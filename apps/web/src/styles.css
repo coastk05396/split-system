@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Design tokens sampled from docs/screens (the split.pen palette), shared by every screen. */
+@theme {
+  --color-sprout-50: #f6fff8;
+  --color-sprout-100: #e4f9e9;
+  --color-sprout-150: #e8f5eb;
+  --color-sprout-200: #dbede0;
+  --color-sprout-500: #2e9d71;
+  --color-sprout-600: #26684b;
+  --color-sprout-700: #245b41;
+  --color-sprout-900: #143f2a;
+  --color-ink: #163d2a;
+  --color-ink-muted: #4f6b5b;
+  --color-peach: #ffe3ca;
+  --color-line: #06c755;
+
+  --font-sans:
+    "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-sprout-50 text-ink font-sans antialiased;
+  }
+}

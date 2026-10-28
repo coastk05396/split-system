@@ -2,5 +2,8 @@
 .scratch/
 node_modules/
 .env
+.env.local
 .dev.vars
 .wrangler/
+dist/
+dist-types/
