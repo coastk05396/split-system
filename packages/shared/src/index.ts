@@ -5,3 +5,5 @@ export * from "./payers.js";
 export * from "./fx.js";
 export * from "./calculator.js";
 export * from "./schemas.js";
+export * from "./payment-plan.js";
+export * from "./payment-plan-worker.js";

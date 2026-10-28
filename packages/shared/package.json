@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./payment-plan.worker": "./src/payment-plan.worker.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
