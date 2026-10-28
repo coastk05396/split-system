@@ -1,2 +1,5 @@
-# Copy to .dev.vars (gitignored) for local Worker development.
-# No values are needed yet; later tickets add local secrets here.
+# Copy to apps/worker/.dev.vars (gitignored) for local Worker development.
+# Signs access tokens. Dev-only value: deployed Workers use `wrangler secret put SESSION_SIGNING_KEY`.
+SESSION_SIGNING_KEY=dev-only-signing-key-change-me-0123456789abcdef
+# Enables POST /api/v1/auth/test-sign-in for local dev and browser tests. Never deploy with it.
+TEST_SIGN_IN=1

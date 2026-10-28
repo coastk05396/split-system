@@ -7,7 +7,13 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         // Tests apply the real migrations to an in-memory D1 in test/apply-migrations.ts.
-        bindings: { TEST_MIGRATIONS: await readD1Migrations("./migrations") },
+        bindings: {
+          TEST_MIGRATIONS: await readD1Migrations("./migrations"),
+          // A fresh key per run; real keys live in Worker secrets and the untracked .dev.vars.
+          SESSION_SIGNING_KEY: Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
+            b.toString(16).padStart(2, "0"),
+          ).join(""),
+        },
       },
     })),
   ],

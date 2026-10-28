@@ -24,7 +24,7 @@ export function newApi() {
         );
       }
       c.set("errorCode", apiError.code);
-      return c.json(apiError.toBody(), apiError.status);
+      return c.json(apiError.toBody(), apiError.status, { ...apiError.headers });
     })
     .notFound((c) => {
       c.set("errorCode", "NOT_FOUND");

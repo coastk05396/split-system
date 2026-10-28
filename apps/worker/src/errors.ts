@@ -9,11 +9,16 @@ export const ERROR_STATUS = {
   IDEMPOTENCY_KEY_REQUIRED: 400,
   IF_MATCH_REQUIRED: 400,
   UNAUTHORIZED: 401,
+  ID_TOKEN_INVALID: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   EDIT_CONFLICT: 409,
   GROUP_FULL: 409,
   BALANCE_NOT_ZERO: 409,
+  IDENTITY_LINKED_ELSEWHERE: 409,
+  PROVIDER_ALREADY_LINKED: 409,
+  LAST_IDENTITY: 409,
+  LAST_ADMIN: 409,
   INVITE_EXPIRED: 422,
   EXPENSE_AMOUNT_INVALID: 422,
   RATE_LIMITED: 429,
@@ -31,12 +36,15 @@ export interface ErrorBody {
 export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly details: unknown;
+  /** Extra response headers, such as `Retry-After` on RATE_LIMITED. */
+  readonly headers: Readonly<Record<string, string>>;
 
-  constructor(code: ErrorCode, details?: unknown) {
+  constructor(code: ErrorCode, details?: unknown, headers: Record<string, string> = {}) {
     super(code);
     this.name = "ApiError";
     this.code = code;
     this.details = details;
+    this.headers = headers;
   }
 
   get status(): ContentfulStatusCode {

@@ -27,5 +27,12 @@
       "id": "00000000000000000000000000000000",
     },
   ],
+  // Public sign-in audiences; placeholders until the deploy ticket sets the real IDs.
+  // SESSION_SIGNING_KEY is a Worker secret (`wrangler secret put`), locally in .dev.vars.
+  // TEST_SIGN_IN is never set here, so the test sign-in route answers 404 when deployed.
+  "vars": {
+    "GOOGLE_CLIENT_ID": "local-google-client-id",
+    "LINE_LOGIN_CHANNEL_ID": "local-line-channel-id",
+  },
   "observability": { "enabled": true },
 }

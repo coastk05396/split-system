@@ -1,5 +1,26 @@
 import type { Context } from "hono";
+import type { z } from "zod";
 import { ApiError } from "./errors.js";
+
+/** Parses a JSON body with a shared Zod schema; a bad body is 400 VALIDATION_FAILED. */
+export async function parseBody<T>(c: Context, schema: z.ZodType<T>): Promise<T> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw new ApiError("VALIDATION_FAILED");
+  }
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    throw new ApiError("VALIDATION_FAILED", {
+      issues: result.error.issues.map((issue) => ({
+        path: issue.path.map(String),
+        message: issue.message,
+      })),
+    });
+  }
+  return result.data;
+}
 
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,128}$/;
 const UPDATED_AT = /^\d{1,16}$/;
