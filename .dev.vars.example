@@ -1,0 +1,2 @@
+# Copy to .dev.vars (gitignored) for local Worker development.
+# No values are needed yet; later tickets add local secrets here.
