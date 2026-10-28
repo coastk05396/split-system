@@ -1,2 +1,8 @@
-// Shell for the Cloudflare Worker (Hono API). Routes arrive in later tickets.
-export {};
+import { app } from "./app.js";
+import type { Bindings } from "./env.js";
+
+export type { AppType } from "./app.js";
+
+export default {
+  fetch: app.fetch,
+} satisfies ExportedHandler<Bindings>;
