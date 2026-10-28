@@ -5,7 +5,7 @@
  */
 export function isConstraintError(
   error: unknown,
-  kind: "UNIQUE" | "CHECK",
+  kind: "UNIQUE" | "CHECK" | "FOREIGN KEY",
   target?: string,
 ): boolean {
   const expected = `${kind} constraint failed${target === undefined ? "" : `: ${target}`}`;

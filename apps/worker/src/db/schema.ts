@@ -3,7 +3,14 @@
  * and 31. Moments are UTC milliseconds; dates and times are local text; money is an
  * integer in the currency's smallest unit; exchange rates are scaled by 1,000,000.
  */
-import { CURRENCY_CODES, MAX_AMOUNT_MINOR, MIN_AMOUNT_MINOR, PROVIDERS } from "@split/shared";
+import {
+  CURRENCY_CODES,
+  MAX_AMOUNT_MINOR,
+  MEMBER_ROLES,
+  MEMBER_STATUSES,
+  MIN_AMOUNT_MINOR,
+  PROVIDERS,
+} from "@split/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -16,9 +23,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-export { PROVIDERS };
-export const MEMBER_ROLES = ["admin", "member"] as const;
-export const MEMBER_STATUSES = ["active", "former", "placeholder"] as const;
+export { MEMBER_ROLES, MEMBER_STATUSES, PROVIDERS };
 export const SPLIT_TYPES = ["equal", "exact", "shares"] as const;
 export const SETTLEMENT_STATUSES = ["pending", "confirmed", "cancelled", "undone"] as const;
 
