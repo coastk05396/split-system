@@ -87,6 +87,8 @@ const errorMessages: Record<ErrorCode, string> = {
   PROVIDER_ALREADY_LINKED: "你已經連結過這種帳號了。",
   LAST_IDENTITY: "至少要保留一種登入方式。",
   LAST_ADMIN: "群組至少要有一位管理員。",
+  TRIP_MODULE_OFF: "這個群組沒有開啟旅行模式。",
+  STOP_LIMIT_REACHED: "這一天最多只能排 50 站。",
   INVITE_EXPIRED: "這個邀請連結已經過期了。",
   EXPENSE_AMOUNT_INVALID: "金額需介於 1 到 99,999,999 之間。",
   RATE_LIMITED: "操作太頻繁了，請稍後再試。",
