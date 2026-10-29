@@ -19,6 +19,8 @@ export interface ExpenseGroup {
 export interface FakeExpenses {
   /** A Group's Expenses, newest first. */
   list(groupId: string): readonly Expense[];
+  /** Seeds existing Expenses onto a Group. */
+  seed(groupId: string, items: readonly Expense[]): void;
   /** Seeds a Stop on a Trip; returns its id. */
   addStop(groupId: string, stop: { dayDate: string; title: string; startTime?: string }): string;
   handle(
@@ -100,6 +102,10 @@ export function createFakeExpenses(nextId: (prefix: string) => string): FakeExpe
 
   return {
     list: (groupId) => [...rows(groupId)].reverse(),
+
+    seed(groupId, items) {
+      rows(groupId).push(...items);
+    },
 
     addStop(groupId, stop) {
       const id = nextId("s");

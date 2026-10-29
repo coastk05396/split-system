@@ -95,6 +95,18 @@ export const routes: RouteObject[] = [
         path: "groups/:id/expenses/:eid/edit",
         lazy: page(() => import("../pages/EditExpensePage.js"), "EditExpensePage"),
       },
+      {
+        path: "groups/:id/trip",
+        lazy: page(() => import("../pages/TripSettingsPage.js"), "TripSettingsPage"),
+      },
+      {
+        path: "groups/:id/stops/new",
+        lazy: page(() => import("../pages/StopPage.js"), "NewStopPage"),
+      },
+      {
+        path: "groups/:id/stops/:sid",
+        lazy: page(() => import("../pages/StopPage.js"), "EditStopPage"),
+      },
       { path: "join/:token", lazy: page(() => import("../pages/JoinPage.js"), "JoinPage") },
       { path: "new", lazy: page(() => import("../pages/NewEntryPage.js"), "NewEntryPage") },
       { path: "stats", lazy: page(() => import("../pages/StatsPage.js"), "StatsPage") },

@@ -204,6 +204,6 @@ export function createFakeApi(): FakeApi {
         query: url.searchParams,
       }) ?? error("NOT_FOUND", 404)
     );
-  }
+  };
   return api;
 }
