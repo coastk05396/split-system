@@ -34,7 +34,7 @@ describe("app shell", () => {
 
     await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
 
-    expect(await screen.findByRole("heading", { level: 1, name: "群組" })).toBeVisible();
+    expect(await screen.findByRole("heading", { level: 1, name: "我的群組" })).toBeVisible();
     expect(router.state.location.pathname).toBe("/groups");
   });
 

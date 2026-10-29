@@ -21,9 +21,19 @@ export function useDeps(): AppDeps {
   return deps;
 }
 
-export function AppProviders({ deps, children }: { deps: AppDeps; children: ReactNode }) {
+export function AppProviders({
+  deps,
+  queryClient: given,
+  children,
+}: {
+  deps: AppDeps;
+  /** Tests pass a client without retries. */
+  queryClient?: QueryClient;
+  children: ReactNode;
+}) {
   const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } }),
+    () =>
+      given ?? new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } }),
   );
   return (
     <DepsContext value={deps}>

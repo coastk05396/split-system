@@ -9,6 +9,11 @@ export interface LineSignIn {
   autoSignIn(): Promise<string | null>;
   /** Outside LINE: send the browser to LINE Login (email or QR), returning here. */
   login(): Promise<void>;
+  /**
+   * Inside LINE: send a text message through the share target picker (decision 10).
+   * Resolves true when sent, false when the person closed the picker.
+   */
+  share(text: string): Promise<boolean>;
 }
 
 const RETURNING_KEY = "split.lineLogin";
@@ -66,6 +71,15 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
         throw new Error("LIFF ID is not configured");
       }
       liff.login({ redirectUri: window.location.href });
+    },
+
+    async share(text) {
+      const liff = await loadLiff();
+      if (liff === null || !liff.isApiAvailable("shareTargetPicker")) {
+        throw new Error("The LINE share target picker is not available");
+      }
+      const result = await liff.shareTargetPicker([{ type: "text", text }]);
+      return result !== undefined;
     },
   };
 }

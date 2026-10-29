@@ -10,6 +10,13 @@ export default defineConfig({
   },
   build: {
     manifest: true,
+    rolldownOptions: {
+      // @split/shared is pure (apart from its Web Worker entries): an eager import of
+      // formatAmount must not pull its Zod schemas into the first-load chunk.
+      treeshake: {
+        moduleSideEffects: (id) => !id.includes("/packages/shared/src/") || id.includes(".worker."),
+      },
+    },
   },
   test: {
     environment: "jsdom",

@@ -1,4 +1,5 @@
 import type { Me } from "@split/shared";
+import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
 /**
  * An in-memory stand-in for the Worker's auth API, reached through `fetch`.
@@ -14,6 +15,10 @@ export interface FakeApi {
   expireAccessToken(): void;
   /** Whether the test sign-in route exists (TEST_SIGN_IN=1). */
   testSignInEnabled: boolean;
+  /** Groups, Members and Invites. */
+  groups: FakeGroups;
+  /** The next request to "METHOD /path" answers with this error (500 INTERNAL by default). */
+  failNext(route: string, code?: string, status?: number): void;
 }
 
 export function makeUser(displayName: string, provider: "google" | "line" = "google"): Me {
@@ -36,6 +41,7 @@ export function createFakeApi(): FakeApi {
   let tokenSeq = 0;
   const liveTokens = new Map<string, Me>();
   const calls: string[] = [];
+  const failing = new Map<string, { code: string; status: number }>();
 
   function issue(user: Me): Response {
     cookieUser = user;
@@ -52,6 +58,10 @@ export function createFakeApi(): FakeApi {
 
   const api: FakeApi = {
     calls,
+    groups: createFakeGroups(),
+    failNext(route, code = "INTERNAL", status = 500) {
+      failing.set(route, { code, status });
+    },
     testSignInEnabled: true,
     setCookieUser(user) {
       cookieUser = user;
@@ -69,6 +79,12 @@ export function createFakeApi(): FakeApi {
       const headers = new Headers(init?.headers);
       const bearer = headers.get("Authorization")?.replace(/^Bearer /, "");
       const authed = bearer === undefined ? undefined : liveTokens.get(bearer);
+
+      const failure = failing.get(`${method} ${url.pathname}`);
+      if (failure !== undefined) {
+        failing.delete(`${method} ${url.pathname}`);
+        return error(failure.code, failure.status);
+      }
 
       switch (`${method} ${url.pathname}`) {
         case "POST /api/v1/auth/refresh":
@@ -95,8 +111,10 @@ export function createFakeApi(): FakeApi {
           return new Response(null, { status: 204 });
         case "GET /api/v1/me":
           return authed === undefined ? error("UNAUTHORIZED", 401) : json(authed);
-        default:
-          return error("NOT_FOUND", 404);
+        default: {
+          const body = method === "GET" || method === "DELETE" ? {} : await readJson(init);
+          return api.groups.handle(method, url.pathname, body, authed) ?? error("NOT_FOUND", 404);
+        }
       }
     },
   };

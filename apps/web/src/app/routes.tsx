@@ -68,6 +68,17 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, Component: HomePage },
       { path: "groups", lazy: page(() => import("../pages/GroupsPage.js"), "GroupsPage") },
+      { path: "groups/new", lazy: page(() => import("../pages/NewGroupPage.js"), "NewGroupPage") },
+      { path: "groups/:id", lazy: page(() => import("../pages/GroupPage.js"), "GroupPage") },
+      {
+        path: "groups/:id/members",
+        lazy: page(() => import("../pages/MembersPage.js"), "MembersPage"),
+      },
+      {
+        path: "groups/:id/invite",
+        lazy: page(() => import("../pages/InvitePage.js"), "InvitePage"),
+      },
+      { path: "join/:token", lazy: page(() => import("../pages/JoinPage.js"), "JoinPage") },
       { path: "new", lazy: page(() => import("../pages/NewEntryPage.js"), "NewEntryPage") },
       { path: "stats", lazy: page(() => import("../pages/StatsPage.js"), "StatsPage") },
       { path: "settings", lazy: page(() => import("../pages/SettingsPage.js"), "SettingsPage") },
