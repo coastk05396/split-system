@@ -61,12 +61,17 @@ export function SettlePanel({ group }: { group: Group }) {
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
   if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
-  const pending = all.filter((s) => s.status === "pending");
+  const pending = all.filter(
+    (s) =>
+      s.status === "pending" &&
+      (s.payerMemberId === group.me.memberId || s.receiverMemberId === group.me.memberId),
+  );
   const history = all.filter((s) => s.status !== "pending");
   // A payment already sent and waiting for its receiver shows once, under 待確認, not here too.
   const planned = plan.status === "ready" ? plan.plan.payments : [];
   const unsent = planned.filter(
     (p) =>
+      involvesMe(group, p) &&
       !pending.some(
         (s) => s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
       ),
@@ -82,10 +87,18 @@ export function SettlePanel({ group }: { group: Group }) {
             mine > 0 ? "settle-aura-get" : mine < 0 ? "settle-aura-pay" : "settle-aura-even"
           }`}
         >
-          <h2 className="text-sm font-medium text-ink-muted">
+          <h2
+            className={`text-sm font-bold ${
+              mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink-muted"
+            }`}
+          >
             {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
           </h2>
-          <p className="text-4xl font-bold tabular-nums">
+          <p
+            className={`text-4xl font-bold tabular-nums ${
+              mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink"
+            }`}
+          >
             <CountUp
               value={Math.abs(mine)}
               format={(n) => formatAmount(n, currency)}
@@ -190,14 +203,11 @@ export function SettlePanel({ group }: { group: Group }) {
                 <SettledMessage celebrate={sawWork.current} />
               ) : (
                 <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
-                  {[...unsent]
-                    // What I have to do comes first; the sort is stable for the rest.
-                    .sort((a, b) => Number(involvesMe(group, b)) - Number(involvesMe(group, a)))
-                    .map((p) => (
-                      <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
-                        <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
-                      </li>
-                    ))}
+                  {unsent.map((p) => (
+                    <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
+                      <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
+                    </li>
+                  ))}
                 </ul>
               ))}
           </section>
@@ -483,7 +493,7 @@ function Person({ id, name, isMe }: { id: string; name: string; isMe: boolean })
 function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
   const badge =
     tone === "pay"
-      ? "border-orange-300 bg-orange-50 text-orange-700"
+      ? "border-red-300 bg-red-50 text-red-700"
       : tone === "get"
         ? "border-sprout-200 bg-sprout-100 text-sprout-600"
         : "border-sprout-200 bg-sprout-50 text-ink-muted";
@@ -503,7 +513,7 @@ function RoleTag({ paying }: { paying: boolean }) {
   return (
     <span
       className={`rounded-full px-3 py-0.5 text-xs font-bold text-white ${
-        paying ? "bg-orange-700" : "bg-sprout-600"
+        paying ? "bg-red-700" : "bg-sprout-600"
       }`}
     >
       {t(paying ? "settle.rolePay" : "settle.roleGet")}
@@ -554,7 +564,13 @@ function PaymentLine({
           })}
         </span>
         <span
-          className={`shrink-0 text-lg font-bold tabular-nums ${struck ? "text-ink-muted line-through" : "text-sprout-600"}`}
+          className={`shrink-0 text-lg font-bold tabular-nums ${
+            struck
+              ? "text-ink-muted line-through"
+              : tone === "pay"
+                ? "text-red-700"
+                : "text-sprout-600"
+          }`}
         >
           {formatAmount(amount, currency)}
         </span>

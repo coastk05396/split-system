@@ -213,15 +213,16 @@
     0 8px 20px -16px #143f2a;
 }
 .settle-aura-pay {
-  background-color: #fff4ec;
+  background-color: #fef2f2;
   background-image: radial-gradient(
     110% 100% at 100% 0%,
-    rgb(255 227 202 / 0.75) 0%,
+    rgb(254 202 202 / 0.65) 0%,
     transparent 65%
   );
+  border: 1px solid rgb(254 202 202 / 0.8);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-    0 8px 20px -16px rgb(194 65 12 / 0.18);
+    0 8px 20px -16px rgb(185 28 28 / 0.2);
 }
 .settle-aura-even {
   background-color: var(--color-sprout-150);
@@ -373,7 +374,7 @@
   color: var(--color-sprout-500);
 }
 .count-up[data-count="bad"] {
-  color: #c2410c;
+  color: #b91c1c;
 }
 .count-up.count-dark[data-count="good"] {
   color: #c6f6d5;

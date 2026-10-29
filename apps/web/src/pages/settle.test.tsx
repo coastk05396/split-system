@@ -259,35 +259,39 @@ describe("Recording and confirming Settlements", () => {
     expect(api.groups.members(id())[2]?.balance).toBe(-200);
   });
 
-  it("lets an Admin confirm a payment between two other Members", async () => {
-    const { user } = await openSettle({
-      name: "室友",
-      others: [
-        { name: "宜庭", balance: -80 },
-        { name: "阿哲", balance: 80 },
-      ],
-    });
-
-    await user.click(
-      (await row("要付給誰", "宜庭付給阿哲")).getByRole("button", { name: "確認收款" }),
-    );
-    await user.click(
-      within(await screen.findByRole("dialog")).getByRole("button", { name: "確認已結清" }),
-    );
-    expect(await row("結算紀錄", "宜庭付給阿哲")).toBeDefined();
-  });
-
-  it("offers no actions on other people's payments to a plain Member", async () => {
+  it("colors negative balance and outgoing payment rows in red when I owe money", async () => {
     await openSettle({
       name: "室友",
-      role: "member",
-      others: [
-        { name: "宜庭", balance: -80, role: "admin" },
-        { name: "阿哲", balance: 80 },
-      ],
+      myBalance: -200,
+      others: [{ name: "宜庭", balance: 200 }],
     });
 
-    const planned = await row("要付給誰", "宜庭付給阿哲");
-    expect(planned.queryByRole("button")).toBeNull();
+    const heading = await screen.findByRole("heading", { name: "你要付" });
+    expect(heading).toHaveClass("text-red-700");
+    expect(heading.closest("section")).toHaveClass("settle-aura-pay");
+
+    const plannedRow = await row("要付給誰", "你付給宜庭");
+    expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-red-700");
+    expect(plannedRow.getByText("你要付")).toHaveClass("bg-red-700");
+  });
+
+  it("hides payments and pending settlements between other Members that do not involve me", async () => {
+    await openSettle(
+      {
+        name: "室友",
+        myBalance: -100,
+        others: [
+          { name: "宜庭", balance: 180 },
+          { name: "阿哲", balance: -80 },
+        ],
+      },
+      (groups, gid) => {
+        groups.addSettlement(gid, { payer: 2, receiver: 1, amount: 40 }, 2);
+      },
+    );
+
+    const planned = await rows();
+    expect(planned).toEqual([expect.stringContaining("你付給宜庭NT$ 100")]);
+    expect(screen.queryByRole("list", { name: "待確認" })).toBeNull();
   });
 });

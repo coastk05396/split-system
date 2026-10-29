@@ -90,7 +90,17 @@ function GroupRow({ group }: { group: Group }) {
         <span className="text-sm text-ink-muted">
           {t("groups.people", { count: group.memberCount })}
           {" · "}
-          {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
+          <span
+            className={
+              balance < 0
+                ? "font-semibold text-red-700"
+                : balance > 0
+                  ? "font-semibold text-sprout-700"
+                  : ""
+            }
+          >
+            {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
+          </span>
         </span>
         <AvatarStack members={group.memberPreview} total={group.memberCount} />
       </span>
