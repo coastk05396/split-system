@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+docs/
+.scratch/
+.claude/
+apps/worker/migrations/
+dist/
+dist-types/

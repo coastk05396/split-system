@@ -1,0 +1,9 @@
+# Copy to apps/worker/.dev.vars (gitignored) for local Worker development.
+# Signs access tokens. Dev-only value: deployed Workers use `wrangler secret put SESSION_SIGNING_KEY`.
+SESSION_SIGNING_KEY=dev-only-signing-key-change-me-0123456789abcdef
+# Enables POST /api/v1/auth/test-sign-in for local dev and browser tests. Never deploy with it.
+TEST_SIGN_IN=1
+# LINE Messaging API channel (deployed: `wrangler secret put`). Left empty locally:
+# without a secret every webhook is refused, without a token replies are dropped.
+LINE_CHANNEL_SECRET=
+LINE_CHANNEL_ACCESS_TOKEN=

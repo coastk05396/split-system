@@ -1,0 +1,36 @@
+{
+  "name": "@split/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist-types/index.d.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "dev": "node -e \"require('node:fs').mkdirSync('../web/dist',{recursive:true})\" && wrangler d1 migrations apply DB --local && wrangler dev",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local"
+  },
+  "dependencies": {
+    "@split/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.14",
+    "jose": "^6.2.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.9",
+    "@cloudflare/workers-types": "^5.20261028.1",
+    "@types/node": "^24.19.2",
+    "drizzle-kit": "^0.31.11",
+    "fast-check": "^4.10.2",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.154.0"
+  }
+}
