@@ -67,19 +67,19 @@
         {
           "binding": "DB",
           "database_name": "split-prod",
-          "database_id": "00000000-0000-0000-0000-000000000000",
+          "database_id": "a817582a-d211-48f2-97dc-034a2dcfb14d",
           "migrations_dir": "migrations",
         },
       ],
       "kv_namespaces": [
         {
           "binding": "JWKS_CACHE",
-          "id": "00000000000000000000000000000000",
+          "id": "f040707a834f4825a80dec3c35b8f2c3",
         },
       ],
       "vars": {
-        "GOOGLE_CLIENT_ID": "prod-google-client-id",
-        "LINE_LOGIN_CHANNEL_ID": "prod-line-channel-id",
+        "GOOGLE_CLIENT_ID": "767797660671-btvuphf42lm0ankofcchdajvuk0pu28h.apps.googleusercontent.com",
+        "LINE_LOGIN_CHANNEL_ID": "2012285524",
       },
     },
   },
