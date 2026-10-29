@@ -3,6 +3,7 @@ import { authRoutes } from "./auth/routes.js";
 import { type AppDeps, productionDeps } from "./deps.js";
 import { groupRoutes } from "./groups/routes.js";
 import { lineRoutes } from "./line/routes.js";
+import { stopRoutes } from "./stops/routes.js";
 
 /** Builds the API with its outside services; tests pass fakes. */
 export function createApp(deps: AppDeps) {
@@ -10,6 +11,7 @@ export function createApp(deps: AppDeps) {
     .get("/health", (c) => c.json({ status: "ok" as const }, 200))
     .route("/", authRoutes(deps))
     .route("/", groupRoutes(deps))
+    .route("/", stopRoutes(deps))
     .route("/", lineRoutes(deps));
 }
 
