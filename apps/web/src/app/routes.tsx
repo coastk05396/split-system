@@ -25,6 +25,8 @@ function Gate() {
   const location = useLocation();
   if (state.status === "loading") return <Splash />;
   if (state.status === "signedOut") {
+    // A chosen sign-out anywhere returns to the landing page, not to sign-in.
+    if (state.byChoice === true && location.pathname !== "/") return <Navigate to="/" replace />;
     if (location.pathname === "/") {
       return (
         <Suspense fallback={<Splash />}>
@@ -62,6 +64,9 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, n
 
 export const routes: RouteObject[] = [
   { path: "/sign-in", Component: SignInRoute },
+  // Policy pages are public: linked from sign-in, readable signed in or out.
+  { path: "/privacy", lazy: page(() => import("../pages/LegalPage.js"), "PrivacyPage") },
+  { path: "/terms", lazy: page(() => import("../pages/LegalPage.js"), "TermsPage") },
   {
     path: "/",
     Component: Gate,

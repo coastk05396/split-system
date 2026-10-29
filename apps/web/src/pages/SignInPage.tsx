@@ -1,8 +1,9 @@
 import { ArrowRight, MessageCircle } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
+import { GoogleButton } from "../auth/GoogleButton.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { SproutMark } from "../shell/SproutMark.js";
 
@@ -10,42 +11,10 @@ const TestSignInForm = lazy(() =>
   import("./TestSignInForm.js").then((m) => ({ default: m.TestSignInForm })),
 );
 
-function GoogleButton() {
-  const { google } = useDeps();
-  const { signIn } = useAuth();
-  const container = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const element = container.current;
-    if (element === null) return;
-    let active = true;
-    google
-      .renderButton(element, (idToken) => {
-        if (active) void signIn("google", idToken);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-      element.replaceChildren();
-    };
-  }, [google, signIn]);
-
-  return (
-    <div className="flex min-h-12 items-center justify-center">
-      {loading && <p className="text-sm text-ink-muted">{t("signIn.googleLoading")}</p>}
-      <div ref={container} />
-    </div>
-  );
-}
-
 /** Screen 1 (歡迎登入) with the decision 29 data summary above the consent line. */
 export function SignInPage() {
   const { line, google, testSignIn } = useDeps();
-  const { state } = useAuth();
+  const { state, signIn } = useAuth();
   const [lineError, setLineError] = useState(false);
   const insideLine = line.isInClient();
   const error = state.status === "signedOut" ? state.error : null;
@@ -83,7 +52,9 @@ export function SignInPage() {
           </span>
           <ArrowRight aria-hidden="true" className="size-5" />
         </button>
-        {!insideLine && google.available && <GoogleButton />}
+        {!insideLine && google.available && (
+          <GoogleButton onIdToken={(idToken) => void signIn("google", idToken)} />
+        )}
       </div>
 
       {testSignIn && (

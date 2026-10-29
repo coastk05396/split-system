@@ -10,6 +10,7 @@ import {
   MEMBER_STATUSES,
   MIN_AMOUNT_MINOR,
   PROVIDERS,
+  SETTLEMENT_STATUSES,
 } from "@split/shared";
 import { type SQL, sql } from "drizzle-orm";
 import {
@@ -23,9 +24,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-export { MEMBER_ROLES, MEMBER_STATUSES, PROVIDERS };
+export { MEMBER_ROLES, MEMBER_STATUSES, PROVIDERS, SETTLEMENT_STATUSES };
 export const SPLIT_TYPES = ["equal", "exact", "shares"] as const;
-export const SETTLEMENT_STATUSES = ["pending", "confirmed", "cancelled", "undone"] as const;
 
 /** `column IN ('a', 'b')` for a fixed list of literals. */
 function oneOf(column: AnySQLiteColumn, values: readonly string[]): SQL {
@@ -243,7 +243,19 @@ export const settlements = sqliteTable(
     /** In the Group's Settlement currency. */
     amount: integer("amount").notNull(),
     status: text("status", { enum: SETTLEMENT_STATUSES }).notNull().default("confirmed"),
+    /** Who recorded it; null once that Member row is gone. */
+    createdByMemberId: text("created_by_member_id").references(() => members.id, {
+      onDelete: "set null",
+    }),
+    /** Decision 15's `confirmed_by_member`: they (or an Admin) may undo it. */
+    confirmedByMemberId: text("confirmed_by_member_id").references(() => members.id, {
+      onDelete: "set null",
+    }),
     confirmedAt: integer("confirmed_at"),
+    undoneByMemberId: text("undone_by_member_id").references(() => members.id, {
+      onDelete: "set null",
+    }),
+    undoneAt: integer("undone_at"),
     idempotencyKey: text("idempotency_key").unique(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

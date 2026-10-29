@@ -15,6 +15,13 @@
       "when": 1793235979188,
       "tag": "0001_expenses_and_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793239306915,
+      "tag": "0002_settlement_flow",
+      "breakpoints": true
     }
   ]
 }
