@@ -3,7 +3,7 @@ import { type Expense, formatAmount, formatRate, type Group } from "@split/share
 import { Pencil, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
-import { CategoryIcon } from "../expenses/CategoryIcon.js";
+import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
 import { dateHeading, memberNames, memberPictures } from "../expenses/ExpenseList.js";
 import { useGroup, useMembers } from "../groups/api.js";
 import {
@@ -73,12 +73,16 @@ function Detail({
       />
       <section className="surface-card overflow-hidden rounded-3xl border border-sprout-200 bg-white">
         <div className="flex items-center gap-3 bg-sprout-150 px-6 py-4">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white text-sprout-600 shadow-xs">
+          <span
+            className={`flex size-12 shrink-0 items-center justify-center rounded-full shadow-xs ${categoryTone(expense.category).badge}`}
+          >
             <CategoryIcon category={expense.category} className="size-6" />
           </span>
           <div className="flex min-w-0 flex-col items-start gap-1">
             <h2 className="break-words text-xl font-bold">{expense.description}</h2>
-            <span className="rounded-full bg-white px-3 py-0.5 text-xs font-bold text-sprout-700">
+            <span
+              className={`rounded-full px-3 py-0.5 text-xs font-bold ${categoryTone(expense.category).badge}`}
+            >
               {categoryLabel(expense.category)}
             </span>
           </div>

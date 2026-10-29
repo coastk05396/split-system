@@ -146,10 +146,10 @@ export function SplitEditor({
           </span>
         </div>
       )}
-      {equal && open && <div className="flex justify-end">{selectAll}</div>}
+      {equal && open && <div className="collapse-enter flex justify-end">{selectAll}</div>}
       <ShareBar shares={shares} />
       {(!equal || open) && (
-        <ul className="flex flex-col gap-2">
+        <ul className="collapse-enter flex flex-col gap-2">
           {members.map((m) => {
             const takesPart = included.has(m.id);
             const amount = amounts.get(m.id);

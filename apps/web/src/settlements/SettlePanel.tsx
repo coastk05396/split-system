@@ -77,8 +77,12 @@ export function SettlePanel({ group }: { group: Group }) {
   return (
     <PictureContext value={memberPictures(members.data)}>
       <div className="flex flex-col gap-6 text-ink">
-        <section className="flex flex-col gap-1 rounded-3xl bg-sprout-150 p-6">
-          <h2 className="text-sm text-ink-muted">
+        <section
+          className={`flex flex-col gap-1 rounded-3xl p-6 transition-colors ${
+            mine > 0 ? "settle-aura-get" : mine < 0 ? "settle-aura-pay" : "settle-aura-even"
+          }`}
+        >
+          <h2 className="text-sm font-medium text-ink-muted">
             {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
           </h2>
           <p className="text-4xl font-bold tabular-nums">
@@ -417,7 +421,7 @@ function SettlementHistory({
           </button>
           {showDropped && (
             <>
-              <ul aria-label={t("settle.droppedTitle")} className="flex flex-col">
+              <ul aria-label={t("settle.droppedTitle")} className="collapse-enter flex flex-col">
                 {byDay(dropped.slice(0, droppedVisible), true)}
               </ul>
               {dropped.length > droppedVisible && (

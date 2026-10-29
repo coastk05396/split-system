@@ -148,6 +148,119 @@
   animation: tab-enter 180ms var(--ease-out-expo);
 }
 
+/* Spatial dropdown menu entrance anchored to its trigger's transform-origin. */
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes menu-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(-1px);
+  }
+}
+.menu-content {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, 50% 0%);
+  background-color: rgb(255 255 255 / 0.95);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 16px 32px -12px rgb(20 63 42 / 0.22);
+}
+.menu-content[data-state="open"] {
+  animation: menu-enter 180ms var(--ease-out-expo);
+}
+.menu-content[data-state="closed"] {
+  animation: menu-exit 120ms ease-out;
+}
+
+/* Smooth reveal for collapsible lists (split participants, cancelled settlements). */
+@keyframes collapse-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.collapse-enter {
+  animation: collapse-enter 220ms var(--ease-out-expo);
+}
+
+/* Semantic balance card auras on the Settlement tab. */
+.settle-aura-get {
+  background-color: var(--color-sprout-100);
+  background-image: radial-gradient(
+    110% 100% at 100% 0%,
+    rgb(46 157 113 / 0.18) 0%,
+    transparent 65%
+  );
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.85),
+    0 8px 20px -16px #143f2a;
+}
+.settle-aura-pay {
+  background-color: #fff4ec;
+  background-image: radial-gradient(
+    110% 100% at 100% 0%,
+    rgb(255 227 202 / 0.75) 0%,
+    transparent 65%
+  );
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 8px 20px -16px rgb(194 65 12 / 0.18);
+}
+.settle-aura-even {
+  background-color: var(--color-sprout-150);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.8);
+}
+
+/* First-run empty state bloom and single sprout wave. */
+@keyframes empty-bloom {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes sprout-greet {
+  0% {
+    transform: rotate(0deg);
+  }
+  30% {
+    transform: rotate(-8deg) scale(1.04);
+  }
+  65% {
+    transform: rotate(6deg) scale(1.02);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+.empty-bloom {
+  animation: empty-bloom 520ms var(--ease-out-expo) both;
+}
+.sprout-greet {
+  transform-origin: 50% 85%;
+  animation: sprout-greet 680ms var(--ease-out-expo) 120ms both;
+}
+
 @keyframes dialog-enter {
   from {
     opacity: 0;
@@ -362,7 +475,12 @@
   .rise,
   .digit-roll,
   .sprout-sway,
-  .tab-panel[data-state="active"] {
+  .tab-panel[data-state="active"],
+  .menu-content[data-state="open"],
+  .menu-content[data-state="closed"],
+  .collapse-enter,
+  .empty-bloom,
+  .sprout-greet {
     animation: none;
   }
   .count-up {

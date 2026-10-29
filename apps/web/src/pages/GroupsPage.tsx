@@ -110,8 +110,10 @@ function NoGroups() {
         <p className="mt-1 text-sm text-ink-muted">{t("groups.count", { count: 0 })}</p>
       </header>
       <div className="flex flex-col items-center gap-6 py-6 text-center">
-        <span className="flex size-56 items-center justify-center rounded-full bg-sprout-150">
-          <SproutMark className="size-28" />
+        <span className="empty-bloom flex size-56 items-center justify-center rounded-full bg-sprout-150 shadow-[inset_0_2px_0_0_rgb(255_255_255/0.8),0_12px_28px_-20px_#143f2a] ring-8 ring-sprout-100/60">
+          <span className="sprout-greet inline-flex">
+            <SproutMark className="size-28" />
+          </span>
         </span>
         <h2 className="text-xl font-bold">{t("groups.empty.title")}</h2>
         <p className="text-ink-muted">

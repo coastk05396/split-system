@@ -14,7 +14,8 @@ import { ArrowRight, Check, ChevronDown, Users } from "lucide-react";
 import { type SubmitEvent, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
 import { Odometer } from "../shell/Odometer.js";
-import { CategoryIcon } from "./CategoryIcon.js";
+import { SelectionPill } from "../shell/SelectionPill.js";
+import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 import { Avatar, card, failureMessage, input, primaryButton } from "../groups/ui.js";
 import { categoryLabel, localName } from "../i18n/format.js";
 import { errorMessage, t } from "../i18n/messages.js";
@@ -63,6 +64,7 @@ export function ExpenseForm({
       pictureUrl: m.pictureUrl,
     }));
   const order = selectable.map((m) => m.id);
+  const [activeKind, setActiveKind] = useState<"spend" | "settlement">("spend");
   const [draft, setDraft] = useState<ExpenseDraft>(() =>
     expense === undefined
       ? newExpenseDraft({
@@ -99,7 +101,13 @@ export function ExpenseForm({
   };
 
   return (
-    <Tabs.Root defaultValue="spend" className="flex flex-col gap-6">
+    <Tabs.Root
+      value={activeKind}
+      onValueChange={(v) => {
+        if (v === "spend" || v === "settlement") setActiveKind(v);
+      }}
+      className="flex flex-col gap-6"
+    >
       <Tabs.List
         aria-label={t("expense.kind")}
         className="flex gap-1 rounded-2xl bg-sprout-150 p-1"
@@ -108,13 +116,21 @@ export function ExpenseForm({
           <Tabs.Trigger
             key={kind}
             value={kind}
-            className="flex-1 rounded-xl py-2.5 text-ink-muted data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-ink"
+            className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-ink"
           >
-            {t(kind === "spend" ? "expense.tab.spend" : "expense.tab.settlement")}
+            {activeKind === kind && (
+              <SelectionPill
+                layoutId="expense-kind-selection"
+                className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a]"
+              />
+            )}
+            <span className="relative">
+              {t(kind === "spend" ? "expense.tab.spend" : "expense.tab.settlement")}
+            </span>
           </Tabs.Trigger>
         ))}
       </Tabs.List>
-      <Tabs.Content value="settlement">
+      <Tabs.Content value="settlement" className="tab-panel">
         <div className={`${card} flex flex-col items-center gap-3 p-5 text-center`}>
           <p className="text-ink-muted">{t("expense.settlementHint")}</p>
           <Link
@@ -125,7 +141,7 @@ export function ExpenseForm({
           </Link>
         </div>
       </Tabs.Content>
-      <Tabs.Content value="spend">
+      <Tabs.Content value="spend" className="tab-panel">
         <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
           <AmountSection
             draft={draft}
@@ -170,7 +186,7 @@ export function ExpenseForm({
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className="press-pill flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 hover:border-sprout-500 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 has-[:checked]:font-bold"
+                  className={`press-pill flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 hover:border-sprout-500 has-[:checked]:font-bold ${categoryTone(category).chip}`}
                 >
                   <input
                     type="radio"
@@ -181,7 +197,11 @@ export function ExpenseForm({
                       update({ category });
                     }}
                   />
-                  <CategoryIcon category={category} className="size-4 text-sprout-600" />
+                  <span
+                    className={`flex size-5 items-center justify-center rounded-full ${categoryTone(category).badge}`}
+                  >
+                    <CategoryIcon category={category} className="size-3.5" />
+                  </span>
                   {categoryLabel(category)}
                 </label>
               ))}
@@ -338,7 +358,7 @@ function CurrencyPicker({
         <Menu.Content
           align="start"
           sideOffset={6}
-          className="z-20 min-w-40 rounded-2xl border border-sprout-200 bg-white p-1 shadow-lg"
+          className="menu-content z-20 min-w-40 rounded-2xl border border-sprout-200/90 p-1"
         >
           <Menu.RadioGroup
             value={value}
@@ -509,7 +529,7 @@ function PayerPicker({
         <Menu.Content
           align="start"
           sideOffset={6}
-          className="z-20 max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto rounded-2xl border border-sprout-200 bg-white p-1 shadow-lg"
+          className="menu-content z-20 max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto rounded-2xl border border-sprout-200/90 p-1"
         >
           <Menu.RadioGroup value={value} onValueChange={onChange}>
             {members.map((m) => (

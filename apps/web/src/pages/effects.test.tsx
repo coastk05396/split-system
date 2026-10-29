@@ -138,5 +138,13 @@ describe("the home intro", () => {
     await screen.findByRole("heading", { level: 1, name: "室友" });
     expect(screen.getByRole("tabpanel")).toHaveClass("tab-panel");
     expect(screen.getByRole("link", { name: "新增支出" })).toHaveClass("press-pill");
+
+    // Adding a placeholder member highlights the newly arrived row
+    await router.navigate(`/groups/${id}/members`);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("名字"), "新夥伴");
+    await user.click(screen.getByRole("button", { name: "新增" }));
+    const newRow = await screen.findByText("新夥伴");
+    expect(newRow.closest("li")).toHaveClass("row-arrive");
   });
 });
