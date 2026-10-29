@@ -13,6 +13,8 @@ export default defineConfig({
           SESSION_SIGNING_KEY: Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
             b.toString(16).padStart(2, "0"),
           ).join(""),
+          // Ensure tests test production defaults regardless of local .dev.vars
+          TEST_SIGN_IN: "0",
         },
       },
     })),
