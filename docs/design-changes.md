@@ -22,7 +22,7 @@ Collected by **Reconcile the designs with the decisions**. `docs/split.pen` is n
 | 6 | 建立與邀請群組 | "預設幣別" becomes a Settlement currency choice (fixed after the first Expense) plus a default Expense currency |
 | 7 | 統計分析 | Per-Group only; remove the 個人 tab |
 | 8 | LINE Bot 快速進入 | Becomes a "加入小芽官方帳號" card in 設定; remove the chat-entry example |
-| 9 | 邀請成員 | Link `split.rickchen.si/join/<token>`; 7-day expiry; regenerate action; share through LINE and copy link |
+| 9 | 邀請成員 | Use a compact deep-green invitation card for the Group name, short explanation and expiry, with one primary action below: send the Invite through LINE's recipient picker (friends, chats or groups), then close the LIFF app after a successful send. Sharing to a LINE group chat does not bind it to the app Group. Keep copy link as a quiet fallback and regenerate below. Omit the simulated LINE message and visible full URL. The link stays valid for 7 days. |
 | 10 | 開銷詳情 | Not reviewed. Must show original amount and currency, the rate with its date and an edited flag, the converted amount, split lines, and edit and delete only for the creator or an admin |
 | 11 | 設定與帳號 | Remove 通知提醒; 預設幣別 becomes a 偏好幣別 dropdown right under the profile; add link and unlink, 登出所有裝置, 刪除帳號, and the "已經是另一個小芽帳號" error state |
 | 12 | 群組列表 | Not reviewed. Show each Group's Balance in its Settlement currency; usage badge |

@@ -88,6 +88,10 @@ _Avoid_: Settlement plan, debt graph
 A LINE-shared link, unguessable and valid for 7 days, that lets a signed-in person join a Group.
 _Avoid_: Invitation code, share link
 
+**LINE chat**:
+A conversation in LINE that can receive an Invite, including a group chat. Sending an Invite there does not link the LINE chat to a Group.
+_Avoid_: Group (when referring to the LINE conversation)
+
 **Admin**:
 A Member who manages a Group: its Invite, its Members and its deletion. A Group always has at least one.
 _Avoid_: Owner, host, moderator

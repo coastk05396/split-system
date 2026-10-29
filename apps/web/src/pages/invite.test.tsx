@@ -7,7 +7,7 @@ import { renderApp } from "../../test/render-app.js";
 const me = makeUser("小宇");
 
 describe("Invite share", () => {
-  it("shows the join link with its 7-day expiry and copies it outside LINE", async () => {
+  it("keeps the link behind a copy action outside LINE", async () => {
     const user = userEvent.setup();
     let id = "";
     renderApp({
@@ -20,10 +20,10 @@ describe("Invite share", () => {
 
     expect(await screen.findByRole("heading", { name: "邀請成員" })).toBeVisible();
     expect(screen.getByText("週末台南小旅行")).toBeVisible();
-    const link = await screen.findByLabelText("邀請連結");
-    expect(link).toHaveTextContent(`${window.location.origin}/join/tok-abc`);
+    expect(screen.getByRole("heading", { name: "週末台南小旅行" })).toBeVisible();
+    expect(screen.queryByText(/\/join\/tok-abc/)).toBeNull();
     expect(screen.getByText(/前有效（7 天）/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /透過 LINE 分享/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /用 LINE 傳送邀請/ })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: /複製邀請連結/ }));
 
@@ -31,7 +31,7 @@ describe("Invite share", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("已複製邀請連結");
   });
 
-  it("has a plain way back to the Group, and one short line of explanation", async () => {
+  it("has one back arrow and one short explanation", async () => {
     let id = "";
     renderApp({
       cookieUser: me,
@@ -41,11 +41,11 @@ describe("Invite share", () => {
       pathFor: () => `/groups/${id}/invite`,
     });
 
-    expect(await screen.findByRole("link", { name: "回到群組" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "返回" })).toHaveAttribute(
       "href",
       `/groups/${id}`,
     );
-    expect(screen.getByText("分享連結，拿到連結並登入的人就能加入。")).toBeVisible();
+    expect(screen.getByText("複製連結傳給朋友，登入後就能一起記帳。")).toBeVisible();
   });
 
   it("shares through the LINE share target picker inside LINE", async () => {
@@ -60,8 +60,9 @@ describe("Invite share", () => {
       pathFor: () => `/groups/${id}/invite`,
     });
 
-    await user.click(await screen.findByRole("button", { name: /透過 LINE 分享/ }));
+    await user.click(await screen.findByRole("button", { name: /用 LINE 傳送邀請/ }));
 
+    expect(screen.getByText("選好友、聊天或群組，邀請連結會直接送出。")).toBeVisible();
     expect(lineShares).toEqual([
       `一起用小芽分帳記「台南」的開銷吧！${window.location.origin}/join/tok-line`,
     ]);
@@ -79,11 +80,13 @@ describe("Invite share", () => {
       pathFor: () => `/groups/${id}/invite`,
     });
 
-    expect(await screen.findByLabelText("邀請連結")).toHaveTextContent("/join/tok-old");
+    await user.click(await screen.findByRole("button", { name: "複製邀請連結" }));
+    expect(await navigator.clipboard.readText()).toContain("/join/tok-old");
     expect(screen.getByText("重新產生後，舊連結會立即失效。")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "重新產生連結" }));
 
-    expect(await screen.findByLabelText("邀請連結")).not.toHaveTextContent("tok-old");
+    await user.click(await screen.findByRole("button", { name: "複製邀請連結" }));
+    expect(await navigator.clipboard.readText()).not.toContain("tok-old");
   });
 
   it("makes the first link for an Admin when the Group has none", async () => {
@@ -96,7 +99,8 @@ describe("Invite share", () => {
       pathFor: () => `/groups/${id}/invite`,
     });
 
-    expect(await screen.findByLabelText("邀請連結")).toHaveTextContent(/\/join\/token-\d+/);
+    await userEvent.click(await screen.findByRole("button", { name: "複製邀請連結" }));
+    expect(await navigator.clipboard.readText()).toMatch(/\/join\/token-\d+/);
   });
 
   it("asks a Member without a live link to get one from an Admin", async () => {
