@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createApp } from "../src/app.js";
 import type { Bindings } from "../src/env.js";
 import { ApiError } from "../src/errors.js";
+import type { RateSource } from "../src/rates/rate-source.js";
 import type {
   IdentityVerifier,
   Provider,
@@ -24,7 +25,16 @@ export const fakeVerifier: IdentityVerifier = {
 
 export const clock = { now: 1_750_000_000_000 };
 
-export const testApp = createApp({ verifier: () => fakeVerifier, now: () => clock.now });
+/** Tests never reach the network: rate tests build their own app with a steerable source. */
+export const offlineRateSource: RateSource = {
+  fetchRate: () => Promise.reject(new Error("offline")),
+};
+
+export const testApp = createApp({
+  verifier: () => fakeVerifier,
+  now: () => clock.now,
+  rateSource: offlineRateSource,
+});
 
 let counter = 0;
 /** A provider `sub` no other test uses: storage is shared across tests in a file. */

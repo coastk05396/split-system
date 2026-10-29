@@ -1,10 +1,13 @@
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
 import type { Bindings } from "./env.js";
+import { productionRateSource, type RateSource } from "./rates/rate-source.js";
 
 /** Outside services and the clock, swapped for fakes in tests. */
 export interface AppDeps {
   verifier: (env: Bindings) => IdentityVerifier;
   now: () => number;
+  /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
+  rateSource: RateSource;
 }
 
 export const productionDeps: AppDeps = {
@@ -17,4 +20,5 @@ export const productionDeps: AppDeps = {
       now: Date.now,
     }),
   now: Date.now,
+  rateSource: productionRateSource(),
 };

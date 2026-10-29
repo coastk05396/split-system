@@ -213,6 +213,11 @@ export const expenseSplits = sqliteTable(
       .notNull()
       .references(() => members.id),
     shareUnits: integer("share_units").notNull().default(1),
+    /**
+     * In the Expense currency, as split before conversion: an exact split's typed amount
+     * cannot be rebuilt from the converted one (decision 15's `input_minor`).
+     */
+    amount: integer("amount").notNull().default(0),
     settlementAmount: integer("settlement_amount").notNull(),
   },
   (t) => [
@@ -284,6 +289,11 @@ export const fxRates = sqliteTable(
     baseCurrency: currency("base_currency").notNull(),
     quoteCurrency: currency("quote_currency").notNull(),
     rateScaled: integer("rate_scaled").notNull(),
+    /**
+     * The day the source published this rate, when earlier than `rate_date` (a weekend or
+     * holiday uses the last day before it, decision 11); null when it is `rate_date` itself.
+     */
+    publishedDate: text("published_date"),
     fetchedAt: integer("fetched_at").notNull(),
   },
   (t) => [
