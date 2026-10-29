@@ -3,6 +3,7 @@ import { CalendarDays, MapPin, NotebookText, Plus, Receipt, Settings } from "luc
 import { Link, useSearchParams } from "react-router";
 import { card, LoadError, Loading, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { SelectionPill } from "../shell/SelectionPill.js";
 import { useStopExpenses, useStops } from "./api.js";
 import { weekdayShort } from "../i18n/format.js";
 import { categoryIcon } from "./categories.js";
@@ -132,10 +133,16 @@ function DayPicker({
           onClick={() => {
             onChoose(d);
           }}
-          className="flex min-w-14 flex-1 flex-col items-center rounded-xl py-2 text-ink-muted aria-pressed:bg-white aria-pressed:text-ink"
+          className="relative flex min-w-14 flex-1 flex-col items-center rounded-xl py-2 text-ink-muted transition-colors aria-pressed:text-ink"
         >
-          <span className="text-xs">{weekdayShort(d)}</span>
-          <span className="text-lg font-bold">{d.slice(8).replace(/^0/, "")}</span>
+          {d === day && (
+            <SelectionPill
+              layoutId="trip-day-selection"
+              className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a]"
+            />
+          )}
+          <span className="relative text-xs">{weekdayShort(d)}</span>
+          <span className="relative text-lg font-bold">{d.slice(8).replace(/^0/, "")}</span>
         </button>
       ))}
     </div>

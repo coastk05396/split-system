@@ -42,7 +42,7 @@ export function NewEntryPage() {
               <li key={g.id}>
                 <PressableLink
                   to={`/groups/${g.id}/expenses/new`}
-                  className={`${card} group flex items-center gap-4 p-4 transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
+                  className={`${card} group flex items-center gap-4 p-4 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
                 >
                   <span
                     className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${
@@ -59,7 +59,10 @@ export function NewEntryPage() {
                       {t(g.isTrip ? "usage.trip" : "usage.tab")}
                     </span>
                   </span>
-                  <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-5 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+                  />
                 </PressableLink>
               </li>
             );
@@ -69,7 +72,7 @@ export function NewEntryPage() {
       {groups.data.length > 0 && (
         <Link
           to="/groups/new?usage=tab"
-          className="flex items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-sprout-500 bg-peach/40 px-6 py-4 font-bold text-sprout-700 hover:bg-peach/70"
+          className="press-card flex items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-sprout-500 bg-peach/40 px-6 py-4 font-bold text-sprout-700 hover:bg-peach/70"
         >
           <Plus aria-hidden="true" className="size-5" />
           {t("groups.create")}

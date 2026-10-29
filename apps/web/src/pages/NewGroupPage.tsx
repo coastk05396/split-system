@@ -12,6 +12,7 @@ import {
   ScreenHeader,
 } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SelectionPill } from "../shell/SelectionPill.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 
 function isCurrency(value: string): value is CurrencyCode {
@@ -117,10 +118,16 @@ function UsageOption(props: {
   const disabled = props.disabled === true;
   return (
     <label
-      className={`flex items-center justify-center gap-2 rounded-xl py-3 has-focus-visible:ring-2 has-focus-visible:ring-sprout-500 ${
+      className={`relative flex items-center justify-center gap-2 rounded-xl py-3 has-focus-visible:ring-2 has-focus-visible:ring-sprout-500 ${
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-      } ${props.checked ? "bg-white font-bold text-ink shadow-sm" : "text-ink-muted"}`}
+      } ${props.checked ? "font-bold text-ink" : "text-ink-muted"}`}
     >
+      {props.checked && (
+        <SelectionPill
+          layoutId="new-group-usage-selection"
+          className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a]"
+        />
+      )}
       <input
         type="radio"
         name="usage"
@@ -129,9 +136,11 @@ function UsageOption(props: {
         onChange={props.onCheck}
         className="sr-only"
       />
-      {props.icon}
-      {t(props.label)}
-      {disabled && <MaintenanceTag />}
+      <span className="relative flex items-center gap-2">
+        {props.icon}
+        {t(props.label)}
+        {disabled && <MaintenanceTag />}
+      </span>
     </label>
   );
 }

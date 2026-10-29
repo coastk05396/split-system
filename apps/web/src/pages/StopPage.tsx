@@ -158,8 +158,8 @@ function DeleteStopDialog({ group, stop }: { group: Group; stop: Stop }) {
         {t("stop.delete")}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-20 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
+        <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
           <Dialog.Title className="text-xl font-bold">
             {t("stop.deleteTitle", { title: stop.title })}
           </Dialog.Title>
@@ -182,7 +182,7 @@ function DeleteStopDialog({ group, stop }: { group: Group; stop: Stop }) {
                     void navigate(planPath(group.id, stop.dayDate), { replace: true }),
                 });
               }}
-              className="flex flex-1 items-center justify-center rounded-full bg-red-700 py-3 font-bold text-white disabled:opacity-50"
+              className="press-pill flex flex-1 items-center justify-center rounded-full bg-red-700 py-3 font-bold text-white hover:bg-red-700/90 disabled:opacity-50"
             >
               {t("stop.deleteConfirm")}
             </button>

@@ -1,10 +1,11 @@
 import type { Group, Invite } from "@split/shared";
-import { ArrowLeft, ArrowUpRight, Copy, RefreshCw, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Copy, RefreshCw, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useDeps } from "../app/AppProviders.js";
 import { useGroup, useInvite, useRegenerateInvite } from "../groups/api.js";
 import {
+  card,
   failureMessage,
   LoadError,
   Loading,
@@ -14,6 +15,7 @@ import {
 } from "../groups/ui.js";
 import { dateFromTimestamp } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
+import { SproutMark } from "../shell/SproutMark.js";
 
 /** `split.rickchen.si/join/<token>` on the site the app is served from. */
 export function joinUrl(token: string): string {
@@ -42,6 +44,7 @@ function InviteCard({ group, invite }: { group: Group; invite: Invite | null }) 
   const regenerate = useRegenerateInvite(group.id);
   const isAdmin = group.me.role === "admin";
   const [notice, setNotice] = useState("");
+  const [justCopied, setJustCopied] = useState(false);
 
   // An Admin arriving with no live link (a new Group, or a lapsed link) gets one at once.
   const asked = useRef(false);
@@ -58,6 +61,7 @@ function InviteCard({ group, invite }: { group: Group; invite: Invite | null }) 
     try {
       await navigator.clipboard.writeText(text);
       setNotice(t("invite.copied"));
+      setJustCopied(true);
     } catch {
       setNotice(failureMessage(null));
     }
@@ -81,7 +85,7 @@ function InviteCard({ group, invite }: { group: Group; invite: Invite | null }) 
         back={`/groups/${group.id}`}
         subtitle={group.name}
       />
-      <section className="flex flex-col gap-3 rounded-3xl border border-sprout-200 bg-white p-5">
+      <section className={`${card} line-bubble-card flex flex-col gap-3 p-5`}>
         <div className="flex items-center gap-3">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-sprout-100">
             <UserPlus aria-hidden="true" className="size-6 text-sprout-500" />
@@ -101,9 +105,27 @@ function InviteCard({ group, invite }: { group: Group; invite: Invite | null }) 
           </p>
         ) : (
           <>
+            <div
+              aria-hidden="true"
+              className="mt-1 flex items-start gap-2.5 rounded-2xl border border-sprout-200/90 bg-sprout-50/90 p-3"
+            >
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white shadow-xs">
+                <SproutMark className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1 overflow-hidden rounded-2xl rounded-tl-sm border border-sprout-200 bg-white shadow-xs">
+                <div className="bg-line px-3 py-1 text-[11px] font-bold tracking-wide text-white">
+                  LINE · {t("app.name")}
+                </div>
+                <div className="p-2.5 text-xs text-ink">
+                  <p className="line-clamp-2 leading-relaxed">
+                    {t("invite.shareMessage", { name: group.name, url: "" }).trim()}
+                  </p>
+                </div>
+              </div>
+            </div>
             <p
               aria-label={t("invite.link")}
-              className="truncate rounded-2xl border border-sprout-200 bg-sprout-50 px-4 py-2.5 text-sm"
+              className="truncate rounded-2xl border border-sprout-200 bg-sprout-50 px-4 py-2.5 text-sm font-medium"
             >
               {url}
             </p>
@@ -121,7 +143,7 @@ function InviteCard({ group, invite }: { group: Group; invite: Invite | null }) 
             <button
               type="button"
               onClick={() => void share(url)}
-              className={`${primaryButton} justify-between py-3`}
+              className={`${primaryButton} bg-line justify-between py-3 hover:bg-line/90`}
             >
               {t("invite.shareLine")}
               <ArrowUpRight aria-hidden="true" className="size-5" />
@@ -133,7 +155,11 @@ function InviteCard({ group, invite }: { group: Group; invite: Invite | null }) 
             className={`${line.isInClient() ? secondaryButton : primaryButton} justify-between py-3`}
           >
             {t("invite.copy")}
-            <Copy aria-hidden="true" className="size-5" />
+            {justCopied ? (
+              <Check aria-hidden="true" className="settle-pop size-5" />
+            ) : (
+              <Copy aria-hidden="true" className="size-5" />
+            )}
           </button>
         </div>
       )}

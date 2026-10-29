@@ -44,7 +44,7 @@ export function SignInPage() {
               setLineError(true);
             });
           }}
-          className="flex items-center justify-between rounded-full bg-line px-6 py-4 font-bold text-white hover:brightness-95"
+          className="press-pill flex items-center justify-between rounded-full bg-line px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_6px_14px_-8px_#06c755] hover:brightness-95"
         >
           <span className="flex items-center gap-2">
             <MessageCircle aria-hidden="true" className="size-5" />

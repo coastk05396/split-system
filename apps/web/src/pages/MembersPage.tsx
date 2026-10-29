@@ -47,6 +47,7 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const former = members.filter((m) => m.status === "former");
   const isAdmin = group.me.role === "admin";
   const [blocked, setBlocked] = useState<string | null>(null);
+  const [freshMemberId, setFreshMemberId] = useState<string | null>(null);
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
@@ -62,7 +63,10 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
       )}
       <ul aria-label={t("members.title")} className="flex flex-col gap-3">
         {seated.map((m) => (
-          <li key={m.id} className={`${card} flex items-center gap-4 p-4`}>
+          <li
+            key={m.id}
+            className={`${card} flex items-center gap-4 p-4 ${m.id === freshMemberId ? "row-arrive" : ""}`}
+          >
             <Avatar
               name={m.displayName}
               pictureUrl={m.pictureUrl}
@@ -100,7 +104,7 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
           </ul>
         </section>
       )}
-      <AddPlaceholderForm groupId={group.id} />
+      <AddPlaceholderForm groupId={group.id} onAdded={setFreshMemberId} />
       <Link
         to={`/groups/${group.id}/invite`}
         className="flex items-start gap-3 rounded-3xl bg-sprout-150 p-5"
@@ -150,14 +154,15 @@ function MemberMenu({
     <Menu.Root>
       <Menu.Trigger
         aria-label={t("members.actions", { name: localName(member.displayName) })}
-        className="rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
+        className="press-icon rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
       >
         <Ellipsis aria-hidden="true" className="size-5" />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
           align="end"
-          className="z-30 min-w-40 rounded-2xl border border-sprout-200 bg-white p-1 text-ink shadow-lg"
+          sideOffset={6}
+          className="menu-content z-30 min-w-40 rounded-2xl border border-sprout-200/90 p-1 text-ink"
         >
           {member.status === "active" && member.role === "member" && (
             <Menu.Item
@@ -194,15 +199,22 @@ function MemberMenu({
   );
 }
 
-function AddPlaceholderForm({ groupId }: { groupId: string }) {
+function AddPlaceholderForm({
+  groupId,
+  onAdded,
+}: {
+  groupId: string;
+  onAdded: (memberId: string) => void;
+}) {
   const add = useAddPlaceholder(groupId);
   const [name, setName] = useState("");
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     add.mutate(name.trim(), {
-      onSuccess: () => {
+      onSuccess: (member) => {
         setName("");
+        onAdded(member.id);
       },
     });
   }

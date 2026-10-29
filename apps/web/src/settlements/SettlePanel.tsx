@@ -26,7 +26,7 @@ const PictureContext = createContext<(id: string) => string | null>(() => null);
 const HISTORY_STEP = 5;
 
 const smallButton =
-  "rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold transition-transform active:scale-[0.97] motion-reduce:active:scale-100";
+  "press-pill rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold hover:border-sprout-500";
 
 /**
  * Screen 5 as amended (decisions 12, 17, 23): my Balance, the Payment plan with its honest
@@ -61,12 +61,17 @@ export function SettlePanel({ group }: { group: Group }) {
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
   if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
-  const pending = all.filter((s) => s.status === "pending");
+  const pending = all.filter(
+    (s) =>
+      s.status === "pending" &&
+      (s.payerMemberId === group.me.memberId || s.receiverMemberId === group.me.memberId),
+  );
   const history = all.filter((s) => s.status !== "pending");
   // A payment already sent and waiting for its receiver shows once, under 待確認, not here too.
   const planned = plan.status === "ready" ? plan.plan.payments : [];
   const unsent = planned.filter(
     (p) =>
+      involvesMe(group, p) &&
       !pending.some(
         (s) => s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
       ),
@@ -77,11 +82,23 @@ export function SettlePanel({ group }: { group: Group }) {
   return (
     <PictureContext value={memberPictures(members.data)}>
       <div className="flex flex-col gap-6 text-ink">
-        <section className="flex flex-col gap-1 rounded-3xl bg-sprout-150 p-6">
-          <h2 className="text-sm text-ink-muted">
+        <section
+          className={`flex flex-col gap-1 rounded-3xl p-6 transition-colors ${
+            mine > 0 ? "settle-aura-get" : mine < 0 ? "settle-aura-pay" : "settle-aura-even"
+          }`}
+        >
+          <h2
+            className={`text-sm font-bold ${
+              mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink-muted"
+            }`}
+          >
             {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
           </h2>
-          <p className="text-4xl font-bold tabular-nums">
+          <p
+            className={`text-4xl font-bold tabular-nums ${
+              mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink"
+            }`}
+          >
             <CountUp
               value={Math.abs(mine)}
               format={(n) => formatAmount(n, currency)}
@@ -186,14 +203,11 @@ export function SettlePanel({ group }: { group: Group }) {
                 <SettledMessage celebrate={sawWork.current} />
               ) : (
                 <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
-                  {[...unsent]
-                    // What I have to do comes first; the sort is stable for the rest.
-                    .sort((a, b) => Number(involvesMe(group, b)) - Number(involvesMe(group, a)))
-                    .map((p) => (
-                      <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
-                        <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
-                      </li>
-                    ))}
+                  {unsent.map((p) => (
+                    <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
+                      <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
+                    </li>
+                  ))}
                 </ul>
               ))}
           </section>
@@ -417,7 +431,7 @@ function SettlementHistory({
           </button>
           {showDropped && (
             <>
-              <ul aria-label={t("settle.droppedTitle")} className="flex flex-col">
+              <ul aria-label={t("settle.droppedTitle")} className="collapse-enter flex flex-col">
                 {byDay(dropped.slice(0, droppedVisible), true)}
               </ul>
               {dropped.length > droppedVisible && (
@@ -465,10 +479,31 @@ function Person({ id, name, isMe }: { id: string; name: string; isMe: boolean })
   // The avatar keeps the real initial; only the label says 你.
   return (
     <span
-      className={`flex min-w-0 items-center gap-2 rounded-full border py-0.5 pr-3 pl-0.5 ${isMe ? "border-ink/40" : "border-transparent"}`}
+      className={`flex min-w-0 items-center gap-2 rounded-full border py-0.5 pr-3 pl-0.5 ${
+        isMe ? "border-sprout-500/45 bg-sprout-50/80 shadow-2xs" : "border-sprout-200/70 bg-white"
+      }`}
     >
       <Avatar name={name} pictureUrl={pictureOf(id)} className="size-8 text-sm" />
       <span className="truncate font-bold">{isMe ? t("settle.you") : name}</span>
+    </span>
+  );
+}
+
+/** Connected arrow track between payer and receiver avatars. */
+function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
+  const badge =
+    tone === "pay"
+      ? "border-red-300 bg-red-50 text-red-700"
+      : tone === "get"
+        ? "border-sprout-200 bg-sprout-100 text-sprout-600"
+        : "border-sprout-200 bg-sprout-50 text-ink-muted";
+  return (
+    <span aria-hidden="true" className="flex shrink-0 items-center">
+      <span className="h-0.5 w-2 bg-sprout-200" />
+      <span className={`flex size-6 items-center justify-center rounded-full border ${badge}`}>
+        <ArrowRight className="size-3.5" />
+      </span>
+      <span className="h-0.5 w-2 bg-sprout-200" />
     </span>
   );
 }
@@ -478,7 +513,7 @@ function RoleTag({ paying }: { paying: boolean }) {
   return (
     <span
       className={`rounded-full px-3 py-0.5 text-xs font-bold text-white ${
-        paying ? "bg-orange-700" : "bg-sprout-600"
+        paying ? "bg-red-700" : "bg-sprout-600"
       }`}
     >
       {t(paying ? "settle.rolePay" : "settle.roleGet")}
@@ -513,12 +548,13 @@ function PaymentLine({
 }) {
   const label = (id: string, name: string) => (id === myMemberId ? t("settle.you") : name);
   const mine = payerId === myMemberId || receiverId === myMemberId;
+  const tone = !mine ? "neutral" : payerId === myMemberId ? "pay" : "get";
   return (
     <>
       <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1">
           <Person id={payerId} name={payer} isMe={payerId === myMemberId} />
-          <ArrowRight className="size-4 shrink-0 text-ink-muted" />
+          <TransferTrack tone={tone} />
           <Person id={receiverId} name={receiver} isMe={receiverId === myMemberId} />
         </span>
         <span className="sr-only">
@@ -528,7 +564,13 @@ function PaymentLine({
           })}
         </span>
         <span
-          className={`shrink-0 text-lg font-bold tabular-nums ${struck ? "text-ink-muted line-through" : "text-sprout-600"}`}
+          className={`shrink-0 text-lg font-bold tabular-nums ${
+            struck
+              ? "text-ink-muted line-through"
+              : tone === "pay"
+                ? "text-red-700"
+                : "text-sprout-600"
+          }`}
         >
           {formatAmount(amount, currency)}
         </span>

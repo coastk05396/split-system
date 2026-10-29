@@ -70,7 +70,7 @@ function GroupRow({ group }: { group: Group }) {
   return (
     <PressableLink
       to={`/groups/${group.id}`}
-      className={`${card} group flex items-center gap-4 p-5 transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
+      className={`${card} group flex items-center gap-4 p-5 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span
         className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${
@@ -90,11 +90,24 @@ function GroupRow({ group }: { group: Group }) {
         <span className="text-sm text-ink-muted">
           {t("groups.people", { count: group.memberCount })}
           {" · "}
-          {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
+          <span
+            className={
+              balance < 0
+                ? "font-semibold text-red-700"
+                : balance > 0
+                  ? "font-semibold text-sprout-700"
+                  : ""
+            }
+          >
+            {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
+          </span>
         </span>
         <AvatarStack members={group.memberPreview} total={group.memberCount} />
       </span>
-      <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
+      <ChevronRight
+        aria-hidden="true"
+        className="size-5 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+      />
     </PressableLink>
   );
 }
@@ -107,8 +120,10 @@ function NoGroups() {
         <p className="mt-1 text-sm text-ink-muted">{t("groups.count", { count: 0 })}</p>
       </header>
       <div className="flex flex-col items-center gap-6 py-6 text-center">
-        <span className="flex size-56 items-center justify-center rounded-full bg-sprout-150">
-          <SproutMark className="size-28" />
+        <span className="empty-bloom flex size-56 items-center justify-center rounded-full bg-sprout-150 shadow-[inset_0_2px_0_0_rgb(255_255_255/0.8),0_12px_28px_-20px_#143f2a] ring-8 ring-sprout-100/60">
+          <span className="sprout-greet inline-flex">
+            <SproutMark className="size-28" />
+          </span>
         </span>
         <h2 className="text-xl font-bold">{t("groups.empty.title")}</h2>
         <p className="text-ink-muted">

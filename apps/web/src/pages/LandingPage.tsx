@@ -21,7 +21,7 @@ export function LandingPage() {
         </span>
         <Link
           to="/sign-in"
-          className="rounded-full bg-sprout-500 px-5 py-2 text-sm font-bold text-white hover:bg-sprout-600"
+          className="press-pill rounded-full bg-sprout-500 px-5 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-600"
         >
           {t("landing.headerSignIn")}
         </Link>
@@ -38,7 +38,7 @@ export function LandingPage() {
           <p className="mt-5 max-w-xl text-ink-muted md:text-lg">{t("landing.body")}</p>
           <Link
             to="/sign-in"
-            className="mt-8 inline-flex items-center gap-3 rounded-full bg-sprout-500 px-7 py-3.5 font-bold text-white hover:bg-sprout-600"
+            className="press-pill mt-8 inline-flex items-center gap-3 rounded-full bg-sprout-500 px-7 py-3.5 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_8px_18px_-10px_#143f2a] hover:bg-sprout-600"
           >
             {t("landing.signIn")}
             <ArrowRight aria-hidden="true" className="size-5" />

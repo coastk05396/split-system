@@ -12,7 +12,7 @@ import { errorMessage, getLocale, t } from "../i18n/messages.js";
 
 const PROVIDER_NAME: Record<Provider, string> = { line: "LINE", google: "Google" };
 
-const card = "rounded-3xl border border-sprout-200 bg-white";
+const card = "surface-card rounded-3xl border border-sprout-200 bg-white";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -91,7 +91,7 @@ export function SettingsPage() {
         type="button"
         disabled={busy}
         onClick={linkLine}
-        className="rounded-full bg-line px-4 py-2 text-sm font-bold text-white"
+        className="press-pill rounded-full bg-line px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-line/90"
       >
         {t("settings.link", { provider: PROVIDER_NAME.line })}
       </button>
@@ -104,11 +104,25 @@ export function SettingsPage() {
     <div className="mx-auto max-w-xl">
       <h1 className="text-3xl font-black">{t("settings.heading")}</h1>
 
-      <div className={`${card} mt-6 flex items-center gap-4 p-5`}>
-        <Avatar name={user.displayName} pictureUrl={user.pictureUrl} className="size-16 text-2xl" />
-        <div>
-          <p className="text-xl font-bold">{user.displayName}</p>
-          <p className="text-sm text-ink-muted">
+      <div className={`${card} line-bubble-card mt-6 flex items-center gap-4 p-5`}>
+        <Avatar
+          name={user.displayName}
+          pictureUrl={user.pictureUrl}
+          className="size-16 text-2xl ring-2 ring-sprout-200"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-xl font-bold">{user.displayName}</p>
+            {linked.has("line") && (
+              <span
+                aria-hidden="true"
+                className="rounded-full bg-line px-2 py-0.5 text-[11px] font-bold tracking-wide text-white"
+              >
+                LINE
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-sm text-ink-muted">
             {t("settings.linkedVia", {
               providers: user.identities
                 .map((i) => PROVIDER_NAME[i.provider])
@@ -198,7 +212,17 @@ export function SettingsPage() {
               const isLinked = linked.has(provider);
               return (
                 <li key={provider} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-bold">
+                  <span className="flex items-center gap-2 font-bold">
+                    <span
+                      aria-hidden="true"
+                      className={`size-2.5 rounded-full ${
+                        isLinked
+                          ? provider === "line"
+                            ? "bg-line"
+                            : "bg-sprout-500"
+                          : "bg-sprout-200"
+                      }`}
+                    />
                     {t(isLinked ? "settings.linked" : "settings.notLinked", { provider: name })}
                   </span>
                   {isLinked
@@ -214,7 +238,7 @@ export function SettingsPage() {
                               acceptMe,
                             );
                           }}
-                          className="rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold"
+                          className="press-pill rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold hover:border-sprout-500"
                         >
                           {t("settings.unlinkShort")}
                         </button>
@@ -230,7 +254,7 @@ export function SettingsPage() {
           <button
             type="button"
             onClick={() => void leave()}
-            className={`${card} flex items-center gap-3 px-5 py-4 font-bold`}
+            className={`${card} press-card flex items-center gap-3 px-5 py-4 font-bold hover:border-sprout-500`}
           >
             <LogOut aria-hidden="true" className="size-5" />
             {t("settings.signOut")}
@@ -241,7 +265,7 @@ export function SettingsPage() {
             onClick={() => {
               void run(() => api.auth["logout-all"].$post(), leave);
             }}
-            className={`${card} flex items-center gap-3 px-5 py-4 font-bold`}
+            className={`${card} press-card flex items-center gap-3 px-5 py-4 font-bold hover:border-sprout-500`}
           >
             <LogOut aria-hidden="true" className="size-5" />
             {t("settings.signOutAll")}
@@ -252,7 +276,7 @@ export function SettingsPage() {
             onClick={() => {
               setConfirmingDelete(true);
             }}
-            className={`${card} flex items-center gap-3 px-5 py-4 font-bold text-red-700`}
+            className={`${card} press-card flex items-center gap-3 px-5 py-4 font-bold text-red-700 hover:border-red-300`}
           >
             <Trash2 aria-hidden="true" className="size-5" />
             {t("settings.deleteAccount")}
@@ -261,13 +285,13 @@ export function SettingsPage() {
       </Section>
 
       {confirmingDelete && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 md:items-center">
+        <div className="dialog-overlay glass-overlay fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center">
           <div
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-title"
             aria-describedby="delete-body"
-            className="w-full max-w-sm rounded-3xl bg-white p-6"
+            className="dialog-content glass-dialog w-full max-w-sm rounded-3xl border border-sprout-200/80 p-6"
           >
             <h2 id="delete-title" className="text-lg font-bold">
               {t("settings.deleteTitle")}
@@ -282,7 +306,7 @@ export function SettingsPage() {
                 onClick={() => {
                   setConfirmingDelete(false);
                 }}
-                className="flex-1 rounded-full border border-sprout-200 py-3 font-bold"
+                className="press-pill flex-1 rounded-full border border-sprout-200 py-3 font-bold hover:border-sprout-500"
               >
                 {t("settings.cancel")}
               </button>
@@ -293,7 +317,7 @@ export function SettingsPage() {
                   setConfirmingDelete(false);
                   void run(() => api.me.$delete(), leave);
                 }}
-                className="flex-1 rounded-full bg-red-700 py-3 font-bold text-white"
+                className="press-pill flex-1 rounded-full bg-red-700 py-3 font-bold text-white hover:bg-red-700/90"
               >
                 {t("settings.deleteConfirm")}
               </button>

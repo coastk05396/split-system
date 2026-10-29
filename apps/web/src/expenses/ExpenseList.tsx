@@ -1,12 +1,13 @@
 import { type CurrencyCode, type Expense, formatAmount, type Member } from "@split/shared";
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
+import { PressableLink } from "../shell/PressableLink.js";
 import { useMembers } from "../groups/api.js";
 import { card, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { longDate } from "../i18n/format.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import { useExpenses } from "./api.js";
-import { CategoryIcon } from "./CategoryIcon.js";
+import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 
 export function memberPictures(
   members: readonly Member[] | undefined,
@@ -119,11 +120,13 @@ function ExpenseRow({
     )
     .join("、");
   return (
-    <Link
+    <PressableLink
       to={`/groups/${groupId}/expenses/${expense.id}`}
-      className={`${card} flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500`}
+      className={`${card} flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500 active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-sprout-100 text-sprout-600">
+      <span
+        className={`flex size-11 shrink-0 items-center justify-center rounded-full shadow-[inset_0_1px_0_0_rgb(255_255_255/0.6)] ${categoryTone(expense.category).badge}`}
+      >
         <CategoryIcon category={expense.category} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
@@ -142,6 +145,6 @@ function ExpenseRow({
           </span>
         )}
       </span>
-    </Link>
+    </PressableLink>
   );
 }

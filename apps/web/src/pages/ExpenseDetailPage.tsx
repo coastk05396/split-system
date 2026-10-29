@@ -3,7 +3,7 @@ import { type Expense, formatAmount, formatRate, type Group } from "@split/share
 import { Pencil, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
-import { CategoryIcon } from "../expenses/CategoryIcon.js";
+import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
 import { dateHeading, memberNames, memberPictures } from "../expenses/ExpenseList.js";
 import { useGroup, useMembers } from "../groups/api.js";
 import {
@@ -64,26 +64,30 @@ function Detail({
             <Link
               to={`/groups/${group.id}/expenses/${expense.id}/edit`}
               aria-label={t("expense.editAction")}
-              className="rounded-full p-2 text-sprout-600"
+              className="press-icon rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
             >
               <Pencil aria-hidden="true" className="size-6" />
             </Link>
           ) : undefined
         }
       />
-      <section className="overflow-hidden rounded-3xl border border-sprout-200 bg-white">
+      <section className="surface-card overflow-hidden rounded-3xl border border-sprout-200 bg-white">
         <div className="flex items-center gap-3 bg-sprout-150 px-6 py-4">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white text-sprout-600">
+          <span
+            className={`flex size-12 shrink-0 items-center justify-center rounded-full shadow-xs ${categoryTone(expense.category).badge}`}
+          >
             <CategoryIcon category={expense.category} className="size-6" />
           </span>
           <div className="flex min-w-0 flex-col items-start gap-1">
             <h2 className="break-words text-xl font-bold">{expense.description}</h2>
-            <span className="rounded-full bg-white px-3 py-0.5 text-xs font-bold text-sprout-700">
+            <span
+              className={`rounded-full px-3 py-0.5 text-xs font-bold ${categoryTone(expense.category).badge}`}
+            >
               {categoryLabel(expense.category)}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center gap-2 px-6 py-6 text-center">
+        <div className="receipt-divider flex flex-col items-center gap-2 px-6 py-6 text-center">
           <p className="text-sm text-ink-muted">{t("expense.total")}</p>
           <p className="text-4xl font-bold tabular-nums text-sprout-700">
             {formatAmount(expense.originalAmount, expense.originalCurrency)}
@@ -179,8 +183,8 @@ function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
         {t("expense.delete")}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay fixed inset-0 z-20 bg-black/40" />
-        <Dialog.Content className="dialog-content fixed inset-x-4 top-1/3 z-30 mx-auto flex max-w-md flex-col gap-4 rounded-3xl bg-white p-6">
+        <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/3 z-30 mx-auto flex max-w-md flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6">
           <Dialog.Title className="text-xl font-bold">
             {t("expense.deleteTitle", { name: expense.description })}
           </Dialog.Title>

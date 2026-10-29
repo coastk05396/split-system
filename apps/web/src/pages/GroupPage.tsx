@@ -14,7 +14,7 @@ import { TRIP_ENABLED } from "../trip/enabled.js";
 import { TripPanel } from "../trip/TripPanel.js";
 
 const headerIcon =
-  "flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2 hover:bg-sprout-150";
+  "press-icon flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2 hover:bg-sprout-150";
 
 /**
  * Screen 3 as amended: the same tabs everywhere, 帳目, 行程 (Trips only) and 結算, with the
@@ -86,7 +86,7 @@ function GroupDetail({ group }: { group: Group }) {
           </div>
           <Link
             to={`/groups/${group.id}/invite`}
-            className="shrink-0 rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white hover:bg-sprout-500/90"
+            className="press-pill shrink-0 rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-500/90"
           >
             {t("group.alone.invite")}
           </Link>
@@ -117,7 +117,7 @@ function GroupDetail({ group }: { group: Group }) {
           <Link
             to={`/groups/${group.id}/expenses/new`}
             aria-label={t("expense.new")}
-            className="flex shrink-0 items-center gap-1 rounded-full bg-sprout-500 px-4 py-3 font-bold text-white hover:bg-sprout-500/90"
+            className="press-pill flex shrink-0 items-center gap-1 rounded-full bg-sprout-500 px-4 py-3 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_4px_12px_-6px_#143f2a] hover:bg-sprout-500/90"
           >
             <Plus aria-hidden="true" className="size-5" />
             {t("group.add")}
@@ -126,27 +126,39 @@ function GroupDetail({ group }: { group: Group }) {
         {tabs.map((tab) => {
           if (tab.value === "expenses") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6 text-ink-muted">
+              <Tabs.Content
+                key={tab.value}
+                value={tab.value}
+                className="tab-panel pt-4 pb-6 text-ink-muted"
+              >
                 <ExpenseList groupId={group.id} settlementCurrency={group.settlementCurrency} />
               </Tabs.Content>
             );
           }
           if (tab.value === "trip") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6">
+              <Tabs.Content key={tab.value} value={tab.value} className="tab-panel pt-4 pb-6">
                 <TripPanel group={group} />
               </Tabs.Content>
             );
           }
           if (tab.value === "settle") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6 text-ink-muted">
+              <Tabs.Content
+                key={tab.value}
+                value={tab.value}
+                className="tab-panel pt-4 pb-6 text-ink-muted"
+              >
                 <SettlePanel group={group} />
               </Tabs.Content>
             );
           }
           return (
-            <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6 text-ink-muted">
+            <Tabs.Content
+              key={tab.value}
+              value={tab.value}
+              className="tab-panel pt-4 pb-6 text-ink-muted"
+            >
               {t("page.comingSoon")}
             </Tabs.Content>
           );

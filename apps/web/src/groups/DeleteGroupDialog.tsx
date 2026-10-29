@@ -17,13 +17,13 @@ export function DeleteGroupDialog({ group }: { group: Group }) {
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger
         aria-label={t("group.delete")}
-        className="rounded-full p-2 text-red-700 hover:bg-red-50"
+        className="press-icon rounded-full p-2 text-red-700 hover:bg-red-50"
       >
         <Trash2 aria-hidden="true" className="size-6" />
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay fixed inset-0 z-20 bg-ink/40" />
-        <Dialog.Content className="dialog-content fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
+        <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
           {open && <DeleteForm group={group} />}
         </Dialog.Content>
       </Dialog.Portal>
@@ -79,7 +79,7 @@ function DeleteForm({ group }: { group: Group }) {
               onSuccess: () => void navigate("/groups", { replace: true }),
             });
           }}
-          className="flex flex-1 items-center justify-center rounded-full bg-red-700 py-3 font-bold text-white disabled:opacity-50"
+          className="press-pill flex flex-1 items-center justify-center rounded-full bg-red-700 py-3 font-bold text-white hover:bg-red-700/90 disabled:opacity-50"
         >
           {t("group.delete.confirm")}
         </button>

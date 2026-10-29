@@ -70,8 +70,10 @@ function JoinForm({ token, preview }: { token: string; preview: InvitePreview })
 
   return (
     <div className="flex max-w-xl flex-col gap-6">
-      <section className="flex flex-col items-center gap-3 rounded-3xl border border-sprout-200 bg-white p-6 text-center">
-        <span className="flex size-20 items-center justify-center rounded-full bg-sprout-100">
+      <section
+        className={`${card} line-bubble-card flex flex-col items-center gap-3 p-6 text-center`}
+      >
+        <span className="flex size-20 items-center justify-center rounded-full bg-sprout-100 shadow-xs">
           <Users aria-hidden="true" className="size-9 text-sprout-500" />
         </span>
         <p className="text-sm text-ink-muted">{t("join.title")}</p>
@@ -171,8 +173,8 @@ function ClaimDialog(props: {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-20 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
+        <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
           {p !== null && (
             <>
               <Dialog.Title className="text-xl font-bold">
