@@ -33,7 +33,7 @@ describe("members", () => {
       ],
     });
 
-    expect(await screen.findByText("台南 · 3 位成員")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "成員與邀請" })).toBeVisible();
     expect((await rows()).map((li) => li.textContent)).toEqual([
       expect.stringMatching(/小宇（你）.*管理員/),
       expect.stringMatching(/宜庭.*成員/),
@@ -41,48 +41,69 @@ describe("members", () => {
     ]);
     const former = within(screen.getByRole("list", { name: "已離開的成員" }));
     expect(former.getByText("Gulu")).toBeVisible();
-    expect(screen.getByText("群組最多 30 位成員")).toBeVisible();
   });
 
-  it("lets an Admin promote, demote and remove from the … menu", async () => {
+  it("lets an Admin promote, demote and remove with the role pill and trash button", async () => {
     const user = userEvent.setup();
     const { api, id } = membersOf({ name: "台南", others: [{ name: "宜庭" }, { name: "阿哲" }] });
 
-    await user.click(await screen.findByRole("button", { name: "宜庭 的操作" }));
-    await user.click(await screen.findByRole("menuitem", { name: "設為管理員" }));
-    expect((await rows())[1]).toHaveTextContent(/宜庭.*管理員/);
-    await screen.findByRole("button", { name: "宜庭 的操作" });
-
-    await user.click(screen.getByRole("button", { name: "宜庭 的操作" }));
-    await user.click(await screen.findByRole("menuitem", { name: "改為一般成員" }));
-    await waitFor(async () => {
-      expect((await rows())[1]).not.toHaveTextContent("管理員");
+    await user.click(await screen.findByRole("button", { name: "宜庭 的角色" }));
+    await user.click(await screen.findByRole("menuitem", { name: "管理員" }));
+    await user.click(await screen.findByRole("button", { name: "設為管理員" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "宜庭 的角色" })).toHaveTextContent("管理員");
     });
 
-    await user.click(screen.getByRole("button", { name: "阿哲 的操作" }));
-    await user.click(await screen.findByRole("menuitem", { name: "移除成員" }));
+    await user.click(screen.getByRole("button", { name: "宜庭 的角色" }));
+    await user.click(await screen.findByRole("menuitem", { name: "成員" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "宜庭 的角色" })).toHaveTextContent("成員");
+    });
+
+    await user.click(screen.getByRole("button", { name: "移除 阿哲" }));
+    expect(await screen.findByRole("heading", { name: "移除 阿哲？" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "移除" }));
     const former = await screen.findByRole("list", { name: "已離開的成員" });
     expect(within(former).getByText("阿哲")).toBeVisible();
     expect(api.groups.members(id()).find((m) => m.name === "阿哲")?.status).toBe("former");
   });
 
-  it("blocks removing a Member whose Balance is not zero", async () => {
+  it("asks before removing and leaves the Member when cancelled", async () => {
+    const user = userEvent.setup();
+    const { api, id } = membersOf({ name: "台南", others: [{ name: "阿哲" }] });
+
+    await user.click(await screen.findByRole("button", { name: "移除 阿哲" }));
+    await user.click(await screen.findByRole("button", { name: "取消" }));
+
+    expect(api.groups.members(id()).find((m) => m.name === "阿哲")?.status).toBe("active");
+  });
+
+  it("blocks removing a Member whose Balance is not zero without asking", async () => {
     const user = userEvent.setup();
     membersOf({ name: "台南", others: [{ name: "宜庭", balance: -320 }] });
 
-    await user.click(await screen.findByRole("button", { name: "宜庭 的操作" }));
-    await user.click(await screen.findByRole("menuitem", { name: "移除成員" }));
+    await user.click(await screen.findByRole("button", { name: "移除 宜庭" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "宜庭 尚有 -NT$ 320 待結算，結清後才能移除。",
     );
+    expect(screen.queryByRole("heading", { name: "移除 宜庭？" })).toBeNull();
   });
 
-  it("gives a plain Member no … menu on others", async () => {
+  it("gives a Placeholder only the trash button and no role pill", async () => {
+    membersOf({ name: "台南", others: [{ name: "成員1", status: "placeholder" }] });
+
+    await rows();
+    expect(screen.getByRole("button", { name: "移除 成員1" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "成員1 的角色" })).toBeNull();
+  });
+
+  it("gives a plain Member no controls on others", async () => {
     membersOf({ name: "台南", role: "member", others: [{ name: "ty", role: "admin" }] });
 
     await rows();
-    expect(screen.queryByRole("button", { name: "ty 的操作" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "ty 的角色" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "移除 ty" })).toBeNull();
   });
 
   it("offers no way to rename myself: Members go by their LINE or Google name", async () => {
@@ -93,17 +114,14 @@ describe("members", () => {
     expect(screen.queryByRole("button", { name: "儲存暱稱" })).toBeNull();
   });
 
-  it("adds a Placeholder Member by name and explains a taken name", async () => {
+  it("adds numbered Placeholder Members with one tap", async () => {
     const user = userEvent.setup();
-    membersOf({ name: "台南", others: [{ name: "宜庭" }] });
+    membersOf({ name: "台南", others: [{ name: "成員1" }] });
 
-    await user.type(await screen.findByLabelText("名字"), "阿哲");
-    await user.click(screen.getByRole("button", { name: "新增" }));
-    expect((await rows())[2]).toHaveTextContent("阿哲（未加入）");
-    expect(screen.getByLabelText("名字")).toHaveValue("");
+    await user.click(await screen.findByRole("button", { name: "新增成員" }));
+    await waitFor(async () => expect((await rows())[2]).toHaveTextContent("成員2（未加入）"));
 
-    await user.type(screen.getByLabelText("名字"), "宜庭");
-    await user.click(screen.getByRole("button", { name: "新增" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("群組裡已經有同名的成員了。");
+    await user.click(screen.getByRole("button", { name: "新增成員" }));
+    await waitFor(async () => expect((await rows())[3]).toHaveTextContent("成員3（未加入）"));
   });
 });

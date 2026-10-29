@@ -85,7 +85,7 @@ The suggested set of Settlements that would bring every Balance to zero, compute
 _Avoid_: Settlement plan, debt graph
 
 **Invite**:
-A LINE-shared link, unguessable and valid for 7 days, that lets a signed-in person join a Group.
+A time-limited, unguessable link that lets a signed-in person join a Group. Members can share it through LINE, as a QR Code, or by copying the link.
 _Avoid_: Invitation code, share link
 
 **LINE chat**:
@@ -109,5 +109,5 @@ The name a Member chooses to be shown by in one Group, defaulting to their LINE 
 _Avoid_: Alias, display name (when meaning the per-Group name)
 
 **Placeholder Member**:
-A Member added by name before the person has joined, with no account, who can be claimed later through an Invite.
+A numbered Member profile created before the person has joined, with no account, that can be claimed later through an Invite.
 _Avoid_: Virtual member, guest, dummy

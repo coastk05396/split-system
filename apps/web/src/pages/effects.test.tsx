@@ -142,9 +142,8 @@ describe("the home intro", () => {
     // Adding a placeholder member highlights the newly arrived row
     await router.navigate(`/groups/${id}/members`);
     const user = userEvent.setup();
-    await user.type(await screen.findByLabelText("名字"), "新夥伴");
-    await user.click(screen.getByRole("button", { name: "新增" }));
-    const newRow = await screen.findByText("新夥伴");
+    await user.click(await screen.findByRole("button", { name: "新增成員" }));
+    const newRow = await screen.findByText(/成員\d+/);
     expect(newRow.closest("li")).toHaveClass("row-arrive");
   });
 });

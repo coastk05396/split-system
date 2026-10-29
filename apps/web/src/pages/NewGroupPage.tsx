@@ -21,7 +21,7 @@ function isCurrency(value: string): value is CurrencyCode {
 
 /**
  * Screen 6 as amended: name, usage (Running Tab or Trip) and the Settlement currency (fixed
- * after the first Expense), which starts at the User's Preferred currency. Then on to the Invite.
+ * after the first Expense), which starts at the User's Preferred currency. Then on to Members and Invite.
  */
 export function NewGroupPage() {
   const [params] = useSearchParams();
@@ -38,7 +38,7 @@ export function NewGroupPage() {
     event.preventDefault();
     create.mutate(
       { name: name.trim(), isTrip, settlementCurrency },
-      { onSuccess: (group) => void navigate(`/groups/${group.id}/invite`, { replace: true }) },
+      { onSuccess: (group) => void navigate(`/groups/${group.id}/members`, { replace: true }) },
     );
   }
 

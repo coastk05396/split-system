@@ -19,7 +19,7 @@ const me = makeUser("小宇");
 const friends = [{ name: "宜庭" }, { name: "阿哲" }, { name: "Gulu" }];
 
 describe("group detail", () => {
-  it("shows a Trip with its size, badge, three tabs and links to Members and the Invite", async () => {
+  it("shows a Trip with its size, badge, three tabs and one Members and Invite link", async () => {
     let id = "";
     renderApp({
       cookieUser: me,
@@ -41,10 +41,7 @@ describe("group detail", () => {
       "行程",
       "結算",
     ]);
-    expect(screen.getByRole("link", { name: /邀請/ })).toHaveAttribute(
-      "href",
-      `/groups/${id}/invite`,
-    );
+    expect(screen.queryByRole("link", { name: "邀請成員" })).toBeNull();
   });
 
   it("hides the 行程 tab of an existing Trip under maintenance and tags it in red", async () => {
@@ -97,11 +94,15 @@ describe("group detail", () => {
     expect(await screen.findByText("只有你一個人")).toBeVisible();
     expect(screen.getByRole("link", { name: "邀請朋友" })).toHaveAttribute(
       "href",
-      `/groups/${id}/invite`,
+      `/groups/${id}/members`,
+    );
+    expect(screen.getByRole("link", { name: /只有你/ })).toHaveAttribute(
+      "href",
+      `/groups/${id}/members`,
     );
   });
 
-  it("lets an Admin delete the Group permanently after typing its name", async () => {
+  it("lets an Admin delete the Group permanently after typing delete", async () => {
     const user = userEvent.setup();
     let id = "";
     const { api, router } = renderApp({
@@ -126,7 +127,7 @@ describe("group detail", () => {
     const confirm = within(dialog).getByRole("button", { name: "永久刪除" });
     expect(confirm).toBeDisabled();
 
-    await user.type(within(dialog).getByLabelText("輸入群組名稱以確認"), "室友");
+    await user.type(within(dialog).getByLabelText("輸入 delete 以確認"), "delete");
     await user.click(confirm);
 
     expect(await screen.findByRole("heading", { name: "從第一個小隊開始吧！" })).toBeVisible();

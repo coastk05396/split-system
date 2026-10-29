@@ -94,7 +94,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "groups/:id/invite",
-        lazy: page(() => import("../pages/InvitePage.js"), "InvitePage"),
+        loader: ({ params }) => redirect(`/groups/${params.id ?? ""}/members`),
       },
       {
         path: "groups/:id/expenses/new",

@@ -1,8 +1,9 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { formatAmount, type Group, type Member } from "@split/shared";
-import { ArrowRight, Ellipsis, Link2 } from "lucide-react";
-import { type SubmitEvent, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Check, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import {
   useAddPlaceholder,
@@ -11,24 +12,16 @@ import {
   usePatchMember,
   useRemoveMember,
 } from "../groups/api.js";
-import {
-  Avatar,
-  card,
-  failureMessage,
-  input,
-  LoadError,
-  Loading,
-  primaryButton,
-  ScreenHeader,
-  secondaryButton,
-} from "../groups/ui.js";
+import { Avatar, card, failureMessage, LoadError, Loading, ScreenHeader } from "../groups/ui.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
+import { InviteSection } from "./InviteSection.js";
 
 /**
  * Screen 13 as amended (decisions 10, 31): Members with roles, shown by their LINE or Google
  * name and picture, Placeholder Members in a dashed circle, Former Members apart, the Admin
- * "…" menu with the zero-Balance block message, and adding a Placeholder Member by name.
+ * role pill and trash button with the zero-Balance block message, one-tap numbered
+ * Placeholder creation, and sharing the Group's Invite.
  */
 export function MembersPage() {
   const id = useParams().id ?? "";
@@ -46,21 +39,43 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const seated = members.filter((m) => m.status !== "former");
   const former = members.filter((m) => m.status === "former");
   const isAdmin = group.me.role === "admin";
+  const add = useAddPlaceholder(group.id);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [freshMemberId, setFreshMemberId] = useState<string | null>(null);
 
+  async function addMember() {
+    const names = new Set(members.map((member) => member.displayName));
+    let number = 1;
+    while (names.has(`成員${number}`)) number++;
+    setBlocked(null);
+    try {
+      const member = await add.mutateAsync(`成員${number}`);
+      setFreshMemberId(member.id);
+    } catch (error) {
+      setBlocked(failureMessage(error));
+    }
+  }
+
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
-      <ScreenHeader
-        title={t("members.title")}
-        back={`/groups/${group.id}`}
-        subtitle={t("members.summary", { name: group.name, count: seated.length })}
-      />
+    <div className="flex max-w-2xl flex-col gap-4">
+      <ScreenHeader title={t("members.manageTitle")} back={`/groups/${group.id}`} />
       {blocked !== null && (
         <p role="alert" className="rounded-2xl bg-peach p-4 font-bold">
           {blocked}
         </p>
       )}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-sprout-900">{t("members.title")}</h2>
+        <button
+          type="button"
+          disabled={add.isPending}
+          onClick={() => void addMember()}
+          className="press-pill flex min-h-11 items-center gap-1 rounded-full bg-sprout-150 px-4 text-sm font-bold text-sprout-700 hover:bg-sprout-200 disabled:opacity-50"
+        >
+          <Plus aria-hidden="true" className="size-5" />
+          {t("members.addTrigger")}
+        </button>
+      </div>
       <ul aria-label={t("members.title")} className="flex flex-col gap-3">
         {seated.map((m) => (
           <li
@@ -86,11 +101,12 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
                 </span>
               )}
             </span>
-            {isAdmin && !m.isMe && <MemberMenu group={group} member={m} onBlocked={setBlocked} />}
+            {isAdmin && !m.isMe && (
+              <MemberControls group={group} member={m} onBlocked={setBlocked} />
+            )}
           </li>
         ))}
       </ul>
-      <p className="text-sm text-ink-muted">{t("members.cap")}</p>
       {former.length > 0 && (
         <section className="flex flex-col gap-3">
           <h2 className="font-bold">{t("members.former")}</h2>
@@ -104,26 +120,12 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
           </ul>
         </section>
       )}
-      <AddPlaceholderForm groupId={group.id} onAdded={setFreshMemberId} />
-      <Link
-        to={`/groups/${group.id}/invite`}
-        className="flex items-start gap-3 rounded-3xl bg-sprout-150 p-5"
-      >
-        <Link2 aria-hidden="true" className="mt-0.5 size-5 text-sprout-500" />
-        <span className="flex flex-col gap-1">
-          <span className="font-bold">{t("members.inviteMore")}</span>
-          <span className="text-sm text-ink-muted">{t("members.inviteMoreBody")}</span>
-        </span>
-      </Link>
-      <Link to={`/groups/${group.id}/invite`} className={`${primaryButton} justify-between`}>
-        {t("members.invite")}
-        <ArrowRight aria-hidden="true" className="size-5" />
-      </Link>
+      <InviteSection group={group} />
     </div>
   );
 }
 
-function MemberMenu({
+function MemberControls({
   group,
   member,
   onBlocked,
@@ -134,11 +136,13 @@ function MemberMenu({
 }) {
   const patch = usePatchMember(group.id);
   const remove = useRemoveMember(group.id);
+  const [confirming, setConfirming] = useState<"promote" | "remove" | null>(null);
+  const name = localName(member.displayName);
   const report = (error: unknown) => {
     onBlocked(
       error instanceof ApiFailure && error.code === "BALANCE_NOT_ZERO"
         ? t("members.blocked", {
-            name: localName(member.displayName),
+            name,
             amount: formatAmount(member.balance, group.settlementCurrency),
           })
         : failureMessage(error),
@@ -148,108 +152,127 @@ function MemberMenu({
     onBlocked(null);
     patch.mutate({ memberId: member.id, patch: { role } }, { onError: report });
   };
-  const item = "cursor-pointer rounded-xl px-4 py-3 outline-none data-[highlighted]:bg-sprout-150";
+  const item =
+    "flex cursor-pointer items-center justify-between gap-4 rounded-xl px-4 py-3 outline-none data-[highlighted]:bg-sprout-150";
 
   return (
-    <Menu.Root>
-      <Menu.Trigger
-        aria-label={t("members.actions", { name: localName(member.displayName) })}
-        className="press-icon rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
-      >
-        <Ellipsis aria-hidden="true" className="size-5" />
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Content
-          align="end"
-          sideOffset={6}
-          className="menu-content z-30 min-w-40 rounded-2xl border border-sprout-200/90 p-1 text-ink"
-        >
-          {member.status === "active" && member.role === "member" && (
-            <Menu.Item
-              className={item}
-              onSelect={() => {
-                setRole("admin");
-              }}
-            >
-              {t("members.promote")}
-            </Menu.Item>
-          )}
-          {member.status === "active" && member.role === "admin" && (
-            <Menu.Item
-              className={item}
-              onSelect={() => {
-                setRole("member");
-              }}
-            >
-              {t("members.demote")}
-            </Menu.Item>
-          )}
-          <Menu.Item
-            className={`${item} text-red-700`}
-            onSelect={() => {
-              onBlocked(null);
-              remove.mutate(member.id, { onError: report });
-            }}
+    <div className="flex items-center gap-1">
+      {member.status === "active" && (
+        <Menu.Root>
+          <Menu.Trigger
+            aria-label={t("members.role", { name })}
+            className="press-pill flex min-h-11 items-center gap-1 rounded-full border border-sprout-200 bg-sprout-100 py-1 pr-2 pl-4 text-sm font-bold text-sprout-800 hover:border-sprout-500"
           >
-            {t("members.remove")}
-          </Menu.Item>
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu.Root>
+            {t(member.role === "admin" ? "members.admin" : "members.member")}
+            <ChevronDown aria-hidden="true" className="size-4" />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content
+              align="end"
+              sideOffset={6}
+              className="menu-content z-30 min-w-40 rounded-2xl border border-sprout-200/90 p-1 text-ink"
+            >
+              {(["admin", "member"] as const).map((role) => (
+                <Menu.Item
+                  key={role}
+                  className={item}
+                  onSelect={() => {
+                    if (role === member.role) return;
+                    if (role === "admin") setConfirming("promote");
+                    else setRole("member");
+                  }}
+                >
+                  {t(role === "admin" ? "members.admin" : "members.member")}
+                  {role === member.role && (
+                    <Check aria-hidden="true" className="size-4 text-sprout-600" />
+                  )}
+                </Menu.Item>
+              ))}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
+      )}
+      <button
+        type="button"
+        aria-label={t("members.removeAria", { name })}
+        onClick={() => {
+          if (member.balance !== 0) report(new ApiFailure("BALANCE_NOT_ZERO", 409));
+          else setConfirming("remove");
+        }}
+        className="press-icon flex size-11 items-center justify-center rounded-full text-red-700 hover:bg-red-50"
+      >
+        <Trash2 aria-hidden="true" className="size-5" />
+      </button>
+      <ConfirmDialog
+        open={confirming === "promote"}
+        title={t("members.confirmPromoteTitle", { name })}
+        body={t("members.confirmPromoteBody")}
+        confirmLabel={t("members.confirmPromote")}
+        onClose={() => {
+          setConfirming(null);
+        }}
+        onConfirm={() => {
+          setRole("admin");
+        }}
+      />
+      <ConfirmDialog
+        open={confirming === "remove"}
+        title={t("members.confirmRemoveTitle", { name })}
+        body={t("members.confirmRemoveBody", { name })}
+        confirmLabel={t("members.confirmRemove")}
+        danger
+        onClose={() => {
+          setConfirming(null);
+        }}
+        onConfirm={() => {
+          onBlocked(null);
+          remove.mutate(member.id, { onError: report });
+        }}
+      />
+    </div>
   );
 }
 
-function AddPlaceholderForm({
-  groupId,
-  onAdded,
-}: {
-  groupId: string;
-  onAdded: (memberId: string) => void;
+function ConfirmDialog(props: {
+  open: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
 }) {
-  const add = useAddPlaceholder(groupId);
-  const [name, setName] = useState("");
-
-  function submit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    add.mutate(name.trim(), {
-      onSuccess: (member) => {
-        setName("");
-        onAdded(member.id);
-      },
-    });
-  }
-
   return (
-    <form onSubmit={submit} className={`${card} flex flex-col gap-3 p-5`}>
-      <h2 className="font-bold">{t("members.addPlaceholder")}</h2>
-      <p className="text-sm text-ink-muted">{t("members.placeholderHint")}</p>
-      <div className="flex gap-3">
-        <label className="flex-1">
-          <span className="sr-only">{t("members.placeholderName")}</span>
-          <input
-            value={name}
-            maxLength={60}
-            placeholder={t("members.placeholderName")}
-            onChange={(e) => {
-              setName(e.target.value);
-              add.reset();
-            }}
-            className={input}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={name.trim() === "" || add.isPending}
-          className={`${secondaryButton} py-2.5`}
-        >
-          {t("members.add")}
-        </button>
-      </div>
-      {add.isError && (
-        <p role="alert" className="text-red-700">
-          {failureMessage(add.error)}
-        </p>
-      )}
-    </form>
+    <Dialog.Root
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-40 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl">
+          <Dialog.Title className="text-xl font-bold text-sprout-900">{props.title}</Dialog.Title>
+          <Dialog.Description className="mt-2 text-sm text-ink-muted">
+            {props.body}
+          </Dialog.Description>
+          <div className="mt-6 flex gap-3">
+            <Dialog.Close className="press-pill flex-1 rounded-full border border-sprout-200 px-6 py-3 font-bold text-sprout-800 hover:border-sprout-500">
+              {t("common.cancel")}
+            </Dialog.Close>
+            <button
+              type="button"
+              onClick={() => {
+                props.onConfirm();
+                props.onClose();
+              }}
+              className={`press-pill flex-1 rounded-full px-6 py-3 font-bold text-white ${props.danger === true ? "bg-red-700 hover:bg-red-800" : "bg-sprout-600 hover:bg-sprout-700"}`}
+            >
+              {props.confirmLabel}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

@@ -17,6 +17,7 @@ export function ScreenHeader({
   subtitle,
   action,
   compact = false,
+  centered = false,
 }: {
   title: string;
   back?: string;
@@ -24,7 +25,31 @@ export function ScreenHeader({
   action?: ReactNode;
   /** Less room underneath, for a screen whose list should start high. */
   compact?: boolean;
+  /** Title in the middle with equal room either side, for a header whose controls are icons. */
+  centered?: boolean;
 }) {
+  if (centered) {
+    return (
+      <header className={`${compact ? "mb-2" : "mb-6"} flex flex-col items-center gap-1`}>
+        <div className="grid w-full grid-cols-[6rem_1fr_6rem] items-center">
+          <div className="flex justify-start">
+            {back !== undefined && (
+              <Link
+                to={back}
+                aria-label={t("common.back")}
+                className="press-icon -ml-1 rounded-full p-1 hover:bg-sprout-150/80"
+              >
+                <ArrowLeft aria-hidden="true" className="size-6" />
+              </Link>
+            )}
+          </div>
+          <h1 className="truncate text-center text-2xl font-bold md:text-3xl">{title}</h1>
+          <div className="flex justify-end">{action}</div>
+        </div>
+        {subtitle !== undefined && <div className="text-sm text-ink-muted">{subtitle}</div>}
+      </header>
+    );
+  }
   return (
     <header className={`${compact ? "mb-2" : "mb-6"} flex flex-col gap-1`}>
       <div className="flex items-center gap-3">
