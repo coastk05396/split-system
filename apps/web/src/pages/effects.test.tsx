@@ -111,4 +111,32 @@ describe("the home intro", () => {
     await screen.findByRole("heading", { name: "快速開始" });
     expect(document.querySelectorAll(".rise")).toHaveLength(0);
   });
+
+  it("applies frosted glass and spring press tiers to navigation, hero card, and group tabs", async () => {
+    let id = "";
+    const { router } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "室友" });
+      },
+    });
+    await screen.findByRole("heading", { name: "快速開始" });
+
+    // Frosted glass bottom bar and hero balance card with glass currency pill
+    expect(screen.getByRole("navigation", { name: "底部導覽" })).toHaveClass("glass-nav");
+    expect(screen.getByRole("region", { name: "目前淨收付" })).toHaveClass("hero-balance-card");
+    expect(screen.getByRole("link", { name: /TWD/ })).toHaveClass("glass-pill", "press-pill");
+
+    // Start card uses card-tier spring press
+    expect(screen.getByRole("link", { name: /快速分帳/ })).toHaveClass(
+      "press-card",
+      "surface-card",
+    );
+
+    // Group detail tabs animate their panel entrance and use pill-tier press on the add button
+    await router.navigate(`/groups/${id}`);
+    await screen.findByRole("heading", { level: 1, name: "室友" });
+    expect(screen.getByRole("tabpanel")).toHaveClass("tab-panel");
+    expect(screen.getByRole("link", { name: "新增支出" })).toHaveClass("press-pill");
+  });
 });

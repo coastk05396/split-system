@@ -1,5 +1,6 @@
 import { type CurrencyCode, type Expense, formatAmount, type Member } from "@split/shared";
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
+import { PressableLink } from "../shell/PressableLink.js";
 import { useMembers } from "../groups/api.js";
 import { card, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { longDate } from "../i18n/format.js";
@@ -119,9 +120,9 @@ function ExpenseRow({
     )
     .join("、");
   return (
-    <Link
+    <PressableLink
       to={`/groups/${groupId}/expenses/${expense.id}`}
-      className={`${card} flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500`}
+      className={`${card} flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500 active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-sprout-100 text-sprout-600">
         <CategoryIcon category={expense.category} />
@@ -142,6 +143,6 @@ function ExpenseRow({
           </span>
         )}
       </span>
-    </Link>
+    </PressableLink>
   );
 }

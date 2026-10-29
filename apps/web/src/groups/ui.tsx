@@ -29,7 +29,11 @@ export function ScreenHeader({
     <header className={`${compact ? "mb-2" : "mb-6"} flex flex-col gap-1`}>
       <div className="flex items-center gap-3">
         {back !== undefined && (
-          <Link to={back} aria-label={t("common.back")} className="-ml-1 rounded-full p-1">
+          <Link
+            to={back}
+            aria-label={t("common.back")}
+            className="press-icon -ml-1 rounded-full p-1 hover:bg-sprout-150/80"
+          >
             <ArrowLeft aria-hidden="true" className="size-6" />
           </Link>
         )}
@@ -116,9 +120,9 @@ export function Avatar({
 }
 
 export const primaryButton =
-  "flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white hover:bg-sprout-500/90 transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50";
+  "press-pill flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_6px_14px_-8px_#143f2a] hover:bg-sprout-500/90 disabled:opacity-50";
 export const secondaryButton =
-  "flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold hover:border-sprout-500 transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50";
+  "press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:opacity-50";
 /** The red tag on every Trip entry while the Trip module is under maintenance. */
 export function MaintenanceTag() {
   return (
@@ -127,6 +131,6 @@ export function MaintenanceTag() {
     </span>
   );
 }
-export const card = "rounded-3xl border border-sprout-200 bg-white";
+export const card = "surface-card rounded-3xl border border-sprout-200 bg-white";
 export const input =
-  "w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none focus:border-sprout-500";
+  "w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none transition-[border-color,box-shadow] duration-180 focus:border-sprout-500 focus:ring-3 focus:ring-sprout-500/15";

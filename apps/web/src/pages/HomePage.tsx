@@ -111,7 +111,7 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
   return (
     <section
       aria-labelledby="home-balance"
-      className="rounded-3xl bg-sprout-500 p-6 text-white shadow-[0_8px_18px_-14px_#143f2a]"
+      className="hero-balance-card rounded-3xl p-6 text-white"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="home-balance" className="text-sm text-white/85">
@@ -120,7 +120,7 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
         <Link
           to="/settings"
           aria-label={t("home.currencyTag", { currency: preferred })}
-          className="flex min-h-9 items-center gap-0.5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className="glass-pill press-pill flex min-h-9 items-center gap-0.5 rounded-full px-3 py-1 text-xs font-bold text-white hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           {preferred}
           <ChevronRight aria-hidden="true" className="size-3.5" />
@@ -213,7 +213,7 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
           {t("home.allSettled")}
         </p>
       ) : (
-        <ul className="overflow-hidden rounded-2xl border border-sprout-200 bg-white shadow-[0_5px_16px_-15px_#143f2a]">
+        <ul className="surface-card overflow-hidden rounded-2xl border border-sprout-200 bg-white">
           {pending.map((g) => (
             <li key={g.id} className="border-b border-sprout-200 last:border-b-0">
               <HomeGroupRow group={g} />
@@ -259,7 +259,10 @@ function HomeGroupRow({ group }: { group: Group }) {
           {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
         </span>
       </span>
-      <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
+      <ChevronRight
+        aria-hidden="true"
+        className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
+      />
     </PressableLink>
   );
 }
@@ -306,12 +309,12 @@ function StartCard(props: {
   return (
     <PressableLink
       to={props.to}
-      className="group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 shadow-[0_5px_16px_-17px_#143f2a] transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
     >
       {content}
       <ChevronRight
         aria-hidden="true"
-        className="size-5 shrink-0 text-sprout-600 transition-transform duration-150 group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+        className="size-5 shrink-0 text-sprout-600 transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
       />
     </PressableLink>
   );

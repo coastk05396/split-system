@@ -20,7 +20,8 @@ describe("dialog motion", () => {
 
     await user.click(await screen.findByRole("button", { name: "刪除群組" }));
 
-    expect(await screen.findByRole("dialog")).toHaveClass("dialog-content");
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("dialog-content", "glass-dialog");
   });
 
   it("gives the delete-expense dialog the shared animation too", async () => {
@@ -58,6 +59,7 @@ describe("dialog motion", () => {
 
     expect(await screen.findByRole("dialog", { name: "刪除「晚餐」？" })).toHaveClass(
       "dialog-content",
+      "glass-dialog",
     );
   });
 });

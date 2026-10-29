@@ -170,7 +170,7 @@ export function ExpenseForm({
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className="flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 has-[:checked]:font-bold"
+                  className="press-pill flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 hover:border-sprout-500 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 has-[:checked]:font-bold"
                 >
                   <input
                     type="radio"

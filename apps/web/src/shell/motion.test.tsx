@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ShareRing } from "../expenses/ShareRing.js";
+import { ShareBar, ShareRing } from "../expenses/ShareRing.js";
 import { CountUp } from "./CountUp.js";
 import { Odometer } from "./Odometer.js";
 import { SelectionPill } from "./SelectionPill.js";
@@ -171,5 +171,16 @@ describe("ShareRing", () => {
 
     rerender(<ShareRing shares={[0, 0]} />);
     expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("draws a proportional ShareBar segment for each positive share", () => {
+    const { container, rerender } = render(<ShareBar shares={[300, 100, 0]} />);
+    const segments = [...container.querySelectorAll("span")];
+    expect(segments).toHaveLength(2);
+    expect((segments[0] as HTMLElement).style.flexGrow).toBe("300");
+    expect((segments[1] as HTMLElement).style.flexGrow).toBe("100");
+
+    rerender(<ShareBar shares={[0, 0]} />);
+    expect(container.firstChild).toBeNull();
   });
 });

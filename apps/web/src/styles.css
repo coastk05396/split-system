@@ -17,6 +17,10 @@
 
   --font-sans:
     "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+
+  /* Fluid ease-out and spring release curves for tactile micro-interactions. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: linear(0, 0.42 12%, 0.78 26%, 0.98 40%, 1.045 54%, 1.018 70%, 0.998 86%, 1);
 }
 
 @layer base {
@@ -26,6 +30,122 @@
   body {
     @apply bg-sprout-50 text-ink font-sans antialiased;
   }
+}
+
+/* Three-tier asymmetric tactile press feedback:
+   press down settles briskly (80ms ease-out); release rebounds gently with a subtle spring. */
+.press-card,
+.press-pill,
+.press-icon {
+  transition-property: transform, background-color, border-color, box-shadow, color, opacity;
+  transition-duration: 360ms, 180ms, 180ms, 220ms, 180ms, 180ms;
+  transition-timing-function:
+    var(--ease-spring), var(--ease-out-expo), var(--ease-out-expo), var(--ease-out-expo),
+    var(--ease-out-expo), var(--ease-out-expo);
+}
+.press-card:active:not(:disabled),
+.press-pill:active:not(:disabled),
+.press-icon:active:not(:disabled) {
+  transition-duration: 80ms, 80ms, 80ms, 80ms, 80ms, 80ms;
+  transition-timing-function: ease-out;
+}
+.press-card:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.press-pill:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.press-icon:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+/* Frosted glass surfaces with specular top highlight and ambient depth. */
+.glass-nav {
+  background-color: rgb(255 255 255 / 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.75),
+    0 -8px 24px -22px #143f2a;
+}
+.glass-overlay {
+  background-color: rgb(22 61 42 / 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.glass-dialog {
+  background-color: rgb(255 255 255 / 0.94);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 24px 48px -18px rgb(20 63 42 / 0.28);
+}
+.glass-pill {
+  background-color: rgb(255 255 255 / 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.28);
+}
+.hero-balance-card {
+  background-color: var(--color-sprout-500);
+  background-image:
+    radial-gradient(120% 100% at 100% 0%, rgb(255 255 255 / 0.16) 0%, transparent 60%),
+    radial-gradient(90% 90% at 0% 100%, rgb(20 63 42 / 0.22) 0%, transparent 65%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.26),
+    0 12px 26px -14px #143f2a;
+}
+.surface-card {
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 5px 16px -15px #143f2a;
+}
+
+/* Digital receipt perforated divider with half-circle side notches. */
+.receipt-divider {
+  position: relative;
+  border-top: 2px dashed var(--color-sprout-200);
+}
+.receipt-divider::before,
+.receipt-divider::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background-color: var(--color-sprout-50);
+  border: 1px solid var(--color-sprout-200);
+}
+.receipt-divider::before {
+  left: -11px;
+}
+.receipt-divider::after {
+  right: -11px;
+}
+
+/* LINE chat preview frame with soft green header glow. */
+.line-bubble-card {
+  background-image: linear-gradient(180deg, rgb(6 199 85 / 0.08) 0%, transparent 45%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 8px 20px -16px #143f2a;
+}
+
+/* Soft panel entrance when switching tabs. */
+@keyframes tab-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tab-panel[data-state="active"] {
+  animation: tab-enter 180ms var(--ease-out-expo);
 }
 
 @keyframes dialog-enter {
@@ -241,10 +361,16 @@
   .row-arrive,
   .rise,
   .digit-roll,
-  .sprout-sway {
+  .sprout-sway,
+  .tab-panel[data-state="active"] {
     animation: none;
   }
   .count-up {
     transition: none;
+  }
+  .press-card:active:not(:disabled),
+  .press-pill:active:not(:disabled),
+  .press-icon:active:not(:disabled) {
+    transform: none;
   }
 }

@@ -1,9 +1,9 @@
 import { type CurrencyCode, formatAmount, type SplitMethod } from "@split/shared";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
-import { ShareRing } from "./ShareRing.js";
+import { ShareBar, ShareRing } from "./ShareRing.js";
 import { evaluateSplit, type SplitDraft, type SplitStatus } from "./split-draft.js";
 
 export interface SplitMember {
@@ -81,7 +81,7 @@ export function SplitEditor({
   const selectAll = (
     <button
       type="button"
-      className="rounded-full border border-sprout-200 px-3 py-1 font-bold"
+      className="press-pill rounded-full border border-sprout-200 px-3 py-1 font-bold hover:border-sprout-500"
       onClick={() => {
         onChange({ ...value, included: order });
       }}
@@ -97,7 +97,7 @@ export function SplitEditor({
         {METHODS.map((method) => (
           <label
             key={method}
-            className={`flex cursor-pointer flex-col gap-0.5 rounded-2xl border p-3 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 ${card}`}
+            className={`press-card flex cursor-pointer flex-col gap-0.5 rounded-2xl border p-3 hover:border-sprout-500 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 ${card}`}
           >
             <input
               type="radio"
@@ -147,6 +147,7 @@ export function SplitEditor({
         </div>
       )}
       {equal && open && <div className="flex justify-end">{selectAll}</div>}
+      <ShareBar shares={shares} />
       {(!equal || open) && (
         <ul className="flex flex-col gap-2">
           {members.map((m) => {
@@ -209,8 +210,13 @@ export function SplitEditor({
       )}
       <p
         role="status"
-        className={`text-sm font-bold ${status.kind === "balanced" ? "text-sprout-600" : "text-red-700"}`}
+        className={`flex items-center gap-1.5 self-start rounded-full px-3 py-1 text-sm font-bold transition-colors ${
+          status.kind === "balanced" ? "bg-sprout-100 text-sprout-700" : "bg-red-50 text-red-700"
+        }`}
       >
+        {status.kind === "balanced" && (
+          <Check aria-hidden="true" className="settle-pop size-4 shrink-0 text-sprout-600" />
+        )}
         {statusText(status, currency)}
       </p>
     </fieldset>

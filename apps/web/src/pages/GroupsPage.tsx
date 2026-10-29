@@ -70,7 +70,7 @@ function GroupRow({ group }: { group: Group }) {
   return (
     <PressableLink
       to={`/groups/${group.id}`}
-      className={`${card} group flex items-center gap-4 p-5 transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
+      className={`${card} group flex items-center gap-4 p-5 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span
         className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${
@@ -94,7 +94,10 @@ function GroupRow({ group }: { group: Group }) {
         </span>
         <AvatarStack members={group.memberPreview} total={group.memberCount} />
       </span>
-      <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
+      <ChevronRight
+        aria-hidden="true"
+        className="size-5 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+      />
     </PressableLink>
   );
 }
