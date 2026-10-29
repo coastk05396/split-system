@@ -28,8 +28,14 @@ export const ERROR_STATUS = {
   EXPENSE_LIMIT_REACHED: 409,
   TRIP_MODULE_OFF: 409,
   STOP_LIMIT_REACHED: 409,
+  /** Confirm or cancel of a Settlement that is no longer pending. */
+  SETTLEMENT_NOT_PENDING: 409,
+  /** Undo of a Settlement that is not confirmed. */
+  SETTLEMENT_NOT_CONFIRMED: 409,
   INVITE_EXPIRED: 422,
   EXPENSE_AMOUNT_INVALID: 422,
+  /** More than the payer still owes the receiver; details `{ maxAmount }`. */
+  SETTLEMENT_EXCEEDS_DEBT: 422,
   RATE_LIMITED: 429,
   INTERNAL: 500,
   /** No Exchange rate source answered and none is cached: the user types a custom rate. */
