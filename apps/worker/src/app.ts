@@ -3,6 +3,7 @@ import { authRoutes } from "./auth/routes.js";
 import { type AppDeps, productionDeps } from "./deps.js";
 import { expenseRoutes } from "./expenses/routes.js";
 import { groupRoutes } from "./groups/routes.js";
+import { lineRoutes } from "./line/routes.js";
 import { rateRoutes } from "./rates/routes.js";
 import { stopRoutes } from "./stops/routes.js";
 
@@ -14,7 +15,8 @@ export function createApp(deps: AppDeps) {
     .route("/", groupRoutes(deps))
     .route("/", expenseRoutes(deps))
     .route("/", rateRoutes(deps))
-    .route("/", stopRoutes(deps));
+    .route("/", stopRoutes(deps))
+    .route("/", lineRoutes(deps));
 }
 
 export const app = createApp(productionDeps);

@@ -1,5 +1,10 @@
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
 import type { Bindings } from "./env.js";
+import {
+  createLineReplyClient,
+  type LineReplyClient,
+  silentReplyClient,
+} from "./line/reply-client.js";
 import { productionRateSource, type RateSource } from "./rates/rate-source.js";
 
 /** Outside services and the clock, swapped for fakes in tests. */
@@ -8,6 +13,7 @@ export interface AppDeps {
   now: () => number;
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
   rateSource: RateSource;
+  lineReplyClient: (env: Bindings) => LineReplyClient;
 }
 
 export const productionDeps: AppDeps = {
@@ -21,4 +27,8 @@ export const productionDeps: AppDeps = {
     }),
   now: Date.now,
   rateSource: productionRateSource(),
+  lineReplyClient: (env) =>
+    env.LINE_CHANNEL_ACCESS_TOKEN === undefined || env.LINE_CHANNEL_ACCESS_TOKEN === ""
+      ? silentReplyClient
+      : createLineReplyClient(env.LINE_CHANNEL_ACCESS_TOKEN),
 };

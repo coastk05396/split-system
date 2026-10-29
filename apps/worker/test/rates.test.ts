@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
 import { fxRates } from "../src/db/schema.js";
+import { silentReplyClient } from "../src/line/reply-client.js";
 import type { FetchedRate, RateSource } from "../src/rates/rate-source.js";
 import { refreshRates } from "../src/rates/rates.js";
 import { bearer, clock, fakeVerifier, signIn, uniqueSub } from "./auth-harness.js";
@@ -30,6 +31,7 @@ async function setup() {
     verifier: () => fakeVerifier,
     now: () => clock.now,
     rateSource: fake.source,
+    lineReplyClient: () => silentReplyClient,
   });
   const session = await signIn("google", uniqueSub("rates"));
   const get = (query: string) =>

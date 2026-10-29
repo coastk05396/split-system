@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createApp } from "../src/app.js";
 import type { Bindings } from "../src/env.js";
 import { ApiError } from "../src/errors.js";
+import { silentReplyClient } from "../src/line/reply-client.js";
 import type { RateSource } from "../src/rates/rate-source.js";
 import type {
   IdentityVerifier,
@@ -34,6 +35,7 @@ export const testApp = createApp({
   verifier: () => fakeVerifier,
   now: () => clock.now,
   rateSource: offlineRateSource,
+  lineReplyClient: () => silentReplyClient,
 });
 
 let counter = 0;

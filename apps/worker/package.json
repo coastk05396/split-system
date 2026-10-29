@@ -9,7 +9,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
     "build:types": "tsc -p tsconfig.types.json",
     "lint": "eslint .",
     "test": "vitest run",
@@ -27,6 +27,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.9",
     "@cloudflare/workers-types": "^5.20261028.1",
+    "@types/node": "^24.19.2",
     "drizzle-kit": "^0.31.11",
     "fast-check": "^4.10.2",
     "vitest": "^4.1.12",
