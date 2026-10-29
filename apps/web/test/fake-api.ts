@@ -30,7 +30,14 @@ export interface FakeApi {
 }
 
 export function makeUser(displayName: string, provider: "google" | "line" = "google"): Me {
-  return { id: `u-${displayName}`, displayName, pictureUrl: null, identities: [{ provider }] };
+  return {
+    id: `u-${displayName}`,
+    displayName,
+    pictureUrl: null,
+    preferredCurrency: "TWD",
+    language: "zh-TW",
+    identities: [{ provider }],
+  };
 }
 
 function json(body: unknown, status = 200): Response {
@@ -90,7 +97,11 @@ export function createFakeApi(): FakeApi {
     testSignInEnabled: true,
     refuseLink: null,
     requests,
-    rates: new Map([["USD-TWD", { rateScaled: 31_523_400 }]]),
+    rates: new Map([
+      ["USD-TWD", { rateScaled: 31_523_400 }],
+      ["TWD-USD", { rateScaled: 31_723 }],
+      ["JPY-TWD", { rateScaled: 215_000 }],
+    ]),
     dropNextResponse(route) {
       dropping.add(route);
     },
@@ -165,6 +176,18 @@ export function createFakeApi(): FakeApi {
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(authed);
       case "POST /api/v1/auth/logout-all":
         return authed === undefined ? error("UNAUTHORIZED", 401) : endAll();
+      case "PATCH /api/v1/me": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const body = await readJson(init);
+        const currencies = ["TWD", "USD", "JPY", "THB"] as const;
+        const currency = currencies.find((c) => c === body.preferredCurrency);
+        const language = body.language === "en" || body.language === "zh-TW" ? body.language : null;
+        return update({
+          ...authed,
+          ...(currency === undefined ? {} : { preferredCurrency: currency }),
+          ...(language === null ? {} : { language }),
+        });
+      }
       case "DELETE /api/v1/me":
         return authed === undefined ? error("UNAUTHORIZED", 401) : endAll();
       case "GET /api/v1/rates": {

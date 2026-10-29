@@ -25,6 +25,36 @@ describe("＋ new entry", () => {
     expect(screen.getByRole("link", { name: /台南/ })).toBeVisible();
   });
 
+  it("offers 建立新群組 under the list of Groups", async () => {
+    renderApp({
+      cookieUser: me,
+      path: "/new",
+      seed: (groups) => {
+        groups.add(me, { name: "室友" });
+        groups.add(me, { name: "台南" });
+      },
+    });
+
+    expect(await screen.findByRole("link", { name: "建立新群組" })).toHaveAttribute(
+      "href",
+      "/groups/new?usage=tab",
+    );
+  });
+
+  it("keeps the list when asked to pick, even with one Group, so a new one can be made", async () => {
+    renderApp({
+      cookieUser: me,
+      path: "/new?pick=1",
+      seed: (groups) => {
+        groups.add(me, { name: "室友" });
+      },
+    });
+
+    expect(await screen.findByRole("heading", { name: "記在哪個群組？" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /室友/ })).toBeVisible();
+    expect(screen.getByRole("link", { name: "建立新群組" })).toBeVisible();
+  });
+
   it("goes straight to the form when there is one Group", async () => {
     let id = "";
     const { router } = renderApp({

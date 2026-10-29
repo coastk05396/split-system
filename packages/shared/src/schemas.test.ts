@@ -65,8 +65,8 @@ describe("expenseInputSchema", () => {
     }
   });
 
-  it("rejects currencies outside v1 and the removed percentage split", () => {
-    expect(expenseInputSchema.safeParse({ ...validExpense, originalCurrency: "JPY" }).success).toBe(
+  it("rejects currencies the app does not ship and the removed percentage split", () => {
+    expect(expenseInputSchema.safeParse({ ...validExpense, originalCurrency: "GBP" }).success).toBe(
       false,
     );
     expect(
@@ -145,7 +145,6 @@ describe("groupInputSchema", () => {
     expect(groupInputSchema.parse({ name: "室友" })).toEqual({
       name: "室友",
       settlementCurrency: "TWD",
-      defaultExpenseCurrency: "TWD",
       isTrip: false,
     });
   });

@@ -22,12 +22,13 @@ import {
   ScreenHeader,
   secondaryButton,
 } from "../groups/ui.js";
+import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 
 /**
- * Screen 13 as amended (decisions 10, 31): Members with roles and Nicknames, Placeholder
- * Members in a dashed circle, Former Members apart, the Admin "…" menu with the zero-Balance
- * block message, my own Nickname, and adding a Placeholder Member by name.
+ * Screen 13 as amended (decisions 10, 31): Members with roles, shown by their LINE or Google
+ * name and picture, Placeholder Members in a dashed circle, Former Members apart, the Admin
+ * "…" menu with the zero-Balance block message, and adding a Placeholder Member by name.
  */
 export function MembersPage() {
   const id = useParams().id ?? "";
@@ -44,7 +45,6 @@ export function MembersPage() {
 function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const seated = members.filter((m) => m.status !== "former");
   const former = members.filter((m) => m.status === "former");
-  const me = members.find((m) => m.isMe);
   const isAdmin = group.me.role === "admin";
   const [blocked, setBlocked] = useState<string | null>(null);
 
@@ -63,10 +63,14 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
       <ul aria-label={t("members.title")} className="flex flex-col gap-3">
         {seated.map((m) => (
           <li key={m.id} className={`${card} flex items-center gap-4 p-4`}>
-            <Avatar name={m.displayName} placeholder={m.status === "placeholder"} />
+            <Avatar
+              name={m.displayName}
+              pictureUrl={m.pictureUrl}
+              placeholder={m.status === "placeholder"}
+            />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate font-bold">
-                {m.displayName}
+                {localName(m.displayName)}
                 {m.isMe && t("members.me")}
                 {m.status === "placeholder" && (
                   <span className="font-normal text-ink-muted">{t("members.placeholder")}</span>
@@ -89,14 +93,13 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
           <ul aria-label={t("members.former")} className="flex flex-col gap-2">
             {former.map((m) => (
               <li key={m.id} className="flex items-center gap-3 px-4 text-ink-muted">
-                <Avatar name={m.displayName} className="size-8 text-sm" />
-                {m.displayName}
+                <Avatar name={m.displayName} pictureUrl={m.pictureUrl} className="size-8 text-sm" />
+                {localName(m.displayName)}
               </li>
             ))}
           </ul>
         </section>
       )}
-      {me !== undefined && <NicknameForm groupId={group.id} me={me} />}
       <AddPlaceholderForm groupId={group.id} />
       <Link
         to={`/groups/${group.id}/invite`}
@@ -131,7 +134,7 @@ function MemberMenu({
     onBlocked(
       error instanceof ApiFailure && error.code === "BALANCE_NOT_ZERO"
         ? t("members.blocked", {
-            name: member.displayName,
+            name: localName(member.displayName),
             amount: formatAmount(member.balance, group.settlementCurrency),
           })
         : failureMessage(error),
@@ -146,7 +149,7 @@ function MemberMenu({
   return (
     <Menu.Root>
       <Menu.Trigger
-        aria-label={t("members.actions", { name: member.displayName })}
+        aria-label={t("members.actions", { name: localName(member.displayName) })}
         className="rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
       >
         <Ellipsis aria-hidden="true" className="size-5" />
@@ -188,56 +191,6 @@ function MemberMenu({
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
-  );
-}
-
-function NicknameForm({ groupId, me }: { groupId: string; me: Member }) {
-  const patch = usePatchMember(groupId);
-  const [nickname, setNickname] = useState(me.displayName);
-  const [saved, setSaved] = useState(false);
-
-  function submit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = nickname.trim();
-    setSaved(false);
-    patch.mutate(
-      { memberId: me.id, patch: { nickname: value === "" ? null : value } },
-      {
-        onSuccess: () => {
-          setSaved(true);
-        },
-      },
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className={`${card} flex flex-col gap-3 p-5`}>
-      <label className="flex flex-col gap-2">
-        <span className="font-bold">{t("members.nickname")}</span>
-        <input
-          value={nickname}
-          maxLength={60}
-          onChange={(e) => {
-            setNickname(e.target.value);
-            setSaved(false);
-          }}
-          className={input}
-        />
-      </label>
-      {patch.isError && (
-        <p role="alert" className="text-red-700">
-          {failureMessage(patch.error)}
-        </p>
-      )}
-      <div className="flex items-center gap-3">
-        <button type="submit" disabled={patch.isPending} className={`${secondaryButton} py-2.5`}>
-          {t("members.nicknameSave")}
-        </button>
-        <p role="status" className="text-sm font-bold text-sprout-600">
-          {saved ? t("members.nicknameSaved") : ""}
-        </p>
-      </div>
-    </form>
   );
 }
 

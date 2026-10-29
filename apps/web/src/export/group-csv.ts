@@ -1,4 +1,6 @@
 import { type CurrencyCode, minorToDecimal } from "@split/shared";
+import { categoryLabel, localName } from "../i18n/format.js";
+import { type MessageId, t } from "../i18n/messages.js";
 
 /**
  * The per-Group "匯出 CSV" (decision 26): built in the browser from data the Group page
@@ -8,7 +10,7 @@ import { type CurrencyCode, minorToDecimal } from "@split/shared";
 
 export interface CsvMember {
   id: string;
-  /** What the Group shows: nickname, placeholder name, or "已刪除的使用者". */
+  /** What the Group shows: the LINE or Google name, a placeholder name, or "已刪除的使用者". */
   name: string;
 }
 
@@ -55,37 +57,37 @@ export interface GroupCsvInput {
   settlements: CsvSettlement[];
 }
 
-const HEADER = [
-  "類型",
-  "日期",
-  "時間",
-  "說明",
-  "類別",
-  "原幣金額",
-  "原幣幣別",
-  "匯率",
-  "結算金額",
-  "結算幣別",
-  "付款人",
-  "分攤",
-  "狀態",
+/** The header row, in the app's language. */
+const header = (): string[] => [
+  t("csv.type"),
+  t("csv.date"),
+  t("csv.time"),
+  t("csv.description"),
+  t("csv.category"),
+  t("csv.originalAmount"),
+  t("csv.originalCurrency"),
+  t("csv.rate"),
+  t("csv.settlementAmount"),
+  t("csv.settlementCurrency"),
+  t("csv.payers"),
+  t("csv.split"),
+  t("csv.status"),
 ];
 
-const STATUS_LABEL: Record<CsvSettlementStatus, string> = {
-  pending: "待確認",
-  confirmed: "已確認",
-  cancelled: "已取消",
-  undone: "已撤銷",
+const STATUS_LABEL: Record<CsvSettlementStatus, MessageId> = {
+  pending: "settle.status.pending",
+  confirmed: "settle.status.confirmed",
+  cancelled: "settle.status.cancelled",
+  undone: "settle.status.undone",
 };
 
-const UNKNOWN_MEMBER = "未知成員";
 const RATE_SCALE = 1_000_000;
 
 /** Builds the CSV text, BOM first so Excel reads UTF-8. */
 export function groupCsv(input: GroupCsvInput): string {
   const { settlementCurrency } = input;
-  const names = new Map(input.members.map((member) => [member.id, member.name]));
-  const nameOf = (id: string) => names.get(id) ?? UNKNOWN_MEMBER;
+  const names = new Map(input.members.map((member) => [member.id, localName(member.name)]));
+  const nameOf = (id: string) => names.get(id) ?? t("marker.unknownMember");
   const amount = (minor: number) => minorToDecimal(minor, settlementCurrency);
   const lines = (list: CsvLine[]) =>
     list.map((line) => `${nameOf(line.memberId)} ${amount(line.settlementAmount)}`).join("; ");
@@ -95,11 +97,11 @@ export function groupCsv(input: GroupCsvInput): string {
       date: expense.date,
       time: expense.time ?? "",
       cells: [
-        "支出",
+        t("csv.expense"),
         expense.date,
         expense.time ?? "",
         expense.description,
-        expense.category,
+        categoryLabel(expense.category),
         minorToDecimal(expense.originalAmount, expense.originalCurrency),
         expense.originalCurrency,
         rate(expense.fxRateScaled),
@@ -118,10 +120,10 @@ export function groupCsv(input: GroupCsvInput): string {
         date: settlement.date,
         time: "",
         cells: [
-          "結算",
+          t("csv.settlement"),
           settlement.date,
           "",
-          `${payer} 付給 ${receiver}`,
+          t("csv.pays", { payer, receiver }),
           "",
           value,
           settlementCurrency,
@@ -130,7 +132,7 @@ export function groupCsv(input: GroupCsvInput): string {
           settlementCurrency,
           `${payer} ${value}`,
           `${receiver} ${value}`,
-          STATUS_LABEL[settlement.status],
+          t(STATUS_LABEL[settlement.status]),
         ],
       };
     }),
@@ -138,19 +140,19 @@ export function groupCsv(input: GroupCsvInput): string {
   // Stable sort: same-day rows keep Expenses before Settlements, each in the given order.
   dated.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
-  const body = [HEADER, ...dated.map((row) => row.cells)]
+  const body = [header(), ...dated.map((row) => row.cells)]
     .map((cells) => cells.map(cell).join(","))
     .join("\r\n");
   return `\uFEFF${body}\r\n`;
 }
 
-/** "小芽分帳-<Group name>-<day>.csv" with characters file systems reject replaced. */
+/** "<app name>-<Group name>-<day>.csv" with characters file systems reject replaced. */
 export function groupCsvFilename(groupName: string, day: string): string {
   const safe = groupName
     .replace(/[\\/:*?"<>|\s]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-  return `小芽分帳-${safe}-${day}.csv`;
+  return `${t("app.name")}-${safe}-${day}.csv`;
 }
 
 function rate(scaled: number): string {

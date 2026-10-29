@@ -351,7 +351,7 @@
         },
         "expenses_original_currency_check": {
           "name": "expenses_original_currency_check",
-          "value": "\"expenses\".\"original_currency\" IN ('TWD', 'USD')"
+          "value": "\"expenses\".\"original_currency\" IN ('TWD', 'USD', 'JPY', 'THB')"
         },
         "expenses_fx_rate_check": {
           "name": "expenses_fx_rate_check",
@@ -517,11 +517,11 @@
       "checkConstraints": {
         "groups_settlement_currency_check": {
           "name": "groups_settlement_currency_check",
-          "value": "\"groups\".\"settlement_currency\" IN ('TWD', 'USD')"
+          "value": "\"groups\".\"settlement_currency\" IN ('TWD', 'USD', 'JPY', 'THB')"
         },
         "groups_default_expense_currency_check": {
           "name": "groups_default_expense_currency_check",
-          "value": "\"groups\".\"default_expense_currency\" IN ('TWD', 'USD')"
+          "value": "\"groups\".\"default_expense_currency\" IN ('TWD', 'USD', 'JPY', 'THB')"
         },
         "groups_is_trip_check": {
           "name": "groups_is_trip_check",

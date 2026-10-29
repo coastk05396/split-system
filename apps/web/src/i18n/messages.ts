@@ -1,8 +1,10 @@
+import type { Language } from "@split/shared";
 import type { ErrorCode } from "../api/errors.js";
+import { en, enErrors } from "./en.js";
 
 /**
- * Every zh-TW string in the SPA, keyed by ID (decision 20). Adding a language later
- * means adding a second catalog of the same type; there is no i18n library in v1.
+ * Every zh-TW string in the SPA, keyed by ID (decision 20). English is a second catalog of the
+ * same type (en.ts), so a missing translation fails the type check; there is no i18n library.
  */
 const zhTW = {
   "app.name": "小芽分帳",
@@ -48,15 +50,15 @@ const zhTW = {
   "signIn.test.submit": "測試登入",
 
   "home.greeting": "{name}，今天想怎麼分？",
-  "home.subtitle": "聚餐快分、旅行慢慢記，都在同一個小芽。",
   "home.balance": "目前淨收付",
-  "home.pending": "你在 {count} 個群組有待結算款項",
   "home.noPending": "目前沒有待結算的款項",
-  "home.viewSettlement": "查看結算明細",
+  "home.rateNote": "依 {date} 的參考匯率換算，僅供參考",
+  "home.rateNoteRange": "依 {from} 至 {to} 的參考匯率換算，僅供參考",
+  "home.morePending": "還有 {count} 個群組待結算",
   "home.quickStart": "快速開始",
-  "home.myGroups": "我的群組",
-  "home.newGroup": "＋ 新群組",
-  "home.viewAllGroups": "查看全部群組（{count}）",
+  "home.pendingGroups": "待結算的群組",
+  "home.allSettled": "全部結清 ✓",
+  "home.currencyTag": "偏好幣別 {currency}，前往設定",
   "home.trip.title": "旅行分帳",
   "home.trip.body": "為旅程記行程與開銷",
   "home.trip.hint": "適合：出國、跨日旅遊、多人包車",
@@ -81,9 +83,11 @@ const zhTW = {
   "groups.empty.create": "建立第一個群組",
   "groups.people": "{count} 人",
   "groups.settled": "已結清",
-  "groups.pending": "待結算 {amount}",
+  "groups.owe": "你要付 {amount}",
+  "groups.owed": "你可收 {amount}",
   "usage.tab": "快速分帳",
   "usage.trip": "旅行分帳",
+  "trip.maintenance": "保養中",
 
   "create.title": "建立群組",
   "create.subtitle": "同一個群組，可以快分，也可以開啟旅程。",
@@ -92,18 +96,20 @@ const zhTW = {
   "create.usage": "使用方式",
   "create.settlementCurrency": "結算幣別",
   "create.settlementHint": "記下第一筆開銷後就不能再更改。",
-  "create.defaultExpenseCurrency": "預設記帳幣別",
   "create.invite.title": "邀請朋友，一起開始",
   "create.invite.body": "建立後就能分享連結，同一份帳大家都看得到",
   "create.submit": "建立群組，繼續",
   "currency.TWD": "TWD 新台幣",
   "currency.USD": "USD 美元",
+  "currency.JPY": "JPY 日元",
+  "currency.THB": "THB 泰銖",
 
   "group.summary": "{count} 位成員",
   "group.tripBadge": "旅行模式",
   "group.delete": "刪除群組",
   "group.members": "成員",
   "group.invite": "邀請",
+  "group.add": "新增",
   "group.tabs": "群組分頁",
   "group.tab.expenses": "帳目",
   "group.tab.trip": "行程",
@@ -185,9 +191,6 @@ const zhTW = {
   "members.demote": "改為一般成員",
   "members.remove": "移除成員",
   "members.blocked": "{name} 尚有 {amount} 待結算，結清後才能移除。",
-  "members.nickname": "我在這個群組的暱稱",
-  "members.nicknameSave": "儲存暱稱",
-  "members.nicknameSaved": "暱稱已更新",
   "members.addPlaceholder": "新增待加入成員",
   "members.placeholderName": "名字",
   "members.placeholderHint": "還沒加入的朋友也能先記帳，之後加入時可以認領。",
@@ -199,8 +202,8 @@ const zhTW = {
 
   "invite.title": "邀請成員",
   "invite.heading": "揪朋友一起分帳！",
-  "invite.body1": "分享連結給朋友，",
-  "invite.body2": "登入後就會加入這個群組。",
+  "invite.body": "分享連結，拿到連結並登入的人就能加入。",
+  "invite.back": "回到群組",
   "invite.link": "邀請連結",
   "invite.expires": "{date} 前有效（7 天）",
   "invite.copy": "複製邀請連結",
@@ -211,7 +214,6 @@ const zhTW = {
   "invite.regenerate": "重新產生連結",
   "invite.regenerateHint": "重新產生後，舊連結會立即失效。",
   "invite.noneMember": "目前沒有有效的邀請連結，請管理員產生新的連結。",
-  "invite.footer": "只有持有連結並登入的人可以加入。",
 
   "join.title": "加入群組",
   "join.summary": "{count} 位成員 · 結算幣別 {currency}",
@@ -244,6 +246,7 @@ const zhTW = {
   "split.method.shares": "份數",
   "split.method.sharesHint": "依每人份數計算",
   "split.participants": "參與分帳",
+  "split.allPeople": "全部 {count} 人",
   "split.checked": "已勾選 {count} / {total} 人",
   "split.selectAll": "全選",
   "split.takesPart": "{name} 參與分帳",
@@ -305,7 +308,9 @@ const zhTW = {
   "expense.list": "帳目",
   "expense.empty": "還沒有任何帳目，記下第一筆吧！",
   "expense.more": "載入更多",
-  "expense.paidByLine": "{names} 先付",
+  "expense.paidByLine": "{name} 先付 {amount}",
+  "expense.total": "總金額",
+  "expense.settledAs": "≈ {amount}",
   "expense.detail": "開銷詳情",
   "expense.paidFirst": "先付 {amount}",
   "expense.splitLines": "分帳明細",
@@ -319,13 +324,23 @@ const zhTW = {
   "expense.deleteBody": "刪除後，這筆開銷對每個人餘額的影響也會一起移除。",
   "expense.deleteConfirm": "刪除這筆",
   "expense.chooseGroup": "記在哪個群組？",
+  "expense.chooseHint": "選一個群組，馬上記一筆。",
   "expense.noGroups": "先建立一個群組，才能記帳。",
 
-  "settle.owedToMe": "別人還欠你",
-  "settle.iOwe": "你還欠別人",
+  "settle.owedToMe": "你可收",
+  "settle.iOwe": "你要付",
+  "settle.you": "你",
   "settle.mineSettled": "你已經結清了",
-  "settle.planTitle": "還款計畫",
-  "settle.label.exact": "最少筆數",
+  "settle.rolePay": "你要付",
+  "settle.roleGet": "你可收",
+  "settle.historyMore": "查看更多",
+  "settle.droppedToggle": "已取消／已撤銷 {count} 筆",
+  "settle.droppedTitle": "已取消與已撤銷",
+  "settle.chartTitle": "大家的結餘",
+  "settle.chartLegend": "紅色是要付，綠色是可收",
+  "settle.chartMe": "（你）",
+  "settle.chartSettled": "其他 {count} 人已結清",
+  "settle.planTitle": "要付給誰",
   "settle.label.greedy": "至多 {count} 筆",
   "settle.planFailed": "還款計畫算不出來，請重新整理。",
   "settle.allSettled": "大家都結清了！",
@@ -356,6 +371,10 @@ const zhTW = {
   "settings.heading": "我的設定",
   "settings.signOut": "登出",
   "settings.linkedVia": "已連結 {providers}",
+  "settings.currencySection": "偏好幣別",
+  "settings.currencyHint": "首頁會先顯示這個幣別，建立新群組時也會預設用它結算。",
+  "settings.languageSection": "語言",
+  "settings.languageHint": "整個 App 的語言，你登入的每台裝置都一樣。",
   "settings.privacySection": "帳號與隱私",
   "settings.privacy": "隱私權政策",
   "settings.terms": "服務條款",
@@ -376,24 +395,76 @@ const zhTW = {
   "settings.deleteConfirm": "確定刪除",
   "settings.cancel": "取消",
   "legal.back": "回到小芽分帳",
+  "legal.englishNotice": "本文件以繁體中文版本為準。",
   "page.comingSoon": "這個頁面還在準備中。",
   "notFound.title": "找不到這個頁面",
   "notFound.home": "回到首頁",
+
+  "language.zh-TW": "繁體中文",
+  "language.en": "English",
+  "category.food": "餐飲",
+  "category.transport": "交通",
+  "category.lodging": "住宿",
+  "category.shopping": "購物",
+  "category.fun": "娛樂",
+  "category.medical": "醫療",
+  "category.other": "其他",
+  "marker.deletedUser": "已刪除的使用者",
+  "marker.removedMember": "已移除的成員",
+  "marker.unknownMember": "未知成員",
+  "csv.type": "類型",
+  "csv.date": "日期",
+  "csv.time": "時間",
+  "csv.description": "說明",
+  "csv.category": "類別",
+  "csv.originalAmount": "原幣金額",
+  "csv.originalCurrency": "原幣幣別",
+  "csv.rate": "匯率",
+  "csv.settlementAmount": "結算金額",
+  "csv.settlementCurrency": "結算幣別",
+  "csv.payers": "付款人",
+  "csv.split": "分攤",
+  "csv.status": "狀態",
+  "csv.expense": "支出",
+  "csv.settlement": "結算",
+  "csv.pays": "{payer} 付給 {receiver}",
 } as const;
 
 export type MessageId = keyof typeof zhTW;
 type Catalog = Record<MessageId, string>;
 
-const catalog: Catalog = zhTW;
+export const catalogs: Record<Language, Catalog> = { "zh-TW": zhTW, en };
 
-/** Looks up a message and fills `{name}` placeholders. */
+let locale: Language = "zh-TW";
+const listeners = new Set<() => void>();
+
+export function getLocale(): Language {
+  return locale;
+}
+
+export function subscribeLocale(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Switches the language of every message, and tells the app to draw itself again. */
+export function setLocale(next: Language): void {
+  if (next === locale) return;
+  locale = next;
+  if (typeof document !== "undefined") document.documentElement.lang = next;
+  for (const listener of listeners) listener();
+}
+
+/** Looks up a message in the current language and fills `{name}` placeholders. */
 export function t(id: MessageId, params: Readonly<Record<string, string | number>> = {}): string {
-  return catalog[id].replace(/\{(\w+)\}/g, (match, key: string) =>
+  return catalogs[locale][id].replace(/\{(\w+)\}/g, (match, key: string) =>
     key in params ? String(params[key]) : match,
   );
 }
 
-const errorMessages: Record<ErrorCode, string> = {
+const zhErrors: Record<ErrorCode, string> = {
   VALIDATION_FAILED: "有欄位填寫不正確，請檢查後再試一次。",
   IDEMPOTENCY_KEY_REQUIRED: "請重新送出一次。",
   IF_MATCH_REQUIRED: "請重新整理後再修改。",
@@ -429,5 +500,5 @@ const errorMessages: Record<ErrorCode, string> = {
 
 /** The message for an API error code. */
 export function errorMessage(code: ErrorCode): string {
-  return errorMessages[code];
+  return (locale === "en" ? enErrors : zhErrors)[code];
 }

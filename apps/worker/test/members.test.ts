@@ -11,6 +11,33 @@ async function setBalance(memberId: string, balance: number) {
   await db.update(members).set({ netBalance: balance }).where(eq(members.id, memberId));
 }
 
+describe("a Former Member's name", () => {
+  it("never revives a nickname they once chose, but keeps the system label", async () => {
+    const { admin, group, others } = await groupWith("小宇", "阿明");
+    const ming = at(await listMembers(admin, group.id), 1);
+
+    // A nickname chosen while active is ignored, and stays ignored after they leave.
+    await db
+      .update(members)
+      .set({ nickname: "Ali", status: "former" })
+      .where(eq(members.id, ming.id));
+    expect(at(await listMembers(admin, group.id), 1)).toMatchObject({
+      displayName: "阿明",
+      status: "former",
+    });
+
+    // The label written when an account is deleted is still what shows.
+    await db
+      .update(members)
+      .set({ nickname: "已刪除的使用者", userId: null })
+      .where(eq(members.id, ming.id));
+    expect(at(await listMembers(admin, group.id), 1)).toMatchObject({
+      displayName: "已刪除的使用者",
+    });
+    expect(others).toHaveLength(1);
+  });
+});
+
 describe("GET /groups/:id/members", () => {
   it("lists Members in joining order with their Balances", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");
@@ -66,22 +93,14 @@ describe("PATCH /groups/:id/members/:mid", () => {
     expect(res.status).toBe(403);
   });
 
-  it("lets a Member set and clear their own Nickname, and only their own", async () => {
+  it("no longer takes a Nickname: names come from LINE or Google", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");
     const ming = at(await listMembers(admin, group.id), 1);
-    const set = await send(at(others, 0), "PATCH", `/groups/${group.id}/members/${ming.id}`, {
+    const res = await send(at(others, 0), "PATCH", `/groups/${group.id}/members/${ming.id}`, {
       nickname: "明明",
     });
-    expect(await set.json()).toMatchObject({ nickname: "明明", displayName: "明明" });
-    const cleared = await send(at(others, 0), "PATCH", `/groups/${group.id}/members/${ming.id}`, {
-      nickname: null,
-    });
-    expect(await cleared.json()).toMatchObject({ nickname: null, displayName: "阿明" });
-
-    const byAdmin = await send(admin, "PATCH", `/groups/${group.id}/members/${ming.id}`, {
-      nickname: "亂取",
-    });
-    expect(byAdmin.status).toBe(403);
+    expect(res.status).toBe(400);
+    expect(at(await listMembers(admin, group.id), 1)).toMatchObject({ displayName: "阿明" });
   });
 
   it("answers 404 for a Member of another Group", async () => {

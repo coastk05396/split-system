@@ -1,15 +1,17 @@
 import { err, ok, type Result } from "./result.js";
 
-/** Currencies shipped in v1. Each amount is an integer in the currency's smallest unit. */
+/** Currencies shipped. Each amount is an integer in the currency's smallest unit. */
 export const CURRENCIES = {
   TWD: { decimals: 0, symbol: "NT$" },
   USD: { decimals: 2, symbol: "US$" },
+  JPY: { decimals: 0, symbol: "JP¥" },
+  THB: { decimals: 2, symbol: "฿" },
 } as const satisfies Record<string, { decimals: number; symbol: string }>;
 
 export type CurrencyCode = keyof typeof CURRENCIES;
 export const CURRENCY_CODES = Object.keys(CURRENCIES) as [CurrencyCode, ...CurrencyCode[]];
 
-/** An Expense is 1 to 99,999,999 units of its currency (NT$ 99,999,999 or US$ 999,999.99). */
+/** An Expense is 1 to 99,999,999 units of its currency (NT$ 99,999,999, JP¥ 99,999,999 or US$ 999,999.99). */
 export const MIN_AMOUNT_MINOR = 1;
 export const MAX_AMOUNT_MINOR = 99_999_999;
 

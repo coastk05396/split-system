@@ -1,3 +1,5 @@
+import { getLocale } from "../i18n/messages.js";
+
 /**
  * Google sign-in through Google Identity Services. The script loads only on the
  * sign-in screen and only outside LINE (decision 20).
@@ -76,7 +78,7 @@ export function createGoogleSignIn(clientId: string | undefined): GoogleSignIn {
         size: "large",
         shape: "pill",
         text: "signin_with",
-        locale: "zh-TW",
+        locale: getLocale() === "en" ? "en" : "zh-TW",
         width: Math.min(container.clientWidth || 350, 400),
       });
     },

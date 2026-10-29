@@ -23,7 +23,6 @@ function toGroup(row: GroupRow, me: MemberRow, locked: number, memberCount: numb
     id: row.id,
     name: row.name,
     settlementCurrency: row.settlementCurrency,
-    defaultExpenseCurrency: row.defaultExpenseCurrency,
     isTrip: row.isTrip,
     tripDestination: row.tripDestination,
     tripStartDate: row.tripStartDate,
@@ -89,7 +88,7 @@ export async function createGroup(
       id: groupId,
       name: input.name,
       settlementCurrency: input.settlementCurrency,
-      defaultExpenseCurrency: input.defaultExpenseCurrency,
+      defaultExpenseCurrency: input.settlementCurrency,
       isTrip: input.isTrip,
       tripDestination: input.tripDestination ?? null,
       tripStartDate: input.tripStartDate ?? null,
@@ -144,7 +143,14 @@ export async function patchGroup(
 
   const updated = await db
     .update(groups)
-    .set({ ...patch, updatedAt: Math.max(now, current.updatedAt + 1) })
+    .set({
+      ...patch,
+      // The column outlives the removed setting: it always equals the Settlement currency.
+      ...(patch.settlementCurrency === undefined
+        ? {}
+        : { defaultExpenseCurrency: patch.settlementCurrency }),
+      updatedAt: Math.max(now, current.updatedAt + 1),
+    })
     .where(
       and(
         eq(groups.id, me.groupId),

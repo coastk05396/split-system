@@ -25,7 +25,6 @@ describe("POST /groups and GET /groups/:id", () => {
     expect(group).toMatchObject({
       name: "室友帳",
       settlementCurrency: "USD",
-      defaultExpenseCurrency: "TWD",
       isTrip: false,
       tripDestination: null,
       settlementCurrencyLocked: false,
@@ -45,14 +44,12 @@ describe("POST /groups and GET /groups/:id", () => {
       tripDestination: "台南",
       tripStartDate: "2026-06-13",
       tripEndDate: "2026-06-15",
-      defaultExpenseCurrency: "USD",
     });
     expect(group).toMatchObject({
       isTrip: true,
       tripDestination: "台南",
       tripStartDate: "2026-06-13",
       tripEndDate: "2026-06-15",
-      defaultExpenseCurrency: "USD",
     });
   });
 
@@ -179,8 +176,6 @@ describe("PATCH /groups/:id", () => {
     const res = await patch(yu, usd, { settlementCurrency: "TWD" });
     expect(res.status).toBe(409);
     expect(await errorCode(res)).toBe("SETTLEMENT_CURRENCY_LOCKED");
-    // The default Expense currency still changes any time.
-    expect((await patch(yu, usd, { defaultExpenseCurrency: "USD" })).status).toBe(200);
   });
 });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { currencyCodeSchema } from "./schemas.js";
 
 /** Sign-in, session and account shapes shared by the Worker and the SPA. */
 
@@ -25,13 +26,30 @@ export const testSignInRequestSchema = z.object({
 });
 export type TestSignInRequest = z.infer<typeof testSignInRequestSchema>;
 
+/** The interface languages: Traditional Chinese (the default) and English. */
+export const LANGUAGES = ["zh-TW", "en"] as const;
+export type Language = (typeof LANGUAGES)[number];
+export const languageSchema = z.enum(LANGUAGES);
+
 export const meSchema = z.object({
   id: z.string(),
   displayName: z.string(),
   pictureUrl: z.string().nullable(),
+  /** Shown first on Home and pre-filled as a new Group's Settlement currency. */
+  preferredCurrency: currencyCodeSchema,
+  /** The language the whole app shows in, kept with the account so every device agrees. */
+  language: languageSchema,
   identities: z.array(z.object({ provider: providerSchema })),
 });
 export type Me = z.infer<typeof meSchema>;
+
+/** `PATCH /me`: the settings a User can change themselves. */
+export const mePatchSchema = z
+  .object({ preferredCurrency: currencyCodeSchema, language: languageSchema })
+  .partial()
+  .strict()
+  .refine((patch) => Object.keys(patch).length > 0, "PATCH_EMPTY");
+export type MePatch = z.infer<typeof mePatchSchema>;
 
 /** Sign-in and refresh answer; the refresh token travels only in the httpOnly cookie. */
 export const sessionResponseSchema = z.object({

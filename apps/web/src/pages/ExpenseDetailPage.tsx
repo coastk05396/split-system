@@ -3,7 +3,8 @@ import { type Expense, formatAmount, formatRate, type Group } from "@split/share
 import { Pencil, Trash2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
-import { memberNames } from "../expenses/ExpenseList.js";
+import { CategoryIcon } from "../expenses/CategoryIcon.js";
+import { dateHeading, memberNames, memberPictures } from "../expenses/ExpenseList.js";
 import { useGroup, useMembers } from "../groups/api.js";
 import {
   Avatar,
@@ -15,6 +16,7 @@ import {
   ScreenHeader,
   secondaryButton,
 } from "../groups/ui.js";
+import { categoryLabel } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 
 /**
@@ -34,17 +36,20 @@ export function ExpenseDetailPage() {
   }
   if (!group.isSuccess || !members.isSuccess || !expense.isSuccess) return <Loading />;
   const nameOf = memberNames(members.data);
-  return <Detail group={group.data} expense={expense.data} nameOf={nameOf} />;
+  const pictureOf = memberPictures(members.data);
+  return <Detail group={group.data} expense={expense.data} nameOf={nameOf} pictureOf={pictureOf} />;
 }
 
 function Detail({
   group,
   expense,
   nameOf,
+  pictureOf,
 }: {
   group: Group;
   expense: Expense;
   nameOf: (id: string) => string;
+  pictureOf: (id: string) => string | null;
 }) {
   const canChange = expense.creatorMemberId === group.me.memberId || group.me.role === "admin";
   const settlement = group.settlementCurrency;
@@ -66,46 +71,61 @@ function Detail({
           ) : undefined
         }
       />
-      <section className="flex flex-col gap-3 rounded-3xl bg-sprout-150 p-6">
-        <p className="text-ink-muted">
-          {expense.category} · {expense.description}
-        </p>
-        <p className="text-4xl font-bold">
-          {formatAmount(expense.originalAmount, expense.originalCurrency)}
-        </p>
-        {foreign && (
-          <div className="flex flex-col gap-1 text-sm">
-            <span>
-              {t("expense.rateLine", {
-                base: expense.originalCurrency,
-                quote: settlement,
-                rate: formatRate(expense.fxRateScaled),
-                date: expense.fxDate,
-              })}
-              {expense.isCustomRate && (
-                <span className="ml-2 rounded-full bg-peach px-2 py-0.5 text-xs font-bold">
-                  {t("expense.rateEdited")}
-                </span>
-              )}
-            </span>
-            <span className="font-bold">
-              {t("expense.convertedLine", {
-                amount: formatAmount(expense.settlementAmount, settlement),
-              })}
+      <section className="overflow-hidden rounded-3xl border border-sprout-200 bg-white">
+        <div className="flex items-center gap-3 bg-sprout-150 px-6 py-4">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white text-sprout-600">
+            <CategoryIcon category={expense.category} className="size-6" />
+          </span>
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <h2 className="break-words text-xl font-bold">{expense.description}</h2>
+            <span className="rounded-full bg-white px-3 py-0.5 text-xs font-bold text-sprout-700">
+              {categoryLabel(expense.category)}
             </span>
           </div>
-        )}
-        <p className="text-sm text-ink-muted">
-          {expense.expenseDate.replaceAll("-", " / ")}
-          {expense.expenseTime === null ? "" : ` ${expense.expenseTime}`} · {group.name}
-        </p>
+        </div>
+        <div className="flex flex-col items-center gap-2 px-6 py-6 text-center">
+          <p className="text-sm text-ink-muted">{t("expense.total")}</p>
+          <p className="text-4xl font-bold tabular-nums text-sprout-700">
+            {formatAmount(expense.originalAmount, expense.originalCurrency)}
+          </p>
+          {foreign && (
+            <div className="mt-1 flex flex-col gap-1 rounded-2xl bg-sprout-100 px-4 py-2 text-sm">
+              <span className="text-ink-muted">
+                {t("expense.rateLine", {
+                  base: expense.originalCurrency,
+                  quote: settlement,
+                  rate: formatRate(expense.fxRateScaled),
+                  date: expense.fxDate,
+                })}
+                {expense.isCustomRate && (
+                  <span className="ml-2 rounded-full bg-peach px-2 py-0.5 text-xs font-bold text-ink">
+                    {t("expense.rateEdited")}
+                  </span>
+                )}
+              </span>
+              <span className="font-bold">
+                {t("expense.convertedLine", {
+                  amount: formatAmount(expense.settlementAmount, settlement),
+                })}
+              </span>
+            </div>
+          )}
+          <p className="mt-1 text-sm text-ink-muted">
+            {dateHeading(expense.expenseDate)}
+            {expense.expenseTime === null ? "" : ` ${expense.expenseTime}`}
+          </p>
+        </div>
       </section>
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-bold">{t("expense.payers")}</h2>
         <ul className="flex flex-col gap-2">
           {expense.payers.map((p) => (
             <li key={p.memberId} className={`${card} flex items-center gap-3 px-4 py-3`}>
-              <Avatar name={nameOf(p.memberId)} className="size-9" />
+              <Avatar
+                name={nameOf(p.memberId)}
+                pictureUrl={pictureOf(p.memberId)}
+                className="size-9"
+              />
               <span className="flex-1 font-bold">{nameOf(p.memberId)}</span>
               <span className="text-sm text-ink-muted">
                 {t("expense.paidFirst", {
@@ -123,8 +143,16 @@ function Detail({
           className="flex flex-col divide-y divide-sprout-200"
         >
           {expense.splits.map((s) => (
-            <li key={s.memberId} className="flex items-center justify-between px-2 py-3">
-              <span>{nameOf(s.memberId)}</span>
+            <li key={s.memberId} className="flex items-center gap-3 px-2 py-3">
+              <Avatar
+                name={nameOf(s.memberId)}
+                pictureUrl={pictureOf(s.memberId)}
+                className="size-9"
+              />
+              <span className="min-w-0 flex-1 break-words">
+                {nameOf(s.memberId)}
+                {s.memberId === group.me.memberId && t("settle.chartMe")}
+              </span>
               <span className="font-bold text-sprout-600">
                 {formatAmount(s.settlementAmount, settlement)}
               </span>

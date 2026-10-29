@@ -36,6 +36,20 @@ describe("settings (screen 11)", () => {
     expect((await accounts()).queryByRole("button", { name: /解除連結/ })).toBeNull();
   });
 
+  it("saves the Preferred currency from a dropdown right under the profile", async () => {
+    const user = userEvent.setup();
+    renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
+
+    const select = await screen.findByRole("combobox", { name: "偏好幣別" });
+    expect(select).toHaveValue("TWD");
+    await user.selectOptions(select, "USD");
+
+    expect(await screen.findByRole("combobox", { name: "偏好幣別" })).toHaveValue("USD");
+    expect(screen.getByRole("option", { name: "USD 美元" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "JPY 日元" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "THB 泰銖" })).toBeVisible();
+  });
+
   it("links Google with the Google button", async () => {
     const user = userEvent.setup();
     const { api } = renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });

@@ -2,31 +2,41 @@ import { CURRENCY_CODES, type CurrencyCode } from "@split/shared";
 import { ArrowRight, Plane, ReceiptText, Users } from "lucide-react";
 import { type SubmitEvent, type ReactNode, useId, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { useAuth } from "../auth/AuthProvider.js";
 import { useCreateGroup } from "../groups/api.js";
-import { failureMessage, input, primaryButton, ScreenHeader } from "../groups/ui.js";
+import {
+  failureMessage,
+  input,
+  MaintenanceTag,
+  primaryButton,
+  ScreenHeader,
+} from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { TRIP_ENABLED } from "../trip/enabled.js";
 
 function isCurrency(value: string): value is CurrencyCode {
   return (CURRENCY_CODES as readonly string[]).includes(value);
 }
 
 /**
- * Screen 6 as amended: name, usage (Running Tab or Trip), the Settlement currency (fixed
- * after the first Expense) and a default Expense currency. Then on to the Invite.
+ * Screen 6 as amended: name, usage (Running Tab or Trip) and the Settlement currency (fixed
+ * after the first Expense), which starts at the User's Preferred currency. Then on to the Invite.
  */
 export function NewGroupPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const create = useCreateGroup();
+  const { state } = useAuth();
   const [name, setName] = useState("");
-  const [isTrip, setIsTrip] = useState(params.get("usage") === "trip");
-  const [settlementCurrency, setSettlementCurrency] = useState<CurrencyCode>("TWD");
-  const [defaultExpenseCurrency, setDefaultExpenseCurrency] = useState<CurrencyCode>("TWD");
+  const [isTrip, setIsTrip] = useState(TRIP_ENABLED && params.get("usage") === "trip");
+  const [settlementCurrency, setSettlementCurrency] = useState<CurrencyCode>(
+    state.status === "signedIn" ? state.user.preferredCurrency : "TWD",
+  );
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     create.mutate(
-      { name: name.trim(), isTrip, settlementCurrency, defaultExpenseCurrency },
+      { name: name.trim(), isTrip, settlementCurrency },
       { onSuccess: (group) => void navigate(`/groups/${group.id}/invite`, { replace: true }) },
     );
   }
@@ -61,6 +71,7 @@ export function NewGroupPage() {
             label="usage.trip"
             icon={<Plane aria-hidden="true" className="size-5" />}
             checked={isTrip}
+            disabled={!TRIP_ENABLED}
             onCheck={() => {
               setIsTrip(true);
             }}
@@ -72,11 +83,6 @@ export function NewGroupPage() {
         hint={t("create.settlementHint")}
         value={settlementCurrency}
         onChange={setSettlementCurrency}
-      />
-      <CurrencySelect
-        label="create.defaultExpenseCurrency"
-        value={defaultExpenseCurrency}
-        onChange={setDefaultExpenseCurrency}
       />
       <div className="flex flex-col items-center gap-2 rounded-3xl bg-sprout-150 p-6 text-center">
         <Users aria-hidden="true" className="size-10 text-sprout-500" />
@@ -104,23 +110,28 @@ function UsageOption(props: {
   label: MessageId;
   icon: ReactNode;
   checked: boolean;
+  /** Under maintenance: greyed out with a red tag, and it cannot be picked. */
+  disabled?: boolean;
   onCheck: () => void;
 }) {
+  const disabled = props.disabled === true;
   return (
     <label
-      className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl py-3 has-focus-visible:ring-2 has-focus-visible:ring-sprout-500 ${
-        props.checked ? "bg-white font-bold text-ink shadow-sm" : "text-ink-muted"
-      }`}
+      className={`flex items-center justify-center gap-2 rounded-xl py-3 has-focus-visible:ring-2 has-focus-visible:ring-sprout-500 ${
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+      } ${props.checked ? "bg-white font-bold text-ink shadow-sm" : "text-ink-muted"}`}
     >
       <input
         type="radio"
         name="usage"
         checked={props.checked}
+        disabled={disabled}
         onChange={props.onCheck}
         className="sr-only"
       />
       {props.icon}
       {t(props.label)}
+      {disabled && <MaintenanceTag />}
     </label>
   );
 }

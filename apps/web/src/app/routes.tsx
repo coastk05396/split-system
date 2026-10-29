@@ -1,11 +1,19 @@
 import { type ComponentType, lazy, Suspense } from "react";
-import { Navigate, Outlet, type RouteObject, useLocation, useSearchParams } from "react-router";
+import {
+  Navigate,
+  Outlet,
+  redirect,
+  type RouteObject,
+  useLocation,
+  useSearchParams,
+} from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { t } from "../i18n/messages.js";
 import { AppShell } from "../shell/AppShell.js";
 import { HomePage } from "../pages/HomePage.js";
 import { NotFoundPage } from "../pages/NotFoundPage.js";
 import { Splash } from "../shell/Splash.js";
+import { TRIP_ENABLED } from "../trip/enabled.js";
 
 const LandingPage = lazy(() =>
   import("../pages/LandingPage.js").then((m) => ({ default: m.LandingPage })),
@@ -13,6 +21,11 @@ const LandingPage = lazy(() =>
 const SignInPage = lazy(() =>
   import("../pages/SignInPage.js").then((m) => ({ default: m.SignInPage })),
 );
+
+/** Trip pages while the Trip module is under maintenance: back to the Group. */
+function tripOnly({ params }: { params: { id?: string } }) {
+  return TRIP_ENABLED ? null : redirect(`/groups/${params.id ?? ""}`);
+}
 
 /** Where to go after sign-in: only same-site paths, never another origin. */
 export function safeNext(next: string | null): string {
@@ -97,14 +110,17 @@ export const routes: RouteObject[] = [
       },
       {
         path: "groups/:id/trip",
+        loader: tripOnly,
         lazy: page(() => import("../pages/TripSettingsPage.js"), "TripSettingsPage"),
       },
       {
         path: "groups/:id/stops/new",
+        loader: tripOnly,
         lazy: page(() => import("../pages/StopPage.js"), "NewStopPage"),
       },
       {
         path: "groups/:id/stops/:sid",
+        loader: tripOnly,
         lazy: page(() => import("../pages/StopPage.js"), "EditStopPage"),
       },
       { path: "join/:token", lazy: page(() => import("../pages/JoinPage.js"), "JoinPage") },

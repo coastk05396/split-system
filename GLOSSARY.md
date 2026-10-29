@@ -56,6 +56,18 @@ _Avoid_: Local currency, foreign currency
 The one currency a Group uses to total debts and settle up, chosen when the Group is created and fixed once its first Expense exists.
 _Avoid_: Base currency, home currency
 
+**Preferred currency**:
+The one currency a User picks in settings; the Home total is shown in it, and a new Group starts with it as its Settlement currency.
+_Avoid_: Display currency, default currency
+
+**Home total**:
+The User's pending Balances from every Group as one amount in the Preferred currency, other currencies converted at the latest reference rate; a reading aid that is never settled.
+_Avoid_: Net worth, grand total
+
+**Language**:
+The language a User picks in settings; the whole app is drawn in it. Data the server keeps in Chinese (categories, the labels of deleted or removed Members) is translated when shown, never rewritten.
+_Avoid_: Locale, translation
+
 **Exchange rate**:
 The reference rate, saved with an Expense, that converts its Expense currency into the Settlement currency.
 _Avoid_: FX rate, conversion rate

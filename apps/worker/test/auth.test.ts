@@ -22,6 +22,8 @@ describe("POST /auth/:provider", () => {
       id: body.user.id,
       displayName: "小宇",
       pictureUrl: `https://pic/${sub}`,
+      preferredCurrency: "TWD",
+      language: "zh-TW",
       identities: [{ provider: "google" }],
     });
   });

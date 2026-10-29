@@ -8,7 +8,7 @@
     "typecheck": "pnpm worker-types && tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
     "lint": "pnpm worker-types && eslint .",
     "test": "vitest run",
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build && node --experimental-strip-types scripts/check-bundle-size.ts",
     "preview": "vite preview"
   },

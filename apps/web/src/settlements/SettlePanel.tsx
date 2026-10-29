@@ -5,13 +5,24 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
-import { useRef, useState } from "react";
-import { card, failureMessage, LoadError, Loading, secondaryButton } from "../groups/ui.js";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import { ArrowRight, ChevronDown } from "lucide-react";
+import { Avatar, card, failureMessage, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
+import { localName } from "../i18n/format.js";
+import { useMembers } from "../groups/api.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
+import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
 import { type BalanceRow, canCancel, canConfirm, canUndo, maxPayable } from "./model.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
+
+/** Each Member's picture by id, for the avatars deep inside the payment cards. */
+const PictureContext = createContext<(id: string) => string | null>(() => null);
+
+/** How many past Settlements show at first, and how many more each 查看更多 adds. */
+const HISTORY_STEP = 5;
 
 const smallButton = "rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold";
 
@@ -27,6 +38,7 @@ export function SettlePanel({ group }: { group: Group }) {
     balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
   );
   const action = useSettlementAction(group.id);
+  const members = useMembers(group.id);
 
   if (balances.isError) {
     return <LoadError error={balances.error} onRetry={() => void balances.refetch()} />;
@@ -38,169 +50,367 @@ export function SettlePanel({ group }: { group: Group }) {
 
   const currency = balances.data.settlementCurrency;
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
-  const nameOf = (id: string) => rows.get(id)?.displayName ?? "?";
+  const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const pending = all.filter((s) => s.status === "pending");
   const history = all.filter((s) => s.status !== "pending");
+  // A payment already sent and waiting for its receiver shows once, under 待確認, not here too.
+  const planned = plan.status === "ready" ? plan.plan.payments : [];
+  const unsent = planned.filter(
+    (p) =>
+      !pending.some(
+        (s) => s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
+      ),
+  );
+  const everythingSent = planned.length > 0 && unsent.length === 0;
 
   return (
-    <div className="flex flex-col gap-6 text-ink">
-      <section className="flex flex-col gap-1 rounded-3xl bg-sprout-150 p-6">
-        <h2 className="text-sm text-ink-muted">
-          {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
-        </h2>
-        <p className="text-4xl font-bold">{formatAmount(Math.abs(mine), currency)}</p>
-      </section>
-
-      {action.isError && (
-        <p role="alert" className="text-red-700">
-          {failureMessage(action.error)}
-        </p>
-      )}
-
-      {pending.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-bold">{t("settle.pendingTitle")}</h2>
-          <ul aria-label={t("settle.pendingTitle")} className="flex flex-col gap-2">
-            {pending.map((s) => {
-              const payer = rows.get(s.payerMemberId);
-              const receiver = rows.get(s.receiverMemberId);
-              return (
-                <li key={s.id} className={`${card} flex flex-wrap items-center gap-3 px-4 py-3`}>
-                  <PaymentLine
-                    payer={nameOf(s.payerMemberId)}
-                    receiver={nameOf(s.receiverMemberId)}
-                    amount={s.amount}
-                    currency={currency}
-                    badge="settle.status.pending"
-                  />
-                  {payer !== undefined &&
-                    receiver !== undefined &&
-                    canConfirm(group.me, payer, receiver) && (
-                      <ConfirmSettlementDialog
-                        trigger={t("settle.confirmAction")}
-                        currency={currency}
-                        target={{
-                          payerName: payer.displayName,
-                          receiverName: receiver.displayName,
-                          suggested: Math.min(s.amount, maxPayable(payer, receiver)),
-                          max: maxPayable(payer, receiver),
-                        }}
-                        submit={(amount) =>
-                          action.mutateAsync({
-                            kind: "confirm",
-                            settlementId: s.id,
-                            ...(amount === s.amount ? {} : { amount }),
-                          })
-                        }
-                      />
-                    )}
-                  {canCancel(group.me, s) && (
-                    <button
-                      type="button"
-                      className={smallButton}
-                      disabled={action.isPending}
-                      onClick={() => {
-                        action.mutate({ kind: "cancel", settlementId: s.id });
-                      }}
-                    >
-                      {t("settle.cancel")}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+    <PictureContext value={memberPictures(members.data)}>
+      <div className="flex flex-col gap-6 text-ink">
+        <section className="flex flex-col gap-1 rounded-3xl bg-sprout-150 p-6">
+          <h2 className="text-sm text-ink-muted">
+            {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
+          </h2>
+          <p className="text-4xl font-bold">{formatAmount(Math.abs(mine), currency)}</p>
         </section>
-      )}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="flex-1 text-lg font-bold">{t("settle.planTitle")}</h2>
-          {plan.status === "ready" && plan.plan.payments.length > 0 && (
-            <span className="rounded-full bg-peach px-3 py-1 text-xs font-bold text-sprout-700">
-              {plan.plan.method === "exact"
-                ? t("settle.label.exact")
-                : t("settle.label.greedy", { count: plan.plan.maxPayments })}
-            </span>
-          )}
-        </div>
-        {plan.status === "computing" && <Loading />}
-        {plan.status === "failed" && (
+        <BalanceChart
+          rows={balances.data.balances}
+          myMemberId={group.me.memberId}
+          currency={currency}
+        />
+
+        {action.isError && (
           <p role="alert" className="text-red-700">
-            {t("settle.planFailed")}
+            {failureMessage(action.error)}
           </p>
         )}
-        {plan.status === "ready" &&
-          (plan.plan.payments.length === 0 ? (
-            <p className="py-4 text-center text-ink-muted">{t("settle.allSettled")}</p>
-          ) : (
-            <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
-              {plan.plan.payments.map((p) => (
-                <li
-                  key={`${p.fromMemberId}-${p.toMemberId}`}
-                  className={`${card} flex flex-wrap items-center gap-3 px-4 py-3`}
-                >
-                  <PlannedRow
-                    group={group}
-                    payment={p}
-                    rows={rows}
-                    currency={currency}
-                    waiting={pending.some(
-                      (s) =>
-                        s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
-                    )}
-                  />
-                </li>
-              ))}
-            </ul>
-          ))}
-      </section>
 
-      {history.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-bold">{t("settle.historyTitle")}</h2>
-          <ul aria-label={t("settle.historyTitle")} className="flex flex-col gap-2">
-            {history.map((s) => (
-              <li key={s.id} className={`${card} flex flex-wrap items-center gap-3 px-4 py-3`}>
-                <PaymentLine
-                  payer={nameOf(s.payerMemberId)}
-                  receiver={nameOf(s.receiverMemberId)}
-                  amount={s.amount}
-                  currency={currency}
-                  badge={statusLabel(s)}
-                  struck={s.status !== "confirmed"}
-                />
-                {s.status === "confirmed" && canUndo(group.me, s) && (
-                  <button
-                    type="button"
-                    className={smallButton}
-                    disabled={action.isPending}
-                    onClick={() => {
-                      action.mutate({ kind: "undo", settlementId: s.id });
-                    }}
-                  >
-                    {t("settle.undo")}
-                  </button>
+        {pending.length > 0 && (
+          <section className="flex flex-col gap-3">
+            <h2 className="text-lg font-bold">{t("settle.pendingTitle")}</h2>
+            <ul aria-label={t("settle.pendingTitle")} className="flex flex-col gap-2">
+              {pending.map((s) => {
+                const payer = rows.get(s.payerMemberId);
+                const receiver = rows.get(s.receiverMemberId);
+                return (
+                  <li key={s.id} className={paymentCard()}>
+                    <PaymentLine
+                      payer={nameOf(s.payerMemberId)}
+                      receiver={nameOf(s.receiverMemberId)}
+                      payerId={s.payerMemberId}
+                      receiverId={s.receiverMemberId}
+                      myMemberId={group.me.memberId}
+                      showRole
+                      amount={s.amount}
+                      currency={currency}
+                      badge="settle.status.pending"
+                    />
+                    {payer !== undefined &&
+                      receiver !== undefined &&
+                      canConfirm(group.me, payer, receiver) && (
+                        <ConfirmSettlementDialog
+                          trigger={t("settle.confirmAction")}
+                          currency={currency}
+                          target={{
+                            payerName: localName(payer.displayName),
+                            receiverName: localName(receiver.displayName),
+                            suggested: Math.min(s.amount, maxPayable(payer, receiver)),
+                            max: maxPayable(payer, receiver),
+                          }}
+                          submit={(amount) =>
+                            action.mutateAsync({
+                              kind: "confirm",
+                              settlementId: s.id,
+                              ...(amount === s.amount ? {} : { amount }),
+                            })
+                          }
+                        />
+                      )}
+                    {canCancel(group.me, s) && (
+                      <button
+                        type="button"
+                        className={smallButton}
+                        disabled={action.isPending}
+                        onClick={() => {
+                          action.mutate({ kind: "cancel", settlementId: s.id });
+                        }}
+                      >
+                        {t("settle.cancel")}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {!everythingSent && (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <h2 className="flex-1 text-lg font-bold">{t("settle.planTitle")}</h2>
+              {/* Only an approximate plan says so; the fewest-payments one needs no label. */}
+              {plan.status === "ready" &&
+                plan.plan.payments.length > 0 &&
+                plan.plan.method !== "exact" && (
+                  <span className="rounded-full bg-peach px-3 py-1 text-xs font-bold text-sprout-700">
+                    {t("settle.label.greedy", { count: plan.plan.maxPayments })}
+                  </span>
                 )}
-              </li>
-            ))}
-          </ul>
-          {settlements.hasNextPage && (
-            <button
-              type="button"
-              className={`${secondaryButton} py-3`}
-              disabled={settlements.isFetchingNextPage}
-              onClick={() => void settlements.fetchNextPage()}
-            >
-              {t("expense.more")}
-            </button>
-          )}
-        </section>
-      )}
-    </div>
+            </div>
+            {plan.status === "computing" && <Loading />}
+            {plan.status === "failed" && (
+              <p role="alert" className="text-red-700">
+                {t("settle.planFailed")}
+              </p>
+            )}
+            {plan.status === "ready" &&
+              (plan.plan.payments.length === 0 ? (
+                <p className="py-4 text-center text-ink-muted">{t("settle.allSettled")}</p>
+              ) : (
+                <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
+                  {[...unsent]
+                    // What I have to do comes first; the sort is stable for the rest.
+                    .sort((a, b) => Number(involvesMe(group, b)) - Number(involvesMe(group, a)))
+                    .map((p) => (
+                      <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
+                        <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
+                      </li>
+                    ))}
+                </ul>
+              ))}
+          </section>
+        )}
+
+        {history.length > 0 && (
+          <SettlementHistory
+            group={group}
+            history={history}
+            nameOf={nameOf}
+            currency={currency}
+            undoDisabled={action.isPending}
+            onUndo={(settlementId) => {
+              action.mutate({ kind: "undo", settlementId });
+            }}
+            more={
+              settlements.hasNextPage ? (
+                <button
+                  type="button"
+                  className={`${secondaryButton} py-3`}
+                  disabled={settlements.isFetchingNextPage}
+                  onClick={() => void settlements.fetchNextPage()}
+                >
+                  {t("expense.more")}
+                </button>
+              ) : null
+            }
+          />
+        )}
+      </div>
+    </PictureContext>
   );
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** When it happened: confirmed, undone or cancelled at; the day it was made as a last resort. */
+function eventAt(s: Settlement): Date {
+  const at =
+    s.status === "confirmed"
+      ? (s.confirmedAt ?? s.createdAt)
+      : s.status === "undone"
+        ? (s.undoneAt ?? s.updatedAt)
+        : s.status === "cancelled"
+          ? s.updatedAt
+          : s.createdAt;
+  return new Date(at);
+}
+
+function dayOf(s: Settlement): string {
+  const d = eventAt(s);
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function timeOf(s: Settlement): string {
+  const d = eventAt(s);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** One past Settlement on a single line: who paid whom, the amount, and what may be done. */
+function HistoryRow({
+  settlement: s,
+  group,
+  nameOf,
+  currency,
+  dropped,
+  undoDisabled,
+  onUndo,
+}: {
+  settlement: Settlement;
+  group: Group;
+  nameOf: (id: string) => string;
+  currency: CurrencyCode;
+  dropped: boolean;
+  undoDisabled: boolean;
+  onUndo: (id: string) => void;
+}) {
+  const me = group.me.memberId;
+  const payer = nameOf(s.payerMemberId);
+  const receiver = nameOf(s.receiverMemberId);
+  const label = (id: string, name: string) => (id === me ? t("settle.you") : name);
+  return (
+    <li
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-sprout-150 py-2 last:border-b-0 ${dropped ? "opacity-60" : ""}`}
+    >
+      <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1.5">
+        <Person id={s.payerMemberId} name={payer} isMe={s.payerMemberId === me} />
+        <ArrowRight className="size-4 shrink-0 text-ink-muted" />
+        <Person id={s.receiverMemberId} name={receiver} isMe={s.receiverMemberId === me} />
+      </span>
+      <span className="sr-only">
+        {t("settle.pays", {
+          payer: label(s.payerMemberId, payer),
+          receiver: label(s.receiverMemberId, receiver),
+        })}
+      </span>
+      <span
+        className={`shrink-0 font-bold tabular-nums ${dropped ? "text-ink-muted line-through" : "text-sprout-600"}`}
+      >
+        {formatAmount(s.amount, currency)}
+      </span>
+      {dropped && (
+        <span className="rounded-full bg-ink/10 px-2 py-0.5 text-xs font-bold text-ink-muted">
+          {t(statusLabel(s))}
+        </span>
+      )}
+      {s.status === "confirmed" && canUndo(group.me, s) && (
+        <button
+          type="button"
+          className="rounded-full border border-sprout-200 px-3 py-1 text-xs font-bold"
+          disabled={undoDisabled}
+          onClick={() => {
+            onUndo(s.id);
+          }}
+        >
+          {t("settle.undo")}
+        </button>
+      )}
+      <span className="w-full pl-0.5 text-xs text-ink-muted">{timeOf(s)}</span>
+    </li>
+  );
+}
+
+/**
+ * 結算紀錄: one line per confirmed Settlement under a heading for its day, the latest few first
+ * with 查看更多 for the rest; the cancelled and undone ones, which move no Balance, stay folded.
+ */
+function SettlementHistory({
+  group,
+  history,
+  nameOf,
+  currency,
+  undoDisabled,
+  onUndo,
+  more,
+}: {
+  group: Group;
+  history: readonly Settlement[];
+  nameOf: (id: string) => string;
+  currency: CurrencyCode;
+  undoDisabled: boolean;
+  onUndo: (id: string) => void;
+  more: ReactNode;
+}) {
+  const [visible, setVisible] = useState(HISTORY_STEP);
+  const [droppedVisible, setDroppedVisible] = useState(HISTORY_STEP);
+  const [showDropped, setShowDropped] = useState(false);
+  const confirmed = history.filter((s) => s.status === "confirmed");
+  const dropped = history.filter((s) => s.status !== "confirmed");
+  const rowProps = { group, nameOf, currency, undoDisabled, onUndo };
+
+  /** One grey heading per day, and a one-line row for each Settlement of that day. */
+  const byDay = (list: readonly Settlement[], isDropped: boolean): ReactNode[] => {
+    const items: ReactNode[] = [];
+    let lastDay = "";
+    for (const s of list) {
+      const day = dayOf(s);
+      if (day !== lastDay) {
+        lastDay = day;
+        items.push(
+          <li key={`day-${day}-${s.id}`} role="presentation" className="pt-3 first:pt-0">
+            <h3 className="rounded-xl bg-sprout-150 px-3 py-1 text-sm font-bold text-ink-muted">
+              {dateHeading(day)}
+            </h3>
+          </li>,
+        );
+      }
+      items.push(<HistoryRow key={s.id} settlement={s} dropped={isDropped} {...rowProps} />);
+    }
+    return items;
+  };
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-lg font-bold">{t("settle.historyTitle")}</h2>
+      <ul aria-label={t("settle.historyTitle")} className="flex flex-col">
+        {byDay(confirmed.slice(0, visible), false)}
+      </ul>
+      {confirmed.length > visible && (
+        <button
+          type="button"
+          className={`${secondaryButton} py-3`}
+          onClick={() => {
+            setVisible(visible + HISTORY_STEP);
+          }}
+        >
+          {t("settle.historyMore")}
+        </button>
+      )}
+      {dropped.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showDropped}
+            className="flex items-center gap-1 self-start text-sm font-bold text-ink-muted"
+            onClick={() => {
+              setShowDropped(!showDropped);
+            }}
+          >
+            {t("settle.droppedToggle", { count: dropped.length })}
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-4 transition-transform ${showDropped ? "rotate-180" : ""}`}
+            />
+          </button>
+          {showDropped && (
+            <>
+              <ul aria-label={t("settle.droppedTitle")} className="flex flex-col">
+                {byDay(dropped.slice(0, droppedVisible), true)}
+              </ul>
+              {dropped.length > droppedVisible && (
+                <button
+                  type="button"
+                  className={`${secondaryButton} py-3`}
+                  onClick={() => {
+                    setDroppedVisible(droppedVisible + HISTORY_STEP);
+                  }}
+                >
+                  {t("settle.historyMore")}
+                </button>
+              )}
+            </>
+          )}
+        </>
+      )}
+      {more}
+    </section>
+  );
+}
+
+function involvesMe(group: Group, p: PlannedPayment): boolean {
+  return p.fromMemberId === group.me.memberId || p.toMemberId === group.me.memberId;
 }
 
 function statusLabel(s: Settlement): MessageId {
@@ -209,32 +419,101 @@ function statusLabel(s: Settlement): MessageId {
   return "settle.status.confirmed";
 }
 
+/** A payment card; faded once withdrawn or undone. */
+function paymentCard(faded = false): string {
+  return `${card} flex flex-col gap-3 p-4 [&>button]:w-full ${faded ? "opacity-70" : ""}`;
+}
+
+const STATUS_TONE: Partial<Record<MessageId, string>> = {
+  "settle.status.pending": "bg-amber-100 text-amber-800",
+  "settle.status.confirmed": "bg-sprout-100 text-sprout-700",
+};
+
+function Person({ id, name, isMe }: { id: string; name: string; isMe: boolean }) {
+  const pictureOf = useContext(PictureContext);
+  // The avatar keeps the real initial; only the label says 你.
+  return (
+    <span
+      className={`flex min-w-0 items-center gap-2 rounded-full border py-0.5 pr-3 pl-0.5 ${isMe ? "border-ink/40" : "border-transparent"}`}
+    >
+      <Avatar name={name} pictureUrl={pictureOf(id)} className="size-8 text-sm" />
+      <span className="truncate font-bold">{isMe ? t("settle.you") : name}</span>
+    </span>
+  );
+}
+
+/** Says why a card matters to me, in words: 你要付 or 你可收. */
+function RoleTag({ paying }: { paying: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-3 py-0.5 text-xs font-bold text-white ${
+        paying ? "bg-orange-700" : "bg-sprout-600"
+      }`}
+    >
+      {t(paying ? "settle.rolePay" : "settle.roleGet")}
+    </span>
+  );
+}
+
 function PaymentLine({
   payer,
   receiver,
+  payerId,
+  receiverId,
+  myMemberId,
   amount,
   currency,
   badge,
+  showRole = false,
   struck = false,
 }: {
+  /** Real display names; the line itself says 你 for me. */
   payer: string;
   receiver: string;
+  payerId: string;
+  receiverId: string;
+  myMemberId: string;
   amount: number;
   currency: CurrencyCode;
   badge?: MessageId;
+  /** Tag the card 你要付 or 你可收 when it is mine to pay or collect. */
+  showRole?: boolean;
   struck?: boolean;
 }) {
+  const label = (id: string, name: string) => (id === myMemberId ? t("settle.you") : name);
+  const mine = payerId === myMemberId || receiverId === myMemberId;
   return (
     <>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-bold">{t("settle.pays", { payer, receiver })}</span>
-        {badge !== undefined && (
-          <span className="text-xs font-bold text-sprout-700">{t(badge)}</span>
-        )}
-      </span>
-      <span className={`font-bold ${struck ? "text-ink-muted line-through" : "text-sprout-600"}`}>
-        {formatAmount(amount, currency)}
-      </span>
+      <div className="flex items-center gap-3">
+        <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Person id={payerId} name={payer} isMe={payerId === myMemberId} />
+          <ArrowRight className="size-4 shrink-0 text-ink-muted" />
+          <Person id={receiverId} name={receiver} isMe={receiverId === myMemberId} />
+        </span>
+        <span className="sr-only">
+          {t("settle.pays", {
+            payer: label(payerId, payer),
+            receiver: label(receiverId, receiver),
+          })}
+        </span>
+        <span
+          className={`shrink-0 text-lg font-bold tabular-nums ${struck ? "text-ink-muted line-through" : "text-sprout-600"}`}
+        >
+          {formatAmount(amount, currency)}
+        </span>
+      </div>
+      {((showRole && mine) || badge !== undefined) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {showRole && mine && <RoleTag paying={payerId === myMemberId} />}
+          {badge !== undefined && (
+            <span
+              className={`rounded-full px-3 py-0.5 text-xs font-bold ${STATUS_TONE[badge] ?? "bg-ink/10 text-ink-muted"}`}
+            >
+              {t(badge)}
+            </span>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -245,14 +524,11 @@ function PlannedRow({
   payment,
   rows,
   currency,
-  waiting,
 }: {
   group: Group;
   payment: PlannedPayment;
   rows: ReadonlyMap<string, BalanceRow>;
   currency: CurrencyCode;
-  /** A 我已付款 for this pair waits for the receiver. */
-  waiting: boolean;
 }) {
   const record = useRecordSettlement(group.id);
   // One key per suggested payment, reused if a lost answer makes the person tap again.
@@ -274,13 +550,16 @@ function PlannedRow({
   return (
     <>
       <PaymentLine
-        payer={payer.displayName}
-        receiver={receiver.displayName}
+        payer={localName(payer.displayName)}
+        receiver={localName(receiver.displayName)}
+        showRole
+        payerId={payer.memberId}
+        receiverId={receiver.memberId}
+        myMemberId={group.me.memberId}
         amount={payment.amountMinor}
         currency={currency}
-        {...(waiting ? { badge: "settle.status.pending" as const } : {})}
       />
-      {iPay && !waiting && !canConfirm(group.me, payer, receiver) && (
+      {iPay && !canConfirm(group.me, payer, receiver) && (
         <button
           type="button"
           className={smallButton}
@@ -296,13 +575,13 @@ function PlannedRow({
           {t("settle.iPaid")}
         </button>
       )}
-      {!waiting && canConfirm(group.me, payer, receiver) && (
+      {canConfirm(group.me, payer, receiver) && (
         <ConfirmSettlementDialog
           trigger={t("settle.markReceived")}
           currency={currency}
           target={{
-            payerName: payer.displayName,
-            receiverName: receiver.displayName,
+            payerName: localName(payer.displayName),
+            receiverName: localName(receiver.displayName),
             suggested: payment.amountMinor,
             max: maxPayable(payer, receiver),
           }}

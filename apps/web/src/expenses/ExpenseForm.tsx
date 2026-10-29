@@ -10,11 +10,14 @@ import {
   type Group,
   type Member,
 } from "@split/shared";
-import { ArrowRight, ChevronDown, Users } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Users } from "lucide-react";
 import { type SubmitEvent, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
-import { card, failureMessage, input, primaryButton } from "../groups/ui.js";
+import { CategoryIcon } from "./CategoryIcon.js";
+import { Avatar, card, failureMessage, input, primaryButton } from "../groups/ui.js";
+import { categoryLabel, localName } from "../i18n/format.js";
 import { errorMessage, t } from "../i18n/messages.js";
+import { TRIP_ENABLED } from "../trip/enabled.js";
 import { useRate, useSaveExpense, useStops } from "./api.js";
 import {
   CATEGORIES,
@@ -39,26 +42,30 @@ export function ExpenseForm({
   group,
   members,
   expense,
+  startCurrency,
   onSaved,
 }: {
   group: Group;
   members: readonly Member[];
   /** The Expense being edited; a new one when absent. */
   expense?: Expense;
+  /** The currency a new Expense starts in; the Settlement currency when absent. */
+  startCurrency?: CurrencyCode;
   onSaved: (expense: Expense) => void;
 }) {
   const selectable: SplitMember[] = members
     .filter((m) => m.status !== "former")
     .map((m) => ({
       id: m.id,
-      displayName: m.displayName,
+      displayName: localName(m.displayName),
       placeholder: m.status === "placeholder",
+      pictureUrl: m.pictureUrl,
     }));
   const order = selectable.map((m) => m.id);
   const [draft, setDraft] = useState<ExpenseDraft>(() =>
     expense === undefined
       ? newExpenseDraft({
-          currency: group.defaultExpenseCurrency,
+          currency: startCurrency ?? group.settlementCurrency,
           myMemberId: group.me.memberId,
           memberIds: order,
           now: new Date(),
@@ -162,7 +169,7 @@ export function ExpenseForm({
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className="cursor-pointer rounded-full border border-sprout-200 bg-white px-4 py-1.5 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 has-[:checked]:font-bold"
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 has-[:checked]:font-bold"
                 >
                   <input
                     type="radio"
@@ -173,7 +180,8 @@ export function ExpenseForm({
                       update({ category });
                     }}
                   />
-                  {category}
+                  <CategoryIcon category={category} className="size-4 text-sprout-600" />
+                  {categoryLabel(category)}
                 </label>
               ))}
             </div>
@@ -191,7 +199,7 @@ export function ExpenseForm({
               }}
             />
           </label>
-          {group.isTrip && (
+          {group.isTrip && TRIP_ENABLED && (
             <StopPicker
               groupId={group.id}
               day={draft.date}
@@ -468,6 +476,64 @@ function StopPicker({
   );
 }
 
+/** One payer, chosen from a menu in the same style as the currency picker. */
+function PayerPicker({
+  members,
+  value,
+  onChange,
+}: {
+  members: readonly SplitMember[];
+  value: string;
+  onChange: (memberId: string) => void;
+}) {
+  const current = members.find((m) => m.id === value);
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        aria-label={`${t("expense.payers")} ${current?.displayName ?? ""}`}
+        className={`${card} flex w-full items-center gap-3 px-4 py-3 text-left data-[state=open]:border-sprout-500`}
+      >
+        <Avatar
+          name={current?.displayName ?? "?"}
+          pictureUrl={current?.pictureUrl ?? null}
+          placeholder={current?.placeholder ?? false}
+          className="size-9"
+        />
+        <span className="min-w-0 flex-1 truncate text-lg font-bold">{current?.displayName}</span>
+        <ChevronDown aria-hidden="true" className="size-5 text-ink-muted" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content
+          align="start"
+          sideOffset={6}
+          className="z-20 max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto rounded-2xl border border-sprout-200 bg-white p-1 shadow-lg"
+        >
+          <Menu.RadioGroup value={value} onValueChange={onChange}>
+            {members.map((m) => (
+              <Menu.RadioItem
+                key={m.id}
+                value={m.id}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 outline-none data-[highlighted]:bg-sprout-100 data-[state=checked]:font-bold"
+              >
+                <Avatar
+                  name={m.displayName}
+                  pictureUrl={m.pictureUrl ?? null}
+                  placeholder={m.placeholder ?? false}
+                  className="size-8 text-sm"
+                />
+                <span className="min-w-0 flex-1 truncate">{m.displayName}</span>
+                <Menu.ItemIndicator>
+                  <Check aria-hidden="true" className="size-5 text-sprout-600" />
+                </Menu.ItemIndicator>
+              </Menu.RadioItem>
+            ))}
+          </Menu.RadioGroup>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 function PayersSection({
   members,
   myMemberId,
@@ -505,26 +571,13 @@ function PayersSection({
         {t(payers.mode === "single" ? "expense.severalPayers" : "expense.onePayer")}
       </button>
       {payers.mode === "single" ? (
-        <div className="flex flex-wrap gap-2">
-          {members.map((m) => (
-            <label
-              key={m.id}
-              className="cursor-pointer rounded-full border border-sprout-200 bg-white px-4 py-1.5 has-[:checked]:border-sprout-500 has-[:checked]:bg-sprout-100 has-[:checked]:font-bold"
-            >
-              <input
-                type="radio"
-                name="payer"
-                aria-label={t("expense.paidBy", { name: m.displayName })}
-                className="sr-only"
-                checked={payers.memberId === m.id}
-                onChange={() => {
-                  update({ payers: { mode: "single", memberId: m.id } });
-                }}
-              />
-              {m.displayName}
-            </label>
-          ))}
-        </div>
+        <PayerPicker
+          members={members}
+          value={payers.memberId}
+          onChange={(memberId) => {
+            update({ payers: { mode: "single", memberId } });
+          }}
+        />
       ) : (
         <>
           <ul className="flex flex-col gap-2">

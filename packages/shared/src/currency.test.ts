@@ -6,6 +6,12 @@ describe("parseAmount", () => {
     expect(parseAmount("2160", "TWD")).toEqual({ ok: true, value: 2160 });
   });
 
+  it("reads JPY as whole yen and THB as satang", () => {
+    expect(parseAmount("1500", "JPY")).toEqual({ ok: true, value: 1500 });
+    expect(parseAmount("1500.5", "JPY")).toEqual({ ok: false, error: "AMOUNT_INVALID" });
+    expect(parseAmount("1234.5", "THB")).toEqual({ ok: true, value: 123_450 });
+  });
+
   it("reads USD as cents", () => {
     expect(parseAmount("12.34", "USD")).toEqual({ ok: true, value: 1234 });
     expect(parseAmount("12.3", "USD")).toEqual({ ok: true, value: 1230 });
@@ -27,6 +33,11 @@ describe("parseAmount", () => {
 describe("formatAmount", () => {
   it("shows TWD with its symbol and thousands separators", () => {
     expect(formatAmount(2160, "TWD")).toBe("NT$ 2,160");
+  });
+
+  it("shows JPY without decimals and THB with two", () => {
+    expect(formatAmount(1500, "JPY")).toBe("JP¥ 1,500");
+    expect(formatAmount(123_450, "THB")).toBe("฿ 1,234.50");
   });
 
   it("shows USD cents with two decimals", () => {

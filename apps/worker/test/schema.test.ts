@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createDb } from "../src/db/client.js";
 import { isConstraintError } from "../src/db/errors.js";
-import { expenses, groups, members, settlements } from "../src/db/schema.js";
+import { expenses, groups, members, settlements, users } from "../src/db/schema.js";
 
 const NOW = 1_750_000_000_000;
 const db = createDb(env.DB);
@@ -117,5 +117,31 @@ describe("migrated D1 schema", () => {
       updatedAt: NOW,
     });
     expect(isConstraintError(await failure(write), "CHECK")).toBe(true);
+  });
+});
+
+describe("users settings constraints", () => {
+  const row = (id: string) => ({ id, displayName: "小宇", createdAt: NOW, updatedAt: NOW });
+
+  it("accepts every shipped currency and language", async () => {
+    await db.insert(users).values({ ...row("u-jpy"), preferredCurrency: "JPY", language: "en" });
+    await db.insert(users).values({ ...row("u-thb"), preferredCurrency: "THB", language: "zh-TW" });
+    const [saved] = await db.select().from(users).where(eq(users.id, "u-jpy"));
+    expect(saved).toMatchObject({ preferredCurrency: "JPY", language: "en" });
+  });
+
+  it("refuses a currency or language outside the shipped lists", async () => {
+    const badCurrency = await failure(
+      env.DB.prepare(
+        "INSERT INTO users (id, display_name, preferred_currency, created_at, updated_at) VALUES ('u-gbp', 'x', 'GBP', 1, 1)",
+      ).run(),
+    );
+    expect(isConstraintError(badCurrency, "CHECK")).toBe(true);
+    const badLanguage = await failure(
+      env.DB.prepare(
+        "INSERT INTO users (id, display_name, language, created_at, updated_at) VALUES ('u-ja', 'x', 'ja', 1, 1)",
+      ).run(),
+    );
+    expect(isConstraintError(badLanguage, "CHECK")).toBe(true);
   });
 });

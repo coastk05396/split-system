@@ -48,7 +48,7 @@ CREATE TABLE `expenses` (
 	FOREIGN KEY (`creator_member_id`) REFERENCES `members`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`stop_id`) REFERENCES `stops`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "expenses_original_amount_check" CHECK("expenses"."original_amount" BETWEEN 1 AND 99999999),
-	CONSTRAINT "expenses_original_currency_check" CHECK("expenses"."original_currency" IN ('TWD', 'USD')),
+	CONSTRAINT "expenses_original_currency_check" CHECK("expenses"."original_currency" IN ('TWD', 'USD', 'JPY', 'THB')),
 	CONSTRAINT "expenses_fx_rate_check" CHECK("expenses"."fx_rate_scaled" > 0),
 	CONSTRAINT "expenses_is_custom_rate_check" CHECK("expenses"."is_custom_rate" IN (0, 1)),
 	CONSTRAINT "expenses_settlement_amount_check" CHECK("expenses"."settlement_amount" >= 0),
@@ -79,8 +79,8 @@ CREATE TABLE `groups` (
 	`trip_notes` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	CONSTRAINT "groups_settlement_currency_check" CHECK("groups"."settlement_currency" IN ('TWD', 'USD')),
-	CONSTRAINT "groups_default_expense_currency_check" CHECK("groups"."default_expense_currency" IN ('TWD', 'USD')),
+	CONSTRAINT "groups_settlement_currency_check" CHECK("groups"."settlement_currency" IN ('TWD', 'USD', 'JPY', 'THB')),
+	CONSTRAINT "groups_default_expense_currency_check" CHECK("groups"."default_expense_currency" IN ('TWD', 'USD', 'JPY', 'THB')),
 	CONSTRAINT "groups_is_trip_check" CHECK("groups"."is_trip" IN (0, 1)),
 	CONSTRAINT "groups_trip_dates_check" CHECK("groups"."trip_start_date" IS NULL OR "groups"."trip_end_date" IS NULL OR "groups"."trip_end_date" >= "groups"."trip_start_date")
 );

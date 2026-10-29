@@ -1,14 +1,18 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
-import { Plane, UserPlus, Users } from "lucide-react";
+import { Plane, Plus, UserPlus, Users } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
-import { LoadError, Loading, primaryButton, ScreenHeader, secondaryButton } from "../groups/ui.js";
+import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { SettlePanel } from "../settlements/SettlePanel.js";
+import { TRIP_ENABLED } from "../trip/enabled.js";
 import { TripPanel } from "../trip/TripPanel.js";
+
+const headerIcon =
+  "flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2 hover:bg-sprout-150";
 
 /**
  * Screen 3 as amended: the same tabs everywhere, 帳目, 行程 (Trips only) and 結算, with the
@@ -26,7 +30,7 @@ export function GroupPage() {
 function GroupDetail({ group }: { group: Group }) {
   const tabs: { value: string; label: MessageId }[] = [
     { value: "expenses", label: "group.tab.expenses" },
-    ...(group.isTrip ? [{ value: "trip", label: "group.tab.trip" } as const] : []),
+    ...(group.isTrip && TRIP_ENABLED ? [{ value: "trip", label: "group.tab.trip" } as const] : []),
     { value: "settle", label: "group.tab.settle" },
   ];
   // `?tab=trip` or `?tab=settle` opens a tab directly
@@ -34,79 +38,104 @@ function GroupDetail({ group }: { group: Group }) {
   return (
     <div className="flex flex-col gap-6">
       <ScreenHeader
+        compact
         title={group.name}
         back="/groups"
-        action={group.me.role === "admin" ? <DeleteGroupDialog group={group} /> : undefined}
+        action={
+          <span className="flex items-center">
+            <Link
+              to={`/groups/${group.id}/members`}
+              aria-label={t("group.summary", { count: group.memberCount })}
+              className={headerIcon}
+            >
+              <Users aria-hidden="true" className="size-6" />
+              <span className="text-sm font-bold">{group.memberCount}</span>
+            </Link>
+            <Link
+              to={`/groups/${group.id}/invite`}
+              aria-label={t("group.invite")}
+              className={headerIcon}
+            >
+              <UserPlus aria-hidden="true" className="size-6" />
+            </Link>
+            {group.me.role === "admin" && <DeleteGroupDialog group={group} />}
+          </span>
+        }
         subtitle={
-          <span className="flex flex-wrap items-center gap-3">
-            {t("group.summary", { count: group.memberCount })}
-            {group.isTrip && (
+          group.isTrip ? (
+            <span className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1 rounded-full bg-peach px-3 py-1 text-xs font-bold text-sprout-700">
                 <Plane aria-hidden="true" className="size-3.5" />
                 {t("group.tripBadge")}
               </span>
-            )}
-          </span>
+              {!TRIP_ENABLED && <MaintenanceTag />}
+            </span>
+          ) : undefined
         }
       />
-      <div className="flex gap-3">
-        <Link to={`/groups/${group.id}/members`} className={`${secondaryButton} flex-1 py-3`}>
-          <Users aria-hidden="true" className="size-5" />
-          {t("group.members")}
-        </Link>
-        <Link to={`/groups/${group.id}/invite`} className={`${secondaryButton} flex-1 py-3`}>
-          <UserPlus aria-hidden="true" className="size-5" />
-          {t("group.invite")}
-        </Link>
-      </div>
       {group.memberCount === 1 && (
-        <section className="flex flex-col items-center gap-3 rounded-3xl bg-sprout-150 p-6 text-center">
-          <h2 className="text-lg font-bold">{t("group.alone.title")}</h2>
-          <p className="text-sm text-ink-muted">{t("group.alone.body")}</p>
-          <Link to={`/groups/${group.id}/invite`} className={`${primaryButton} py-3`}>
+        <section className="flex items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-bold">{t("group.alone.title")}</h2>
+            <p className="text-sm text-ink-muted">{t("group.alone.body")}</p>
+          </div>
+          <Link
+            to={`/groups/${group.id}/invite`}
+            className="shrink-0 rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white hover:bg-sprout-500/90"
+          >
             {t("group.alone.invite")}
           </Link>
         </section>
       )}
       <Tabs.Root defaultValue={tabs.some((tab) => tab.value === asked) ? asked : "expenses"}>
-        <Tabs.List
-          aria-label={t("group.tabs")}
-          className="flex gap-1 rounded-2xl bg-sprout-150 p-1"
-        >
-          {tabs.map((tab) => (
-            <Tabs.Trigger
-              key={tab.value}
-              value={tab.value}
-              className="flex-1 rounded-xl py-2.5 text-ink-muted data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-ink"
-            >
-              {t(tab.label)}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+        <div className="flex items-center gap-2">
+          <Tabs.List
+            aria-label={t("group.tabs")}
+            className="flex flex-1 gap-1 rounded-2xl bg-sprout-150 p-1"
+          >
+            {tabs.map((tab) => (
+              <Tabs.Trigger
+                key={tab.value}
+                value={tab.value}
+                className="flex-1 rounded-xl py-2.5 text-ink-muted data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-ink"
+              >
+                {t(tab.label)}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+          <Link
+            to={`/groups/${group.id}/expenses/new`}
+            aria-label={t("expense.new")}
+            className="flex shrink-0 items-center gap-1 rounded-full bg-sprout-500 px-4 py-3 font-bold text-white hover:bg-sprout-500/90"
+          >
+            <Plus aria-hidden="true" className="size-5" />
+            {t("group.add")}
+          </Link>
+        </div>
         {tabs.map((tab) => {
           if (tab.value === "expenses") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
-                <ExpenseList groupId={group.id} />
+              <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6 text-ink-muted">
+                <ExpenseList groupId={group.id} settlementCurrency={group.settlementCurrency} />
               </Tabs.Content>
             );
           }
           if (tab.value === "trip") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="py-6">
+              <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6">
                 <TripPanel group={group} />
               </Tabs.Content>
             );
           }
           if (tab.value === "settle") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
+              <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6 text-ink-muted">
                 <SettlePanel group={group} />
               </Tabs.Content>
             );
           }
           return (
-            <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
+            <Tabs.Content key={tab.value} value={tab.value} className="pt-4 pb-6 text-ink-muted">
               {t("page.comingSoon")}
             </Tabs.Content>
           );

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, type ReactNode, use, useState } from "react";
 import { AuthProvider } from "../auth/AuthProvider.js";
+import { LocaleProvider } from "../i18n/LocaleProvider.js";
 import type { GoogleSignIn } from "../platform/google.js";
 import type { LineSignIn } from "../platform/line.js";
 
@@ -39,7 +40,7 @@ export function AppProviders({
     <DepsContext value={deps}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider fetch={deps.fetch} line={deps.line}>
-          {children}
+          <LocaleProvider>{children}</LocaleProvider>
         </AuthProvider>
       </QueryClientProvider>
     </DepsContext>

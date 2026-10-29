@@ -8,7 +8,6 @@ export interface SettlementGroup {
   members: {
     id: string;
     name: string;
-    nickname: string | null;
     status: string;
     role: string;
     balance: number;
@@ -77,7 +76,7 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
             settlementCurrency: g.settlementCurrency,
             balances: g.members.map((m) => ({
               memberId: m.id,
-              displayName: m.nickname ?? m.name,
+              displayName: m.name,
               status: m.status,
               balance: m.balance,
             })),

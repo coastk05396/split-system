@@ -28,10 +28,14 @@ function Harness({ amountMinor }: { amountMinor: number | null }) {
 const row = (name: string) => within(screen.getByRole("listitem", { name }));
 
 describe("split editor", () => {
-  it("splits equally among everyone by default, the payer taking the leftover", () => {
+  it("splits equally among everyone by default, the payer taking the leftover", async () => {
+    const user = userEvent.setup();
     render(<Harness amountMinor={100} />);
 
-    expect(screen.getByText("已勾選 3 / 3 人")).toBeVisible();
+    expect(screen.getByRole("radio", { name: /平均分/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
+    expect(screen.queryByRole("listitem", { name: "ty" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /參與分帳/ }));
     expect(row("ty").getByText("NT$ 34")).toBeVisible();
     expect(row("Yizhen").getByText("NT$ 33")).toBeVisible();
     expect(row("Gulu").getByText("NT$ 33")).toBeVisible();
@@ -42,8 +46,9 @@ describe("split editor", () => {
     const user = userEvent.setup();
     render(<Harness amountMinor={100} />);
 
+    await user.click(screen.getByRole("button", { name: /參與分帳/ }));
     await user.click(row("Gulu").getByRole("checkbox"));
-    expect(screen.getByText("已勾選 2 / 3 人")).toBeVisible();
+    expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("已勾選 2 / 3 人");
     expect(row("ty").getByText("NT$ 50")).toBeVisible();
     expect(row("Gulu").getByText("不參與")).toBeVisible();
 
@@ -52,7 +57,7 @@ describe("split editor", () => {
     expect(screen.getByRole("status")).toHaveTextContent("至少要有一人分攤");
 
     await user.click(screen.getByRole("button", { name: "全選" }));
-    expect(screen.getByText("已勾選 3 / 3 人")).toBeVisible();
+    expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
   });
 
   it("shows the remaining amount while exact amounts do not add up", async () => {
@@ -87,9 +92,11 @@ describe("split editor", () => {
     expect(screen.getByRole("status")).toHaveTextContent("份數需介於 1 到 99");
   });
 
-  it("waits for an amount before showing what each Member owes", () => {
+  it("waits for an amount before showing what each Member owes", async () => {
+    const user = userEvent.setup();
     render(<Harness amountMinor={null} />);
 
+    await user.click(screen.getByRole("button", { name: /參與分帳/ }));
     expect(row("ty").queryByText(/NT\$/)).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("先輸入金額");
   });

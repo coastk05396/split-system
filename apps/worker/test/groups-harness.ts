@@ -7,7 +7,6 @@ export interface GroupBody {
   id: string;
   name: string;
   settlementCurrency: string;
-  defaultExpenseCurrency: string;
   isTrip: boolean;
   tripDestination: string | null;
   tripStartDate: string | null;
@@ -23,7 +22,6 @@ export interface MemberBody {
   id: string;
   userId: string | null;
   displayName: string;
-  nickname: string | null;
   pictureUrl: string | null;
   role: "admin" | "member";
   status: "active" | "former" | "placeholder";

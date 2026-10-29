@@ -126,23 +126,26 @@ describe("GET /rates", () => {
   it("rejects a bad query", async () => {
     const { get } = await setup();
     expect((await get("date=2025-13-01&base=USD&quote=TWD")).status).toBe(400);
-    expect((await get("date=2025-06-02&base=JPY&quote=TWD")).status).toBe(400);
+    expect((await get("date=2025-06-02&base=GBP&quote=TWD")).status).toBe(400);
   });
 });
 
 describe("daily rate refresh", () => {
-  it("stores today's rate for both directions of the pair", async () => {
+  it("stores today's rate for every ordered pair of the shipped currencies", async () => {
     const { state, source } = fakeSource();
     state.answer = () => ({ rateDate: "2025-07-01", rateScaled: 29_000_000 });
     const db = createDb(env.DB);
 
     await refreshRates(db, source, Date.parse("2025-07-01T16:30:00Z"));
 
-    expect(state.calls).toHaveLength(2);
+    // Four currencies make twelve ordered pairs.
+    expect(state.calls).toHaveLength(12);
     expect(state.calls).toEqual(
       expect.arrayContaining([
         { date: "2025-07-01", base: "USD", quote: "TWD" },
         { date: "2025-07-01", base: "TWD", quote: "USD" },
+        { date: "2025-07-01", base: "JPY", quote: "TWD" },
+        { date: "2025-07-01", base: "THB", quote: "USD" },
       ]),
     );
     const { state: later, get } = await setup();

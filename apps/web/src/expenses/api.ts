@@ -3,6 +3,7 @@ import {
   type InfiniteData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -89,6 +90,20 @@ export function useRate(date: string, base: CurrencyCode, quote: CurrencyCode) {
     retry: false,
     staleTime: 60 * 60 * 1000,
     queryFn: () => read<Rate>(fetch(path("/api/v1/rates", { date, base, quote }))),
+  });
+}
+
+/** The reference rates from each of `bases` into `quote` for one day, in the order of `bases`. */
+export function useRates(date: string, quote: CurrencyCode, bases: readonly CurrencyCode[]) {
+  const { fetch } = useSession();
+  return useQueries({
+    queries: bases.map((base) => ({
+      queryKey: expenseKeys.rate(date, base, quote),
+      enabled: base !== quote && date !== "",
+      retry: false,
+      staleTime: 60 * 60 * 1000,
+      queryFn: () => read<Rate>(fetch(path("/api/v1/rates", { date, base, quote }))),
+    })),
   });
 }
 

@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import { errorMessage, t } from "../i18n/messages.js";
@@ -15,14 +15,17 @@ export function ScreenHeader({
   back,
   subtitle,
   action,
+  compact = false,
 }: {
   title: string;
   back?: string;
   subtitle?: ReactNode;
   action?: ReactNode;
+  /** Less room underneath, for a screen whose list should start high. */
+  compact?: boolean;
 }) {
   return (
-    <header className="mb-6 flex flex-col gap-1">
+    <header className={`${compact ? "mb-2" : "mb-6"} flex flex-col gap-1`}>
       <div className="flex items-center gap-3">
         {back !== undefined && (
           <Link to={back} aria-label={t("common.back")} className="-ml-1 rounded-full p-1">
@@ -57,16 +60,36 @@ export function Loading() {
   return <p className="text-ink-muted">{t("app.loading")}</p>;
 }
 
-/** Initial in a circle; a Placeholder Member's circle is dashed (decision 31). */
+/**
+ * A Member's LINE or Google picture in a circle; without one, or when it fails to load, the
+ * initial. A Placeholder Member's circle is dashed and never has a picture (decision 31).
+ */
 export function Avatar({
   name,
+  pictureUrl = null,
   placeholder = false,
   className = "size-11",
 }: {
   name: string;
+  pictureUrl?: string | null;
   placeholder?: boolean;
   className?: string;
 }) {
+  const [broken, setBroken] = useState(false);
+  if (pictureUrl !== null && !broken && !placeholder) {
+    return (
+      <img
+        src={pictureUrl}
+        alt=""
+        aria-hidden="true"
+        referrerPolicy="no-referrer"
+        onError={() => {
+          setBroken(true);
+        }}
+        className={`shrink-0 rounded-full object-cover ${className}`}
+      />
+    );
+  }
   const first = new Intl.Segmenter().segment(name)[Symbol.iterator]().next();
   const initial = first.done === true ? "?" : first.value.segment.toUpperCase();
   return (
@@ -87,6 +110,14 @@ export const primaryButton =
   "flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white hover:bg-sprout-500/90 disabled:opacity-50";
 export const secondaryButton =
   "flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold hover:border-sprout-500 disabled:opacity-50";
+/** The red tag on every Trip entry while the Trip module is under maintenance. */
+export function MaintenanceTag() {
+  return (
+    <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+      {t("trip.maintenance")}
+    </span>
+  );
+}
 export const card = "rounded-3xl border border-sprout-200 bg-white";
 export const input =
   "w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none focus:border-sprout-500";
