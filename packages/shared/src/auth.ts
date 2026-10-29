@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LANGUAGES } from "./labels.js";
 import { currencyCodeSchema } from "./schemas.js";
 
 /** Sign-in, session and account shapes shared by the Worker and the SPA. */
@@ -10,9 +11,6 @@ export const providerSchema = z.enum(PROVIDERS);
 /** Access tokens live for one hour; refresh tokens for 30 days, renewed at each rotation. */
 export const ACCESS_TOKEN_TTL_SECONDS = 3600;
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600;
-
-/** Shown in place of a deleted User's name on the Member rows they leave behind. */
-export const DELETED_USER_NAME = "已刪除的使用者";
 
 /** `POST /auth/google`, `/auth/line` and `/auth/link/:provider`. */
 export const idTokenRequestSchema = z.object({ idToken: z.string().min(1).max(8192) });
@@ -26,9 +24,6 @@ export const testSignInRequestSchema = z.object({
 });
 export type TestSignInRequest = z.infer<typeof testSignInRequestSchema>;
 
-/** The interface languages: Traditional Chinese (the default) and English. */
-export const LANGUAGES = ["zh-TW", "en"] as const;
-export type Language = (typeof LANGUAGES)[number];
 export const languageSchema = z.enum(LANGUAGES);
 
 export const meSchema = z.object({

@@ -20,9 +20,6 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 export const MEMBER_STATUSES = ["active", "former", "placeholder"] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
-/** Shown for a removed Placeholder Member that old Expenses still name; the typed name is gone. */
-export const REMOVED_PLACEHOLDER_NAME = "已移除的成員";
-
 const daysInclusive = (start: string, end: string): number =>
   (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000 + 1;
 

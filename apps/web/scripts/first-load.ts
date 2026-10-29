@@ -10,6 +10,15 @@ export interface ManifestChunk {
 export type Manifest = Record<string, ManifestChunk>;
 
 /**
+ * True when a built chunk holds Zod's runtime. The schemas are for the Worker and for forms
+ * on lazy pages; a plain constant imported from a schema module drags them into first load
+ * (24 KB gzipped at the time of writing), which the 200 KB budget alone would not notice.
+ */
+export function bundlesZod(source: string): boolean {
+  return source.includes("_zod") && source.includes("invalid_type");
+}
+
+/**
  * The files a browser must fetch before the first screen renders: every entry chunk,
  * its static imports (transitively) and their CSS. Lazy route chunks are left out.
  */
