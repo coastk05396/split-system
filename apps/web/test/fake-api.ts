@@ -14,6 +14,8 @@ export interface FakeApi {
   expireAccessToken(): void;
   /** Whether the test sign-in route exists (TEST_SIGN_IN=1). */
   testSignInEnabled: boolean;
+  /** When set, `POST /auth/link/:provider` fails with this 409 code. */
+  refuseLink: string | null;
 }
 
 export function makeUser(displayName: string, provider: "google" | "line" = "google"): Me {
@@ -50,9 +52,25 @@ export function createFakeApi(): FakeApi {
     return Promise.resolve(JSON.parse(raw) as Record<string, unknown>);
   }
 
+  /** Replaces the signed-in User everywhere the fake remembers them. */
+  function update(user: Me): Response {
+    if (cookieUser?.id === user.id) cookieUser = user;
+    for (const [token, holder] of liveTokens) {
+      if (holder.id === user.id) liveTokens.set(token, user);
+    }
+    return json(user);
+  }
+
+  function endAll(): Response {
+    cookieUser = null;
+    liveTokens.clear();
+    return new Response(null, { status: 204 });
+  }
+
   const api: FakeApi = {
     calls,
     testSignInEnabled: true,
+    refuseLink: null,
     setCookieUser(user) {
       cookieUser = user;
     },
@@ -95,9 +113,32 @@ export function createFakeApi(): FakeApi {
           return new Response(null, { status: 204 });
         case "GET /api/v1/me":
           return authed === undefined ? error("UNAUTHORIZED", 401) : json(authed);
-        default:
-          return error("NOT_FOUND", 404);
+        case "POST /api/v1/auth/logout-all":
+          return authed === undefined ? error("UNAUTHORIZED", 401) : endAll();
+        case "DELETE /api/v1/me":
+          return authed === undefined ? error("UNAUTHORIZED", 401) : endAll();
       }
+
+      const identity =
+        /^(POST \/api\/v1\/auth\/link|DELETE \/api\/v1\/auth\/identities)\/(line|google)$/.exec(
+          `${method} ${url.pathname}`,
+        );
+      if (identity !== null) {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const provider = identity[2] === "line" ? "line" : "google";
+        const others = authed.identities.filter((i) => i.provider !== provider);
+        if (method === "DELETE") {
+          if (others.length === 0) return error("LAST_IDENTITY", 409);
+          return update({ ...authed, identities: others });
+        }
+        const { idToken } = await readJson(init);
+        if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
+          return error("ID_TOKEN_INVALID", 401);
+        }
+        if (api.refuseLink !== null) return error(api.refuseLink, 409);
+        return update({ ...authed, identities: [...others, { provider }] });
+      }
+      return error("NOT_FOUND", 404);
     },
   };
   return api;

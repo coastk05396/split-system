@@ -6,7 +6,8 @@ import { createSession, type Session } from "./session.js";
 
 export type AuthState =
   | { status: "loading" }
-  | { status: "signedOut"; error: ErrorCode | null }
+  /** `byChoice`: the person signed out (or deleted the account) here, so the app returns to `/`. */
+  | { status: "signedOut"; error: ErrorCode | null; byChoice?: true }
   | { status: "signedIn"; user: Me };
 
 export interface Auth {
@@ -15,6 +16,8 @@ export interface Auth {
   signIn: (provider: Provider, idToken: string) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Replaces the signed-in User after the server changed them (Identity link or unlink). */
+  updateUser: (user: Me) => void;
 }
 
 const AuthContext = createContext<Auth | null>(null);
@@ -90,7 +93,10 @@ export function AuthProvider({
       testSignIn: (request) => enter(session.testSignIn(request)),
       async signOut() {
         await session.signOut();
-        setState({ status: "signedOut", error: null });
+        setState({ status: "signedOut", error: null, byChoice: true });
+      },
+      updateUser(user) {
+        setState({ status: "signedIn", user });
       },
     };
   }, [state, session]);
