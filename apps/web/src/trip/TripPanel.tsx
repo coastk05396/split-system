@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router";
 import { card, LoadError, Loading, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { useStopExpenses, useStops } from "./api.js";
+import { weekdayShort } from "../i18n/format.js";
 import { categoryIcon } from "./categories.js";
 import {
   dayLabel,
@@ -133,7 +134,7 @@ function DayPicker({
           }}
           className="flex min-w-14 flex-1 flex-col items-center rounded-xl py-2 text-ink-muted aria-pressed:bg-white aria-pressed:text-ink"
         >
-          <span className="text-xs">{weekdayLabel(d).slice(1)}</span>
+          <span className="text-xs">{weekdayShort(d)}</span>
           <span className="text-lg font-bold">{d.slice(8).replace(/^0/, "")}</span>
         </button>
       ))}

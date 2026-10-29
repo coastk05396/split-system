@@ -1,9 +1,9 @@
 import type { Stop } from "@split/shared";
+import { monthDay, weekday } from "../i18n/format.js";
 
 /** Trip dates and Stop days are local calendar dates, "2026-06-13" (no timezone). */
 
 const DAY_MS = 86_400_000;
-const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"] as const;
 
 function utc(day: string): Date {
   return new Date(`${day}T00:00:00Z`);
@@ -32,16 +32,11 @@ export function planDays(start: string | null, end: string | null, stops: readon
   return [...new Set(stops.map((s) => s.dayDate))].sort();
 }
 
-/** "6月13日". */
-export function dayLabel(day: string): string {
-  const date = utc(day);
-  return `${String(date.getUTCMonth() + 1)}月${String(date.getUTCDate())}日`;
-}
+/** "6月13日" or "June 13". */
+export const dayLabel = monthDay;
 
-/** "週六". */
-export function weekdayLabel(day: string): string {
-  return `週${WEEKDAYS[utc(day).getUTCDay()] ?? ""}`;
-}
+/** "週六" or "Sat". */
+export const weekdayLabel = weekday;
 
 /** Today on this device as a local calendar date. */
 export function localToday(now = new Date()): string {

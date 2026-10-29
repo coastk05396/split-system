@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { t } from "../i18n/messages.js";
+import { getLocale, t } from "../i18n/messages.js";
 import privacySource from "../legal/privacy.md?raw";
 import termsSource from "../legal/terms.md?raw";
 
@@ -67,6 +67,11 @@ function PolicyPage({ source }: { source: string }) {
         <ArrowLeft aria-hidden="true" className="size-4" />
         {t("legal.back")}
       </Link>
+      {getLocale() === "en" && (
+        <p role="note" className="mt-4 rounded-2xl bg-peach/60 px-4 py-3 text-sm font-bold">
+          {t("legal.englishNotice")}
+        </p>
+      )}
       {parsePolicy(source).map((block, index) => {
         switch (block.kind) {
           case "h1":

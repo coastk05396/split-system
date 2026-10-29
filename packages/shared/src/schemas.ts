@@ -120,7 +120,6 @@ export const groupInputSchema = z
   .object({
     name: textSchema(MAX_NAME_LENGTH),
     settlementCurrency: currencyCodeSchema.default("TWD"),
-    defaultExpenseCurrency: currencyCodeSchema.default("TWD"),
     isTrip: z.boolean().default(false),
     tripDestination: textSchema(MAX_NAME_LENGTH).optional(),
     tripStartDate: localDateSchema.optional(),

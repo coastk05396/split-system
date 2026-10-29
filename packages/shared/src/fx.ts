@@ -37,6 +37,27 @@ export function convertAmount(
 }
 
 /**
+ * Converts a Balance of any size and either sign, for a total shown on screen. Unlike an
+ * Expense (`convertAmount`) it has no 99,999,999 cap; it fails only on an unusable rate or a
+ * result too large to hold exactly. The result is rounded to the target's smallest unit.
+ */
+export function convertBalance(
+  amountMinor: number,
+  from: CurrencyCode,
+  to: CurrencyCode,
+  rateScaled: number,
+): Result<number, "RATE_INVALID" | "AMOUNT_INVALID"> {
+  if (!Number.isSafeInteger(amountMinor)) return err("AMOUNT_INVALID");
+  if (from === to) return ok(amountMinor);
+  if (!isValidRate(rateScaled)) return err("RATE_INVALID");
+  const num = BigInt(Math.abs(amountMinor)) * BigInt(rateScaled) * pow10(CURRENCIES[to].decimals);
+  const den = BigInt(RATE_SCALE) * pow10(CURRENCIES[from].decimals);
+  const magnitude = Number(roundHalfUp(num, den));
+  if (!Number.isSafeInteger(magnitude)) return err("AMOUNT_INVALID");
+  return ok(amountMinor < 0 ? -magnitude : magnitude);
+}
+
+/**
  * Derives the scaled rate from a converted amount the user typed. The typed amount stays the
  * authority; this rate is stored for display with the custom-rate flag set.
  */
@@ -55,8 +76,17 @@ export function deriveRateScaled(
   return isValidRate(rate) ? ok(rate) : err("RATE_INVALID");
 }
 
-/** Shows a scaled rate to four decimals, as in "1 USD ≈ NT$ 31.5234". */
+/**
+ * Shows a scaled rate to four decimals, as in "1 USD ≈ NT$ 31.5234". Below 1 the leading
+ * digits are zeros (1 JPY ≈ 0.006543 USD), so it shows up to six, dropping zeros past the fourth.
+ */
 export function formatRate(rateScaled: number): string {
+  if (rateScaled < RATE_SCALE) {
+    const fraction = String(rateScaled).padStart(RATE_DECIMALS, "0");
+    let end = RATE_DECIMALS;
+    while (end > DISPLAY_DECIMALS && fraction[end - 1] === "0") end--;
+    return `0.${fraction.slice(0, end)}`;
+  }
   const units = roundHalfUp(BigInt(rateScaled), pow10(RATE_DECIMALS - DISPLAY_DECIMALS));
   const digits = units.toString().padStart(DISPLAY_DECIMALS + 1, "0");
   return `${digits.slice(0, -DISPLAY_DECIMALS)}.${digits.slice(-DISPLAY_DECIMALS)}`;

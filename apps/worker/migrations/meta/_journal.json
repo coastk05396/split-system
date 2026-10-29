@@ -22,6 +22,20 @@
       "when": 1793239306915,
       "tag": "0002_settlement_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793272279376,
+      "tag": "0003_preferred_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793272279377,
+      "tag": "0004_language",
+      "breakpoints": true
     }
   ]
 }

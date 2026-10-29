@@ -1,9 +1,20 @@
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { SeedGroup } from "../../test/fake-groups.js";
 import { renderApp } from "../../test/render-app.js";
+
+// The Trip module is under maintenance in the app; these tests run it switched on.
+const trip = vi.hoisted(() => ({ enabled: true }));
+vi.mock("../trip/enabled.js", () => ({
+  get TRIP_ENABLED() {
+    return trip.enabled;
+  },
+}));
+afterEach(() => {
+  trip.enabled = true;
+});
 
 const me = makeUser("小宇");
 const friends = [{ name: "宜庭" }, { name: "阿哲" }];
@@ -23,6 +34,38 @@ function openForm(seed: Partial<SeedGroup> = {}) {
 const submit = () => screen.getByRole("button", { name: "新增支出" });
 
 describe("add Expense form", () => {
+  it("starts in the currency of the Group's latest Expense", async () => {
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "美國行", settlementCurrency: "TWD", others: friends });
+        const ids = groups.members(id).map((m) => m.id);
+        groups.addExpense(
+          id,
+          {
+            description: "Uber",
+            category: "交通",
+            originalAmount: 2000,
+            originalCurrency: "USD",
+            fxRateScaled: 32_000_000,
+            fxDate: "2026-10-29",
+            isCustomRate: false,
+            settlementAmount: 640,
+            payers: [{ memberId: ids[0], amountMinor: 2000 }],
+            split: { method: "equal", participants: ids },
+            expenseDate: "2026-10-29",
+            expenseTime: null,
+          },
+          0,
+        );
+      },
+      pathFor: () => `/groups/${id}/expenses/new`,
+    });
+
+    expect(await screen.findByRole("button", { name: "幣別 USD" })).toBeVisible();
+  });
+
   it("evaluates the amount field's arithmetic and splits it equally by default", async () => {
     const user = userEvent.setup();
     openForm();
@@ -32,6 +75,8 @@ describe("add Expense form", () => {
 
     expect(screen.getByText("= NT$ 360")).toBeVisible();
     const split = within(screen.getByRole("group", { name: "分帳方式" }));
+    expect(split.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
+    await user.click(split.getByRole("button", { name: /參與分帳/ }));
     expect(split.getAllByText("NT$ 120")).toHaveLength(3);
     expect(submit()).toBeEnabled();
   });
@@ -118,6 +163,30 @@ describe("add Expense form", () => {
     });
   });
 
+  it("takes yen, whole and converted at the reference rate", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openForm();
+
+    await user.type(await screen.findByLabelText("名稱"), "拉麵");
+    await user.click(screen.getByRole("button", { name: "幣別 TWD" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "JPY 日元" }));
+    await user.type(screen.getByLabelText("金額"), "1500");
+
+    // 1 JPY = 0.215 TWD, so JP¥ 1,500 is NT$ 323 (322.5 rounded up).
+    expect(await screen.findByDisplayValue("0.2150")).toBe(screen.getByLabelText("匯率"));
+    expect(screen.getByLabelText("換算金額（TWD）")).toHaveValue("323");
+
+    await user.click(submit());
+    await screen.findByRole("heading", { level: 1, name: "室友" });
+    const [saved] = api.groups.expenses.list(id());
+    expect(saved).toMatchObject({
+      originalAmount: 1500,
+      originalCurrency: "JPY",
+      settlementAmount: 323,
+      fxRateScaled: 215_000,
+    });
+  });
+
   it("displays stale rate badge when the reference rate is from an earlier date", async () => {
     const user = userEvent.setup();
     const { api } = openForm();
@@ -140,7 +209,8 @@ describe("add Expense form", () => {
 
     await user.type(await screen.findByLabelText("名稱"), "住宿");
     await user.type(screen.getByLabelText("金額"), "3000");
-    await user.click(screen.getByRole("radio", { name: "宜庭 先付" }));
+    await user.click(screen.getByRole("button", { name: /^誰先付錢/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "宜庭" }));
     await user.click(screen.getByRole("button", { name: "多人付款" }));
 
     await user.type(screen.getByLabelText("小宇 付的金額"), "1000");

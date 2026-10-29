@@ -1,4 +1,4 @@
-import { PROVIDERS, type Me, type Provider } from "@split/shared";
+import { CURRENCY_CODES, LANGUAGES, PROVIDERS, type Me, type Provider } from "@split/shared";
 import { ChevronRight, FileText, Link2, LogOut, ShieldCheck, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
@@ -7,7 +7,8 @@ import { type ErrorCode, toApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleButton } from "../auth/GoogleButton.js";
-import { errorMessage, t } from "../i18n/messages.js";
+import { Avatar } from "../groups/ui.js";
+import { errorMessage, getLocale, t } from "../i18n/messages.js";
 
 const PROVIDER_NAME: Record<Provider, string> = { line: "LINE", google: "Google" };
 
@@ -22,33 +23,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Avatar({ user }: { user: Me }) {
-  const [broken, setBroken] = useState(false);
-  if (user.pictureUrl !== null && !broken) {
-    return (
-      <img
-        src={user.pictureUrl}
-        alt=""
-        onError={() => {
-          setBroken(true);
-        }}
-        className="size-16 rounded-full object-cover"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-16 items-center justify-center rounded-full bg-peach text-2xl font-bold text-sprout-600"
-    >
-      {user.displayName.slice(0, 1)}
-    </span>
-  );
-}
-
 /**
- * Screen 11 (設定與帳號) as changed by docs/design-changes.md: no 通知提醒 or 預設幣別;
- * linked Identities with link and unlink, 登出所有裝置, 刪除帳號, and the policy links.
+ * Screen 11 (設定與帳號) as changed by docs/design-changes.md: no 通知提醒; the 偏好幣別
+ * (Preferred currency) sits right under the profile; linked Identities with link and unlink, 登出所有裝置, 刪除帳號, and the policy links.
  */
 export function SettingsPage() {
   const { state, session, signOut, updateUser } = useAuth();
@@ -128,22 +105,66 @@ export function SettingsPage() {
       <h1 className="text-3xl font-black">{t("settings.heading")}</h1>
 
       <div className={`${card} mt-6 flex items-center gap-4 p-5`}>
-        <Avatar user={user} />
+        <Avatar name={user.displayName} pictureUrl={user.pictureUrl} className="size-16 text-2xl" />
         <div>
           <p className="text-xl font-bold">{user.displayName}</p>
           <p className="text-sm text-ink-muted">
             {t("settings.linkedVia", {
-              providers: user.identities.map((i) => PROVIDER_NAME[i.provider]).join("、"),
+              providers: user.identities
+                .map((i) => PROVIDER_NAME[i.provider])
+                .join(getLocale() === "en" ? ", " : "、"),
             })}
           </p>
         </div>
       </div>
+
+      <Section title={t("settings.currencySection")}>
+        <select
+          aria-label={t("settings.currencySection")}
+          value={user.preferredCurrency}
+          disabled={busy}
+          onChange={(e) => {
+            const code = CURRENCY_CODES.find((c) => c === e.target.value);
+            if (code === undefined || code === user.preferredCurrency) return;
+            void run(() => api.me.$patch({}, withJson({ preferredCurrency: code })), acceptMe);
+          }}
+          className="w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none focus:border-sprout-500"
+        >
+          {CURRENCY_CODES.map((code) => (
+            <option key={code} value={code}>
+              {t(`currency.${code}`)}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 px-1 text-sm text-ink-muted">{t("settings.currencyHint")}</p>
+      </Section>
 
       {error !== null && (
         <p role="alert" className="mt-6 rounded-2xl bg-peach px-4 py-3 text-sm">
           {errorMessage(error)}
         </p>
       )}
+
+      <Section title={t("settings.languageSection")}>
+        <select
+          aria-label={t("settings.languageSection")}
+          value={user.language}
+          disabled={busy}
+          onChange={(e) => {
+            const language = LANGUAGES.find((l) => l === e.target.value);
+            if (language === undefined || language === user.language) return;
+            void run(() => api.me.$patch({}, withJson({ language })), acceptMe);
+          }}
+          className="w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none focus:border-sprout-500"
+        >
+          {LANGUAGES.map((language) => (
+            <option key={language} value={language}>
+              {t(`language.${language}`)}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 px-1 text-sm text-ink-muted">{t("settings.languageHint")}</p>
+      </Section>
 
       <Section title={t("settings.privacySection")}>
         <ul className={`${card} divide-y divide-sprout-150`}>

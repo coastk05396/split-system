@@ -31,6 +31,23 @@ describe("Invite share", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("已複製邀請連結");
   });
 
+  it("has a plain way back to the Group, and one short line of explanation", async () => {
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "台南", invite: { token: "tok-back" } });
+      },
+      pathFor: () => `/groups/${id}/invite`,
+    });
+
+    expect(await screen.findByRole("link", { name: "回到群組" })).toHaveAttribute(
+      "href",
+      `/groups/${id}`,
+    );
+    expect(screen.getByText("分享連結，拿到連結並登入的人就能加入。")).toBeVisible();
+  });
+
   it("shares through the LINE share target picker inside LINE", async () => {
     const user = userEvent.setup();
     let id = "";

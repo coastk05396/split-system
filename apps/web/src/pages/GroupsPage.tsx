@@ -1,11 +1,13 @@
-import { formatAmount, type Group } from "@split/shared";
+import { type Group } from "@split/shared";
 import { ArrowRight, ChevronRight, House, Plane, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
-import { card, LoadError, Loading, primaryButton } from "../groups/ui.js";
+import { balanceLine } from "../groups/totals.js";
+import { card, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { SproutMark } from "../shell/SproutMark.js";
+import { TRIP_ENABLED } from "../trip/enabled.js";
 
 /** Screen 12 (group list) and screen 19 (no Groups yet). */
 export function GroupsPage() {
@@ -81,13 +83,12 @@ function GroupRow({ group }: { group: Group }) {
           <span className="shrink-0 rounded-full bg-sprout-150 px-2 py-0.5 text-xs text-sprout-600">
             {t(group.isTrip ? "usage.trip" : "usage.tab")}
           </span>
+          {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
         </span>
         <span className="text-sm text-ink-muted">
           {t("groups.people", { count: group.memberCount })}
           {" · "}
-          {balance === 0
-            ? t("groups.settled")
-            : t("groups.pending", { amount: formatAmount(balance, group.settlementCurrency) })}
+          {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
         </span>
       </span>
       <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />

@@ -9,6 +9,9 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    // The golden path is written against the Chinese interface; a headless browser would
+    // otherwise report en-US and be shown English.
+    locale: "zh-TW",
     baseURL: "http://[::1]:8787",
     trace: "on-first-retry",
   },
@@ -39,8 +42,10 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
+      // The production configuration: TEST_SIGN_IN is pinned off here so an `apps/worker/.dev.vars`
+      // from `pnpm dev` (which turns it on) cannot leak into this instance.
       command:
-        "pnpm --filter @split/worker exec wrangler dev --port 8788 --ip ::1 --persist-to /tmp/wrangler-e2e-8788 --var SESSION_SIGNING_KEY:local-session-signing-key-minimum-32-chars-long",
+        "pnpm --filter @split/worker exec wrangler dev --port 8788 --ip ::1 --persist-to /tmp/wrangler-e2e-8788 --var TEST_SIGN_IN:0 --var SESSION_SIGNING_KEY:local-session-signing-key-minimum-32-chars-long",
       url: "http://[::1]:8788/api/v1/health",
       reuseExistingServer: false,
       stdout: "pipe",

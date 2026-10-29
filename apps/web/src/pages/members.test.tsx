@@ -23,11 +23,11 @@ const rows = async () =>
   within(await screen.findByRole("list", { name: "群組成員" })).getAllByRole("listitem");
 
 describe("members", () => {
-  it("lists Members with roles, Nicknames, Placeholders and Former Members", async () => {
+  it("lists Members with roles, Placeholders and Former Members", async () => {
     membersOf({
       name: "台南",
       others: [
-        { name: "Yizhen", nickname: "宜庭" },
+        { name: "宜庭" },
         { name: "阿哲", status: "placeholder" },
         { name: "Gulu", status: "former" },
       ],
@@ -85,18 +85,12 @@ describe("members", () => {
     expect(screen.queryByRole("button", { name: "ty 的操作" })).toBeNull();
   });
 
-  it("sets my own Nickname for this Group", async () => {
-    const user = userEvent.setup();
+  it("offers no way to rename myself: Members go by their LINE or Google name", async () => {
     membersOf({ name: "台南" });
 
-    const field = await screen.findByLabelText("我在這個群組的暱稱");
-    expect(field).toHaveValue("小宇");
-    await user.clear(field);
-    await user.type(field, "宇宇");
-    await user.click(screen.getByRole("button", { name: "儲存暱稱" }));
-
-    expect(await screen.findByRole("status")).toHaveTextContent("暱稱已更新");
-    expect((await rows())[0]).toHaveTextContent("宇宇（你）");
+    expect((await rows())[0]).toHaveTextContent("小宇（你）");
+    expect(screen.queryByLabelText("我在這個群組的暱稱")).toBeNull();
+    expect(screen.queryByRole("button", { name: "儲存暱稱" })).toBeNull();
   });
 
   it("adds a Placeholder Member by name and explains a taken name", async () => {

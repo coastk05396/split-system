@@ -19,8 +19,8 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     // 3. User lands on home page with personalized greeting
     await expect(page.getByRole("heading", { name: /小宇/ })).toBeVisible();
 
-    // 4. Create a new group
-    await page.getByRole("link", { name: "新增分帳或旅程" }).click();
+    // 4. Create a new group from the 快速分帳 start card (a first-time user has no groups)
+    await page.getByRole("link", { name: /^快速分帳/ }).click();
     await expect(page).toHaveURL(/\/groups\/new/);
     await page.getByLabel("群組名稱").fill("台南吃透透");
     await page.getByRole("button", { name: "建立群組，繼續" }).click();
@@ -33,7 +33,7 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     await expect(page.getByRole("heading", { name: "台南吃透透" })).toBeVisible();
 
     // 6. Add a placeholder member
-    await page.getByRole("link", { name: "成員" }).click();
+    await page.getByRole("link", { name: /位成員/ }).click();
     await expect(page).toHaveURL(`/groups/${groupId}/members`);
     await page.getByLabel("名字").fill("阿哲");
     await page.getByRole("button", { name: "新增" }).click();
@@ -53,10 +53,10 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     await expect(page).toHaveURL(`/groups/${groupId}`);
     await page.getByRole("tab", { name: "結算" }).click();
 
-    // 9. Payment plan shows 阿哲 owes 小宇 NT$ 100
-    const planList = page.getByRole("list", { name: "還款計畫" });
+    // 9. Payment plan shows 阿哲 owes 小宇 NT$ 100 (小宇 is "你" in the signed-in view)
+    const planList = page.getByRole("list", { name: "要付給誰" });
     await expect(planList).toBeVisible({ timeout: 15_000 });
-    const planItem = planList.getByRole("listitem").filter({ hasText: "阿哲付給小宇" });
+    const planItem = planList.getByRole("listitem").filter({ hasText: "阿哲付給你" });
     await expect(planItem).toContainText("NT$ 100");
 
     // 10. Receiver confirms the settlement
@@ -67,7 +67,9 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
 
     // 11. Verify debts are completely settled
     await expect(page.getByText("大家都結清了！")).toBeVisible({ timeout: 10_000 });
+    // The confirmed payment is in the history, one line under its day.
     const historyList = page.getByRole("list", { name: "結算紀錄" });
-    await expect(historyList).toContainText("已確認");
+    await expect(historyList).toContainText("阿哲付給你");
+    await expect(historyList).toContainText("NT$ 100");
   });
 });

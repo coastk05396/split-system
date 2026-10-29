@@ -1,0 +1,74 @@
+import { type CurrencyCode, formatAmount } from "@split/shared";
+import { card } from "../groups/ui.js";
+import { localName } from "../i18n/format.js";
+import { t } from "../i18n/messages.js";
+import type { BalanceRow } from "./model.js";
+
+/**
+ * 大家的結餘: everyone still owing or owed, as bars out of a centre line: red to the left for
+ * what they pay, green to the right for what they get, the length following the amount.
+ */
+export function BalanceChart({
+  rows,
+  myMemberId,
+  currency,
+}: {
+  rows: readonly BalanceRow[];
+  myMemberId: string;
+  currency: CurrencyCode;
+}) {
+  const seated = rows.filter((r) => r.status !== "former");
+  const open = seated.filter((r) => r.balance !== 0).sort((a, b) => b.balance - a.balance);
+  if (open.length === 0) return null;
+  const settled = seated.length - open.length;
+  const largest = Math.max(...open.map((r) => Math.abs(r.balance)));
+
+  return (
+    <section aria-labelledby="balance-chart" className={`${card} flex flex-col gap-3 p-5`}>
+      <div>
+        <h2 id="balance-chart" className="text-lg font-bold">
+          {t("settle.chartTitle")}
+        </h2>
+        <p className="text-sm text-ink-muted">{t("settle.chartLegend")}</p>
+      </div>
+      <ul aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
+        {open.map((r) => {
+          const owed = r.balance > 0;
+          const width = `${String(Math.max(4, Math.round((Math.abs(r.balance) / largest) * 100)))}%`;
+          return (
+            <li
+              key={r.memberId}
+              className={`flex flex-col gap-1 rounded-xl px-2 py-1 ${
+                r.memberId === myMemberId ? "bg-sprout-100" : ""
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 break-words font-bold">
+                  {localName(r.displayName)}
+                  {r.memberId === myMemberId && t("settle.chartMe")}
+                </span>
+                <span
+                  className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-red-700"}`}
+                >
+                  {owed && "+"}
+                  {formatAmount(r.balance, currency)}
+                </span>
+              </div>
+              <div aria-hidden="true" className="grid grid-cols-2">
+                <div className="flex justify-end border-r-2 border-ink/30">
+                  {!owed && <div className="h-3 rounded-l-full bg-red-400" style={{ width }} />}
+                </div>
+                <div className="flex">
+                  {owed && <div className="h-3 rounded-r-full bg-sprout-500" style={{ width }} />}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {settled > 0 && (
+        <p className="text-sm text-ink-muted">{t("settle.chartSettled", { count: settled })}</p>
+      )}
+    </section>
+  );
+}

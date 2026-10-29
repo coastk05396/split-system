@@ -1,6 +1,7 @@
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   idTokenRequestSchema,
+  mePatchSchema,
   providerSchema,
   REFRESH_TOKEN_TTL_SECONDS,
   type SessionResponse,
@@ -21,6 +22,7 @@ import {
   linkIdentity,
   loadMe,
   rotateSession,
+  updateSettings,
   signInIdentity,
   unlinkIdentity,
 } from "./accounts.js";
@@ -133,6 +135,12 @@ export function authRoutes(deps: AppDeps) {
     .get("/me", signedIn, async (c) =>
       c.json(await requireMe(createDb(c.env.DB), c.var.userId), 200),
     )
+    .patch("/me", signedIn, async (c) => {
+      const patch = await parseBody(c, mePatchSchema);
+      const db = createDb(c.env.DB);
+      await updateSettings(db, c.var.userId, patch, deps.now());
+      return c.json(await requireMe(db, c.var.userId), 200);
+    })
     .delete("/me", signedIn, async (c) => {
       await deleteAccount(createDb(c.env.DB), c.var.userId);
       clearRefreshCookie(c);

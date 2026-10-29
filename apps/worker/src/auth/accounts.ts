@@ -1,5 +1,6 @@
 import {
   DELETED_USER_NAME,
+  type MePatch,
   type Me,
   type Provider,
   REFRESH_TOKEN_TTL_SECONDS,
@@ -28,8 +29,23 @@ export async function loadMe(db: Db, userId: string): Promise<Me | null> {
     id: user.id,
     displayName: user.displayName,
     pictureUrl: user.pictureUrl,
+    preferredCurrency: user.preferredCurrency,
+    language: user.language,
     identities: linked,
   };
+}
+
+/** Saves the settings a User changes themselves; new Groups start from the Preferred currency. */
+export async function updateSettings(
+  db: Db,
+  userId: string,
+  settings: MePatch,
+  now: number,
+): Promise<void> {
+  await db
+    .update(users)
+    .set({ ...settings, updatedAt: now })
+    .where(eq(users.id, userId));
 }
 
 /**

@@ -20,9 +20,6 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 export const MEMBER_STATUSES = ["active", "former", "placeholder"] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
-/** Shown for a removed Placeholder Member that old Expenses still name; the typed name is gone. */
-export const REMOVED_PLACEHOLDER_NAME = "已移除的成員";
-
 const daysInclusive = (start: string, end: string): number =>
   (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000 + 1;
 
@@ -43,7 +40,6 @@ export const groupPatchSchema = z
   .object({
     name: nameSchema,
     settlementCurrency: currencyCodeSchema,
-    defaultExpenseCurrency: currencyCodeSchema,
     isTrip: z.boolean(),
     tripDestination: nameSchema.nullable(),
     tripStartDate: localDateSchema.nullable(),
@@ -60,7 +56,6 @@ export const groupSchema = z.object({
   id: z.string(),
   name: z.string(),
   settlementCurrency: currencyCodeSchema,
-  defaultExpenseCurrency: currencyCodeSchema,
   isTrip: z.boolean(),
   tripDestination: z.string().nullable(),
   tripStartDate: z.string().nullable(),
@@ -84,9 +79,8 @@ export const memberSchema = z.object({
   id: z.string(),
   /** Null for a Placeholder Member and for a Former Member whose account was deleted. */
   userId: z.string().nullable(),
-  /** The Nickname, else the User's own name, else the Placeholder Member's typed name. */
+  /** The User's LINE or Google name, else the Placeholder Member's typed name. */
   displayName: z.string(),
-  nickname: z.string().nullable(),
   pictureUrl: z.string().nullable(),
   role: z.enum(MEMBER_ROLES),
   status: z.enum(MEMBER_STATUSES),
@@ -96,9 +90,9 @@ export const memberSchema = z.object({
 });
 export type Member = z.infer<typeof memberSchema>;
 
-/** `PATCH /groups/:id/members/:mid`: an Admin sets the role; a Member sets their own Nickname. */
+/** `PATCH /groups/:id/members/:mid`: an Admin sets the role. */
 export const memberPatchSchema = z
-  .object({ role: z.enum(MEMBER_ROLES), nickname: nameSchema.nullable() })
+  .object({ role: z.enum(MEMBER_ROLES) })
   .partial()
   .strict()
   .refine((patch) => Object.keys(patch).length > 0, "PATCH_EMPTY");

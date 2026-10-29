@@ -64,11 +64,15 @@ describe("Expense list and detail", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "開銷詳情" })).toBeVisible();
     expect(screen.getByText("先付 NT$ 2,160")).toBeVisible();
     const lines = within(screen.getByRole("list", { name: "分帳明細" }));
-    expect(lines.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "小宇NT$ 720",
-      "宜庭NT$ 720",
-      "阿哲NT$ 720",
-    ]);
+    const items = lines.getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent("小宇（你）");
+    expect(items[1]).toHaveTextContent("宜庭");
+    expect(items[1]).not.toHaveTextContent("（你）");
+    for (const item of items) expect(item).toHaveTextContent("NT$ 720");
+    // The header names the Expense first, with its category and a plain Chinese date.
+    expect(screen.getByRole("heading", { level: 2, name: "晚餐" })).toBeVisible();
+    expect(screen.getByText("2026年5月17日 19:30")).toBeVisible();
   });
 
   it("shows a foreign-currency Expense's rate, its date, the edited flag and the converted amount", async () => {

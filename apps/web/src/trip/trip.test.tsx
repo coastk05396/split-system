@@ -1,9 +1,20 @@
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { SeedGroup } from "../../test/fake-groups.js";
 import { renderApp } from "../../test/render-app.js";
+
+// The Trip module is under maintenance in the app; these tests run it switched on.
+const trip = vi.hoisted(() => ({ enabled: true }));
+vi.mock("./enabled.js", () => ({
+  get TRIP_ENABLED() {
+    return trip.enabled;
+  },
+}));
+afterEach(() => {
+  trip.enabled = true;
+});
 
 const me = makeUser("小宇");
 const tainan = { destination: "台南", startDate: "2026-06-12", endDate: "2026-06-14" };
@@ -26,6 +37,18 @@ function stopTitles(day: string): string[] {
     .getAllByRole("heading", { level: 3 })
     .map((h) => h.textContent);
 }
+
+describe("Trip under maintenance", () => {
+  it("sends the Trip pages back to the Group", async () => {
+    trip.enabled = false;
+    const app = openTrip({ name: "週末台南小旅行", trip: tainan });
+    await screen.findByRole("heading", { level: 1 });
+    await app.router.navigate(`/groups/${app.id()}/trip`);
+    expect(app.router.state.location.pathname).toBe(`/groups/${app.id()}`);
+    await app.router.navigate(`/groups/${app.id()}/stops/new`);
+    expect(app.router.state.location.pathname).toBe(`/groups/${app.id()}`);
+  });
+});
 
 describe("Trip itinerary", () => {
   it("lists a day's Stops by start time, untimed Stops last in the order added", async () => {

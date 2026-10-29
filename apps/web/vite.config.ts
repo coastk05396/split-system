@@ -6,6 +6,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    // `cloudflared tunnel --url` hands out a random *.trycloudflare.com name (see AGENTS.md).
+    allowedHosts: [".trycloudflare.com"],
     proxy: { "/api": "http://localhost:8787" },
   },
   build: {

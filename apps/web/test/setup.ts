@@ -1,12 +1,15 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+import { setLocale } from "../src/i18n/messages.js";
 
 // Whole-app renders over lazy routes are slow on a busy machine; wait longer than 1 s.
 configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
+  // A test that switches to English must not leave the next one in it.
+  setLocale("zh-TW");
 });
 
 // jsdom has no Web Worker: run the Payment plan Worker's message handler in-thread, async.

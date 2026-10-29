@@ -1,4 +1,5 @@
 import {
+  DELETED_USER_NAME,
   type Member,
   type MemberPatch,
   type PlaceholderInput,
@@ -10,6 +11,9 @@ import { isConstraintError } from "../db/errors.js";
 import { groups, members, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { anotherAdmin, hasFreeSeat, type MemberRow, requireAdmin } from "./membership.js";
+
+const isSystemLabel = (name: string | null): name is string =>
+  name === DELETED_USER_NAME || name === REMOVED_PLACEHOLDER_NAME;
 
 /** Every Member row of a Group in joining order, Former and Placeholder Members included. */
 export async function listMembers(db: Db, groupId: string, meId: string | null): Promise<Member[]> {
@@ -23,8 +27,14 @@ export async function listMembers(db: Db, groupId: string, meId: string | null):
   return rows.map(({ member, userName, pictureUrl }) => ({
     id: member.id,
     userId: member.userId,
-    displayName: member.nickname ?? userName ?? member.placeholderName ?? REMOVED_PLACEHOLDER_NAME,
-    nickname: member.nickname,
+    // Names come from LINE or Google, or are typed for a Placeholder Member. The nickname column
+    // survives only as the label of a Former Member (已刪除的使用者, 已移除的成員); a nickname
+    // a Member once chose is never shown again, not even after they leave.
+    displayName:
+      (member.status === "former" && isSystemLabel(member.nickname) ? member.nickname : null) ??
+      userName ??
+      member.placeholderName ??
+      REMOVED_PLACEHOLDER_NAME,
     pictureUrl: member.status === "placeholder" ? null : pictureUrl,
     role: member.role,
     status: member.status,
@@ -74,7 +84,6 @@ export async function patchMember(
     requireAdmin(me);
     if (target.status !== "active") throw new ApiError("MEMBER_NOT_ACTIVE");
   }
-  if (patch.nickname !== undefined && target.id !== me.id) throw new ApiError("FORBIDDEN");
 
   const demotes = patch.role === "member" && target.role === "admin";
   const updated = await db

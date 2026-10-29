@@ -2,7 +2,7 @@ import { type Group, stopDayInTrip, stopTimesValid } from "@split/shared";
 import { type ReactNode, type SubmitEvent, useId, useState } from "react";
 import { failureMessage, input, primaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
-import { stopCategories } from "./categories.js";
+import { stopCategories, stopCategoryLabel } from "./categories.js";
 import { dayLabel, mapsUrl } from "./days.js";
 
 /** The add and edit form of screen 27 as amended: free-text name and location, a map link. */
@@ -136,7 +136,7 @@ export function StopForm({
           >
             {categories.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {stopCategoryLabel(c)}
               </option>
             ))}
           </select>

@@ -1,8 +1,19 @@
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
+
+// The Trip module is under maintenance in the app; these tests run it switched on.
+const trip = vi.hoisted(() => ({ enabled: true }));
+vi.mock("../trip/enabled.js", () => ({
+  get TRIP_ENABLED() {
+    return trip.enabled;
+  },
+}));
+afterEach(() => {
+  trip.enabled = true;
+});
 
 const me = makeUser("小宇");
 const friends = [{ name: "宜庭" }, { name: "阿哲" }, { name: "Gulu" }];
@@ -19,7 +30,10 @@ describe("group detail", () => {
     });
 
     expect(await screen.findByRole("heading", { level: 1, name: "週末台南小旅行" })).toBeVisible();
-    expect(screen.getByText("4 位成員")).toBeVisible();
+    expect(screen.getByRole("link", { name: "4 位成員" })).toHaveAttribute(
+      "href",
+      `/groups/${id}/members`,
+    );
     expect(screen.getByText("旅行模式")).toBeVisible();
     const tabs = within(screen.getByRole("tablist", { name: "群組分頁" }));
     expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
@@ -27,14 +41,27 @@ describe("group detail", () => {
       "行程",
       "結算",
     ]);
-    expect(screen.getByRole("link", { name: /成員/ })).toHaveAttribute(
-      "href",
-      `/groups/${id}/members`,
-    );
     expect(screen.getByRole("link", { name: /邀請/ })).toHaveAttribute(
       "href",
       `/groups/${id}/invite`,
     );
+  });
+
+  it("hides the 行程 tab of an existing Trip under maintenance and tags it in red", async () => {
+    trip.enabled = false;
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "週末台南小旅行", isTrip: true, others: friends });
+      },
+      pathFor: () => `/groups/${id}`,
+    });
+
+    expect(await screen.findByRole("heading", { level: 1, name: "週末台南小旅行" })).toBeVisible();
+    expect(screen.getByText("保養中")).toBeVisible();
+    const tabs = within(screen.getByRole("tablist", { name: "群組分頁" }));
+    expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["帳目", "結算"]);
   });
 
   it("has no 行程 tab, badge or delete action for a Member of a Running Tab", async () => {

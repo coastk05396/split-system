@@ -5,6 +5,7 @@
  */
 import {
   CURRENCY_CODES,
+  LANGUAGES,
   MAX_AMOUNT_MINOR,
   MEMBER_ROLES,
   MEMBER_STATUSES,
@@ -35,13 +36,22 @@ function oneOf(column: AnySQLiteColumn, values: readonly string[]): SQL {
 const isFlag = (column: AnySQLiteColumn): SQL => sql`${column} IN (0, 1)`;
 const currency = (name: string) => text(name, { enum: CURRENCY_CODES });
 
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  displayName: text("display_name").notNull(),
-  pictureUrl: text("picture_url"),
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull(),
-});
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    displayName: text("display_name").notNull(),
+    pictureUrl: text("picture_url"),
+    preferredCurrency: currency("preferred_currency").notNull().default("TWD"),
+    language: text("language", { enum: LANGUAGES }).notNull().default("zh-TW"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [
+    check("users_preferred_currency_check", oneOf(t.preferredCurrency, CURRENCY_CODES)),
+    check("users_language_check", oneOf(t.language, LANGUAGES)),
+  ],
+);
 
 export const identities = sqliteTable(
   "identities",

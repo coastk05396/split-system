@@ -1,6 +1,13 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { convertAmount, deriveRateScaled, formatRate, parseRate, RATE_SCALE } from "./fx.js";
+import {
+  convertAmount,
+  convertBalance,
+  deriveRateScaled,
+  formatRate,
+  parseRate,
+  RATE_SCALE,
+} from "./fx.js";
 
 describe("convertAmount", () => {
   it("converts US$ 12.34 at 31.5234 to a whole NT$ 389", () => {
@@ -69,7 +76,9 @@ describe("formatRate and parseRate", () => {
   it("shows a scaled rate to four decimals", () => {
     expect(formatRate(31_523_400)).toBe("31.5234");
     expect(formatRate(31_523_450)).toBe("31.5235");
-    expect(formatRate(31_723)).toBe("0.0317");
+    expect(formatRate(31_723)).toBe("0.031723");
+    expect(formatRate(31_700)).toBe("0.0317");
+    expect(formatRate(6_543)).toBe("0.006543");
   });
 
   it("reads a typed custom rate into the scaled integer", () => {
@@ -78,5 +87,38 @@ describe("formatRate and parseRate", () => {
     for (const text of ["0", "", "-1", "1.1234567", "abc"]) {
       expect(parseRate(text)).toEqual({ ok: false, error: "RATE_INVALID" });
     }
+  });
+});
+
+describe("convertBalance", () => {
+  it("converts a Balance far above the single-Expense cap, in either sign", () => {
+    // 120,000,000 JPY at 0.21 TWD each is NT$ 25,200,000; the Expense cap is 99,999,999.
+    expect(convertBalance(120_000_000, "JPY", "TWD", 210_000)).toEqual({
+      ok: true,
+      value: 25_200_000,
+    });
+    expect(convertBalance(-120_000_000, "JPY", "TWD", 210_000)).toEqual({
+      ok: true,
+      value: -25_200_000,
+    });
+  });
+
+  it("rounds to the target's smallest unit and lets a sliver become zero", () => {
+    expect(convertBalance(1, "JPY", "TWD", 215_000)).toEqual({ ok: true, value: 0 });
+    expect(convertBalance(0, "JPY", "TWD", 215_000)).toEqual({ ok: true, value: 0 });
+    // US$ 12.50 at 31.5234 is NT$ 394.0425, rounded to NT$ 394.
+    expect(convertBalance(1250, "USD", "TWD", 31_523_400)).toEqual({ ok: true, value: 394 });
+  });
+
+  it("keeps a Balance in its own currency as it is", () => {
+    expect(convertBalance(-293, "TWD", "TWD", RATE_SCALE)).toEqual({ ok: true, value: -293 });
+  });
+
+  it("refuses an unusable rate or a result too large to hold exactly", () => {
+    expect(convertBalance(100, "USD", "TWD", 0)).toEqual({ ok: false, error: "RATE_INVALID" });
+    expect(convertBalance(Number.MAX_SAFE_INTEGER, "USD", "JPY", 9_000_000_000)).toEqual({
+      ok: false,
+      error: "AMOUNT_INVALID",
+    });
   });
 });

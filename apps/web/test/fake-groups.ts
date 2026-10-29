@@ -22,7 +22,6 @@ interface FakeMember {
   id: string;
   userId: string | null;
   name: string;
-  nickname: string | null;
   role: MemberRole;
   status: MemberStatus;
   balance: number;
@@ -34,7 +33,6 @@ interface FakeGroup {
   id: string;
   name: string;
   settlementCurrency: CurrencyCode;
-  defaultExpenseCurrency: CurrencyCode;
   isTrip: boolean;
   locked: boolean;
   members: FakeMember[];
@@ -83,7 +81,6 @@ export interface SeedGroup {
     role?: MemberRole;
     status?: MemberStatus;
     balance?: number;
-    nickname?: string;
     addedBy?: string;
     expenseCount?: number;
   }[];
@@ -100,11 +97,7 @@ export interface FakeGroups {
   members(groupId: string): readonly FakeMember[];
   exists(groupId: string): boolean;
   /** A seeded or created Group's settings, for assertions. */
-  summary(
-    groupId: string,
-  ):
-    | Pick<FakeGroup, "name" | "isTrip" | "settlementCurrency" | "defaultExpenseCurrency">
-    | undefined;
+  summary(groupId: string): Pick<FakeGroup, "name" | "isTrip" | "settlementCurrency"> | undefined;
   /** A Group's Trip settings, for assertions. */
   trip(groupId: string): Readonly<FakeTrip> | undefined;
   /** A Group's Stops in the order they were added, for assertions. */
@@ -209,7 +202,7 @@ export function createFakeGroups(): FakeGroups {
   };
 
   function displayName(m: FakeMember): string {
-    return m.nickname ?? m.name;
+    return m.name;
   }
 
   function toGroup(g: FakeGroup, me: FakeMember): Group {
@@ -217,7 +210,6 @@ export function createFakeGroups(): FakeGroups {
       id: g.id,
       name: g.name,
       settlementCurrency: g.settlementCurrency,
-      defaultExpenseCurrency: g.defaultExpenseCurrency,
       isTrip: g.isTrip,
       ...g.trip,
       settlementCurrencyLocked: g.locked,
@@ -233,7 +225,6 @@ export function createFakeGroups(): FakeGroups {
       id: m.id,
       userId: m.userId,
       displayName: displayName(m),
-      nickname: m.nickname,
       pictureUrl: null,
       role: m.role,
       status: m.status,
@@ -300,7 +291,6 @@ export function createFakeGroups(): FakeGroups {
           id: nextId("m"),
           userId: user.id,
           name: user.displayName,
-          nickname: null,
           role: seed.role ?? "admin",
           status: "active",
           balance: seed.myBalance ?? 0,
@@ -315,7 +305,6 @@ export function createFakeGroups(): FakeGroups {
           id: nextId("m"),
           userId: status === "placeholder" ? null : `u-${o.name}`,
           name: o.name,
-          nickname: o.nickname ?? null,
           role: o.role ?? "member",
           status,
           balance: o.balance ?? 0,
@@ -353,7 +342,6 @@ export function createFakeGroups(): FakeGroups {
         expenses,
         name: seed.name,
         settlementCurrency: seed.settlementCurrency ?? "TWD",
-        defaultExpenseCurrency: seed.settlementCurrency ?? "TWD",
         isTrip: seed.isTrip ?? false,
         locked: false,
         members,
@@ -397,8 +385,8 @@ export function createFakeGroups(): FakeGroups {
     summary(groupId) {
       const g = groups.get(groupId);
       if (g === undefined) return undefined;
-      const { name, isTrip, settlementCurrency, defaultExpenseCurrency } = g;
-      return { name, isTrip, settlementCurrency, defaultExpenseCurrency };
+      const { name, isTrip, settlementCurrency } = g;
+      return { name, isTrip, settlementCurrency };
     },
 
     trip(groupId) {
@@ -472,7 +460,6 @@ export function createFakeGroups(): FakeGroups {
               id: nextId("m"),
               userId: user.id,
               name: user.displayName,
-              nickname: null,
               role: "member",
               status: "active",
               balance: 0,
@@ -512,7 +499,6 @@ export function createFakeGroups(): FakeGroups {
         });
         const g = groups.get(id);
         if (g === undefined) return error("INTERNAL", 500);
-        g.defaultExpenseCurrency = body.defaultExpenseCurrency === "USD" ? "USD" : "TWD";
         const me = activeMine(g, user);
         return me === undefined ? error("INTERNAL", 500) : json(toGroup(g, me), 201);
       }
@@ -610,7 +596,6 @@ export function createFakeGroups(): FakeGroups {
             id: nextId("m"),
             userId: null,
             name,
-            nickname: null,
             role: "member",
             status: "placeholder",
             balance: 0,
@@ -623,10 +608,7 @@ export function createFakeGroups(): FakeGroups {
         case "PATCH groups/:/members/:": {
           const target = g.members.find((m) => m.id === parts[3]);
           if (target === undefined) return error("NOT_FOUND", 404);
-          if ("nickname" in body) {
-            if (target.id !== me.id) return error("FORBIDDEN", 403);
-            target.nickname = typeof body.nickname === "string" ? body.nickname : null;
-          }
+          if ("nickname" in body) return error("VALIDATION_FAILED", 400);
           if (body.role === "admin" || body.role === "member") {
             if (!isAdmin) return error("FORBIDDEN", 403);
             const admins = g.members.filter((m) => m.status === "active" && m.role === "admin");

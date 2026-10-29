@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `preferred_currency` text DEFAULT 'TWD' NOT NULL CONSTRAINT "users_preferred_currency_check" CHECK(`preferred_currency` IN ('TWD', 'USD', 'JPY', 'THB'));--> statement-breakpoint
