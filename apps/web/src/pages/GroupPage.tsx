@@ -1,12 +1,13 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, UserPlus, Users } from "lucide-react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, primaryButton, ScreenHeader, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SettlePanel } from "../settlements/SettlePanel.js";
 
 /**
  * Screen 3 as amended: the same tabs everywhere, 帳目, 行程 (Trips only) and 結算, with the
@@ -22,6 +23,8 @@ export function GroupPage() {
 }
 
 function GroupDetail({ group }: { group: Group }) {
+  // `?tab=settle` opens a tab directly, as after recording a 轉帳.
+  const [params] = useSearchParams();
   const tabs: { value: string; label: MessageId }[] = [
     { value: "expenses", label: "group.tab.expenses" },
     ...(group.isTrip ? [{ value: "trip", label: "group.tab.trip" } as const] : []),
@@ -64,7 +67,9 @@ function GroupDetail({ group }: { group: Group }) {
           </Link>
         </section>
       )}
-      <Tabs.Root defaultValue="expenses">
+      <Tabs.Root
+        defaultValue={tabs.some((x) => x.value === params.get("tab")) ? (params.get("tab") ?? "") : "expenses"}
+      >
         <Tabs.List
           aria-label={t("group.tabs")}
           className="flex gap-1 rounded-2xl bg-sprout-150 p-1"
@@ -81,7 +86,13 @@ function GroupDetail({ group }: { group: Group }) {
         </Tabs.List>
         {tabs.map((tab) => (
           <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
-            {tab.value === "expenses" ? <ExpenseList groupId={group.id} /> : t("page.comingSoon")}
+            {tab.value === "expenses" ? (
+              <ExpenseList groupId={group.id} />
+            ) : tab.value === "settle" ? (
+              <SettlePanel group={group} />
+            ) : (
+              t("page.comingSoon")
+            )}
           </Tabs.Content>
         ))}
       </Tabs.Root>

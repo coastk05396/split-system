@@ -10,6 +10,7 @@ import {
   type MemberStatus,
 } from "@split/shared";
 import { createFakeExpenses, type FakeExpenses } from "./fake-expenses.js";
+import { createFakeSettlements, type FakeSettlements } from "./fake-settlements.js";
 
 /** The Worker's Group, Member and Invite routes over in-memory rows (ticket 05 contract). */
 
@@ -82,6 +83,14 @@ export interface FakeGroups {
   expenses: FakeExpenses;
   /** Seeds an Expense created by the `creator`-th Member (an `ExpenseInput` body); returns its id. */
   addExpense(groupId: string, body: Record<string, unknown>, creator?: number): string;
+  /** Balances and Settlements of these Groups. */
+  settlements: FakeSettlements;
+  /** Seeds a Settlement recorded by the `creator`-th Member; returns it as the API would. */
+  addSettlement(
+    groupId: string,
+    body: { payer: number; receiver: number; amount: number },
+    creator?: number,
+  ): string;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -157,6 +166,24 @@ export function createFakeGroups(): FakeGroups {
   const fake: FakeGroups = {
     now: 1_700_000_000_000,
     expenses: createFakeExpenses(nextId),
+    settlements: createFakeSettlements(nextId),
+
+    addSettlement(groupId, { payer, receiver, amount }, creator = 0) {
+      const g = groups.get(groupId);
+      const me = g?.members[creator];
+      if (g === undefined || me === undefined) throw new Error(`no Group ${groupId}`);
+      const res = fake.settlements.handle(
+        "POST groups/:/settlements",
+        ["groups", groupId, "settlements"],
+        { payerMemberId: g.members[payer]?.id, receiverMemberId: g.members[receiver]?.id, amount },
+        new Headers({ "Idempotency-Key": nextId("key") }),
+        g,
+        me,
+        fake.now,
+      );
+      if (res?.status !== 201) throw new Error(`seed Settlement refused: ${String(res?.status)}`);
+      return fake.settlements.list(groupId)[0]?.id ?? "";
+    },
 
     add(user, seed) {
       const id = nextId("g");
@@ -249,9 +276,21 @@ export function createFakeGroups(): FakeGroups {
       request = { headers: new Headers(), query: new URLSearchParams() },
     ) {
       const parts = path.replace(/^\/api\/v1\//, "").split("/");
-      if (parts[0] !== "groups" && parts[0] !== "invites") return null;
+      if (parts[0] !== "groups" && parts[0] !== "invites" && parts[0] !== "settlements") {
+        return null;
+      }
       if (user === undefined) return error("UNAUTHORIZED", 401);
       const route = `${method} ${parts.map((p, i) => (i % 2 === 1 ? ":" : p)).join("/")}`;
+
+      if (parts[0] === "settlements") {
+        const g = groups.get(fake.settlements.groupOf(parts[1] ?? "") ?? "");
+        const me = g === undefined ? undefined : activeMine(g, user);
+        if (g === undefined || me === undefined) return error("NOT_FOUND", 404);
+        return (
+          fake.settlements.handle(route, parts, body, request.headers, g, me, fake.now) ??
+          error("NOT_FOUND", 404)
+        );
+      }
 
       if (parts[0] === "invites") {
         const opened = openInvite(parts[1] ?? "", fake.now);
@@ -407,6 +446,7 @@ export function createFakeGroups(): FakeGroups {
         default:
           return (
             fake.expenses.handle(route, parts, body, request, g, me, fake.now) ??
+            fake.settlements.handle(route, parts, body, request.headers, g, me, fake.now) ??
             error("NOT_FOUND", 404)
           );
       }
