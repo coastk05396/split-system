@@ -41,12 +41,12 @@ export function ConfirmSettlementDialog({
         setOpen(next);
       }}
     >
-      <Dialog.Trigger className="rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-sprout-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600">
+      <Dialog.Trigger className="rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white transition-[background-color,transform] active:scale-[0.97] motion-reduce:active:scale-100 hover:bg-sprout-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600">
         {trigger}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="settlement-dialog-overlay fixed inset-0 z-20 bg-ink/40" />
-        <Dialog.Content className="settlement-dialog-content fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
+        <Dialog.Overlay className="dialog-overlay fixed inset-0 z-20 bg-ink/40" />
+        <Dialog.Content className="dialog-content fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
           <ConfirmForm
             key={formKey}
             target={target}

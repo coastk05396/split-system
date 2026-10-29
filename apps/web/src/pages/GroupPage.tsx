@@ -1,8 +1,6 @@
-import { spring, useShouldReduceMotion, useTempoTransition } from "@animate-ui/react/utils/motion";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, Plus, UserPlus, Users } from "lucide-react";
-import { motion } from "motion/react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
@@ -10,6 +8,7 @@ import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SelectionPill } from "../shell/SelectionPill.js";
 import { SettlePanel } from "../settlements/SettlePanel.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 import { TripPanel } from "../trip/TripPanel.js";
@@ -41,8 +40,6 @@ function GroupDetail({ group }: { group: Group }) {
   const [activeTab, setActiveTab] = useState(
     tabs.some((tab) => tab.value === asked) ? asked : "expenses",
   );
-  const reduceMotion = useShouldReduceMotion();
-  const selection = useTempoTransition(spring.selection);
   return (
     <div className="flex flex-col gap-6">
       <ScreenHeader
@@ -108,11 +105,9 @@ function GroupDetail({ group }: { group: Group }) {
                 className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-ink focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
                 {activeTab === tab.value && (
-                  <motion.span
-                    aria-hidden="true"
-                    {...(reduceMotion ? {} : { layoutId: `group-tab-${group.id}` })}
-                    transition={selection}
-                    className="pointer-events-none absolute inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a] after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-6 after:-translate-x-1/2 after:rounded-full after:bg-sprout-500"
+                  <SelectionPill
+                    layoutId={`group-tab-${group.id}`}
+                    className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a] after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-6 after:-translate-x-1/2 after:rounded-full after:bg-sprout-500"
                   />
                 )}
                 <span className="relative">{t(tab.label)}</span>

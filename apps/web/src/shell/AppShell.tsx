@@ -1,14 +1,10 @@
-import {
-  ReducedMotionConfig,
-  spring,
-  useShouldReduceMotion,
-  useTempoTransition,
-} from "@animate-ui/react/utils/motion";
+import { ReducedMotionConfig } from "@animate-ui/react/utils/motion";
 import { ChartColumn, House, type LucideIcon, Plus, Settings, Users } from "lucide-react";
-import { LayoutGroup, motion } from "motion/react";
+import { LayoutGroup } from "motion/react";
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SelectionPill } from "./SelectionPill.js";
 import { SproutMark } from "./SproutMark.js";
 
 interface Tab {
@@ -29,8 +25,6 @@ const TABS: readonly Tab[] = [
 const SIDEBAR_TABS = TABS.filter((tab) => tab.to !== "/new");
 
 function BottomBar() {
-  const reduceMotion = useShouldReduceMotion();
-  const selection = useTempoTransition(spring.selection);
   return (
     <nav
       aria-label={t("nav.bottom")}
@@ -52,11 +46,9 @@ function BottomBar() {
                 {({ isActive }) => (
                   <>
                     {isActive && to !== "/new" && (
-                      <motion.span
-                        aria-hidden="true"
-                        {...(reduceMotion ? {} : { layoutId: "bottom-navigation-selection" })}
-                        transition={selection}
-                        className="pointer-events-none absolute top-1 h-9 w-14 rounded-2xl border border-sprout-200 bg-sprout-150 shadow-[0_3px_8px_-7px_#143f2a]"
+                      <SelectionPill
+                        layoutId="bottom-navigation-selection"
+                        className="top-1 h-9 w-14 rounded-2xl border border-sprout-200 bg-sprout-150 shadow-[0_3px_8px_-7px_#143f2a]"
                       />
                     )}
                     {to === "/new" ? (
@@ -85,8 +77,6 @@ function BottomBar() {
 }
 
 function Sidebar() {
-  const reduceMotion = useShouldReduceMotion();
-  const selection = useTempoTransition(spring.selection);
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col bg-sprout-900 px-4 py-7 text-white md:flex">
       <Link to="/" className="mb-8 flex items-center gap-3 px-2">
@@ -110,11 +100,9 @@ function Sidebar() {
                   {({ isActive }) => (
                     <>
                       {isActive && (
-                        <motion.span
-                          aria-hidden="true"
-                          {...(reduceMotion ? {} : { layoutId: "side-navigation-selection" })}
-                          transition={selection}
-                          className="pointer-events-none absolute inset-0 rounded-xl bg-sprout-600"
+                        <SelectionPill
+                          layoutId="side-navigation-selection"
+                          className="inset-0 rounded-xl bg-sprout-600"
                         />
                       )}
                       <Icon aria-hidden="true" className="relative size-5" />

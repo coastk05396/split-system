@@ -72,7 +72,7 @@ function GroupRow({ group }: { group: Group }) {
       className={`${card} group flex items-center gap-4 p-5 transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span
-        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl transition-transform duration-150 group-active:scale-[0.92] motion-reduce:group-active:scale-100 ${
+        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${
           group.isTrip ? "bg-sprout-100" : "bg-peach"
         }`}
       >

@@ -26,7 +26,8 @@ const PictureContext = createContext<(id: string) => string | null>(() => null);
 /** How many past Settlements show at first, and how many more each 查看更多 adds. */
 const HISTORY_STEP = 5;
 
-const smallButton = "rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold";
+const smallButton =
+  "rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold transition-transform active:scale-[0.97] motion-reduce:active:scale-100";
 
 /**
  * Screen 5 as amended (decisions 12, 17, 23): my Balance, the Payment plan with its honest

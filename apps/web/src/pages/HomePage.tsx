@@ -214,7 +214,7 @@ function HomeGroupRow({ group }: { group: Group }) {
       to={`/groups/${group.id}?tab=settle`}
       className="group flex items-center gap-3 px-4 py-3.5 text-ink transition-colors hover:bg-sprout-50 active:bg-sprout-100 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-sprout-100 text-sprout-600 transition-transform duration-150 group-active:scale-[0.92] motion-reduce:group-active:scale-100">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-sprout-100 text-sprout-600">
         <Users aria-hidden="true" className="size-5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -249,7 +249,7 @@ function StartCard(props: {
   const content = (
     <>
       <span
-        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl transition-transform duration-150 group-active:scale-[0.92] motion-reduce:group-active:scale-100 ${props.iconClass}`}
+        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${props.iconClass}`}
       >
         {props.icon}
       </span>

@@ -107,9 +107,9 @@ export function Avatar({
 }
 
 export const primaryButton =
-  "flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white hover:bg-sprout-500/90 disabled:opacity-50";
+  "flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white hover:bg-sprout-500/90 transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50";
 export const secondaryButton =
-  "flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold hover:border-sprout-500 disabled:opacity-50";
+  "flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold hover:border-sprout-500 transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50";
 /** The red tag on every Trip entry while the Trip module is under maintenance. */
 export function MaintenanceTag() {
   return (

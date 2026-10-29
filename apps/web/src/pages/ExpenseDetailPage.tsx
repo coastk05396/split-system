@@ -179,8 +179,8 @@ function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
         {t("expense.delete")}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-20 bg-black/40" />
-        <Dialog.Content className="fixed inset-x-4 top-1/3 z-30 mx-auto flex max-w-md flex-col gap-4 rounded-3xl bg-white p-6">
+        <Dialog.Overlay className="dialog-overlay fixed inset-0 z-20 bg-black/40" />
+        <Dialog.Content className="dialog-content fixed inset-x-4 top-1/3 z-30 mx-auto flex max-w-md flex-col gap-4 rounded-3xl bg-white p-6">
           <Dialog.Title className="text-xl font-bold">
             {t("expense.deleteTitle", { name: expense.description })}
           </Dialog.Title>
