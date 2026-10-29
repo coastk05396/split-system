@@ -416,7 +416,7 @@ export function createFakeGroups(): FakeGroups {
       user,
       request = { headers: new Headers(), query: new URLSearchParams() },
     ) {
-      const headers = request instanceof Headers ? request : (request.headers ?? new Headers());
+      const headers = request instanceof Headers ? request : request.headers;
       const parts = path
         .replace(/^\/api\/v1\//, "")
         .split("/")
