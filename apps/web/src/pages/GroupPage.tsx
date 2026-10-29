@@ -2,6 +2,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, UserPlus, Users } from "lucide-react";
 import { Link, useParams } from "react-router";
+import { ExpenseList } from "../expenses/ExpenseList.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, primaryButton, ScreenHeader, secondaryButton } from "../groups/ui.js";
@@ -80,7 +81,7 @@ function GroupDetail({ group }: { group: Group }) {
         </Tabs.List>
         {tabs.map((tab) => (
           <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
-            {t("page.comingSoon")}
+            {tab.value === "expenses" ? <ExpenseList groupId={group.id} /> : t("page.comingSoon")}
           </Tabs.Content>
         ))}
       </Tabs.Root>

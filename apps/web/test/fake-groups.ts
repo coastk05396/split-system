@@ -9,6 +9,7 @@ import {
   type MemberRole,
   type MemberStatus,
 } from "@split/shared";
+import { createFakeExpenses, type FakeExpenses } from "./fake-expenses.js";
 
 /** The Worker's Group, Member and Invite routes over in-memory rows (ticket 05 contract). */
 
@@ -74,8 +75,13 @@ export interface FakeGroups {
     path: string,
     body: Record<string, unknown>,
     user: Me | undefined,
+    request?: { headers: Headers; query: URLSearchParams },
   ): Response | null;
   now: number;
+  /** Expenses and Stops of these Groups. */
+  expenses: FakeExpenses;
+  /** Seeds an Expense created by the `creator`-th Member (an `ExpenseInput` body); returns its id. */
+  addExpense(groupId: string, body: Record<string, unknown>, creator?: number): string;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -150,6 +156,7 @@ export function createFakeGroups(): FakeGroups {
 
   const fake: FakeGroups = {
     now: 1_700_000_000_000,
+    expenses: createFakeExpenses(nextId),
 
     add(user, seed) {
       const id = nextId("g");
@@ -205,6 +212,24 @@ export function createFakeGroups(): FakeGroups {
       return groups.get(groupId)?.members ?? [];
     },
 
+    addExpense(groupId, body, creator = 0) {
+      const g = groups.get(groupId);
+      const me = g?.members[creator];
+      if (g === undefined || me === undefined) throw new Error(`no Group ${groupId}`);
+      const headers = new Headers({ "Idempotency-Key": nextId("key") });
+      const res = fake.expenses.handle(
+        "POST groups/:/expenses",
+        ["groups", groupId, "expenses"],
+        body,
+        { headers, query: new URLSearchParams() },
+        g,
+        me,
+        fake.now,
+      );
+      if (res?.status !== 201) throw new Error(`seed Expense refused: ${String(res?.status)}`);
+      return fake.expenses.list(groupId)[0]?.id ?? "";
+    },
+
     exists(groupId) {
       return groups.has(groupId);
     },
@@ -216,7 +241,13 @@ export function createFakeGroups(): FakeGroups {
       return { name, isTrip, settlementCurrency, defaultExpenseCurrency };
     },
 
-    handle(method, path, body, user) {
+    handle(
+      method,
+      path,
+      body,
+      user,
+      request = { headers: new Headers(), query: new URLSearchParams() },
+    ) {
       const parts = path.replace(/^\/api\/v1\//, "").split("/");
       if (parts[0] !== "groups" && parts[0] !== "invites") return null;
       if (user === undefined) return error("UNAUTHORIZED", 401);
@@ -374,7 +405,10 @@ export function createFakeGroups(): FakeGroups {
           g.invite = { token: nextId("token"), expiresAt: fake.now + INVITE_TTL_MS };
           return json(g.invite, 201);
         default:
-          return error("NOT_FOUND", 404);
+          return (
+            fake.expenses.handle(route, parts, body, request, g, me, fake.now) ??
+            error("NOT_FOUND", 404)
+          );
       }
     },
   };

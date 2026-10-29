@@ -19,6 +19,12 @@ export interface FakeApi {
   groups: FakeGroups;
   /** The next request to "METHOD /path" answers with this error (500 INTERNAL by default). */
   failNext(route: string, code?: string, status?: number): void;
+  /** The next request to "METHOD /path" reaches the server, but its answer is lost (network error). */
+  dropNextResponse(route: string): void;
+  /** Every request seen, with its headers and body text. */
+  requests: { route: string; headers: Headers; body: string | null }[];
+  /** Reference rates by "BASE-QUOTE" (scaled by 1,000,000); a missing pair answers 503 RATE_UNAVAILABLE. */
+  rates: Map<string, { rateScaled: number; rateDate?: string }>;
 }
 
 export function makeUser(displayName: string, provider: "google" | "line" = "google"): Me {
@@ -42,6 +48,8 @@ export function createFakeApi(): FakeApi {
   const liveTokens = new Map<string, Me>();
   const calls: string[] = [];
   const failing = new Map<string, { code: string; status: number }>();
+  const dropping = new Set<string>();
+  const requests: FakeApi["requests"] = [];
 
   function issue(user: Me): Response {
     cookieUser = user;
@@ -59,6 +67,11 @@ export function createFakeApi(): FakeApi {
   const api: FakeApi = {
     calls,
     groups: createFakeGroups(),
+    requests,
+    rates: new Map([["USD-TWD", { rateScaled: 31_523_400 }]]),
+    dropNextResponse(route) {
+      dropping.add(route);
+    },
     failNext(route, code = "INTERNAL", status = 500) {
       failing.set(route, { code, status });
     },
@@ -77,6 +90,11 @@ export function createFakeApi(): FakeApi {
       const method = (init?.method ?? "GET").toUpperCase();
       calls.push(`${method} ${url.pathname}`);
       const headers = new Headers(init?.headers);
+      requests.push({
+        route: `${method} ${url.pathname}`,
+        headers,
+        body: typeof init?.body === "string" ? init.body : null,
+      });
       const bearer = headers.get("Authorization")?.replace(/^Bearer /, "");
       const authed = bearer === undefined ? undefined : liveTokens.get(bearer);
 
@@ -85,35 +103,54 @@ export function createFakeApi(): FakeApi {
         failing.delete(`${method} ${url.pathname}`);
         return error(failure.code, failure.status);
       }
+      const response = await answer();
+      if (dropping.delete(`${method} ${url.pathname}`)) throw new TypeError("Failed to fetch");
+      return response;
 
-      switch (`${method} ${url.pathname}`) {
-        case "POST /api/v1/auth/refresh":
-          return cookieUser === null ? error("UNAUTHORIZED", 401) : issue(cookieUser);
-        case "POST /api/v1/auth/google":
-        case "POST /api/v1/auth/line": {
-          const { idToken } = await readJson(init);
-          if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
-            return error("ID_TOKEN_INVALID", 401);
+      async function answer(): Promise<Response> {
+        switch (`${method} ${url.pathname}`) {
+          case "POST /api/v1/auth/refresh":
+            return cookieUser === null ? error("UNAUTHORIZED", 401) : issue(cookieUser);
+          case "POST /api/v1/auth/google":
+          case "POST /api/v1/auth/line": {
+            const { idToken } = await readJson(init);
+            if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
+              return error("ID_TOKEN_INVALID", 401);
+            }
+            const [, , name = "someone"] = idToken.split("|");
+            const provider = url.pathname.endsWith("line") ? "line" : "google";
+            return issue(makeUser(name, provider));
           }
-          const [, , name = "someone"] = idToken.split("|");
-          const provider = url.pathname.endsWith("line") ? "line" : "google";
-          return issue(makeUser(name, provider));
-        }
-        case "POST /api/v1/auth/test-sign-in": {
-          if (!api.testSignInEnabled) return error("NOT_FOUND", 404);
-          const body = await readJson(init);
-          const provider = body.provider === "line" ? "line" : "google";
-          return issue(makeUser(String(body.displayName), provider));
-        }
-        case "POST /api/v1/auth/logout":
-          cookieUser = null;
-          liveTokens.clear();
-          return new Response(null, { status: 204 });
-        case "GET /api/v1/me":
-          return authed === undefined ? error("UNAUTHORIZED", 401) : json(authed);
-        default: {
-          const body = method === "GET" || method === "DELETE" ? {} : await readJson(init);
-          return api.groups.handle(method, url.pathname, body, authed) ?? error("NOT_FOUND", 404);
+          case "POST /api/v1/auth/test-sign-in": {
+            if (!api.testSignInEnabled) return error("NOT_FOUND", 404);
+            const body = await readJson(init);
+            const provider = body.provider === "line" ? "line" : "google";
+            return issue(makeUser(String(body.displayName), provider));
+          }
+          case "POST /api/v1/auth/logout":
+            cookieUser = null;
+            liveTokens.clear();
+            return new Response(null, { status: 204 });
+          case "GET /api/v1/me":
+            return authed === undefined ? error("UNAUTHORIZED", 401) : json(authed);
+          case "GET /api/v1/rates": {
+            if (authed === undefined) return error("UNAUTHORIZED", 401);
+            const base = url.searchParams.get("base") ?? "";
+            const quote = url.searchParams.get("quote") ?? "";
+            const rate = api.rates.get(`${base}-${quote}`);
+            if (rate === undefined) return error("RATE_UNAVAILABLE", 503);
+            const rateDate = rate.rateDate ?? url.searchParams.get("date") ?? "";
+            return json({ base, quote, rateScaled: rate.rateScaled, rateDate, stale: false });
+          }
+          default: {
+            const body = method === "GET" || method === "DELETE" ? {} : await readJson(init);
+            return (
+              api.groups.handle(method, url.pathname, body, authed, {
+                headers,
+                query: url.searchParams,
+              }) ?? error("NOT_FOUND", 404)
+            );
+          }
         }
       }
     },
