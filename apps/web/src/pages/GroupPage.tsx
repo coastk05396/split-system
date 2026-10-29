@@ -1,11 +1,12 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, UserPlus, Users } from "lucide-react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, primaryButton, ScreenHeader, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { TripPanel } from "../trip/TripPanel.js";
 
 /**
  * Screen 3 as amended: the same tabs everywhere, 帳目, 行程 (Trips only) and 結算, with the
@@ -26,6 +27,8 @@ function GroupDetail({ group }: { group: Group }) {
     ...(group.isTrip ? [{ value: "trip", label: "group.tab.trip" } as const] : []),
     { value: "settle", label: "group.tab.settle" },
   ];
+  // `?tab=trip` opens a tab directly, as when returning from a Stop.
+  const asked = useSearchParams()[0].get("tab") ?? "";
   return (
     <div className="flex flex-col gap-6">
       <ScreenHeader
@@ -63,7 +66,7 @@ function GroupDetail({ group }: { group: Group }) {
           </Link>
         </section>
       )}
-      <Tabs.Root defaultValue="expenses">
+      <Tabs.Root defaultValue={tabs.some((tab) => tab.value === asked) ? asked : "expenses"}>
         <Tabs.List
           aria-label={t("group.tabs")}
           className="flex gap-1 rounded-2xl bg-sprout-150 p-1"
@@ -78,11 +81,17 @@ function GroupDetail({ group }: { group: Group }) {
             </Tabs.Trigger>
           ))}
         </Tabs.List>
-        {tabs.map((tab) => (
-          <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
-            {t("page.comingSoon")}
-          </Tabs.Content>
-        ))}
+        {tabs.map((tab) =>
+          tab.value === "trip" ? (
+            <Tabs.Content key={tab.value} value={tab.value} className="py-6">
+              <TripPanel group={group} />
+            </Tabs.Content>
+          ) : (
+            <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
+              {t("page.comingSoon")}
+            </Tabs.Content>
+          ),
+        )}
       </Tabs.Root>
     </div>
   );

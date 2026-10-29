@@ -155,7 +155,9 @@ export function createFakeApi(): FakeApi {
         return update({ ...authed, identities: [...others, { provider }] });
       }
       const body = method === "GET" || method === "DELETE" ? {} : await readJson(init);
-      return api.groups.handle(method, url.pathname, body, authed) ?? error("NOT_FOUND", 404);
+      return (
+        api.groups.handle(method, url.pathname, body, authed, headers) ?? error("NOT_FOUND", 404)
+      );
     },
   };
   return api;

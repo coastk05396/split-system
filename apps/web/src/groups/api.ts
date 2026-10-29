@@ -23,20 +23,20 @@ export const groupKeys = {
   preview: (token: string) => ["invites", token] as const,
 };
 
-function useApi() {
+export function useApi() {
   const { session } = useAuth();
   return useMemo(() => createApiClient(session.fetch), [session]);
 }
 
 /** Reads a JSON answer, throwing ApiFailure for anything but 2xx. */
-async function read<T>(call: Promise<Response>): Promise<T> {
+export async function read<T>(call: Promise<Response>): Promise<T> {
   // Widened: the typed client only describes the success status.
   const res: Response = await call;
   if (!res.ok) throw await toApiFailure(res);
   return (await res.json()) as T;
 }
 
-async function send(call: Promise<Response>): Promise<void> {
+export async function send(call: Promise<Response>): Promise<void> {
   const res: Response = await call;
   if (!res.ok) throw await toApiFailure(res);
 }
