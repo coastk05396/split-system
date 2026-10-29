@@ -18,6 +18,19 @@ import {
 const db = createDb(env.DB);
 const NOW = 1_750_000_000_000;
 
+describe("a Group's member preview", () => {
+  it("lists the first four seated Members in joining order, for the card's avatars", async () => {
+    const { admin, group } = await groupWith("小宇", "甲", "乙", "丙", "丁", "戊");
+    const list = await (
+      await send(admin, "GET", "/groups")
+    ).json<{ id: string; memberCount: number; memberPreview: { name: string }[] }[]>();
+    const mine = list.find((g) => g.id === group.id);
+
+    expect(mine?.memberCount).toBe(6);
+    expect(mine?.memberPreview.map((m) => m.name)).toEqual(["小宇", "甲", "乙", "丙"]);
+  });
+});
+
 describe("POST /groups and GET /groups/:id", () => {
   it("creates a Running Tab with the creator as its only Member and Admin", async () => {
     const yu = await person("小宇");
@@ -29,6 +42,9 @@ describe("POST /groups and GET /groups/:id", () => {
       tripDestination: null,
       settlementCurrencyLocked: false,
       memberCount: 1,
+      memberPreview: [
+        { name: "小宇", pictureUrl: expect.stringContaining("https://pic/") as unknown },
+      ],
       me: { role: "admin", balance: 0 },
     });
 

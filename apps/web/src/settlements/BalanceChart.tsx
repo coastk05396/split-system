@@ -2,6 +2,7 @@ import { type CurrencyCode, formatAmount } from "@split/shared";
 import { card } from "../groups/ui.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
+import { CountUp } from "../shell/CountUp.js";
 import type { BalanceRow } from "./model.js";
 
 /**
@@ -32,8 +33,10 @@ export function BalanceChart({
         <p className="text-sm text-ink-muted">{t("settle.chartLegend")}</p>
       </div>
       <ul aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
-        {open.map((r) => {
+        {open.map((r, index) => {
           const owed = r.balance > 0;
+          // Rows set off one after another, capped so a long list is not a long wait.
+          const delay = `${String(Math.min(index, 6) * 60)}ms`;
           const width = `${String(Math.max(4, Math.round((Math.abs(r.balance) / largest) * 100)))}%`;
           return (
             <li
@@ -50,16 +53,28 @@ export function BalanceChart({
                 <span
                   className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-red-700"}`}
                 >
-                  {owed && "+"}
-                  {formatAmount(r.balance, currency)}
+                  <CountUp
+                    value={r.balance}
+                    format={(n) => `${n > 0 ? "+" : ""}${formatAmount(n, currency)}`}
+                  />
                 </span>
               </div>
               <div aria-hidden="true" className="grid grid-cols-2">
                 <div className="flex justify-end border-r-2 border-ink/30">
-                  {!owed && <div className="h-3 rounded-l-full bg-red-400" style={{ width }} />}
+                  {!owed && (
+                    <div
+                      className="bar-grow-left h-3 rounded-l-full bg-red-400"
+                      style={{ width, animationDelay: delay }}
+                    />
+                  )}
                 </div>
                 <div className="flex">
-                  {owed && <div className="h-3 rounded-r-full bg-sprout-500" style={{ width }} />}
+                  {owed && (
+                    <div
+                      className="bar-grow-right h-3 rounded-r-full bg-sprout-500"
+                      style={{ width, animationDelay: delay }}
+                    />
+                  )}
                 </div>
               </div>
             </li>

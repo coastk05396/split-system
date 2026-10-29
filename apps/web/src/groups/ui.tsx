@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import { errorMessage, t } from "../i18n/messages.js";
+import { SproutMark } from "../shell/SproutMark.js";
 
 /** The zh-TW message for a failed call; anything that is not an API answer reads as INTERNAL. */
 export function failureMessage(error: unknown): string {
@@ -56,8 +57,16 @@ export function LoadError({ error, onRetry }: { error: unknown; onRetry: () => v
   );
 }
 
+/** The sprout sways while something loads; the words stay for screen readers. */
 export function Loading() {
-  return <p className="text-ink-muted">{t("app.loading")}</p>;
+  return (
+    <div role="status" className="flex justify-center py-8">
+      <span aria-hidden="true" className="sprout-sway inline-flex">
+        <SproutMark className="size-12" />
+      </span>
+      <span className="sr-only">{t("app.loading")}</span>
+    </div>
+  );
 }
 
 /**
@@ -107,9 +116,9 @@ export function Avatar({
 }
 
 export const primaryButton =
-  "flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white hover:bg-sprout-500/90 disabled:opacity-50";
+  "flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white hover:bg-sprout-500/90 transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50";
 export const secondaryButton =
-  "flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold hover:border-sprout-500 disabled:opacity-50";
+  "flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold hover:border-sprout-500 transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50";
 /** The red tag on every Trip entry while the Trip module is under maintenance. */
 export function MaintenanceTag() {
   return (

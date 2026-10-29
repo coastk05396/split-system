@@ -13,6 +13,7 @@ import {
 import { ArrowRight, Check, ChevronDown, Users } from "lucide-react";
 import { type SubmitEvent, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
+import { Odometer } from "../shell/Odometer.js";
 import { CategoryIcon } from "./CategoryIcon.js";
 import { Avatar, card, failureMessage, input, primaryButton } from "../groups/ui.js";
 import { categoryLabel, localName } from "../i18n/format.js";
@@ -292,7 +293,9 @@ function AmountSection({
       </div>
       {amount.kind === "ok" && amount.isExpression && (
         <p className="text-right font-bold text-sprout-600">
-          {t("expense.result", { amount: formatAmount(amount.amountMinor, draft.currency) })}
+          <Odometer
+            text={t("expense.result", { amount: formatAmount(amount.amountMinor, draft.currency) })}
+          />
         </p>
       )}
       {amount.kind === "error" && (

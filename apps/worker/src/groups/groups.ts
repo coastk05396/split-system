@@ -5,7 +5,7 @@ import {
   MAX_GROUPS_PER_USER,
   tripDatesValid,
 } from "@split/shared";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { groups, members, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
@@ -18,7 +18,48 @@ type GroupRow = typeof groups.$inferSelect;
 const lockedSql = sql<number>`EXISTS (SELECT 1 FROM expenses e WHERE e.group_id = "groups"."id")`;
 const seatedSql = sql<number>`(SELECT count(*) FROM members s WHERE s.group_id = "groups"."id" AND s.status IN ('active', 'placeholder'))`;
 
-function toGroup(row: GroupRow, me: MemberRow, locked: number, memberCount: number): Group {
+const PREVIEW_SIZE = 4;
+
+/** The first few seated Members of each Group, in joining order, for the card's avatars. */
+async function previewsOf(db: Db, groupIds: readonly string[]) {
+  const byGroup = new Map<string, Group["memberPreview"]>();
+  if (groupIds.length === 0) return byGroup;
+  const rows = await db
+    .select({
+      groupId: members.groupId,
+      userName: users.displayName,
+      placeholderName: members.placeholderName,
+      pictureUrl: users.pictureUrl,
+      status: members.status,
+    })
+    .from(members)
+    .leftJoin(users, eq(users.id, members.userId))
+    .where(
+      and(
+        inArray(members.groupId, [...groupIds]),
+        inArray(members.status, ["active", "placeholder"]),
+      ),
+    )
+    .orderBy(asc(members.createdAt), sql`${members}.rowid`);
+  for (const r of rows) {
+    const list = byGroup.get(r.groupId) ?? [];
+    if (list.length >= PREVIEW_SIZE) continue;
+    list.push({
+      name: r.userName ?? r.placeholderName ?? "?",
+      pictureUrl: r.status === "placeholder" ? null : r.pictureUrl,
+    });
+    byGroup.set(r.groupId, list);
+  }
+  return byGroup;
+}
+
+function toGroup(
+  row: GroupRow,
+  me: MemberRow,
+  locked: number,
+  memberCount: number,
+  memberPreview: Group["memberPreview"],
+): Group {
   return {
     id: row.id,
     name: row.name,
@@ -30,6 +71,7 @@ function toGroup(row: GroupRow, me: MemberRow, locked: number, memberCount: numb
     tripNotes: row.tripNotes,
     settlementCurrencyLocked: locked === 1,
     memberCount,
+    memberPreview,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     me: { memberId: me.id, role: me.role, balance: me.netBalance },
@@ -44,7 +86,13 @@ export async function listGroups(db: Db, userId: string): Promise<Group[]> {
     .innerJoin(groups, eq(groups.id, members.groupId))
     .where(and(eq(members.userId, userId), eq(members.status, "active")))
     .orderBy(desc(groups.createdAt), desc(groups.id));
-  return rows.map((r) => toGroup(r.group, r.me, r.locked, r.memberCount));
+  const previews = await previewsOf(
+    db,
+    rows.map((r) => r.group.id),
+  );
+  return rows.map((r) =>
+    toGroup(r.group, r.me, r.locked, r.memberCount, previews.get(r.group.id) ?? []),
+  );
 }
 
 export async function loadGroup(db: Db, me: MemberRow): Promise<Group> {
@@ -53,7 +101,8 @@ export async function loadGroup(db: Db, me: MemberRow): Promise<Group> {
     .from(groups)
     .where(eq(groups.id, me.groupId));
   if (row === undefined) throw new ApiError("NOT_FOUND");
-  return toGroup(row.group, me, row.locked, row.memberCount);
+  const previews = await previewsOf(db, [row.group.id]);
+  return toGroup(row.group, me, row.locked, row.memberCount, previews.get(row.group.id) ?? []);
 }
 
 /** Active Groups of a User, the count the 20-Group cap applies to. */

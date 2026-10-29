@@ -6,12 +6,13 @@ import {
   type Settlement,
 } from "@split/shared";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight, ChevronDown, CircleCheck } from "lucide-react";
 import { Avatar, card, failureMessage, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
 import { useMembers } from "../groups/api.js";
+import { CountUp } from "../shell/CountUp.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
@@ -24,7 +25,8 @@ const PictureContext = createContext<(id: string) => string | null>(() => null);
 /** How many past Settlements show at first, and how many more each 查看更多 adds. */
 const HISTORY_STEP = 5;
 
-const smallButton = "rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold";
+const smallButton =
+  "rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold transition-transform active:scale-[0.97] motion-reduce:active:scale-100";
 
 /**
  * Screen 5 as amended (decisions 12, 17, 23): my Balance, the Payment plan with its honest
@@ -38,6 +40,11 @@ export function SettlePanel({ group }: { group: Group }) {
     balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
   );
   const action = useSettlementAction(group.id);
+  // Whether I was last owed or owing: a debt that shrinks to 0 is good news, a credit that does not.
+  const owedSign = useRef(0);
+  // Whether there was anything to settle while this screen was open: only then is "all settled"
+  // news worth a ring, rather than the calm state of a group that never owed anything.
+  const sawWork = useRef(false);
   const members = useMembers(group.id);
 
   if (balances.isError) {
@@ -52,6 +59,7 @@ export function SettlePanel({ group }: { group: Group }) {
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
+  if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const pending = all.filter((s) => s.status === "pending");
   const history = all.filter((s) => s.status !== "pending");
@@ -63,6 +71,7 @@ export function SettlePanel({ group }: { group: Group }) {
         (s) => s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
       ),
   );
+  if (mine !== 0 || pending.length > 0 || unsent.length > 0) sawWork.current = true;
   const everythingSent = planned.length > 0 && unsent.length === 0;
 
   return (
@@ -72,7 +81,13 @@ export function SettlePanel({ group }: { group: Group }) {
           <h2 className="text-sm text-ink-muted">
             {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
           </h2>
-          <p className="text-4xl font-bold">{formatAmount(Math.abs(mine), currency)}</p>
+          <p className="text-4xl font-bold tabular-nums">
+            <CountUp
+              value={Math.abs(mine)}
+              format={(n) => formatAmount(n, currency)}
+              goodWhen={owedSign.current >= 0 ? "up" : "down"}
+            />
+          </p>
         </section>
 
         <BalanceChart
@@ -168,7 +183,7 @@ export function SettlePanel({ group }: { group: Group }) {
             )}
             {plan.status === "ready" &&
               (plan.plan.payments.length === 0 ? (
-                <p className="py-4 text-center text-ink-muted">{t("settle.allSettled")}</p>
+                <SettledMessage celebrate={sawWork.current} />
               ) : (
                 <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
                   {[...unsent]
@@ -210,6 +225,22 @@ export function SettlePanel({ group }: { group: Group }) {
         )}
       </div>
     </PictureContext>
+  );
+}
+
+function SettledMessage({ celebrate }: { celebrate: boolean }) {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-2xl bg-sprout-150 px-4 py-5 font-bold text-sprout-700">
+      <span aria-hidden="true" className="relative">
+        {celebrate && (
+          <span className="settle-ring absolute inset-0 rounded-full border-2 border-sprout-500" />
+        )}
+        <span className={`relative inline-flex ${celebrate ? "settle-pop" : ""}`}>
+          <CircleCheck className="size-6" />
+        </span>
+      </span>
+      <p>{t("settle.allSettled")}</p>
+    </div>
   );
 }
 

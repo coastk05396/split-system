@@ -3,6 +3,7 @@ import { Link, Navigate, useSearchParams } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { card, LoadError, Loading, primaryButton, ScreenHeader } from "../groups/ui.js";
 import { SproutMark } from "../shell/SproutMark.js";
+import { PressableLink } from "../shell/PressableLink.js";
 import { t } from "../i18n/messages.js";
 
 /**
@@ -39,9 +40,9 @@ export function NewEntryPage() {
             const Icon = g.isTrip ? Plane : House;
             return (
               <li key={g.id}>
-                <Link
+                <PressableLink
                   to={`/groups/${g.id}/expenses/new`}
-                  className={`${card} flex items-center gap-4 p-4 hover:border-sprout-500`}
+                  className={`${card} group flex items-center gap-4 p-4 transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
                 >
                   <span
                     className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${
@@ -59,7 +60,7 @@ export function NewEntryPage() {
                     </span>
                   </span>
                   <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
-                </Link>
+                </PressableLink>
               </li>
             );
           })}

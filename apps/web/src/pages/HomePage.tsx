@@ -1,14 +1,17 @@
 import { type CurrencyCode, formatAmount, type Group } from "@split/shared";
-import { ArrowRight, ChevronRight, Plane, ReceiptText } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Plane, ReceiptText, Users } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
 import { useRates } from "../expenses/api.js";
 import { localNow } from "../expenses/expense-draft.js";
 import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js";
-import { card, MaintenanceTag } from "../groups/ui.js";
+import { LoadError, MaintenanceTag } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { CountUp } from "../shell/CountUp.js";
+import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 
@@ -19,21 +22,54 @@ export function HomePage() {
   const preferred = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   const groupsQuery = useGroups();
   const groups = groupsQuery.data ?? [];
+  const intro = useIntro();
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-bold md:text-4xl">{t("home.greeting", { name })}</h1>
-        <SproutMark className="size-14" />
+      <header className="flex items-start justify-between gap-3">
+        <h1 className="text-balance text-2xl leading-tight font-bold md:text-4xl">
+          {t("home.greeting", { name })}
+        </h1>
+        <SproutMark className="size-12 md:size-14" />
       </header>
 
-      <BalanceCard groups={groups} preferred={preferred} isSuccess={groupsQuery.isSuccess} />
-
-      {groups.length > 0 && <ActiveGroupsSection groups={groups} />}
-      <QuickStartSection hasGroups={groups.length > 0} />
+      {groupsQuery.isError ? (
+        <LoadError error={groupsQuery.error} onRetry={() => void groupsQuery.refetch()} />
+      ) : (
+        <>
+          <div {...rise(intro, 0)}>
+            <BalanceCard groups={groups} preferred={preferred} isSuccess={groupsQuery.isSuccess} />
+          </div>
+          {groupsQuery.isSuccess && (
+            <>
+              {groups.length > 0 && (
+                <div {...rise(intro, 1)}>
+                  <ActiveGroupsSection groups={groups} />
+                </div>
+              )}
+              <div {...rise(intro, 2)}>
+                <QuickStartSection hasGroups={groups.length > 0} />
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }
+
+/** Home's sections rise one after another the first time Home is drawn in this visit. */
+let introPlayed = false;
+function useIntro(): boolean {
+  const [intro] = useState(() => !introPlayed);
+  useEffect(() => {
+    introPlayed = true;
+  }, []);
+  return intro;
+}
+
+const rise = (intro: boolean, step: number) =>
+  intro ? { className: "rise", style: { animationDelay: `${String(step * 60)}ms` } } : {};
 
 function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSuccess: boolean }) {
   const { groups, preferred, isSuccess } = props;
@@ -75,7 +111,7 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
   return (
     <section
       aria-labelledby="home-balance"
-      className="rounded-3xl bg-sprout-500 p-6 text-white shadow-sm"
+      className="rounded-3xl bg-sprout-500 p-6 text-white shadow-[0_8px_18px_-14px_#143f2a]"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="home-balance" className="text-sm text-white/85">
@@ -84,7 +120,7 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
         <Link
           to="/settings"
           aria-label={t("home.currencyTag", { currency: preferred })}
-          className="flex items-center gap-0.5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white hover:bg-white/25"
+          className="flex min-h-9 items-center gap-0.5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           {preferred}
           <ChevronRight aria-hidden="true" className="size-3.5" />
@@ -98,8 +134,12 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
               ? {}
               : { title: rateNote, "aria-describedby": "home-rate-note" })}
           >
-            <span className="text-3xl font-bold md:text-4xl">
-              {formatAmount(converting ? total : main.amount, main.currency)}
+            <span className="text-3xl font-bold tracking-tight md:text-4xl">
+              <CountUp
+                value={converting ? total : main.amount}
+                format={(n) => formatAmount(n, main.currency)}
+                onDark
+              />
             </span>
             {sideBySide &&
               foreign.map((x) => (
@@ -114,7 +154,10 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
             </span>
           )}
           {summary.pendingGroups === 0 && (
-            <p className="mt-3 text-sm text-white/85">{t("home.noPending")}</p>
+            <p className="mt-5 flex items-center gap-2 border-t border-white/25 pt-3 text-sm text-white/90">
+              <Check aria-hidden="true" className="size-4" />
+              {t("home.noPending")}
+            </p>
           )}
         </>
       ) : (
@@ -170,9 +213,9 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
           {t("home.allSettled")}
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="overflow-hidden rounded-2xl border border-sprout-200 bg-white shadow-[0_5px_16px_-15px_#143f2a]">
           {pending.map((g) => (
-            <li key={g.id}>
+            <li key={g.id} className="border-b border-sprout-200 last:border-b-0">
               <HomeGroupRow group={g} />
             </li>
           ))}
@@ -195,11 +238,14 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
 function HomeGroupRow({ group }: { group: Group }) {
   const balance = group.me.balance;
   return (
-    <Link
+    <PressableLink
       to={`/groups/${group.id}?tab=settle`}
-      className={`${card} flex items-center justify-between p-4.5 hover:border-sprout-500`}
+      className="group flex items-center gap-3 px-4 py-3.5 text-ink transition-colors hover:bg-sprout-50 active:bg-sprout-100 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
-      <span className="flex min-w-0 flex-col gap-1">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-sprout-100 text-sprout-600">
+        <Users aria-hidden="true" className="size-5" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
           <span className="truncate text-base font-bold">{group.name}</span>
           <span className="shrink-0 rounded-full bg-sprout-150 px-2 py-0.5 text-xs text-sprout-600">
@@ -213,8 +259,8 @@ function HomeGroupRow({ group }: { group: Group }) {
           {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
         </span>
       </span>
-      <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
-    </Link>
+      <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
+    </PressableLink>
   );
 }
 
@@ -258,11 +304,15 @@ function StartCard(props: {
     );
   }
   return (
-    <Link
+    <PressableLink
       to={props.to}
-      className="flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 hover:border-sprout-500"
+      className="group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 shadow-[0_5px_16px_-17px_#143f2a] transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
     >
       {content}
-    </Link>
+      <ChevronRight
+        aria-hidden="true"
+        className="size-5 shrink-0 text-sprout-600 transition-transform duration-150 group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+      />
+    </PressableLink>
   );
 }

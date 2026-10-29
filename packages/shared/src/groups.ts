@@ -65,6 +65,8 @@ export const groupSchema = z.object({
   settlementCurrencyLocked: z.boolean(),
   /** Active Members plus Placeholder Members, the count the 30-Member cap applies to. */
   memberCount: z.number().int(),
+  /** The first few seated Members, for the overlapping avatars on a Group's card. */
+  memberPreview: z.array(z.object({ name: z.string(), pictureUrl: z.string().nullable() })),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   me: z.object({

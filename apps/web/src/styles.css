@@ -27,3 +27,224 @@
     @apply bg-sprout-50 text-ink font-sans antialiased;
   }
 }
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@keyframes overlay-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlay-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.dialog-content[data-state="open"] {
+  animation: dialog-enter 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dialog-content[data-state="closed"] {
+  animation: dialog-exit 160ms ease-out;
+}
+.dialog-overlay[data-state="open"] {
+  animation: overlay-enter 260ms ease-out;
+}
+.dialog-overlay[data-state="closed"] {
+  animation: overlay-exit 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-content[data-state="open"],
+  .dialog-content[data-state="closed"] {
+    animation-name: overlay-enter;
+    animation-duration: 120ms;
+  }
+  .dialog-content[data-state="closed"] {
+    animation-name: overlay-exit;
+  }
+}
+
+/* A balance bar grows out of the centre line: green to the right, red to the left. A clip keeps
+   the rounded end undistorted, where a scaleX would squash it. */
+@keyframes bar-grow-right {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes bar-grow-left {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+.bar-grow-right {
+  animation: bar-grow-right 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.bar-grow-left {
+  animation: bar-grow-left 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The tick that settles into "everyone is settled". */
+@keyframes settle-pop {
+  from {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.settle-pop {
+  animation: settle-pop 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A number on the move is tinted by what the move means, then settles back to its own colour. */
+.count-up {
+  transition: color 300ms ease-out;
+}
+.count-up[data-count="good"] {
+  color: var(--color-sprout-500);
+}
+.count-up[data-count="bad"] {
+  color: #c2410c;
+}
+.count-up.count-dark[data-count="good"] {
+  color: #c6f6d5;
+}
+.count-up.count-dark[data-count="bad"] {
+  color: #ffd2b8;
+}
+
+/* A single ring that opens out of the tick when everything is settled. */
+@keyframes settle-ring {
+  from {
+    opacity: 0.55;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+.settle-ring {
+  animation: settle-ring 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* A new row drops in under its day and glows once, so the eye finds where it was logged. */
+@keyframes row-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+    background-color: var(--color-sprout-100);
+  }
+  60% {
+    background-color: var(--color-sprout-100);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    background-color: transparent;
+  }
+}
+.row-arrive {
+  animation: row-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  border-radius: 1.5rem;
+}
+
+/* Home's sections come up one after another, once per visit to the app. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* A digit that changes rolls in from below, like a taxi meter. */
+@keyframes digit-roll {
+  from {
+    opacity: 0;
+    transform: translateY(70%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.digit-roll {
+  display: inline-block;
+  animation: digit-roll 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The sprout rocks gently while something loads. */
+@keyframes sprout-sway {
+  0%,
+  100% {
+    transform: rotate(-7deg);
+  }
+  50% {
+    transform: rotate(7deg);
+  }
+}
+.sprout-sway {
+  transform-origin: 50% 90%;
+  animation: sprout-sway 1.6s ease-in-out infinite;
+}
+
+/* Everything above moves less, or not at all, for a user who asked for it. The tints and the
+   final states stay: only the movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  .bar-grow-right,
+  .bar-grow-left,
+  .settle-pop,
+  .settle-ring,
+  .row-arrive,
+  .rise,
+  .digit-roll,
+  .sprout-sway {
+    animation: none;
+  }
+  .count-up {
+    transition: none;
+  }
+}

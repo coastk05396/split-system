@@ -22,8 +22,8 @@ export function DeleteGroupDialog({ group }: { group: Group }) {
         <Trash2 aria-hidden="true" className="size-6" />
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-20 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
+        <Dialog.Overlay className="dialog-overlay fixed inset-0 z-20 bg-ink/40" />
+        <Dialog.Content className="dialog-content fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
           {open && <DeleteForm group={group} />}
         </Dialog.Content>
       </Dialog.Portal>

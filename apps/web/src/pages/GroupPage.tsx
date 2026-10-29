@@ -1,12 +1,14 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, Plus, UserPlus, Users } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SelectionPill } from "../shell/SelectionPill.js";
 import { SettlePanel } from "../settlements/SettlePanel.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 import { TripPanel } from "../trip/TripPanel.js";
@@ -35,6 +37,9 @@ function GroupDetail({ group }: { group: Group }) {
   ];
   // `?tab=trip` or `?tab=settle` opens a tab directly
   const asked = useSearchParams()[0].get("tab") ?? "";
+  const [activeTab, setActiveTab] = useState(
+    tabs.some((tab) => tab.value === asked) ? asked : "expenses",
+  );
   return (
     <div className="flex flex-col gap-6">
       <ScreenHeader
@@ -87,7 +92,7 @@ function GroupDetail({ group }: { group: Group }) {
           </Link>
         </section>
       )}
-      <Tabs.Root defaultValue={tabs.some((tab) => tab.value === asked) ? asked : "expenses"}>
+      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
         <div className="flex items-center gap-2">
           <Tabs.List
             aria-label={t("group.tabs")}
@@ -97,9 +102,15 @@ function GroupDetail({ group }: { group: Group }) {
               <Tabs.Trigger
                 key={tab.value}
                 value={tab.value}
-                className="flex-1 rounded-xl py-2.5 text-ink-muted data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-ink"
+                className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-ink focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
-                {t(tab.label)}
+                {activeTab === tab.value && (
+                  <SelectionPill
+                    layoutId={`group-tab-${group.id}`}
+                    className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a] after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-6 after:-translate-x-1/2 after:rounded-full after:bg-sprout-500"
+                  />
+                )}
+                <span className="relative">{t(tab.label)}</span>
               </Tabs.Trigger>
             ))}
           </Tabs.List>

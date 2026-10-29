@@ -8,7 +8,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
-import { t } from "../i18n/messages.js";
+import { Loading } from "../groups/ui.js";
 import { AppShell } from "../shell/AppShell.js";
 import { HomePage } from "../pages/HomePage.js";
 import { NotFoundPage } from "../pages/NotFoundPage.js";
@@ -52,7 +52,7 @@ function Gate() {
   }
   return (
     <AppShell>
-      <Suspense fallback={<p className="p-6 text-ink-muted">{t("app.loading")}</p>}>
+      <Suspense fallback={<Loading />}>
         <Outlet />
       </Suspense>
     </AppShell>

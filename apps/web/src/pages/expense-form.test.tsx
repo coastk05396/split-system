@@ -73,7 +73,7 @@ describe("add Expense form", () => {
     await user.type(await screen.findByLabelText("名稱"), "晚餐");
     await user.type(screen.getByLabelText("金額"), "120+80×3");
 
-    expect(screen.getByText("= NT$ 360")).toBeVisible();
+    expect(screen.getByLabelText("= NT$ 360")).toBeVisible();
     const split = within(screen.getByRole("group", { name: "分帳方式" }));
     expect(split.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
     await user.click(split.getByRole("button", { name: /參與分帳/ }));

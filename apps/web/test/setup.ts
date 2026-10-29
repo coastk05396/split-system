@@ -6,6 +6,23 @@ import { setLocale } from "../src/i18n/messages.js";
 // Whole-app renders over lazy routes are slow on a busy machine; wait longer than 1 s.
 configure({ asyncUtilTimeout: 5000 });
 
+// jsdom has no matchMedia. The unit tests run as a user who asked for reduced motion, so every
+// count-up and slide is at its end state; the motion itself is tested in shell/motion.test.tsx.
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  writable: true,
+  value: vi.fn().mockImplementation((media: string) => ({
+    matches: media.includes("prefers-reduced-motion"),
+    media,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
 afterEach(() => {
   cleanup();
   // A test that switches to English must not leave the next one in it.

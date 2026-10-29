@@ -3,9 +3,11 @@ import { ArrowRight, ChevronRight, House, Plane, Plus, Search } from "lucide-rea
 import { useState } from "react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
+import { AvatarStack } from "../groups/AvatarStack.js";
 import { balanceLine } from "../groups/totals.js";
 import { card, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 
@@ -66,9 +68,9 @@ function GroupRow({ group }: { group: Group }) {
   const Icon = group.isTrip ? Plane : House;
   const balance = group.me.balance;
   return (
-    <Link
+    <PressableLink
       to={`/groups/${group.id}`}
-      className={`${card} flex items-center gap-4 p-5 hover:border-sprout-500`}
+      className={`${card} group flex items-center gap-4 p-5 transition-[border-color,background-color,box-shadow] hover:border-sprout-500 hover:shadow-[0_8px_20px_-15px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span
         className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${
@@ -90,9 +92,10 @@ function GroupRow({ group }: { group: Group }) {
           {" · "}
           {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
         </span>
+        <AvatarStack members={group.memberPreview} total={group.memberCount} />
       </span>
       <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
-    </Link>
+    </PressableLink>
   );
 }
 
