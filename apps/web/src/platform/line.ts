@@ -45,14 +45,19 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
   async function startAutoSignIn(): Promise<string | null> {
     const returning = storage()?.getItem(RETURNING_KEY) === "1";
     if (!returning && !looksLikeLineApp(navigator.userAgent)) return null;
-    storage()?.removeItem(RETURNING_KEY);
     const liff = await loadLiff();
-    if (liff === null) return null;
+    if (liff === null) {
+      storage()?.removeItem(RETURNING_KEY);
+      return null;
+    }
     if (!liff.isLoggedIn()) {
+      storage()?.removeItem(RETURNING_KEY);
       if (liff.isInClient()) liff.login();
       return null;
     }
-    return liff.getIDToken();
+    const idToken = liff.getIDToken();
+    storage()?.removeItem(RETURNING_KEY);
+    return idToken;
   }
 
   return {
