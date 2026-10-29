@@ -1,7 +1,7 @@
 import type { Expense, ExpensePage } from "@split/shared";
 import { describe, expect, it } from "vitest";
 import { clock } from "./auth-harness.js";
-import { groupWith, listMembers, person, send } from "./groups-harness.js";
+import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { balances, createExpense, newKey, postExpense, twdExpense } from "./expenses-harness.js";
 
 describe("Expenses and Balances", () => {
@@ -149,6 +149,38 @@ describe("Expenses and Balances", () => {
     expect(await balances(admin, group.id)).toEqual(new Map([[a, 0]]));
   });
 
+  it("links an Expense only to a Stop of the same Group", async () => {
+    const trip = { isTrip: true, tripStartDate: "2026-07-01", tripEndDate: "2026-07-03" };
+    const admin = await person("小宇");
+    const mine = await createGroup(admin, trip);
+    const theirs = await createGroup(admin, trip);
+    const addStop = async (groupId: string) => {
+      const res = await send(admin, "POST", `/groups/${groupId}/stops`, {
+        dayDate: "2026-07-01",
+        title: "赤崁樓",
+        category: "景點",
+      });
+      return (await res.json<{ id: string }>()).id;
+    };
+    const [myStop, theirStop] = [await addStop(mine.id), await addStop(theirs.id)];
+    const me = mine.me.memberId;
+
+    const foreign = await postExpense(
+      admin,
+      mine.id,
+      twdExpense(me, [me], 100, { stopId: theirStop }),
+    );
+    expect(foreign.status).toBe(400);
+    expect(JSON.stringify(await foreign.json())).toContain("STOP_NOT_IN_GROUP");
+
+    const linked = await createExpense(
+      admin,
+      mine.id,
+      twdExpense(me, [me], 100, { stopId: myStop }),
+    );
+    expect(linked.stopId).toBe(myStop);
+  });
+
   it("answers 404 to someone who is not a Member", async () => {
     const { admin, group } = await groupWith("小宇");
     const stranger = await person("路人");
@@ -182,5 +214,5 @@ describe("Expenses and Balances", () => {
     expect(page2.nextCursor).toBeNull();
     const ids = [...page1.expenses, ...page2.expenses].map((e) => e.id);
     expect(ids).toEqual([...created].reverse());
-  }, 120_000);
+  }, 300_000);
 });

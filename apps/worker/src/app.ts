@@ -4,6 +4,7 @@ import { type AppDeps, productionDeps } from "./deps.js";
 import { expenseRoutes } from "./expenses/routes.js";
 import { groupRoutes } from "./groups/routes.js";
 import { rateRoutes } from "./rates/routes.js";
+import { stopRoutes } from "./stops/routes.js";
 
 /** Builds the API with its outside services; tests pass fakes. */
 export function createApp(deps: AppDeps) {
@@ -12,7 +13,8 @@ export function createApp(deps: AppDeps) {
     .route("/", authRoutes(deps))
     .route("/", groupRoutes(deps))
     .route("/", expenseRoutes(deps))
-    .route("/", rateRoutes(deps));
+    .route("/", rateRoutes(deps))
+    .route("/", stopRoutes(deps));
 }
 
 export const app = createApp(productionDeps);
