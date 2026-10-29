@@ -5,15 +5,14 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
-import { spring, useShouldReduceMotion, useTempoTransition } from "@animate-ui/react/utils/motion";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CircleCheck } from "lucide-react";
-import { motion } from "motion/react";
 import { Avatar, card, failureMessage, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
 import { useMembers } from "../groups/api.js";
+import { CountUp } from "../shell/CountUp.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
@@ -41,6 +40,11 @@ export function SettlePanel({ group }: { group: Group }) {
     balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
   );
   const action = useSettlementAction(group.id);
+  // Whether I was last owed or owing: a debt that shrinks to 0 is good news, a credit that does not.
+  const owedSign = useRef(0);
+  // Whether there was anything to settle while this screen was open: only then is "all settled"
+  // news worth a ring, rather than the calm state of a group that never owed anything.
+  const sawWork = useRef(false);
   const members = useMembers(group.id);
 
   if (balances.isError) {
@@ -55,6 +59,7 @@ export function SettlePanel({ group }: { group: Group }) {
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
+  if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const pending = all.filter((s) => s.status === "pending");
   const history = all.filter((s) => s.status !== "pending");
@@ -66,6 +71,7 @@ export function SettlePanel({ group }: { group: Group }) {
         (s) => s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
       ),
   );
+  if (mine !== 0 || pending.length > 0 || unsent.length > 0) sawWork.current = true;
   const everythingSent = planned.length > 0 && unsent.length === 0;
 
   return (
@@ -75,7 +81,13 @@ export function SettlePanel({ group }: { group: Group }) {
           <h2 className="text-sm text-ink-muted">
             {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
           </h2>
-          <p className="text-4xl font-bold">{formatAmount(Math.abs(mine), currency)}</p>
+          <p className="text-4xl font-bold tabular-nums">
+            <CountUp
+              value={Math.abs(mine)}
+              format={(n) => formatAmount(n, currency)}
+              goodWhen={owedSign.current >= 0 ? "up" : "down"}
+            />
+          </p>
         </section>
 
         <BalanceChart
@@ -171,7 +183,7 @@ export function SettlePanel({ group }: { group: Group }) {
             )}
             {plan.status === "ready" &&
               (plan.plan.payments.length === 0 ? (
-                <SettledMessage celebrate={action.isSuccess} />
+                <SettledMessage celebrate={sawWork.current} />
               ) : (
                 <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
                   {[...unsent]
@@ -217,21 +229,16 @@ export function SettlePanel({ group }: { group: Group }) {
 }
 
 function SettledMessage({ celebrate }: { celebrate: boolean }) {
-  const reduceMotion = useShouldReduceMotion();
-  const pop = useTempoTransition(spring.pop);
-
   return (
     <div className="flex items-center justify-center gap-2 rounded-2xl bg-sprout-150 px-4 py-5 font-bold text-sprout-700">
-      <motion.span
-        aria-hidden="true"
-        initial={
-          celebrate ? { opacity: 0.45, transform: reduceMotion ? "scale(1)" : "scale(0.8)" } : false
-        }
-        animate={{ opacity: 1, transform: "scale(1)" }}
-        transition={pop}
-      >
-        <CircleCheck className="size-6" />
-      </motion.span>
+      <span aria-hidden="true" className="relative">
+        {celebrate && (
+          <span className="settle-ring absolute inset-0 rounded-full border-2 border-sprout-500" />
+        )}
+        <span className={`relative inline-flex ${celebrate ? "settle-pop" : ""}`}>
+          <CircleCheck className="size-6" />
+        </span>
+      </span>
       <p>{t("settle.allSettled")}</p>
     </div>
   );

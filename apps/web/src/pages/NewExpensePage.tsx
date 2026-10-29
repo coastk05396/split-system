@@ -29,7 +29,7 @@ export function NewExpensePage() {
         group={group.data}
         members={members.data}
         {...(startCurrency === undefined ? {} : { startCurrency })}
-        onSaved={() => void navigate(`/groups/${id}`)}
+        onSaved={(saved) => void navigate(`/groups/${id}`, { state: { newExpenseId: saved.id } })}
       />
     </div>
   );

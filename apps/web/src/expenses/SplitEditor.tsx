@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { ShareRing } from "./ShareRing.js";
 import { evaluateSplit, type SplitDraft, type SplitStatus } from "./split-draft.js";
 
 export interface SplitMember {
@@ -65,6 +66,8 @@ export function SplitEditor({
   const order = members.map((m) => m.id);
   const { amounts, status } = evaluateSplit(value, amountMinor, currency, order, payerIds);
   const included = new Set(value.included);
+  // Each person's share in the order of the list, for the ring: 0 for anyone not sharing.
+  const shares = members.map((m) => amounts.get(m.id) ?? 0);
   const toggle = (id: string) => {
     onChange({
       ...value,
@@ -121,6 +124,7 @@ export function SplitEditor({
         >
           <span className="font-bold">{t("split.participants")}</span>
           <span className="flex items-center gap-2 text-sm text-sprout-600">
+            <ShareRing shares={shares} />
             {included.size === members.length
               ? t("split.allPeople", { count: members.length })
               : t("split.checked", { count: included.size, total: members.length })}
@@ -134,6 +138,7 @@ export function SplitEditor({
         <div className="flex items-center justify-between">
           <span className="font-bold">{t("split.participants")}</span>
           <span className="flex items-center gap-3 text-sm">
+            <ShareRing shares={shares} />
             <span className="text-sprout-600">
               {t("split.checked", { count: included.size, total: members.length })}
             </span>

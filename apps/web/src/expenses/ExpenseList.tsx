@@ -1,5 +1,5 @@
 import { type CurrencyCode, type Expense, formatAmount, type Member } from "@split/shared";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useMembers } from "../groups/api.js";
 import { card, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { longDate } from "../i18n/format.js";
@@ -44,6 +44,8 @@ export function ExpenseList({
   settlementCurrency: CurrencyCode;
 }) {
   const expenses = useExpenses(groupId);
+  // Coming back from saving one: that row drops in and glows once.
+  const freshId = (useLocation().state as { newExpenseId?: string } | null)?.newExpenseId;
   const members = useMembers(groupId);
   const nameOf = memberNames(members.data);
   if (expenses.isError) {
@@ -68,7 +70,7 @@ export function ExpenseList({
               </h3>
               <ul className="flex flex-col gap-2">
                 {day.items.map((e) => (
-                  <li key={e.id}>
+                  <li key={e.id} className={e.id === freshId ? "row-arrive" : undefined}>
                     <ExpenseRow
                       groupId={groupId}
                       expense={e}

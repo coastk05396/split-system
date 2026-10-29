@@ -3,6 +3,7 @@ import { ArrowRight, ChevronRight, House, Plane, Plus, Search } from "lucide-rea
 import { useState } from "react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
+import { AvatarStack } from "../groups/AvatarStack.js";
 import { balanceLine } from "../groups/totals.js";
 import { card, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
@@ -91,6 +92,7 @@ function GroupRow({ group }: { group: Group }) {
           {" · "}
           {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
         </span>
+        <AvatarStack members={group.memberPreview} total={group.memberCount} />
       </span>
       <ChevronRight aria-hidden="true" className="size-5 text-ink-muted" />
     </PressableLink>

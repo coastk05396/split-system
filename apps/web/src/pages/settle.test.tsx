@@ -197,6 +197,23 @@ describe("Recording and confirming Settlements", () => {
     expect(pending.getByText("你可收")).toBeVisible();
   });
 
+  it("opens a ring around the tick when the last payment settles", async () => {
+    const { user } = await openSettle({
+      name: "台南小旅行",
+      myBalance: 100,
+      others: [{ name: "宜庭", balance: -100 }],
+    });
+
+    await user.click(
+      (await row("要付給誰", "宜庭付給你")).getByRole("button", { name: "確認收款" }),
+    );
+    const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+    await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+
+    expect(await screen.findByText("大家都結清了！")).toBeVisible();
+    expect(document.querySelector(".settle-ring")).not.toBeNull();
+  });
+
   it("shows one line per Settlement under a day heading, 5 first and 5 more each time", async () => {
     const { user } = await openSettle(owedToMe, (groups, gid) => {
       for (let i = 0; i < 7; i++) {

@@ -1,6 +1,7 @@
 import { type CurrencyCode, formatAmount, type Group } from "@split/shared";
 import { ArrowRight, Check, ChevronRight, Plane, ReceiptText, Users } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
@@ -9,6 +10,7 @@ import { localNow } from "../expenses/expense-draft.js";
 import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js";
 import { LoadError, MaintenanceTag } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { CountUp } from "../shell/CountUp.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
@@ -20,6 +22,7 @@ export function HomePage() {
   const preferred = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   const groupsQuery = useGroups();
   const groups = groupsQuery.data ?? [];
+  const intro = useIntro();
 
   return (
     <div className="flex flex-col gap-8">
@@ -34,11 +37,19 @@ export function HomePage() {
         <LoadError error={groupsQuery.error} onRetry={() => void groupsQuery.refetch()} />
       ) : (
         <>
-          <BalanceCard groups={groups} preferred={preferred} isSuccess={groupsQuery.isSuccess} />
+          <div {...rise(intro, 0)}>
+            <BalanceCard groups={groups} preferred={preferred} isSuccess={groupsQuery.isSuccess} />
+          </div>
           {groupsQuery.isSuccess && (
             <>
-              {groups.length > 0 && <ActiveGroupsSection groups={groups} />}
-              <QuickStartSection hasGroups={groups.length > 0} />
+              {groups.length > 0 && (
+                <div {...rise(intro, 1)}>
+                  <ActiveGroupsSection groups={groups} />
+                </div>
+              )}
+              <div {...rise(intro, 2)}>
+                <QuickStartSection hasGroups={groups.length > 0} />
+              </div>
             </>
           )}
         </>
@@ -46,6 +57,19 @@ export function HomePage() {
     </div>
   );
 }
+
+/** Home's sections rise one after another the first time Home is drawn in this visit. */
+let introPlayed = false;
+function useIntro(): boolean {
+  const [intro] = useState(() => !introPlayed);
+  useEffect(() => {
+    introPlayed = true;
+  }, []);
+  return intro;
+}
+
+const rise = (intro: boolean, step: number) =>
+  intro ? { className: "rise", style: { animationDelay: `${String(step * 60)}ms` } } : {};
 
 function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSuccess: boolean }) {
   const { groups, preferred, isSuccess } = props;
@@ -111,7 +135,11 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
               : { title: rateNote, "aria-describedby": "home-rate-note" })}
           >
             <span className="text-3xl font-bold tracking-tight md:text-4xl">
-              {formatAmount(converting ? total : main.amount, main.currency)}
+              <CountUp
+                value={converting ? total : main.amount}
+                format={(n) => formatAmount(n, main.currency)}
+                onDark
+              />
             </span>
             {sideBySide &&
               foreign.map((x) => (
