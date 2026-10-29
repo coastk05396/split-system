@@ -45,3 +45,12 @@ export function formatAmount(minor: number, currency: CurrencyCode): string {
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return `${sign}${symbol} ${grouped}${decimals > 0 ? `.${fraction}` : ""}`;
 }
+
+/** Minor units as plain decimal text ("12.34" or "-12.34"), without currency symbol or grouping commas. */
+export function minorToDecimal(minor: number, currency: CurrencyCode): string {
+  const { decimals } = CURRENCIES[currency];
+  if (decimals === 0) return String(minor);
+  const digits = String(Math.abs(minor)).padStart(decimals + 1, "0");
+  const sign = minor < 0 ? "-" : "";
+  return `${sign}${digits.slice(0, -decimals)}.${digits.slice(-decimals)}`;
+}

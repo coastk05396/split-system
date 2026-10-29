@@ -1,5 +1,6 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
+import { Link } from "react-router";
 import {
   CURRENCY_CODES,
   type CurrencyCode,
@@ -95,19 +96,26 @@ export function ExpenseForm({
         aria-label={t("expense.kind")}
         className="flex gap-1 rounded-2xl bg-sprout-150 p-1"
       >
-        {(["spend", "transfer"] as const).map((kind) => (
+        {(["spend", "settlement"] as const).map((kind) => (
           <Tabs.Trigger
             key={kind}
             value={kind}
             className="flex-1 rounded-xl py-2.5 text-ink-muted data-[state=active]:bg-white data-[state=active]:font-bold data-[state=active]:text-ink"
           >
-            {t(kind === "spend" ? "expense.tab.spend" : "expense.tab.transfer")}
+            {t(kind === "spend" ? "expense.tab.spend" : "expense.tab.settlement")}
           </Tabs.Trigger>
         ))}
       </Tabs.List>
-      <Tabs.Content value="transfer">
-        {/* TODO(ticket 12): link to the record-Settlement screen once the Settlements API lands. */}
-        <p className={`${card} p-5 text-ink-muted`}>{t("expense.transferStub")}</p>
+      <Tabs.Content value="settlement">
+        <div className={`${card} flex flex-col items-center gap-3 p-5 text-center`}>
+          <p className="text-ink-muted">{t("expense.settlementHint")}</p>
+          <Link
+            to={`/groups/${group.id}?tab=settle`}
+            className={`${primaryButton} inline-flex items-center gap-2 px-4 py-2`}
+          >
+            {t("expense.goToSettlement")}
+          </Link>
+        </div>
       </Tabs.Content>
       <Tabs.Content value="spend">
         <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
@@ -119,6 +127,7 @@ export function ExpenseForm({
               loading: rate.isFetching,
               unavailable: rate.isError,
               date: rate.data?.rateDate,
+              stale: rate.data?.stale === true,
             }}
             update={update}
           />
@@ -246,7 +255,7 @@ function AmountSection({
   draft: ExpenseDraft;
   evaluation: DraftEvaluation;
   settlementCurrency: CurrencyCode;
-  rate: { loading: boolean; unavailable: boolean; date: string | undefined };
+  rate: { loading: boolean; unavailable: boolean; date: string | undefined; stale?: boolean };
   update: (patch: Partial<ExpenseDraft>) => void;
 }) {
   const { amount, conversion } = evaluation;
@@ -353,7 +362,7 @@ function ConversionFields({
   draft: ExpenseDraft;
   conversion: Exclude<ConversionState, { kind: "same" }>;
   settlementCurrency: CurrencyCode;
-  rate: { loading: boolean; unavailable: boolean; date: string | undefined };
+  rate: { loading: boolean; unavailable: boolean; date: string | undefined; stale?: boolean };
   update: (patch: Partial<ExpenseDraft>) => void;
 }) {
   const rateText =
@@ -394,22 +403,31 @@ function ConversionFields({
           />
         </label>
       </div>
-      <p className="text-xs text-ink-muted">
-        {draft.conversion.source !== "reference"
-          ? t("expense.rateCustom")
-          : rate.loading
-            ? t("expense.rateLoading")
-            : rate.unavailable
-              ? errorMessage("RATE_UNAVAILABLE")
-              : conversion.kind === "ok"
-                ? t("expense.rateHint", {
-                    base: draft.currency,
-                    quote: settlementCurrency,
-                    rate: formatRate(conversion.rateScaled),
-                    date: rate.date ?? draft.date,
-                  })
-                : ""}
-      </p>
+      <div className="text-xs text-ink-muted">
+        {draft.conversion.source !== "reference" ? (
+          <p>{t("expense.rateCustom")}</p>
+        ) : rate.loading ? (
+          <p>{t("expense.rateLoading")}</p>
+        ) : rate.unavailable ? (
+          <p>{errorMessage("RATE_UNAVAILABLE")}</p>
+        ) : conversion.kind === "ok" ? (
+          <p className="flex flex-wrap items-center gap-2">
+            <span>
+              {t("expense.rateHint", {
+                base: draft.currency,
+                quote: settlementCurrency,
+                rate: formatRate(conversion.rateScaled),
+                date: rate.date ?? draft.date,
+              })}
+            </span>
+            {rate.stale && (
+              <span className="rounded-full bg-peach px-2 py-0.5 text-xs font-bold text-sprout-800">
+                {t("expense.rateStale", { date: rate.date ?? draft.date })}
+              </span>
+            )}
+          </p>
+        ) : null}
+      </div>
       {conversion.kind === "invalid" && (
         <p className="text-sm font-bold text-red-700">{t("expense.conversionInvalid")}</p>
       )}

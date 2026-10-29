@@ -1,4 +1,4 @@
-import { CURRENCIES, type CurrencyCode } from "@split/shared";
+import { type CurrencyCode, minorToDecimal } from "@split/shared";
 
 /**
  * The per-Group "匯出 CSV" (decision 26): built in the browser from data the Group page
@@ -86,7 +86,7 @@ export function groupCsv(input: GroupCsvInput): string {
   const { settlementCurrency } = input;
   const names = new Map(input.members.map((member) => [member.id, member.name]));
   const nameOf = (id: string) => names.get(id) ?? UNKNOWN_MEMBER;
-  const amount = (minor: number) => decimal(minor, settlementCurrency);
+  const amount = (minor: number) => minorToDecimal(minor, settlementCurrency);
   const lines = (list: CsvLine[]) =>
     list.map((line) => `${nameOf(line.memberId)} ${amount(line.settlementAmount)}`).join("; ");
 
@@ -100,7 +100,7 @@ export function groupCsv(input: GroupCsvInput): string {
         expense.time ?? "",
         expense.description,
         expense.category,
-        decimal(expense.originalAmount, expense.originalCurrency),
+        minorToDecimal(expense.originalAmount, expense.originalCurrency),
         expense.originalCurrency,
         rate(expense.fxRateScaled),
         amount(expense.settlementAmount),
@@ -151,14 +151,6 @@ export function groupCsvFilename(groupName: string, day: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
   return `小芽分帳-${safe}-${day}.csv`;
-}
-
-function decimal(minor: number, currency: CurrencyCode): string {
-  const { decimals } = CURRENCIES[currency];
-  if (decimals === 0) return String(minor);
-  const digits = String(Math.abs(minor)).padStart(decimals + 1, "0");
-  const sign = minor < 0 ? "-" : "";
-  return `${sign}${digits.slice(0, -decimals)}.${digits.slice(-decimals)}`;
 }
 
 function rate(scaled: number): string {

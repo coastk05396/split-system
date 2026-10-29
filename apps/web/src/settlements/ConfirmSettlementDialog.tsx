@@ -90,7 +90,9 @@ function ConfirmForm({
       <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-peach text-sprout-600">
         <HandCoins aria-hidden="true" className="size-9" />
       </span>
-      <Dialog.Title className="text-center text-xl font-bold">{t("settle.confirm.title")}</Dialog.Title>
+      <Dialog.Title className="text-center text-xl font-bold">
+        {t("settle.confirm.title")}
+      </Dialog.Title>
       <Dialog.Description className="text-center text-sm text-ink-muted">
         {t("settle.confirm.body")}
       </Dialog.Description>

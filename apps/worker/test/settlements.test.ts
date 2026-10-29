@@ -111,24 +111,30 @@ describe("Settlements", () => {
     expect((await balances(admin, group.id)).get(ids.ming)).toBe(-300);
   });
 
-  it("the confirmer can change a pending amount up to the debt; a second confirm is refused", async () => {
+  it("the confirmer can change a pending amount only down, not up; a second confirm is refused", async () => {
     const { group, admin, ming, ids } = await owingGroup();
+    // Debt is 300; ming records 150
     const pending = await record(ming, group.id, {
       payerMemberId: ids.ming,
       receiverMemberId: ids.admin,
-      amount: 300,
+      amount: 150,
     });
     const confirm = (amount: number) =>
       send(admin, "POST", `/settlements/${pending.id}/confirm`, { amount });
 
-    expect(await errorCode(await confirm(301))).toBe("SETTLEMENT_EXCEEDS_DEBT");
-    const lowered = await confirm(200);
-    expect(lowered.status).toBe(200);
-    expect((await lowered.json<Settlement>()).amount).toBe(200);
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-100);
+    // Raising above recorded amount is rejected even if within debt
+    const raised = await confirm(200);
+    expect(raised.status).toBe(400);
+    expect(JSON.stringify(await raised.json())).toContain("AMOUNT_EXCEEDS_RECORDED_SETTLEMENT");
 
-    expect(await errorCode(await confirm(100))).toBe("SETTLEMENT_NOT_PENDING");
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-100);
+    // Lowering to 100 succeeds
+    const lowered = await confirm(100);
+    expect(lowered.status).toBe(200);
+    expect((await lowered.json<Settlement>()).amount).toBe(100);
+    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-200);
+
+    expect(await errorCode(await confirm(50))).toBe("SETTLEMENT_NOT_PENDING");
+    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-200);
   });
 
   it("a second pending payment cannot be confirmed once the first cleared the debt", async () => {

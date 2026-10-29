@@ -118,6 +118,22 @@ describe("add Expense form", () => {
     });
   });
 
+  it("displays stale rate badge when the reference rate is from an earlier date", async () => {
+    const user = userEvent.setup();
+    const { api } = openForm();
+    api.rates.set("USD-TWD", {
+      rateScaled: 31_523_400,
+      rateDate: "2026-05-15",
+      stale: true,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "幣別 TWD" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "USD 美元" }));
+    await user.type(screen.getByLabelText("金額"), "10");
+
+    expect(await screen.findByText("使用 2026-05-15 的匯率")).toBeVisible();
+  });
+
   it("lets someone else pay, or several people pay parts that must add up", async () => {
     const user = userEvent.setup();
     const { api, id } = openForm();

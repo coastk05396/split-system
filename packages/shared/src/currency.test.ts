@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAmount, isValidExpenseAmount, parseAmount } from "./currency.js";
+import { formatAmount, isValidExpenseAmount, minorToDecimal, parseAmount } from "./currency.js";
 
 describe("parseAmount", () => {
   it("reads TWD as whole dollars", () => {
@@ -50,5 +50,19 @@ describe("isValidExpenseAmount", () => {
     for (const n of [0, -1, 1.5, 100_000_000, Number.NaN]) {
       expect(isValidExpenseAmount(n)).toBe(false);
     }
+  });
+});
+
+describe("minorToDecimal", () => {
+  it("formats TWD as integer string", () => {
+    expect(minorToDecimal(2160, "TWD")).toBe("2160");
+    expect(minorToDecimal(-50, "TWD")).toBe("-50");
+  });
+
+  it("formats USD cents as decimal string with sign", () => {
+    expect(minorToDecimal(1234, "USD")).toBe("12.34");
+    expect(minorToDecimal(5, "USD")).toBe("0.05");
+    expect(minorToDecimal(-1250, "USD")).toBe("-12.50");
+    expect(minorToDecimal(0, "USD")).toBe("0.00");
   });
 });

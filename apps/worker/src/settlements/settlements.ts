@@ -9,7 +9,7 @@ import { runBatch } from "../db/batch.js";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
 import { members, settlements } from "../db/schema.js";
-import { ApiError } from "../errors.js";
+import { ApiError, invalid } from "../errors.js";
 import { type MemberRow, requireMember } from "../groups/membership.js";
 import { newSortableId } from "../ids.js";
 
@@ -38,10 +38,6 @@ function toSettlement(row: SettlementRow): Settlement {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-function invalid(path: string, message: string): ApiError {
-  return new ApiError("VALIDATION_FAILED", { issues: [{ path: [path], message }] });
 }
 
 /** The most a payer can still pay this receiver: what neither Balance can go past zero for. */
@@ -200,8 +196,8 @@ async function settlementFor(db: Db, settlementId: string, userId: string) {
 }
 
 /**
- * The receiver (or an Admin) confirms a pending Settlement, optionally at a lower or higher
- * amount up to what the payer still owes them, and Balances move in the same batch.
+ * The receiver (or an Admin) confirms a pending Settlement, optionally at a lower amount
+ * up to the recorded amount (decision 12), and Balances move in the same batch.
  */
 export async function confirmSettlement(
   db: Db,
@@ -215,6 +211,10 @@ export async function confirmSettlement(
   const found = await parties(db, row.groupId, row.payerMemberId, row.receiverMemberId);
   if (found === null) throw new ApiError("NOT_FOUND");
   if (!canConfirm(me, found.payer, found.receiver)) throw new ApiError("FORBIDDEN");
+
+  if (amount !== undefined && (amount <= 0 || amount > row.amount)) {
+    throw invalid("amount", "AMOUNT_EXCEEDS_RECORDED_SETTLEMENT");
+  }
 
   const paid = amount ?? row.amount;
   const { payerMemberId: payerId, receiverMemberId: receiverId } = row;

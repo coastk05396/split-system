@@ -5,7 +5,14 @@ import type { Settlement } from "@split/shared";
 export interface SettlementGroup {
   id: string;
   settlementCurrency: string;
-  members: { id: string; name: string; nickname: string | null; status: string; role: string; balance: number }[];
+  members: {
+    id: string;
+    name: string;
+    nickname: string | null;
+    status: string;
+    role: string;
+    balance: number;
+  }[];
 }
 
 type Caller = SettlementGroup["members"][number];

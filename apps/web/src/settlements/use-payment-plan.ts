@@ -3,9 +3,7 @@ import { useEffect, useState } from "react";
 import { startPlanWorker } from "./plan-worker.js";
 
 export type PlanState =
-  | { status: "computing" }
-  | { status: "ready"; plan: PaymentPlan }
-  | { status: "failed" };
+  { status: "computing" } | { status: "ready"; plan: PaymentPlan } | { status: "failed" };
 
 /**
  * The Payment plan for these Balances, computed in a Web Worker (SPEC §3.4). Every device gets

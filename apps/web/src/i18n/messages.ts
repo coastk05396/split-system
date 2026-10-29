@@ -258,7 +258,12 @@ const zhTW = {
   "expense.edit": "編輯支出",
   "expense.kind": "記錄類型",
   "expense.tab.spend": "花費",
+  "expense.tab.settlement": "轉帳",
   "expense.tab.transfer": "轉帳",
+  "expense.settlementHint":
+    "轉帳會記成一筆結算：你付給別人的要等對方確認，別人付給你的會直接確認。",
+  "expense.goToSettlement": "前往結算",
+  "expense.hasSettlementsWarning": "此群組已有結算紀錄，修改會改變債務",
   "expense.transferStub":
     "轉帳會記成一筆結算：你付給別人的要等對方確認，別人付給你的會直接確認。這個功能即將推出。",
   "expense.currency": "幣別",
@@ -269,6 +274,7 @@ const zhTW = {
   "expense.calc.DIVISION_BY_ZERO": "不能除以 0。",
   "expense.rate": "匯率",
   "expense.rateHint": "參考匯率 1 {base} ≈ {rate} {quote}（{date}）",
+  "expense.rateStale": "使用 {date} 的匯率",
   "expense.rateLoading": "正在查詢匯率…",
   "expense.rateCustom": "已自訂匯率",
   "expense.converted": "換算金額（{currency}）",

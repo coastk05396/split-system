@@ -232,9 +232,7 @@ function PaymentLine({
           <span className="text-xs font-bold text-sprout-700">{t(badge)}</span>
         )}
       </span>
-      <span
-        className={`font-bold ${struck ? "text-ink-muted line-through" : "text-sprout-600"}`}
-      >
+      <span className={`font-bold ${struck ? "text-ink-muted line-through" : "text-sprout-600"}`}>
         {formatAmount(amount, currency)}
       </span>
     </>
@@ -309,9 +307,7 @@ function PlannedRow({
             max: maxPayable(payer, receiver),
           }}
           submit={(amount) =>
-            record
-              .mutateAsync({ input: input(amount), idempotencyKey: key.current })
-              .then(saved)
+            record.mutateAsync({ input: input(amount), idempotencyKey: key.current }).then(saved)
           }
         />
       )}

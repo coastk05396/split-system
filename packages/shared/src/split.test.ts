@@ -70,6 +70,19 @@ describe("splitShares", () => {
       ["b"],
     );
     expect(leftover.ok && amounts(leftover.value)).toEqual([3, 7]);
+
+    // 10 * 2/4 = 5.0 (exact for payer a), 10 * 1/4 = 2.5 (remainder for b and c).
+    // Payer a has exact share 5 so receives no leftover; first remainder goes to b.
+    const exactPayer = splitShares(
+      10,
+      [
+        { memberId: "a", shares: 2 },
+        { memberId: "b", shares: 1 },
+        { memberId: "c", shares: 1 },
+      ],
+      ["a"],
+    );
+    expect(exactPayer.ok && amounts(exactPayer.value)).toEqual([5, 3, 2]);
   });
 
   it("accepts whole shares from 1 to 99 only", () => {

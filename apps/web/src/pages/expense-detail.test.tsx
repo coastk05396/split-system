@@ -115,6 +115,44 @@ describe("Expense list and detail", () => {
     expect(patch?.headers.get("If-Match")).toBe(String(api.groups.now));
   });
 
+  it("warns about altering debts when editing an Expense in a Group with Settlements", async () => {
+    let id = "";
+    let eid = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, {
+          name: "室友",
+          settlementCurrency: "TWD",
+          role: "admin",
+          others: [{ name: "宜庭", role: "admin" }],
+        });
+        const ids = groups.members(id).map((m) => m.id);
+        eid = groups.addExpense(
+          id,
+          {
+            description: "晚餐",
+            category: "餐飲",
+            originalAmount: 1000,
+            originalCurrency: "TWD",
+            fxRateScaled: 1_000_000,
+            fxDate: "2026-05-17",
+            isCustomRate: false,
+            settlementAmount: 1000,
+            payers: [{ memberId: ids[0], amountMinor: 1000 }],
+            split: { method: "equal", participants: ids },
+            expenseDate: "2026-05-17",
+          },
+          0,
+        );
+        groups.addSettlement(id, { payer: 1, receiver: 0, amount: 500 });
+      },
+      pathFor: () => `/groups/${id}/expenses/${eid}/edit`,
+    });
+
+    expect(await screen.findByText("此群組已有結算紀錄，修改會改變債務")).toBeVisible();
+  });
+
   it("deletes the Expense after confirming", async () => {
     const user = userEvent.setup();
     const { api, id } = withExpense({ path: (id, eid) => `/groups/${id}/expenses/${eid}` });

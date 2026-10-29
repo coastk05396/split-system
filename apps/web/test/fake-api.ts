@@ -26,7 +26,7 @@ export interface FakeApi {
   /** Every request seen, with its headers and body text. */
   requests: { route: string; headers: Headers; body: string | null }[];
   /** Reference rates by "BASE-QUOTE" (scaled by 1,000,000); a missing pair answers 503 RATE_UNAVAILABLE. */
-  rates: Map<string, { rateScaled: number; rateDate?: string }>;
+  rates: Map<string, { rateScaled: number; rateDate?: string; stale?: boolean }>;
 }
 
 export function makeUser(displayName: string, provider: "google" | "line" = "google"): Me {
@@ -174,7 +174,13 @@ export function createFakeApi(): FakeApi {
         const rate = api.rates.get(`${base}-${quote}`);
         if (rate === undefined) return error("RATE_UNAVAILABLE", 503);
         const rateDate = rate.rateDate ?? url.searchParams.get("date") ?? "";
-        return json({ base, quote, rateScaled: rate.rateScaled, rateDate, stale: false });
+        return json({
+          base,
+          quote,
+          rateScaled: rate.rateScaled,
+          rateDate,
+          stale: rate.stale ?? false,
+        });
       }
     }
 
@@ -204,6 +210,6 @@ export function createFakeApi(): FakeApi {
         query: url.searchParams,
       }) ?? error("NOT_FOUND", 404)
     );
-  };
+  }
   return api;
 }

@@ -97,12 +97,16 @@ describe("Recording and confirming Settlements", () => {
       others: [{ name: "宜庭", balance: 200 }],
     });
 
-    await user.click((await row("還款計畫", "小宇付給宜庭")).getByRole("button", { name: "我已付款" }));
+    await user.click(
+      (await row("還款計畫", "小宇付給宜庭")).getByRole("button", { name: "我已付款" }),
+    );
 
     const pending = await row("待確認", "小宇付給宜庭");
     expect(pending.getByText("NT$ 200")).toBeVisible();
     expect((await row("還款計畫", "小宇付給宜庭")).getByText("待確認")).toBeVisible();
-    expect((await row("還款計畫", "小宇付給宜庭")).queryByRole("button", { name: "我已付款" })).toBeNull();
+    expect(
+      (await row("還款計畫", "小宇付給宜庭")).queryByRole("button", { name: "我已付款" }),
+    ).toBeNull();
     expect(api.groups.members(id())[0]?.balance).toBe(-200);
     const post = api.requests.find((r) => r.route === `POST /api/v1/groups/${id()}/settlements`);
     expect(post?.headers.get("Idempotency-Key")).toBeTruthy();
@@ -115,7 +119,9 @@ describe("Recording and confirming Settlements", () => {
   it("lets the receiver confirm a partial payment; the rest stays a debt", async () => {
     const { user, api, id } = await openSettle(owedToMe);
 
-    await user.click((await row("還款計畫", "阿哲付給小宇")).getByRole("button", { name: "確認收款" }));
+    await user.click(
+      (await row("還款計畫", "阿哲付給小宇")).getByRole("button", { name: "確認收款" }),
+    );
     const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
     const amount = dialog.getByLabelText("實收金額（TWD）");
     expect(amount).toHaveValue("200");
@@ -129,7 +135,10 @@ describe("Recording and confirming Settlements", () => {
     expect(await (await row("結算紀錄", "阿哲付給小宇")).findByText("已確認")).toBeVisible();
     expect(await (await row("還款計畫", "阿哲付給小宇")).findByText("NT$ 50")).toBeVisible();
     expect(await (await row("結算紀錄", "阿哲付給小宇")).findByText("NT$ 150")).toBeVisible();
-    expect(api.groups.settlements.list(id())[0]).toMatchObject({ amount: 150, status: "confirmed" });
+    expect(api.groups.settlements.list(id())[0]).toMatchObject({
+      amount: 150,
+      status: "confirmed",
+    });
   });
 
   it("confirms a payer's pending Settlement for the receiver", async () => {
@@ -169,7 +178,9 @@ describe("Recording and confirming Settlements", () => {
       ],
     });
 
-    await user.click((await row("還款計畫", "宜庭付給阿哲")).getByRole("button", { name: "確認收款" }));
+    await user.click(
+      (await row("還款計畫", "宜庭付給阿哲")).getByRole("button", { name: "確認收款" }),
+    );
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", { name: "確認已結清" }),
     );

@@ -523,9 +523,7 @@ export function createFakeGroups(): FakeGroups {
       const isAdmin = me.role === "admin";
 
       const reqObj =
-        request instanceof Headers
-          ? { headers: request, query: new URLSearchParams() }
-          : request;
+        request instanceof Headers ? { headers: request, query: new URLSearchParams() } : request;
       switch (route) {
         case "GET groups/:":
           return json(toGroup(g, me));
@@ -590,7 +588,8 @@ export function createFakeGroups(): FakeGroups {
           const before = g.stops.length;
           g.stops = g.stops.filter((x) => x.id !== parts[3]);
           if (g.stops.length === before) return error("NOT_FOUND", 404);
-          for (const e of fake.expenses.list(g.id)) if (e.stopId === parts[3]) (e as { stopId: string | null }).stopId = null;
+          for (const e of fake.expenses.list(g.id))
+            if (e.stopId === parts[3]) (e as { stopId: string | null }).stopId = null;
           for (const e of g.expenses) if (e.stopId === parts[3]) e.stopId = null;
           return new Response(null, { status: 204 });
         }

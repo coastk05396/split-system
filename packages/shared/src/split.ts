@@ -25,8 +25,10 @@ export const MAX_SHARES = 99;
 
 /**
  * Divides `total` in proportion to `weights` with the deterministic leftover rule:
- * every line gets floor(total * weight / sum), then leftover units go one each, first to
- * lines whose member is in `firstInLine` (payers), then to the rest, both in input order.
+ * every line gets floor(total * weight / sum), then leftover units go one each to lines
+ * that produced a fractional remainder (`hasRemainder`), prioritizing payers in `firstInLine`,
+ * then the rest in input order. Lines whose share is an exact integer are never rounded up,
+ * keeping amounts within 1 unit of their exact mathematical weight.
  * Weights must be non-negative integers with a positive sum. BigInt keeps the products exact.
  */
 export function allocateWithLeftover(

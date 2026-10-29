@@ -12,8 +12,16 @@ import { and, asc, desc, eq, inArray, lt, type SQL, type SQLWrapper, sql } from 
 import { runBatch } from "../db/batch.js";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
-import { expensePayers, expenses, expenseSplits, groups, members, stops } from "../db/schema.js";
-import { ApiError } from "../errors.js";
+import {
+  expensePayers,
+  expenses,
+  expenseSplits,
+  fxRates,
+  groups,
+  members,
+  stops,
+} from "../db/schema.js";
+import { ApiError, invalid } from "../errors.js";
 import type { MemberRow } from "../groups/membership.js";
 import { listMembers } from "../groups/members.js";
 import { newSortableId } from "../ids.js";
@@ -21,11 +29,6 @@ import { newSortableId } from "../ids.js";
 type ExpenseRow = typeof expenses.$inferSelect;
 type PayerRow = typeof expensePayers.$inferSelect;
 type SplitRow = typeof expenseSplits.$inferSelect;
-
-/** A rule the shared schema cannot check without the Group: 400 with the code as the issue. */
-function invalid(path: string, message: string): ApiError {
-  return new ApiError("VALIDATION_FAILED", { issues: [{ path: [path], message }] });
-}
 
 function toExpense(row: ExpenseRow, payers: PayerRow[], splits: SplitRow[]): Expense {
   return {
@@ -167,6 +170,23 @@ async function prepare(db: Db, me: MemberRow, input: ExpenseInput): Promise<Prep
       .from(stops)
       .where(and(eq(stops.groupId, me.groupId), eq(stops.id, stopId)));
     if (stop === undefined) throw invalid("stopId", "STOP_NOT_IN_GROUP");
+  }
+
+  if (!input.isCustomRate && input.originalCurrency !== group.currency) {
+    const [rateRow] = await db
+      .select({ rateScaled: fxRates.rateScaled })
+      .from(fxRates)
+      .where(
+        and(
+          eq(fxRates.baseCurrency, input.originalCurrency),
+          eq(fxRates.quoteCurrency, group.currency),
+          eq(fxRates.rateDate, input.fxDate),
+        ),
+      )
+      .limit(1);
+    if (rateRow !== undefined && rateRow.rateScaled !== input.fxRateScaled) {
+      throw invalid("fxRateScaled", "RATE_MISMATCH_WITH_REFERENCE");
+    }
   }
 
   const allocation = allocateExpense(

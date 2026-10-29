@@ -9,7 +9,7 @@ import {
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { groups, stops } from "../db/schema.js";
-import { ApiError } from "../errors.js";
+import { ApiError, invalid } from "../errors.js";
 import type { MemberRow } from "../groups/membership.js";
 import { assertIfMatch } from "../request-guards.js";
 
@@ -28,10 +28,6 @@ function toStop(row: StopRow): Stop {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-function invalid(path: string, message: string): ApiError {
-  return new ApiError("VALIDATION_FAILED", { issues: [{ path: [path], message }] });
 }
 
 async function loadTrip(db: Db, groupId: string) {

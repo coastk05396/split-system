@@ -74,3 +74,8 @@ export class ApiError extends Error {
       : { error: { code: this.code, details: this.details } };
   }
 }
+
+/** Standard validation error format returned for individual field violations. */
+export function invalid(path: string, message: string): ApiError {
+  return new ApiError("VALIDATION_FAILED", { issues: [{ path: [path], message }] });
+}

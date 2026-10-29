@@ -1,5 +1,8 @@
 import type { Expense, ExpensePage } from "@split/shared";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { createDb } from "../src/db/client.js";
+import { fxRates } from "../src/db/schema.js";
 import { clock } from "./auth-harness.js";
 import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { balances, createExpense, newKey, postExpense, twdExpense } from "./expenses-harness.js";
@@ -147,6 +150,27 @@ describe("Expenses and Balances", () => {
     expect(mismatch.status).toBe(400);
     expect(JSON.stringify(await mismatch.json())).toContain("SETTLEMENT_AMOUNT_MISMATCH");
     expect(await balances(admin, group.id)).toEqual(new Map([[a, 0]]));
+
+    // When an official reference rate exists in D1, client cannot forge a non-custom rate
+    await createDb(env.DB).insert(fxRates).values({
+      rateDate: "2026-07-01",
+      baseCurrency: "USD",
+      quoteCurrency: "TWD",
+      rateScaled: 31_523_400,
+      publishedDate: null,
+      fetchedAt: 1_700_000_000_000,
+    });
+
+    const forged = await postExpense(admin, group.id, {
+      ...twdExpense(a, [a], 1000),
+      originalCurrency: "USD",
+      fxRateScaled: 30_000_000,
+      fxDate: "2026-07-01",
+      settlementAmount: 300,
+      isCustomRate: false,
+    });
+    expect(forged.status).toBe(400);
+    expect(JSON.stringify(await forged.json())).toContain("RATE_MISMATCH_WITH_REFERENCE");
   });
 
   it("links an Expense only to a Stop of the same Group", async () => {

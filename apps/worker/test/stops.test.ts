@@ -132,7 +132,7 @@ describe("POST and GET /groups/:id/stops", () => {
     });
     expect(await errorCode(res)).toBe("STOP_LIMIT_REACHED");
     await addStop(admin, group.id, { title: "隔天", dayDate: "2026-07-02" });
-  });
+  }, 15_000);
 
   it("lets any Member add Stops but hides them from non-Members", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");

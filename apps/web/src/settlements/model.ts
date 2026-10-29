@@ -8,12 +8,16 @@ type Me = Group["me"];
 /** The receiver confirms; an Admin may for anyone except their own payment, unless the receiver is a Placeholder. */
 export function canConfirm(me: Me, payer: BalanceRow, receiver: BalanceRow): boolean {
   if (me.memberId === receiver.memberId) return true;
-  return me.role === "admin" && (me.memberId !== payer.memberId || receiver.status === "placeholder");
+  return (
+    me.role === "admin" && (me.memberId !== payer.memberId || receiver.status === "placeholder")
+  );
 }
 
 /** The payer, whoever recorded it, or an Admin withdraws a pending Settlement. */
 export function canCancel(me: Me, s: Settlement): boolean {
-  return me.memberId === s.payerMemberId || me.memberId === s.createdByMemberId || me.role === "admin";
+  return (
+    me.memberId === s.payerMemberId || me.memberId === s.createdByMemberId || me.role === "admin"
+  );
 }
 
 /** Whoever confirmed it, or an Admin, undoes a confirmed Settlement. */

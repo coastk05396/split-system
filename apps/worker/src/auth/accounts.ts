@@ -154,9 +154,9 @@ export async function linkIdentity(
   identity: VerifiedIdentity,
   now: number,
 ): Promise<void> {
-  const owner = await findIdentity(db, identity.provider, identity.sub);
-  if (owner !== undefined) {
-    if (owner.userId === userId) return;
+  const existing = await findIdentity(db, identity.provider, identity.sub);
+  if (existing !== undefined) {
+    if (existing.userId === userId) return;
     throw new ApiError("IDENTITY_LINKED_ELSEWHERE");
   }
   const [sameProvider] = await db
