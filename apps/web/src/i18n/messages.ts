@@ -220,10 +220,12 @@ const errorMessages: Record<ErrorCode, string> = {
   ALREADY_MEMBER: "你已經是這個群組的成員了。",
   TRIP_MODULE_OFF: "這個群組沒有開啟旅行模式。",
   STOP_LIMIT_REACHED: "這一天最多只能排 50 站。",
+  EXPENSE_LIMIT_REACHED: "這個群組最多只能記 2,000 筆支出。",
   INVITE_EXPIRED: "這個邀請連結已經過期了。",
   EXPENSE_AMOUNT_INVALID: "金額需介於 1 到 99,999,999 之間。",
   RATE_LIMITED: "操作太頻繁了，請稍後再試。",
   INTERNAL: "小芽出了點狀況，請稍後再試。",
+  RATE_UNAVAILABLE: "暫時查不到匯率，請自行輸入匯率。",
 };
 
 /** The message for an API error code. */

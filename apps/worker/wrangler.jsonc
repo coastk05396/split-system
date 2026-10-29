@@ -34,5 +34,7 @@
     "GOOGLE_CLIENT_ID": "local-google-client-id",
     "LINE_LOGIN_CHANNEL_ID": "local-line-channel-id",
   },
+  // Daily reference Exchange rates, after Frankfurter publishes the ECB rates (~16:00 CET).
+  "triggers": { "crons": ["30 16 * * *"] },
   "observability": { "enabled": true },
 }

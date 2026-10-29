@@ -25,12 +25,15 @@ export const ERROR_STATUS = {
   PLACEHOLDER_NAME_TAKEN: 409,
   PLACEHOLDER_CLAIMED: 409,
   ALREADY_MEMBER: 409,
+  EXPENSE_LIMIT_REACHED: 409,
   TRIP_MODULE_OFF: 409,
   STOP_LIMIT_REACHED: 409,
   INVITE_EXPIRED: 422,
   EXPENSE_AMOUNT_INVALID: 422,
   RATE_LIMITED: 429,
   INTERNAL: 500,
+  /** No Exchange rate source answered and none is cached: the user types a custom rate. */
+  RATE_UNAVAILABLE: 503,
 } as const satisfies Record<string, ContentfulStatusCode>;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;
