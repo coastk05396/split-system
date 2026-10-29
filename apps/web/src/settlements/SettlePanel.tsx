@@ -5,8 +5,10 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
+import { spring, useShouldReduceMotion, useTempoTransition } from "@animate-ui/react/utils/motion";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight, ChevronDown, CircleCheck } from "lucide-react";
+import { motion } from "motion/react";
 import { Avatar, card, failureMessage, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
@@ -168,7 +170,7 @@ export function SettlePanel({ group }: { group: Group }) {
             )}
             {plan.status === "ready" &&
               (plan.plan.payments.length === 0 ? (
-                <p className="py-4 text-center text-ink-muted">{t("settle.allSettled")}</p>
+                <SettledMessage celebrate={action.isSuccess} />
               ) : (
                 <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
                   {[...unsent]
@@ -210,6 +212,27 @@ export function SettlePanel({ group }: { group: Group }) {
         )}
       </div>
     </PictureContext>
+  );
+}
+
+function SettledMessage({ celebrate }: { celebrate: boolean }) {
+  const reduceMotion = useShouldReduceMotion();
+  const pop = useTempoTransition(spring.pop);
+
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-2xl bg-sprout-150 px-4 py-5 font-bold text-sprout-700">
+      <motion.span
+        aria-hidden="true"
+        initial={
+          celebrate ? { opacity: 0.45, transform: reduceMotion ? "scale(1)" : "scale(0.8)" } : false
+        }
+        animate={{ opacity: 1, transform: "scale(1)" }}
+        transition={pop}
+      >
+        <CircleCheck className="size-6" />
+      </motion.span>
+      <p>{t("settle.allSettled")}</p>
+    </div>
   );
 }
 

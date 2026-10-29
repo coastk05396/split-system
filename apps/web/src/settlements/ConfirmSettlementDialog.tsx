@@ -32,24 +32,30 @@ export function ConfirmSettlementDialog({
   submit: (amount: number) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className="rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white">
+    <Dialog.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setFormKey((key) => key + 1);
+        setOpen(next);
+      }}
+    >
+      <Dialog.Trigger className="rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-sprout-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600">
         {trigger}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-20 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
-          {open && (
-            <ConfirmForm
-              target={target}
-              currency={currency}
-              submit={submit}
-              onDone={() => {
-                setOpen(false);
-              }}
-            />
-          )}
+        <Dialog.Overlay className="settlement-dialog-overlay fixed inset-0 z-20 bg-ink/40" />
+        <Dialog.Content className="settlement-dialog-content fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl bg-white p-6 text-ink">
+          <ConfirmForm
+            key={formKey}
+            target={target}
+            currency={currency}
+            submit={submit}
+            onDone={() => {
+              setOpen(false);
+            }}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

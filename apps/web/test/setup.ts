@@ -6,6 +6,21 @@ import { setLocale } from "../src/i18n/messages.js";
 // Whole-app renders over lazy routes are slow on a busy machine; wait longer than 1 s.
 configure({ asyncUtilTimeout: 5000 });
 
+// Animate UI reads the OS motion preference; jsdom does not implement matchMedia.
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: vi.fn().mockImplementation((media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
 afterEach(() => {
   cleanup();
   // A test that switches to English must not leave the next one in it.
