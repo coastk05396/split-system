@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { createApp } from "../src/app.js";
 import type { Bindings } from "../src/env.js";
 import { ApiError } from "../src/errors.js";
+import { silentReplyClient } from "../src/line/reply-client.js";
 import type {
   IdentityVerifier,
   Provider,
@@ -24,7 +25,11 @@ export const fakeVerifier: IdentityVerifier = {
 
 export const clock = { now: 1_750_000_000_000 };
 
-export const testApp = createApp({ verifier: () => fakeVerifier, now: () => clock.now });
+export const testApp = createApp({
+  verifier: () => fakeVerifier,
+  now: () => clock.now,
+  lineReplyClient: () => silentReplyClient,
+});
 
 let counter = 0;
 /** A provider `sub` no other test uses: storage is shared across tests in a file. */
