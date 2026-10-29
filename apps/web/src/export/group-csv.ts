@@ -141,7 +141,7 @@ export function groupCsv(input: GroupCsvInput): string {
   const body = [HEADER, ...dated.map((row) => row.cells)]
     .map((cells) => cells.map(cell).join(","))
     .join("\r\n");
-  return `﻿${body}\r\n`;
+  return `\uFEFF${body}\r\n`;
 }
 
 /** "小芽分帳-<Group name>-<day>.csv" with characters file systems reject replaced. */

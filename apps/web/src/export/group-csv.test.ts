@@ -8,7 +8,7 @@ const members = [
 ];
 
 function rows(csv: string): string[] {
-  return csv.replace(/^﻿/, "").split("\r\n");
+  return csv.replace(/^\uFEFF/, "").split("\r\n");
 }
 
 const header = "類型,日期,時間,說明,類別,原幣金額,原幣幣別,匯率,結算金額,結算幣別,付款人,分攤,狀態";
@@ -17,7 +17,7 @@ describe("groupCsv", () => {
   it("writes a UTF-8 BOM, a zh-TW header and CRLF lines so Excel opens it", () => {
     const csv = groupCsv({ settlementCurrency: "TWD", members, expenses: [], settlements: [] });
 
-    expect(csv.startsWith("﻿")).toBe(true);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
     expect(rows(csv)).toEqual([header, ""]);
   });
 
