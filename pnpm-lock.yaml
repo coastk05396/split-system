@@ -127,6 +127,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20261028.1
         version: 5.20261028.1
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
