@@ -7,6 +7,7 @@ import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, primaryButton, ScreenHeader, secondaryButton } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SettlePanel } from "../settlements/SettlePanel.js";
 import { TripPanel } from "../trip/TripPanel.js";
 
 /**
@@ -28,7 +29,7 @@ function GroupDetail({ group }: { group: Group }) {
     ...(group.isTrip ? [{ value: "trip", label: "group.tab.trip" } as const] : []),
     { value: "settle", label: "group.tab.settle" },
   ];
-  // `?tab=trip` opens a tab directly, as when returning from a Stop.
+  // `?tab=trip` or `?tab=settle` opens a tab directly
   const asked = useSearchParams()[0].get("tab") ?? "";
   return (
     <div className="flex flex-col gap-6">
@@ -94,6 +95,13 @@ function GroupDetail({ group }: { group: Group }) {
             return (
               <Tabs.Content key={tab.value} value={tab.value} className="py-6">
                 <TripPanel group={group} />
+              </Tabs.Content>
+            );
+          }
+          if (tab.value === "settle") {
+            return (
+              <Tabs.Content key={tab.value} value={tab.value} className="py-6 text-ink-muted">
+                <SettlePanel group={group} />
               </Tabs.Content>
             );
           }
