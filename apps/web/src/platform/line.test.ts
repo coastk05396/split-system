@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLineSignIn, LineShareUnavailableError } from "./line.js";
 
 const liff = vi.hoisted(() => ({
@@ -13,6 +13,11 @@ const liff = vi.hoisted(() => ({
   ),
   isInClient: vi.fn(() => true),
   closeWindow: vi.fn(),
+  sendMessages: vi.fn((): Promise<void> => Promise.resolve()),
+  getContext: vi.fn((): { type: string } | null => ({ type: "group" })),
+  permission: {
+    query: vi.fn((): Promise<{ state: string }> => Promise.resolve({ state: "granted" })),
+  },
 }));
 
 vi.mock("@line/liff", () => ({ default: liff }));
@@ -85,4 +90,69 @@ it("stays in the app when recipient selection is canceled", async () => {
   liff.shareTargetPicker.mockResolvedValueOnce(undefined);
   await expect(createLineSignIn("liff-id").share("Join us")).resolves.toBe(false);
   expect(liff.closeWindow).not.toHaveBeenCalled();
+});
+
+describe("posting into the current LINE chat", () => {
+  const inLineApp = () => {
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 Line/14.0",
+    });
+  };
+
+  beforeEach(() => {
+    liff.getContext.mockReset();
+    liff.getContext.mockReturnValue({ type: "group" });
+    liff.permission.query.mockReset();
+    liff.permission.query.mockResolvedValue({ state: "granted" });
+  });
+  // jsdom's userAgent is a getter on the prototype: drop the override we put on the instance.
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "userAgent");
+  });
+
+  it.each(["utou", "group", "room"])(
+    "is offered in a %s chat when the scope is there",
+    async (type) => {
+      inLineApp();
+      liff.getContext.mockReturnValue({ type });
+      await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(true);
+    },
+  );
+
+  it("is hidden when the app was not opened from a chat", async () => {
+    inLineApp();
+    liff.getContext.mockReturnValue({ type: "none" });
+    await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
+  });
+
+  it("is hidden when the LIFF app lacks the chat_message.write scope", async () => {
+    inLineApp();
+    liff.permission.query.mockResolvedValue({ state: "unavailable" });
+    await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
+  });
+
+  it("is hidden outside the LINE app without asking LIFF anything", async () => {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Chrome/120" });
+    await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
+    expect(liff.permission.query).not.toHaveBeenCalled();
+  });
+
+  it("is hidden when LIFF cannot say, rather than failing the form", async () => {
+    inLineApp();
+    liff.permission.query.mockRejectedValue(new Error("no access token"));
+    await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
+  });
+
+  it("sends the messages with sendMessages", async () => {
+    const message = { type: "text" as const, text: "hi" };
+    await createLineSignIn("liff-id").sendToChat([message]);
+    expect(liff.sendMessages).toHaveBeenCalledWith([message]);
+  });
+
+  it("shares a Flex card through the picker like a text", async () => {
+    const message = { type: "text" as const, text: "card" };
+    await expect(createLineSignIn("liff-id").shareMessages([message])).resolves.toBe(true);
+    expect(liff.shareTargetPicker).toHaveBeenCalledWith([message]);
+  });
 });

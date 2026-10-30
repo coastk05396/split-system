@@ -1,9 +1,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type Expense, formatAmount, formatRate, type Group } from "@split/shared";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Share2, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
 import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
+import { buildExpenseCard } from "../expenses/expense-card.js";
+import { ExpenseShareDialog } from "../expenses/ExpenseShareDialog.js";
 import { dateHeading, memberNames, memberPictures } from "../expenses/ExpenseList.js";
 import { useGroup, useMembers } from "../groups/api.js";
 import {
@@ -52,6 +55,7 @@ function Detail({
   pictureOf: (id: string) => string | null;
 }) {
   const canChange = expense.creatorMemberId === group.me.memberId || group.me.role === "admin";
+  const [sharing, setSharing] = useState(false);
   const settlement = group.settlementCurrency;
   const foreign = expense.originalCurrency !== settlement;
   return (
@@ -60,15 +64,27 @@ function Detail({
         title={t("expense.detail")}
         back={`/groups/${group.id}`}
         action={
-          canChange ? (
-            <Link
-              to={`/groups/${group.id}/expenses/${expense.id}/edit`}
-              aria-label={t("expense.editAction")}
-              className="press-icon rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
+          <span className="flex items-center">
+            <button
+              type="button"
+              aria-label={t("expenseShare.action")}
+              onClick={() => {
+                setSharing(true);
+              }}
+              className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-600 hover:bg-sprout-150"
             >
-              <Pencil aria-hidden="true" className="size-6" />
-            </Link>
-          ) : undefined
+              <Share2 aria-hidden="true" className="size-6" />
+            </button>
+            {canChange && (
+              <Link
+                to={`/groups/${group.id}/expenses/${expense.id}/edit`}
+                aria-label={t("expense.editAction")}
+                className="press-icon rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
+              >
+                <Pencil aria-hidden="true" className="size-6" />
+              </Link>
+            )}
+          </span>
         }
       />
       <section className="surface-card overflow-hidden rounded-3xl border border-sprout-200 bg-white">
@@ -165,6 +181,11 @@ function Detail({
         </ul>
       </section>
       {canChange && <DeleteExpense group={group} expense={expense} />}
+      <ExpenseShareDialog
+        card={buildExpenseCard(expense, group, nameOf)}
+        open={sharing}
+        onOpenChange={setSharing}
+      />
     </div>
   );
 }

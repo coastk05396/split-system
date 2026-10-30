@@ -11,8 +11,9 @@ import {
   type Member,
 } from "@split/shared";
 import { ArrowRight, Check, ChevronDown, Users } from "lucide-react";
-import { type SubmitEvent, useRef, useState } from "react";
+import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
+import { useDeps } from "../app/AppProviders.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
@@ -53,8 +54,10 @@ export function ExpenseForm({
   expense?: Expense;
   /** The currency a new Expense starts in; the Settlement currency when absent. */
   startCurrency?: CurrencyCode;
-  onSaved: (expense: Expense) => void;
+  /** `sendToChat` says whether to post it into the LINE chat the app was opened from. */
+  onSaved: (expense: Expense, options: { sendToChat: boolean }) => void | Promise<void>;
 }) {
+  const { line } = useDeps();
   const selectable: SplitMember[] = members
     .filter((m) => m.status !== "former")
     .map((m) => ({
@@ -75,6 +78,21 @@ export function ExpenseForm({
         })
       : expenseDraftFrom(expense, group.settlementCurrency),
   );
+  // Only a new Expense opened from a LINE chat can be posted back into that chat.
+  const [chatAvailable, setChatAvailable] = useState(false);
+  const [sendToChat, setSendToChat] = useState(false);
+  // Saved, but the caller is still finishing (posting to the chat): no second submit meanwhile.
+  const [finishing, setFinishing] = useState(false);
+  useEffect(() => {
+    if (expense !== undefined) return;
+    let current = true;
+    void line.canSendToChat().then((available) => {
+      if (current) setChatAvailable(available);
+    });
+    return () => {
+      current = false;
+    };
+  }, [expense, line]);
   // One key for this form's create, kept across retries (decision 15).
   const idempotencyKey = useRef(crypto.randomUUID());
   const rate = useRate(draft.date, draft.currency, group.settlementCurrency);
@@ -91,12 +109,19 @@ export function ExpenseForm({
   const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = evaluation.input;
-    if (body === null || save.isPending) return;
+    if (body === null || save.isPending || finishing) return;
     save.mutate(
       expense === undefined
         ? { kind: "create", input: body, idempotencyKey: idempotencyKey.current }
         : { kind: "edit", input: body, expense },
-      { onSuccess: onSaved },
+      {
+        onSuccess: (saved) => {
+          setFinishing(true);
+          void Promise.resolve(onSaved(saved, { sendToChat })).finally(() => {
+            setFinishing(false);
+          });
+        },
+      },
     );
   };
 
@@ -258,12 +283,26 @@ export function ExpenseForm({
                 : t("expense.networkError")}
             </p>
           )}
+          {chatAvailable && (
+            <label className="press-card flex cursor-pointer items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3 font-bold">
+              <input
+                type="checkbox"
+                checked={sendToChat}
+                onChange={(e) => {
+                  setSendToChat(e.target.checked);
+                }}
+                className="size-5 accent-sprout-500"
+              />
+              <span aria-hidden="true">💬</span>
+              {t("expenseShare.sendToChat")}
+            </label>
+          )}
           <button
             type="submit"
             className={`${primaryButton} justify-between`}
-            disabled={evaluation.input === null || save.isPending}
+            disabled={evaluation.input === null || save.isPending || finishing}
           >
-            {save.isPending
+            {save.isPending || finishing
               ? t("expense.saving")
               : t(expense === undefined ? "expense.submit" : "expense.save")}
             <ArrowRight aria-hidden="true" className="size-5" />

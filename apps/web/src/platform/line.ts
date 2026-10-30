@@ -1,3 +1,8 @@
+import type liff from "@line/liff";
+
+/** A message the LIFF share picker or `sendMessages` takes: text or a Flex card. */
+export type LineMessage = Parameters<typeof liff.sendMessages>[0][number];
+
 /**
  * LINE sign-in through LIFF (decision 20). The SDK is large, so it is imported only
  * when the page is inside LINE or is coming back from LINE Login.
@@ -14,6 +19,15 @@ export interface LineSignIn {
    * Resolves true when sent, false when the person closed the picker.
    */
   share(text: string): Promise<boolean>;
+  /** Like `share`, for any messages, such as a Flex card. */
+  shareMessages(messages: LineMessage[]): Promise<boolean>;
+  /**
+   * Whether the app was opened from a LINE chat and the LIFF app may post into it
+   * (the `chat_message.write` scope). False everywhere else, so callers hide the choice.
+   */
+  canSendToChat(): Promise<boolean>;
+  /** Post messages as the person into the chat the app was opened from. */
+  sendToChat(messages: LineMessage[]): Promise<void>;
 }
 
 export class LineShareUnavailableError extends Error {}
@@ -71,6 +85,17 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     return idToken;
   }
 
+  async function shareMessages(messages: LineMessage[]): Promise<boolean> {
+    const liff = await loadLiff();
+    if (liff === null || !liff.isApiAvailable("shareTargetPicker")) {
+      throw new LineShareUnavailableError("The LINE share target picker is not available");
+    }
+    const result = await liff.shareTargetPicker(messages);
+    if (result === undefined) return false;
+    if (liff.isInClient()) liff.closeWindow();
+    return true;
+  }
+
   return {
     isInClient: () => looksLikeLineApp(navigator.userAgent),
 
@@ -93,15 +118,27 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       liff.login({ redirectUri: window.location.href });
     },
 
-    async share(text) {
-      const liff = await loadLiff();
-      if (liff === null || !liff.isApiAvailable("shareTargetPicker")) {
-        throw new LineShareUnavailableError("The LINE share target picker is not available");
+    share: (text) => shareMessages([{ type: "text", text }]),
+
+    shareMessages,
+
+    async canSendToChat() {
+      if (!looksLikeLineApp(navigator.userAgent)) return false;
+      try {
+        const liff = await loadLiff();
+        if (liff === null || !liff.isInClient()) return false;
+        const type = liff.getContext()?.type;
+        if (type !== "utou" && type !== "group" && type !== "room") return false;
+        return (await liff.permission.query("chat_message.write")).state !== "unavailable";
+      } catch {
+        return false;
       }
-      const result = await liff.shareTargetPicker([{ type: "text", text }]);
-      if (result === undefined) return false;
-      if (liff.isInClient()) liff.closeWindow();
-      return true;
+    },
+
+    async sendToChat(messages) {
+      const liff = await loadLiff();
+      if (liff === null) throw new LineShareUnavailableError("LIFF is not configured");
+      await liff.sendMessages(messages);
     },
   };
 }
