@@ -1,5 +1,5 @@
 import { type CurrencyCode, formatAmount } from "@split/shared";
-import { card } from "../groups/ui.js";
+import { AvatarTip, card } from "../groups/ui.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
@@ -13,10 +13,12 @@ export function BalanceChart({
   rows,
   myMemberId,
   currency,
+  pictureOf,
 }: {
   rows: readonly BalanceRow[];
   myMemberId: string;
   currency: CurrencyCode;
+  pictureOf: (id: string) => string | null;
 }) {
   const seated = rows.filter((r) => r.status !== "former");
   const open = seated.filter((r) => r.balance !== 0).sort((a, b) => b.balance - a.balance);
@@ -45,11 +47,14 @@ export function BalanceChart({
                 r.memberId === myMemberId ? "bg-sprout-100" : ""
               }`}
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 break-words font-bold">
-                  {localName(r.displayName)}
-                  {r.memberId === myMemberId && t("settle.chartMe")}
-                </span>
+              <div className="flex items-center justify-between gap-3">
+                <AvatarTip
+                  name={localName(r.displayName)}
+                  pictureUrl={pictureOf(r.memberId)}
+                  placeholder={r.status === "placeholder"}
+                  isMe={r.memberId === myMemberId}
+                  className="size-9"
+                />
                 <span
                   className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-red-700"}`}
                 >

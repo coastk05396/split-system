@@ -215,6 +215,11 @@ export const en: Record<MessageId, string> = {
   "invite.shareUnavailable":
     "Can't open LINE's recipient picker. Copy the link and send it to a friend instead.",
   "invite.shareMessage": "Let's log the spending of “{name}” in Sprout Split! {url}",
+  "invite.card.alt": "You're invited to split costs in “{name}”",
+  "invite.card.app": "Sprout Split",
+  "invite.card.badge": "You're invited",
+  "invite.card.body": "Everyone's expenses and settlements live in one place.",
+  "invite.card.join": "Join the group",
   "invite.regenerate": "Make a new link",
   "invite.noneMember": "There is no valid invite link now; ask an admin to make a new one.",
 
@@ -269,6 +274,7 @@ export const en: Record<MessageId, string> = {
   "split.allPeople": "All {count} people",
   "split.checked": "{count} / {total} selected",
   "split.selectAll": "Select all",
+  "split.clear": "Clear",
   "split.takesPart": "{name} shares",
   "split.notIn": "Not sharing",
   "split.amountOf": "{name}'s amount",

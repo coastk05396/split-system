@@ -60,6 +60,18 @@ describe("split editor", () => {
     expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
   });
 
+  it("shows 清空 while everyone is in, and it turns into 全選 once emptied", async () => {
+    const user = userEvent.setup();
+    render(<Harness amountMinor={100} />);
+
+    await user.click(screen.getByRole("button", { name: "清空" }));
+    expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("已勾選 0 / 3 人");
+    expect(screen.getByRole("status")).toHaveTextContent("至少要有一人分攤");
+
+    await user.click(screen.getByRole("button", { name: "全選" }));
+    expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
+  });
+
   it("shows the remaining amount while exact amounts do not add up", async () => {
     const user = userEvent.setup();
     render(<Harness amountMinor={100} />);

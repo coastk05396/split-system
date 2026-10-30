@@ -7,6 +7,8 @@ import { useEnsureInvite } from "../groups/api.js";
 import { ShareButtons } from "../groups/ShareButtons.js";
 import { failureMessage, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { liffLink } from "../platform/liff-link.js";
+import { inviteFlexMessage } from "../groups/invite-card.js";
 
 /** Share actions at the end of the combined Members and Invite page. */
 export function InviteSection({ group }: { group: Group }) {
@@ -15,7 +17,9 @@ export function InviteSection({ group }: { group: Group }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const current = ensure.data ?? null;
   const url = current === null ? null : `${window.location.origin}/join/${current.token}`;
-  const message = url === null ? "" : t("invite.shareMessage", { name: group.name, url });
+  // What goes into LINE carries the LIFF address, so opening it there can use the share picker.
+  const lineUrl = url === null ? "" : liffLink(url);
+  const message = url === null ? "" : t("invite.shareMessage", { name: group.name, url: lineUrl });
 
   return (
     <section
@@ -102,7 +106,8 @@ export function InviteSection({ group }: { group: Group }) {
                     url,
                     title: group.name,
                     telegramText: t("invite.shareTelegramText", { name: group.name }),
-                    copyText: url,
+                    lineMessages: [inviteFlexMessage({ groupName: group.name, url: lineUrl })],
+                    copyText: message,
                     copyLabel: t("invite.copy"),
                     copiedNotice: t("invite.copied"),
                   }}

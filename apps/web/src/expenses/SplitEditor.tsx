@@ -1,6 +1,6 @@
 import { type CurrencyCode, formatAmount, type SplitMethod } from "@split/shared";
 import { Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { ShareBar, ShareRing } from "./ShareRing.js";
@@ -46,7 +46,7 @@ const fieldClass =
 
 /**
  * Screen 30 as amended (decision 23): equal, exact amount or Shares, everyone checked by
- * default with 全選, and a live line saying what is left until the split balances.
+ * default with a 全選/清空 pill, and a live line saying what is left until the split balances.
  */
 export function SplitEditor({
   members,
@@ -68,7 +68,10 @@ export function SplitEditor({
   const included = new Set(value.included);
   // Each person's share in the order of the list, for the ring: 0 for anyone not sharing.
   const shares = members.map((m) => amounts.get(m.id) ?? 0);
+  // A bulk 全選/清空 ripples down the list; a single tick should answer at once.
+  const [wave, setWave] = useState(false);
   const toggle = (id: string) => {
+    setWave(false);
     onChange({
       ...value,
       included: included.has(id) ? value.included.filter((x) => x !== id) : [...value.included, id],
@@ -78,15 +81,20 @@ export function SplitEditor({
   // Equal splits keep the people behind a dropdown; exact and Shares need every row in sight.
   const equal = value.method === "equal";
   const [open, setOpen] = useState(false);
-  const selectAll = (
+  // One pill for both directions, so it never needs a second button: 清空 while everyone is in.
+  const everyoneIn = included.size === members.length;
+  const toggleAll = (
     <button
       type="button"
-      className="press-pill rounded-full border border-sprout-200 px-3 py-1 font-bold hover:border-sprout-500"
+      className="press-pill rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold text-sprout-600 hover:bg-sprout-200"
       onClick={() => {
-        onChange({ ...value, included: order });
+        setWave(true);
+        onChange({ ...value, included: everyoneIn ? [] : order });
       }}
     >
-      {t("split.selectAll")}
+      <span key={String(everyoneIn)} className="swap-in">
+        {everyoneIn ? t("split.clear") : t("split.selectAll")}
+      </span>
     </button>
   );
 
@@ -114,43 +122,49 @@ export function SplitEditor({
         ))}
       </div>
       {equal ? (
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => {
-            setOpen(!open);
-          }}
-          className={`${card} flex items-center justify-between px-4 py-3`}
-        >
+        // The pill hugs the title on the left, so the count changing width never moves it.
+        <div className={`${card} flex items-center gap-2 py-1.5 pl-4`}>
           <span className="font-bold">{t("split.participants")}</span>
-          <span className="flex items-center gap-2 text-sm text-sprout-600">
+          {toggleAll}
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={t("split.participants")}
+            onClick={() => {
+              setOpen(!open);
+            }}
+            className="flex flex-1 items-center justify-end gap-2 py-1.5 pr-4 text-sm text-sprout-600"
+          >
             <ShareRing shares={shares} />
-            {included.size === members.length
-              ? t("split.allPeople", { count: members.length })
-              : t("split.checked", { count: included.size, total: members.length })}
+            <span key={included.size} className="swap-in">
+              {everyoneIn
+                ? t("split.allPeople", { count: members.length })
+                : t("split.checked", { count: included.size, total: members.length })}
+            </span>
             <ChevronDown
               aria-hidden="true"
               className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
             />
-          </span>
-        </button>
+          </button>
+        </div>
       ) : (
         <div className="flex items-center justify-between">
-          <span className="font-bold">{t("split.participants")}</span>
+          <span className="flex items-center gap-2">
+            <span className="font-bold">{t("split.participants")}</span>
+            {toggleAll}
+          </span>
           <span className="flex items-center gap-3 text-sm">
             <ShareRing shares={shares} />
             <span className="text-sprout-600">
               {t("split.checked", { count: included.size, total: members.length })}
             </span>
-            {selectAll}
           </span>
         </div>
       )}
-      {equal && open && <div className="collapse-enter flex justify-end">{selectAll}</div>}
       <ShareBar shares={shares} />
       {(!equal || open) && (
         <ul className="collapse-enter flex flex-col gap-2">
-          {members.map((m) => {
+          {members.map((m, index) => {
             const takesPart = included.has(m.id);
             const amount = amounts.get(m.id);
             return (
@@ -197,7 +211,8 @@ export function SplitEditor({
                 <input
                   type="checkbox"
                   aria-label={t("split.takesPart", { name: m.displayName })}
-                  className="size-5 accent-sprout-500"
+                  className="tick-pop size-5 accent-sprout-500"
+                  style={wave ? ({ "--wave": index } as CSSProperties) : undefined}
                   checked={takesPart}
                   onChange={() => {
                     toggle(m.id);

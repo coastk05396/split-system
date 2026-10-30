@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import { errorMessage, t } from "../i18n/messages.js";
@@ -140,6 +140,79 @@ export function Avatar({
       }`}
     >
       {initial}
+    </span>
+  );
+}
+
+/**
+ * An Avatar standing in for a name: tap it and the name floats above for a moment. The name stays
+ * on the button's label, and "you" wears a green ring and a small 你 badge.
+ */
+export function AvatarTip({
+  name,
+  pictureUrl,
+  placeholder = false,
+  isMe = false,
+  className = "size-10",
+}: {
+  name: string;
+  pictureUrl?: string | null;
+  placeholder?: boolean;
+  isMe?: boolean;
+  className?: string;
+}) {
+  const [shown, setShown] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(
+    () => () => {
+      window.clearTimeout(timer.current);
+    },
+    [],
+  );
+  const tap = () => {
+    window.clearTimeout(timer.current);
+    if (shown) {
+      setShown(false);
+      return;
+    }
+    setShown(true);
+    timer.current = window.setTimeout(() => {
+      setShown(false);
+    }, 1500);
+  };
+  return (
+    <span className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        aria-label={isMe ? `${name}${t("settle.chartMe")}` : name}
+        onClick={tap}
+        className={`press-icon rounded-full ${isMe ? "ring-2 ring-sprout-500 ring-offset-2" : ""}`}
+      >
+        <Avatar
+          name={name}
+          pictureUrl={pictureUrl ?? null}
+          placeholder={placeholder}
+          className={className}
+        />
+      </button>
+      {isMe && (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-sprout-500 text-[10px] leading-none font-bold text-white"
+        >
+          {t("settle.you")}
+        </span>
+      )}
+      {shown && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 bottom-full left-0 z-10 mb-1.5 flex justify-center"
+        >
+          <span className="swap-in rounded-full bg-ink px-2.5 py-1 text-xs font-bold whitespace-nowrap text-white shadow-md">
+            {name}
+          </span>
+        </span>
+      )}
     </span>
   );
 }

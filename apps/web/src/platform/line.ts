@@ -21,11 +21,12 @@ export interface LineSignIn {
   login(): Promise<void>;
   /**
    * Inside LINE: send a text message through the share target picker (decision 10).
-   * Resolves true when sent, false when the person closed the picker.
+   * Resolves true when sent, false when the person closed the picker. The LINE window closes
+   * after a send unless `stayOpen`, for a share the person may repeat, such as an invitation.
    */
-  share(text: string): Promise<boolean>;
+  share(text: string, options?: ShareOptions): Promise<boolean>;
   /** Like `share`, for any messages, such as a Flex card. */
-  shareMessages(messages: LineMessage[]): Promise<boolean>;
+  shareMessages(messages: LineMessage[], options?: ShareOptions): Promise<boolean>;
   /**
    * Whether the app was opened from a LINE chat and the LIFF app may post into it
    * (the `chat_message.write` scope). False everywhere else, so callers hide the choice.
@@ -33,6 +34,10 @@ export interface LineSignIn {
   canSendToChat(): Promise<boolean>;
   /** Post messages as the person into the chat the app was opened from. */
   sendToChat(messages: LineMessage[]): Promise<void>;
+}
+
+export interface ShareOptions {
+  stayOpen?: boolean;
 }
 
 export class LineShareUnavailableError extends Error {}
@@ -150,7 +155,10 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     return idToken;
   }
 
-  async function shareMessages(messages: LineMessage[]): Promise<boolean> {
+  async function shareMessages(
+    messages: LineMessage[],
+    options: ShareOptions = {},
+  ): Promise<boolean> {
     const liff = await loadLiff();
     if (liff === null) throw new LineShareUnavailableError("LIFF is not configured");
     if (!liff.isLoggedIn() && !liff.isInClient()) {
@@ -163,7 +171,7 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     }
     const result = await liff.shareTargetPicker(messages);
     if (result === undefined) return false;
-    if (liff.isInClient()) liff.closeWindow();
+    if (liff.isInClient() && options.stayOpen !== true) liff.closeWindow();
     return true;
   }
 
@@ -194,7 +202,7 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       liff.login({ redirectUri: window.location.href });
     },
 
-    share: (text) => shareMessages([{ type: "text", text }]),
+    share: (text, options) => shareMessages([{ type: "text", text }], options),
 
     shareMessages,
 

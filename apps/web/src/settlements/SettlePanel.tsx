@@ -7,7 +7,14 @@ import {
 } from "@split/shared";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, CircleCheck } from "lucide-react";
-import { Avatar, card, failureMessage, LoadError, Loading, secondaryButton } from "../groups/ui.js";
+import {
+  AvatarTip,
+  card,
+  failureMessage,
+  LoadError,
+  Loading,
+  secondaryButton,
+} from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
@@ -111,6 +118,7 @@ export function SettlePanel({ group }: { group: Group }) {
           rows={balances.data.balances}
           myMemberId={group.me.memberId}
           currency={currency}
+          pictureOf={memberPictures(members.data)}
         />
 
         {action.isError && (
@@ -309,7 +317,7 @@ function HistoryRow({
     <li
       className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-sprout-150 py-2 last:border-b-0 ${dropped ? "opacity-60" : ""}`}
     >
-      <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1.5">
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <Person id={s.payerMemberId} name={payer} isMe={s.payerMemberId === me} />
         <ArrowRight className="size-4 shrink-0 text-ink-muted" />
         <Person id={s.receiverMemberId} name={receiver} isMe={s.receiverMemberId === me} />
@@ -476,16 +484,8 @@ const STATUS_TONE: Partial<Record<MessageId, string>> = {
 
 function Person({ id, name, isMe }: { id: string; name: string; isMe: boolean }) {
   const pictureOf = useContext(PictureContext);
-  // The avatar keeps the real initial; only the label says 你.
   return (
-    <span
-      className={`flex min-w-0 items-center gap-2 rounded-full border py-0.5 pr-3 pl-0.5 ${
-        isMe ? "border-sprout-500/45 bg-sprout-50/80 shadow-2xs" : "border-sprout-200/70 bg-white"
-      }`}
-    >
-      <Avatar name={name} pictureUrl={pictureOf(id)} className="size-8 text-sm" />
-      <span className="truncate font-bold">{isMe ? t("settle.you") : name}</span>
-    </span>
+    <AvatarTip name={name} pictureUrl={pictureOf(id)} isMe={isMe} className="size-10 text-base" />
   );
 }
 
@@ -552,7 +552,7 @@ function PaymentLine({
   return (
     <>
       <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1">
+        <span className="flex min-w-0 flex-1 items-center gap-1">
           <Person id={payerId} name={payer} isMe={payerId === myMemberId} />
           <TransferTrack tone={tone} />
           <Person id={receiverId} name={receiver} isMe={receiverId === myMemberId} />

@@ -243,4 +243,12 @@ describe("posting into the current LINE chat", () => {
     await expect(createLineSignIn("liff-id").shareMessages([message])).resolves.toBe(true);
     expect(liff.shareTargetPicker).toHaveBeenCalledWith([message]);
   });
+
+  it("closes the LINE window after a share unless asked to stay open", async () => {
+    await createLineSignIn("liff-id").share("hi", { stayOpen: true });
+    expect(liff.closeWindow).not.toHaveBeenCalled();
+
+    await createLineSignIn("liff-id").share("hi");
+    expect(liff.closeWindow).toHaveBeenCalledOnce();
+  });
 });
