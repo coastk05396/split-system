@@ -48,6 +48,10 @@ _Avoid_: Split type, division mode, percentage split
 A whole-number weight (1 to 99) that sets one Member's portion of an Expense under the shares Split method.
 _Avoid_: Portion, point
 
+**Personal spending**:
+The sum of a User's own Expense allocations in Groups they currently belong to; it excludes amounts paid on behalf of other Members and Settlement payments.
+_Avoid_: Amount paid, total Group spending
+
 **Expense currency**:
 The currency an Expense was actually paid in, chosen per Expense.
 _Avoid_: Local currency, foreign currency
