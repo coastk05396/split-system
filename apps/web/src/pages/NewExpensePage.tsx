@@ -1,12 +1,10 @@
 import { useNavigate, useParams } from "react-router";
-import { useDeps } from "../app/AppProviders.js";
-import { buildExpenseCard, expenseFlexMessage } from "../expenses/expense-card.js";
-import type { ChatSendResult, SavedShare } from "../expenses/ExpenseSavedToast.js";
+import { useExpenseSharing } from "../expenses/expense-sharing.js";
 import { memberNames } from "../expenses/ExpenseList.js";
 import { ExpenseForm } from "../expenses/ExpenseForm.js";
 import { ExpenseGroupBadge } from "../expenses/ExpenseGroupBadge.js";
 import { useExpenses } from "../expenses/api.js";
-import { useEnsureInvite, useGroup, useMembers } from "../groups/api.js";
+import { useGroup, useMembers } from "../groups/api.js";
 import { LoadError, Loading, ScreenHeader } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 
@@ -17,11 +15,10 @@ import { t } from "../i18n/messages.js";
 export function NewExpensePage() {
   const id = useParams().id ?? "";
   const navigate = useNavigate();
-  const { line } = useDeps();
+  const sharing = useExpenseSharing(id);
   const group = useGroup(id);
   const members = useMembers(id);
   const expenses = useExpenses(id);
-  const ensureInvite = useEnsureInvite(id);
   if (group.isError) return <LoadError error={group.error} onRetry={() => void group.refetch()} />;
   if (members.isError) {
     return <LoadError error={members.error} onRetry={() => void members.refetch()} />;
@@ -42,22 +39,12 @@ export function NewExpensePage() {
         members={members.data}
         {...(startCurrency === undefined ? {} : { startCurrency })}
         onSaved={async (saved, { sendToChat }) => {
-          // The card carries the Group's Invite, so whoever opens it can get in.
-          const invite = await ensureInvite.mutateAsync().catch(() => null);
-          const card = buildExpenseCard(
+          const share = await sharing.prepare(
             saved,
             group.data,
             memberNames(members.data),
-            invite?.token ?? null,
+            sendToChat,
           );
-          let chat: ChatSendResult = "none";
-          if (sendToChat) {
-            chat = await line
-              .sendToChat([expenseFlexMessage(card)])
-              .then((): ChatSendResult => "sent")
-              .catch((): ChatSendResult => "failed");
-          }
-          const share: SavedShare = { card, chat };
           await navigate(`/groups/${id}`, { state: { newExpenseId: saved.id, share } });
         }}
       />

@@ -27,6 +27,17 @@ async function recordDinner(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("sharing a new Expense", () => {
+  it("offers an existing-Member link when an Invite cannot be prepared", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openNewExpense();
+    api.failNext(`POST /api/v1/groups/${id()}/invite/ensure`);
+    await recordDinner(user);
+    await user.click(await screen.findByRole("button", { name: "分享" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "分享這筆開銷" }));
+    await user.click(dialog.getByRole("button", { name: "複製訊息" }));
+    expect(await navigator.clipboard.readText()).toContain(`/groups/${id()}/expenses/`);
+    expect(await navigator.clipboard.readText()).not.toContain("/join/");
+  });
   it("offers Share after saving, and the dialog previews the card with LINE and Telegram links", async () => {
     const user = userEvent.setup();
     const { id, router } = openNewExpense();
@@ -132,6 +143,27 @@ describe("posting into the current LINE chat", () => {
 });
 
 describe("sharing an older Expense", () => {
+  it("opens sharing with an existing-Member link when Invite preparation fails", async () => {
+    const user = userEvent.setup();
+    let id = "";
+    const { api } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, {
+          name: "室友",
+          others: friends,
+          expenses: [{ description: "火鍋", amount: 2160 }],
+        });
+      },
+      pathFor: () => `/groups/${id}/expenses/e-火鍋`,
+    });
+    api.failNext(`POST /api/v1/groups/${id}/invite/ensure`);
+    await user.click(await screen.findByRole("button", { name: "分享" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "分享這筆開銷" }));
+    await user.click(dialog.getByRole("button", { name: "複製訊息" }));
+    expect(await navigator.clipboard.readText()).toContain(`/groups/${id}/expenses/e-火鍋`);
+    expect(await navigator.clipboard.readText()).not.toContain("/join/");
+  });
   it("shares it from the detail page", async () => {
     const user = userEvent.setup();
     let id = "";

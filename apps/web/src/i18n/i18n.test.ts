@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { categoryLabel, localName, longDate, weekdayShort } from "./format.js";
+import { localName, longDate, weekdayShort } from "./format.js";
+import { categoryLabel } from "../expenses/categories.js";
 import { catalogs, errorMessage, setLocale, t } from "./messages.js";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -29,6 +30,8 @@ describe("labels the server stores in Chinese", () => {
     expect(categoryLabel("餐飲")).toBe("Food & drink");
     expect(categoryLabel("醫療")).toBe("Medical");
     expect(categoryLabel("自己打的")).toBe("自己打的");
+    expect(categoryLabel("constructor")).toBe("constructor");
+    expect(categoryLabel("門票")).toBe("門票");
     expect(localName("已刪除的使用者")).toBe("Deleted user");
     expect(localName("已移除的成員")).toBe("Removed member");
     expect(localName("小宇")).toBe("小宇");

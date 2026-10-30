@@ -1,5 +1,6 @@
 import { type CurrencyCode, minorToDecimal } from "@split/shared";
-import { categoryLabel, localName } from "../i18n/format.js";
+import { localName } from "../i18n/format.js";
+import { categoryLabel } from "../expenses/categories.js";
 import { type MessageId, t } from "../i18n/messages.js";
 
 /**

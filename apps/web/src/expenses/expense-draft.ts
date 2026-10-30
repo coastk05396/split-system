@@ -1,3 +1,4 @@
+import { DEFAULT_CATEGORY } from "./categories.js";
 import {
   type CalculatorError,
   convertAmount,
@@ -46,9 +47,6 @@ export interface ExpenseDraft {
     | { mode: "several"; amounts: Readonly<Record<string, string>> };
   split: SplitDraft;
 }
-
-export const CATEGORIES = ["餐飲", "交通", "住宿", "購物", "娛樂", "醫療", "其他"] as const;
-const DEFAULT_CATEGORY = "其他";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 

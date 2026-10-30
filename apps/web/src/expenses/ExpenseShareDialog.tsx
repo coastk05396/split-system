@@ -2,12 +2,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { ShareButtons } from "../groups/ShareButtons.js";
 import { t } from "../i18n/messages.js";
-import {
-  type ExpenseCard,
-  expenseFlexMessage,
-  expenseText,
-  expenseTextWithoutLink,
-} from "./expense-card.js";
+import type { ExpenseCard } from "./expense-card.js";
+import { expenseShareContent } from "./expense-sharing.js";
 
 /** A small copy of the LINE card, so a person sees what the others will get. */
 function CardPreview({ card }: { card: ExpenseCard }) {
@@ -75,18 +71,7 @@ export function ExpenseShareDialog({
             </Dialog.Close>
           </div>
           <CardPreview card={card} />
-          <ShareButtons
-            content={{
-              text: expenseText(card),
-              url: card.url,
-              title: card.title,
-              telegramText: expenseTextWithoutLink(card),
-              lineMessages: [expenseFlexMessage(card)],
-              copyText: expenseText(card),
-              copyLabel: t("expenseShare.copy"),
-              copiedNotice: t("expenseShare.copied"),
-            }}
-          />
+          <ShareButtons content={expenseShareContent(card)} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

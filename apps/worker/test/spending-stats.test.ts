@@ -4,10 +4,47 @@ import { eq } from "drizzle-orm";
 import { createDb } from "../src/db/client.js";
 import { members } from "../src/db/schema.js";
 import { call } from "./auth-harness.js";
-import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
+import {
+  createGroup,
+  groupWith,
+  listMembers,
+  person,
+  seedExpense,
+  send,
+} from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 
 describe("personal spending statistics", () => {
+  it("keeps summary and paginated details consistent for the same User", async () => {
+    const admin = await person("Stats paging");
+    const group = await createGroup(admin);
+    for (let i = 0; i < 51; i++) await seedExpense(group.id, group.me.memberId);
+    const summary = await (
+      await send(admin, "GET", "/stats/spending?from=2026-06&to=2026-06")
+    ).json();
+    expect(summary).toEqual([
+      { month: "2026-06", category: "food", currency: "TWD", amount: 51 * 600 },
+    ]);
+    type Page = { items: { id: string; amount: number }[]; nextCursor: string | null };
+    const first = await (
+      await send(admin, "GET", "/stats/expenses?month=2026-06&category=food")
+    ).json<Page>();
+    expect(first.items).toHaveLength(50);
+    expect(first.nextCursor).not.toBeNull();
+    const next = await (
+      await send(
+        admin,
+        "GET",
+        `/stats/expenses?month=2026-06&category=food&cursor=${encodeURIComponent(first.nextCursor ?? "")}`,
+      )
+    ).json<Page>();
+    expect(next.items).toHaveLength(1);
+    expect(next.nextCursor).toBeNull();
+    expect(new Set([...first.items, ...next.items].map((item) => item.id)).size).toBe(51);
+    expect([...first.items, ...next.items].reduce((sum, item) => sum + item.amount, 0)).toBe(
+      51 * 600,
+    );
+  });
   it("keeps different Group settlement currencies separate for conversion", async () => {
     const admin = await person("Stats currencies");
     const twd = await createGroup(admin, { settlementCurrency: "TWD" });

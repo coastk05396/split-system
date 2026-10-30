@@ -5,10 +5,11 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
 import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
-import { buildExpenseCard } from "../expenses/expense-card.js";
+import type { ExpenseCard } from "../expenses/expense-card.js";
+import { useExpenseSharing } from "../expenses/expense-sharing.js";
 import { ExpenseShareDialog } from "../expenses/ExpenseShareDialog.js";
 import { dateHeading, memberNames, memberPictures } from "../expenses/ExpenseList.js";
-import { useEnsureInvite, useGroup, useMembers } from "../groups/api.js";
+import { useGroup, useMembers } from "../groups/api.js";
 import {
   Avatar,
   card,
@@ -19,7 +20,7 @@ import {
   ScreenHeader,
   secondaryButton,
 } from "../groups/ui.js";
-import { categoryLabel } from "../i18n/format.js";
+import { categoryLabel } from "../expenses/categories.js";
 import { t } from "../i18n/messages.js";
 
 /**
@@ -62,8 +63,9 @@ function Detail({
 }) {
   const canChange = expense.creatorMemberId === group.me.memberId || group.me.role === "admin";
   const [sharing, setSharing] = useState(false);
+  const [shareCard, setShareCard] = useState<ExpenseCard | null>(null);
   const joined = joinedGroupName(useLocation().state);
-  const ensureInvite = useEnsureInvite(group.id);
+  const share = useExpenseSharing(group.id);
   const settlement = group.settlementCurrency;
   const foreign = expense.originalCurrency !== settlement;
   return (
@@ -82,15 +84,10 @@ function Detail({
               type="button"
               aria-label={t("expenseShare.action")}
               onClick={() => {
-                // The card carries the Group's Invite, so whoever opens it can get in.
-                void ensureInvite.mutateAsync().then(
-                  () => {
-                    setSharing(true);
-                  },
-                  () => {
-                    setSharing(true);
-                  },
-                );
+                void share.prepare(expense, group, nameOf, false).then(({ card: prepared }) => {
+                  setShareCard(prepared);
+                  setSharing(true);
+                });
               }}
               className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-600 hover:bg-sprout-150"
             >
@@ -202,11 +199,9 @@ function Detail({
         </ul>
       </section>
       {canChange && <DeleteExpense group={group} expense={expense} />}
-      <ExpenseShareDialog
-        card={buildExpenseCard(expense, group, nameOf, ensureInvite.data?.token ?? null)}
-        open={sharing}
-        onOpenChange={setSharing}
-      />
+      {shareCard !== null && (
+        <ExpenseShareDialog card={shareCard} open={sharing} onOpenChange={setSharing} />
+      )}
     </div>
   );
 }

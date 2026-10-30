@@ -26,12 +26,12 @@ import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 import { Avatar, card, failureMessage, input, primaryButton } from "../groups/ui.js";
-import { categoryLabel, localName } from "../i18n/format.js";
+import { localName } from "../i18n/format.js";
+import { CATEGORIES, categoryLabel } from "./categories.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 import { useRate, useSaveExpense, useStops } from "./api.js";
 import {
-  CATEGORIES,
   type ConversionState,
   type DraftEvaluation,
   evaluateDraft,
