@@ -144,4 +144,32 @@ describe("members", () => {
     await user.click(screen.getByRole("button", { name: "新增成員" }));
     await waitFor(async () => expect((await rows())[3]).toHaveTextContent("成員3（未加入）"));
   });
+
+  it("takes a refused new Placeholder back off the list and says why", async () => {
+    const user = userEvent.setup();
+    const { api, id } = membersOf({ name: "台南", others: [{ name: "成員1" }] });
+    api.failNext(`POST /api/v1/groups/${id()}/members`);
+
+    await user.click(await screen.findByRole("button", { name: "新增成員" }));
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await waitFor(async () => {
+      expect(await rows()).toHaveLength(2);
+    });
+    expect(screen.queryByText("成員2")).toBeNull();
+  });
+
+  it("puts a refused role change back", async () => {
+    const user = userEvent.setup();
+    const { api, id } = membersOf({ name: "台南", others: [{ name: "宜庭" }] });
+    api.failNext(`PATCH /api/v1/groups/${id()}/members/${api.groups.members(id())[1]?.id}`);
+
+    await user.click(await screen.findByRole("button", { name: "宜庭 的角色" }));
+    await user.click(await screen.findByRole("menuitem", { name: "管理員" }));
+    await user.click(await screen.findByRole("button", { name: "設為管理員" }));
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await waitFor(async () => expect((await rows())[1]).toHaveTextContent("成員"));
+    expect((await rows())[1]).not.toHaveTextContent("管理員");
+  });
 });

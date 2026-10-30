@@ -95,9 +95,8 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
         <h2 className="text-lg font-bold text-sprout-900">{t("members.title")}</h2>
         <button
           type="button"
-          disabled={add.isPending}
           onClick={() => void addMember()}
-          className="press-pill flex min-h-11 items-center gap-1 rounded-full bg-sprout-150 px-4 text-sm font-bold text-sprout-700 hover:bg-sprout-200 disabled:opacity-50"
+          className="press-pill flex min-h-11 items-center gap-1 rounded-full bg-sprout-150 px-4 text-sm font-bold text-sprout-700 hover:bg-sprout-200"
         >
           <Plus aria-hidden="true" className="size-5" />
           {t("members.addTrigger")}

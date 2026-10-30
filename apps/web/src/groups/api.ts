@@ -102,25 +102,78 @@ function useRefreshGroup(id: string) {
   return () => client.invalidateQueries({ queryKey: groupKeys.group(id) });
 }
 
+/**
+ * Shows a Member change in the cached list at once, puts the list back if the server refuses it,
+ * and re-reads the Group either way so the server's answer wins. Only for changes the browser can
+ * compute exactly; never use it for anything that moves a Balance (docs/adr/0004).
+ */
+function useOptimisticMembers<TVariables>(
+  id: string,
+  change: (members: Member[], variables: TVariables) => Member[],
+) {
+  const client = useQueryClient();
+  const key = groupKeys.members(id);
+  return {
+    onMutate: async (variables: TVariables) => {
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<Member[]>(key);
+      if (previous !== undefined) client.setQueryData(key, change(previous, variables));
+      return { previous };
+    },
+    onError: (
+      _error: unknown,
+      _variables: TVariables,
+      context: { previous: Member[] | undefined } | undefined,
+    ) => {
+      if (context?.previous !== undefined) client.setQueryData(key, context.previous);
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: groupKeys.group(id) }),
+  };
+}
+
 export function useAddPlaceholder(id: string) {
   const api = useApi();
-  const refresh = useRefreshGroup(id);
+  const optimistic = useOptimisticMembers(id, (members, name: string) => [
+    ...members,
+    {
+      id: `tmp-${crypto.randomUUID()}`,
+      userId: null,
+      displayName: name,
+      pictureUrl: null,
+      role: "member",
+      status: "placeholder",
+      balance: 0,
+      isMe: false,
+    },
+  ]);
   return useMutation({
     mutationFn: (name: string) =>
       read<Member>(api.groups[":id"].members.$post({ param: { id } }, withJson({ name }))),
-    onSuccess: refresh,
+    ...optimistic,
   });
 }
 
+type PatchMemberVariables = { memberId: string; patch: MemberPatch };
+
 export function usePatchMember(id: string) {
   const api = useApi();
-  const refresh = useRefreshGroup(id);
+  const optimistic = useOptimisticMembers(id, (members, { memberId, patch }: PatchMemberVariables) =>
+    members.map((member) =>
+      member.id === memberId
+        ? {
+            ...member,
+            role: patch.role ?? member.role,
+            displayName: patch.placeholderName ?? member.displayName,
+          }
+        : member,
+    ),
+  );
   return useMutation({
-    mutationFn: ({ memberId, patch }: { memberId: string; patch: MemberPatch }) =>
+    mutationFn: ({ memberId, patch }: PatchMemberVariables) =>
       read<Member>(
         api.groups[":id"].members[":mid"].$patch({ param: { id, mid: memberId } }, withJson(patch)),
       ),
-    onSuccess: refresh,
+    ...optimistic,
   });
 }
 
