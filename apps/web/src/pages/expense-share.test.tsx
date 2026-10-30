@@ -48,10 +48,13 @@ describe("sharing a new Expense", () => {
     expect(dialog.getByText("小宇先付")).toBeVisible();
     expect(dialog.getByText("每人約 NT$ 720")).toBeVisible();
     expect(dialog.getByText(/查看這筆開銷/)).toBeVisible();
-    const link = `${window.location.origin}/groups/${id()}/expenses/`;
+    // The card opens through the Group's Invite, so someone outside the Group can get in.
+    const link = `${window.location.origin}/join/`;
+    const next = encodeURIComponent(`/groups/${id()}/expenses/`);
     expect(dialog.getByRole("button", { name: "透過 LINE 分享" })).toBeVisible();
     await user.click(dialog.getByRole("button", { name: "複製訊息" }));
     expect(await navigator.clipboard.readText()).toContain(link);
+    expect(await navigator.clipboard.readText()).toContain(`?next=${next}`);
     expect(await navigator.clipboard.readText()).toContain("火鍋");
     expect(dialog.queryByRole("button", { name: "更多方式…" })).toBeNull();
     expect(dialog.getByRole("link", { name: "透過 Telegram 分享" })).toHaveAttribute(

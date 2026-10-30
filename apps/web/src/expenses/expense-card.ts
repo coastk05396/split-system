@@ -16,8 +16,9 @@ export interface ExpenseCard {
   payer: string;
   /** What each person owes under an equal split; null for the other split methods. */
   each: string | null;
+  /** Opens the Expense, joining the Group first through its Invite if the person is not in it. */
   url: string;
-  /** The same page as a LIFF address, for what goes into LINE. */
+  /** The same as a LIFF address, for what goes into LINE. */
   lineUrl: string;
 }
 
@@ -56,8 +57,14 @@ export function buildExpenseCard(
   expense: Expense,
   group: Group,
   nameOf: (memberId: string) => string,
+  /** The Group's live Invite token; without it the link only works for people already in. */
+  inviteToken: string | null = null,
 ): ExpenseCard {
-  const url = `${window.location.origin}/groups/${group.id}/expenses/${expense.id}`;
+  const path = `/groups/${group.id}/expenses/${expense.id}`;
+  const url =
+    inviteToken === null
+      ? `${window.location.origin}${path}`
+      : `${window.location.origin}/join/${inviteToken}?next=${encodeURIComponent(path)}`;
   const [payer, ...otherPayers] = expense.payers;
   const eachMinor = Math.max(0, ...expense.splits.map((split) => split.amountMinor));
   return {

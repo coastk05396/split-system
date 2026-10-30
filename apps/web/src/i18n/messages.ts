@@ -258,7 +258,8 @@ const zhTW = {
   "join.claimConfirm": "確認認領",
   "join.asNew": "我不是，以新成員加入",
   "join.expired": "這個邀請連結已經過期了，請向群組管理員要一個新的連結。",
-  "join.revoked": "這個邀請連結已經失效，可能已被管理員重新產生。",
+  "join.joined": "已加入「{name}」",
+  "join.revoked": "這個邀請連結已經失效，可能已被管理員重新產生。請群組成員重新分享。",
   "join.full": "這個群組已經滿 30 人了，無法再加入。",
   "join.home": "回到首頁",
 
