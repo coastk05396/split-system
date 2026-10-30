@@ -63,3 +63,9 @@ Collected by **Reconcile the designs with the decisions**. `docs/split.pen` is n
 - Join screen for an Invite: "你是這些人之一嗎？" list and the claim confirmation ("你會承接 … 的 N 筆帳").
 - Members screen: "合併成員" for admins.
 
+
+## Expense form layout refinement (2026-10-30)
+
+- Keep 誰先付錢 and the 多人付款 toggle on one header row, with the payer card immediately below, to reduce vertical space.
+- Show a visible amount label and group the currency picker with the large, left-aligned amount. Align calculation results and errors to the same left edge.
+- Preserve currency selection, amount expressions, and single/multiple payer behavior.

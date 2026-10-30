@@ -33,7 +33,13 @@ function ShareChip({ children }: { children: ReactNode }) {
 }
 
 /** LINE, Telegram, copy and the system share menu, for any share dialog. */
-export function ShareButtons({ content }: { content: ShareContent }) {
+export function ShareButtons({
+  content,
+  invite = false,
+}: {
+  content: ShareContent;
+  invite?: boolean;
+}) {
   const { line } = useDeps();
   const insideLine = line.isInClient();
   const [notice, setNotice] = useState("");
@@ -86,7 +92,23 @@ export function ShareButtons({ content }: { content: ShareContent }) {
   return (
     <>
       <div className="flex flex-col gap-3">
-        {insideLine ? (
+        {invite && (
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="press-pill flex w-full items-center gap-3 rounded-full border border-sprout-200 px-3 py-2.5 font-bold text-sprout-800 hover:border-sprout-500"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sprout-150">
+              {justCopied ? (
+                <Check aria-hidden="true" className="size-5" />
+              ) : (
+                <Copy aria-hidden="true" className="size-5" />
+              )}
+            </span>
+            {content.copyLabel}
+          </button>
+        )}
+        {insideLine && !invite ? (
           <button
             type="button"
             onClick={() => void share()}
@@ -97,8 +119,6 @@ export function ShareButtons({ content }: { content: ShareContent }) {
         ) : (
           <a
             href={`https://line.me/R/share?text=${encodeURIComponent(content.text)}`}
-            target="_blank"
-            rel="noopener noreferrer"
             className={`${brandButton} bg-line hover:bg-line/90`}
           >
             {lineLabel}
@@ -115,20 +135,22 @@ export function ShareButtons({ content }: { content: ShareContent }) {
           </ShareChip>
           {t("invite.shareTelegram")}
         </a>
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="press-pill flex w-full items-center gap-3 rounded-full border border-sprout-200 px-3 py-2.5 font-bold text-sprout-800 hover:border-sprout-500"
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sprout-150">
-            {justCopied ? (
-              <Check aria-hidden="true" className="size-5" />
-            ) : (
-              <Copy aria-hidden="true" className="size-5" />
-            )}
-          </span>
-          {content.copyLabel}
-        </button>
+        {!invite && (
+          <button
+            type="button"
+            onClick={() => void copy()}
+            className="press-pill flex w-full items-center gap-3 rounded-full border border-sprout-200 px-3 py-2.5 font-bold text-sprout-800 hover:border-sprout-500"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sprout-150">
+              {justCopied ? (
+                <Check aria-hidden="true" className="size-5" />
+              ) : (
+                <Copy aria-hidden="true" className="size-5" />
+              )}
+            </span>
+            {content.copyLabel}
+          </button>
+        )}
         {typeof navigator.share === "function" && (
           <button
             type="button"

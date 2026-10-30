@@ -46,10 +46,10 @@ describe("Invite share", () => {
     expect(await screen.findByRole("button", { name: "分享群組" })).toBeVisible();
   });
 
-  it("shares through the LINE share target picker inside LINE", async () => {
+  it("opens LINE's recipient picker directly inside LINE", async () => {
     const user = userEvent.setup();
     let id = "";
-    const { lineShares } = renderApp({
+    renderApp({
       cookieUser: me,
       insideLine: { idToken: null },
       seed: (groups) => {
@@ -57,14 +57,11 @@ describe("Invite share", () => {
       },
       pathFor: () => `/groups/${id}/members`,
     });
-
     await user.click(await screen.findByRole("button", { name: "分享群組" }));
-    await user.click(screen.getByRole("button", { name: "透過 LINE 分享" }));
-
-    expect(lineShares).toEqual([
-      `一起用小芽分帳記「台南」的開銷吧！${window.location.origin}/join/tok-line`,
-    ]);
-    expect(await screen.findByRole("status")).toHaveTextContent("已分享到 LINE");
+    expect(screen.getByRole("link", { name: "透過 LINE 分享" })).toHaveAttribute(
+      "href",
+      `https://line.me/R/share?text=${encodeURIComponent(`一起用小芽分帳記「台南」的開銷吧！${window.location.origin}/join/tok-line`)}`,
+    );
   });
 
   it("opens LINE and Telegram share links directly outside LINE", async () => {

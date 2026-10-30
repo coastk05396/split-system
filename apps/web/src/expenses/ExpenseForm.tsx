@@ -329,36 +329,39 @@ function AmountSection({
   const { amount, conversion } = evaluation;
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-end gap-3 border-b-2 border-sprout-500 pb-2">
+      <label htmlFor="expense-amount" className="text-sm font-bold">
+        {t("expense.amount")}
+      </label>
+      <div className="flex items-baseline gap-3 border-b-2 border-sprout-500 pb-2">
         <CurrencyPicker
           value={draft.currency}
           onChange={(currency) => {
             update({ currency, conversion: { source: "reference" } });
           }}
         />
-        <label className="flex min-w-0 flex-1 flex-col items-end">
-          <span className="sr-only">{t("expense.amount")}</span>
+        <div className="min-w-0 flex-1">
           <input
+            id="expense-amount"
             inputMode="decimal"
             autoComplete="off"
-            className="w-full bg-transparent text-right text-4xl font-bold text-sprout-900 outline-none"
+            className="w-full bg-transparent text-left text-4xl font-bold text-sprout-900 outline-none"
             placeholder={t("expense.amountPlaceholder")}
             value={draft.amountText}
             onChange={(e) => {
               update({ amountText: e.target.value });
             }}
           />
-        </label>
+        </div>
       </div>
       {amount.kind === "ok" && amount.isExpression && (
-        <p className="text-right font-bold text-sprout-600">
+        <p className="font-bold text-sprout-600">
           <Odometer
             text={t("expense.result", { amount: formatAmount(amount.amountMinor, draft.currency) })}
           />
         </p>
       )}
       {amount.kind === "error" && (
-        <p className="text-right text-sm font-bold text-red-700">
+        <p className="text-sm font-bold text-red-700">
           {amount.error === "EXPENSE_AMOUNT_INVALID"
             ? errorMessage("EXPENSE_AMOUNT_INVALID")
             : t(`expense.calc.${amount.error}`)}
@@ -613,25 +616,27 @@ function PayersSection({
   const status = evaluation.payers;
   return (
     <fieldset className="flex flex-col gap-3">
-      <legend className="mb-3 flex w-full items-center justify-between text-lg font-bold">
-        {t("expense.payers")}
+      <legend className="mb-3 w-full">
+        <span className="flex items-center justify-between gap-3">
+          <span className="text-lg font-bold">{t("expense.payers")}</span>
+          <button
+            type="button"
+            aria-pressed={payers.mode === "several"}
+            className="flex items-center gap-2 shrink-0 rounded-full border border-sprout-200 px-3 py-1 text-sm font-bold"
+            onClick={() => {
+              update({
+                payers:
+                  payers.mode === "single"
+                    ? { mode: "several", amounts: {} }
+                    : { mode: "single", memberId: myMemberId },
+              });
+            }}
+          >
+            <Users aria-hidden="true" className="size-4" />
+            {t(payers.mode === "single" ? "expense.severalPayers" : "expense.onePayer")}
+          </button>
+        </span>
       </legend>
-      <button
-        type="button"
-        aria-pressed={payers.mode === "several"}
-        className="flex items-center gap-2 self-end rounded-full border border-sprout-200 px-3 py-1 text-sm font-bold"
-        onClick={() => {
-          update({
-            payers:
-              payers.mode === "single"
-                ? { mode: "several", amounts: {} }
-                : { mode: "single", memberId: myMemberId },
-          });
-        }}
-      >
-        <Users aria-hidden="true" className="size-4" />
-        {t(payers.mode === "single" ? "expense.severalPayers" : "expense.onePayer")}
-      </button>
       {payers.mode === "single" ? (
         <PayerPicker
           members={members}

@@ -107,6 +107,7 @@ export function InviteSection({ group }: { group: Group }) {
                 <p className="mt-1 text-center text-xs text-ink-muted">{t("invite.qrHint")}</p>
                 <div className="mt-6">
                   <ShareButtons
+                    invite
                     content={{
                       text: message,
                       url,
