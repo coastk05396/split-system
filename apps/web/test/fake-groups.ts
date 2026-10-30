@@ -612,6 +612,14 @@ export function createFakeGroups(): FakeGroups {
           const target = g.members.find((m) => m.id === parts[3]);
           if (target === undefined) return error("NOT_FOUND", 404);
           if ("nickname" in body) return error("VALIDATION_FAILED", 400);
+          if (typeof body.placeholderName === "string") {
+            if (target.status !== "placeholder") return error("MEMBER_NOT_ACTIVE", 409);
+            const name = body.placeholderName.trim();
+            if (!name || name.length > 50) return error("VALIDATION_FAILED", 400);
+            if (g.members.some((m) => m !== target && m.status !== "former" && m.name === name))
+              return error("PLACEHOLDER_NAME_TAKEN", 409);
+            target.name = name;
+          }
           if (body.role === "admin" || body.role === "member") {
             if (!isAdmin) return error("FORBIDDEN", 403);
             const admins = g.members.filter((m) => m.status === "active" && m.role === "admin");
@@ -636,6 +644,11 @@ export function createFakeGroups(): FakeGroups {
         }
         case "GET groups/:/invite":
           if (g.invite === null || g.invite.expiresAt <= fake.now) return error("NOT_FOUND", 404);
+          return json(g.invite);
+        case "POST groups/:/invite/:":
+          if (g.invite === null || g.invite.expiresAt <= fake.now) {
+            g.invite = { token: nextId("token"), expiresAt: fake.now + INVITE_TTL_MS };
+          }
           return json(g.invite);
         case "POST groups/:/invite":
           if (!isAdmin) return error("FORBIDDEN", 403);

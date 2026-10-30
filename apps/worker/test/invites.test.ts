@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createDb } from "../src/db/client.js";
-import { members } from "../src/db/schema.js";
+import { invites, members } from "../src/db/schema.js";
+import { eq } from "drizzle-orm";
 import { clock } from "./auth-harness.js";
 import {
   at,
@@ -15,17 +16,17 @@ import {
 } from "./groups-harness.js";
 
 const db = createDb(env.DB);
-const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
+const TWELVE_HOURS = 12 * 3600 * 1000;
 
 describe("POST /groups/:id/invite", () => {
-  it("gives an Admin an unguessable link valid for 7 days", async () => {
+  it("gives an Admin an unguessable link valid for 12 hours", async () => {
     const yu = await person("小宇");
     const group = await createGroup(yu);
     const res = await send(yu, "POST", `/groups/${group.id}/invite`);
     expect(res.status).toBe(201);
     const invite = await res.json<{ token: string; expiresAt: number }>();
     expect(invite.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(invite.expiresAt).toBe(clock.now + SEVEN_DAYS);
+    expect(invite.expiresAt).toBe(clock.now + TWELVE_HOURS);
 
     const current = await send(yu, "GET", `/groups/${group.id}/invite`);
     expect(await current.json()).toEqual(invite);
@@ -61,6 +62,23 @@ describe("POST /groups/:id/invite", () => {
   });
 });
 
+describe("POST /groups/:id/invite/ensure", () => {
+  it("lets members reuse live links and renew expired links without revoking existing ones", async () => {
+    const { group, others, token } = await groupWith("小宇", "阿明");
+    const member = at(others, 0);
+    const path = `/groups/${group.id}/invite/ensure`;
+    const reuse = await send(member, "POST", path);
+    expect(await reuse.json()).toMatchObject({ token });
+    await db.update(invites).set({ expiresAt: clock.now }).where(eq(invites.token, token));
+    const renewed = await send(member, "POST", path);
+    const fresh = await renewed.json<{ token: string; expiresAt: number }>();
+    expect(fresh.token).not.toBe(token);
+    expect(fresh.expiresAt).toBe(clock.now + TWELVE_HOURS);
+    expect(await (await send(member, "POST", path)).json()).toEqual(fresh);
+    expect((await send(await person("路人"), "POST", path)).status).toBe(404);
+  });
+});
+
 describe("GET /invites/:token", () => {
   it("previews the Group name and Member count", async () => {
     const yu = await person("小宇");
@@ -74,7 +92,7 @@ describe("GET /invites/:token", () => {
       groupName: "室友帳",
       settlementCurrency: "TWD",
       memberCount: 1,
-      expiresAt: clock.now + SEVEN_DAYS,
+      expiresAt: clock.now + TWELVE_HOURS,
       isMember: false,
       placeholders: [],
     });
@@ -86,11 +104,11 @@ describe("GET /invites/:token", () => {
     expect((await send(ming, "GET", "/invites/not-a-real-token")).status).toBe(404);
   });
 
-  it("answers INVITE_EXPIRED once 7 days have passed", async () => {
+  it("answers INVITE_EXPIRED once 12 hours have passed", async () => {
     const yu = await person("小宇");
     const group = await createGroup(yu);
     const token = await inviteToken(yu, group.id);
-    clock.now += SEVEN_DAYS + 1;
+    clock.now += TWELVE_HOURS + 1;
     const ming = await person("阿明");
     const preview = await send(ming, "GET", `/invites/${token}`);
     expect(preview.status).toBe(422);

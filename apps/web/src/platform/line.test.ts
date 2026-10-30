@@ -133,6 +133,20 @@ it("initializes LIFF once when signing in and sharing on the same page", async (
   expect(liff.closeWindow).toHaveBeenCalledTimes(1);
 });
 
+it("starts LINE login before sharing a card in an external browser", async () => {
+  liff.isLoggedIn.mockReturnValueOnce(false);
+  liff.isInClient.mockReturnValueOnce(false);
+  await expect(
+    createLineSignIn("liff-id").shareMessages([{ type: "text", text: "Join" }]),
+  ).resolves.toBe(false);
+  expect(liff.login).toHaveBeenCalledWith({ redirectUri: window.location.href });
+  expect(localStorage.getItem("split.lineLogin")).not.toBeNull();
+  sessionStorage.clear();
+  await createLineSignIn("liff-id").prepare();
+  expect(liff.init).toHaveBeenCalledTimes(2);
+  expect(liff.shareTargetPicker).not.toHaveBeenCalled();
+});
+
 it("reports when LINE cannot show the recipient picker", async () => {
   liff.isApiAvailable.mockReturnValueOnce(false);
   await expect(createLineSignIn("liff-id").share("Join us")).rejects.toBeInstanceOf(

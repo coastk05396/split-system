@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from "react-router";
 import { useExpense } from "../expenses/api.js";
 import { ExpenseForm } from "../expenses/ExpenseForm.js";
+import { ExpenseGroupBadge } from "../expenses/ExpenseGroupBadge.js";
 import { useGroup, useMembers } from "../groups/api.js";
 import { LoadError, Loading, ScreenHeader } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
@@ -26,7 +27,11 @@ export function EditExpensePage() {
   const back = `/groups/${id}/expenses/${eid}`;
   return (
     <div className="flex max-w-2xl flex-col">
-      <ScreenHeader title={t("expense.edit")} back={back} subtitle={group.data.name} />
+      <ScreenHeader
+        title={t("expense.edit")}
+        back={back}
+        action={<ExpenseGroupBadge name={group.data.name} />}
+      />
       {hasSettlements && (
         <div
           role="alert"

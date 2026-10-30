@@ -49,11 +49,11 @@ describe("sharing a new Expense", () => {
     expect(dialog.getByText("每人約 NT$ 720")).toBeVisible();
     expect(dialog.getByText(/查看這筆開銷/)).toBeVisible();
     const link = `${window.location.origin}/groups/${id()}/expenses/`;
-    expect(
-      decodeURIComponent(
-        dialog.getByRole("link", { name: "透過 LINE 分享" }).getAttribute("href") ?? "",
-      ),
-    ).toContain(link);
+    expect(dialog.getByRole("button", { name: "透過 LINE 分享" })).toBeVisible();
+    await user.click(dialog.getByRole("button", { name: "複製訊息" }));
+    expect(await navigator.clipboard.readText()).toContain(link);
+    expect(await navigator.clipboard.readText()).toContain("火鍋");
+    expect(dialog.queryByRole("button", { name: "更多方式…" })).toBeNull();
     expect(dialog.getByRole("link", { name: "透過 Telegram 分享" })).toHaveAttribute(
       "href",
       expect.stringContaining("https://t.me/share/url?url="),

@@ -13,7 +13,7 @@ import {
 /** Active Groups one User may belong to; placeholders do not count (decisions 15, 31). */
 export const MAX_GROUPS_PER_USER = 20;
 /** An Invite link stays valid this long after it is made or regenerated. */
-export const INVITE_TTL_MS = 7 * 24 * 3600 * 1000;
+export const INVITE_TTL_MS = 12 * 3600 * 1000;
 
 export const MEMBER_ROLES = ["admin", "member"] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
@@ -92,12 +92,15 @@ export const memberSchema = z.object({
 });
 export type Member = z.infer<typeof memberSchema>;
 
-/** `PATCH /groups/:id/members/:mid`: an Admin sets the role. */
+/** `PATCH /groups/:id/members/:mid`: an Admin sets the role, or a Member renames a Placeholder Member. */
 export const memberPatchSchema = z
-  .object({ role: z.enum(MEMBER_ROLES) })
+  .object({ role: z.enum(MEMBER_ROLES).optional(), placeholderName: nameSchema.optional() })
   .partial()
   .strict()
-  .refine((patch) => Object.keys(patch).length > 0, "PATCH_EMPTY");
+  .refine(
+    (patch) => (patch.role === undefined) !== (patch.placeholderName === undefined),
+    "PATCH_INVALID",
+  );
 export type MemberPatch = z.infer<typeof memberPatchSchema>;
 
 /** `POST /groups/:id/members`: any Member adds a Placeholder Member by name. */

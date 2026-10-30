@@ -5,7 +5,7 @@ import {
   type JoinResult,
   MAX_MEMBERS_PER_GROUP,
 } from "@split/shared";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
 import { groups, invites, members } from "../db/schema.js";
@@ -40,10 +40,21 @@ export async function currentInvite(db: Db, me: MemberRow, now: number): Promise
   const [row] = await db
     .select({ token: invites.token, expiresAt: invites.expiresAt })
     .from(invites)
-    .where(eq(invites.groupId, me.groupId))
+    .where(and(eq(invites.groupId, me.groupId), gt(invites.expiresAt, now)))
     .orderBy(desc(invites.createdAt));
   if (row === undefined || row.expiresAt <= now) throw new ApiError("NOT_FOUND");
   return row;
+}
+
+/** Get or create a live invite without revoking one another member just shared. */
+export async function ensureInvite(db: Db, me: MemberRow, now: number): Promise<Invite> {
+  const id = crypto.randomUUID();
+  const token = newToken();
+  const expiresAt = now + INVITE_TTL_MS;
+  await db.run(sql`INSERT INTO invites (id, group_id, token, expires_at, created_at)
+    SELECT ${id}, ${me.groupId}, ${token}, ${expiresAt}, ${now}
+    WHERE NOT EXISTS (SELECT 1 FROM invites WHERE group_id = ${me.groupId} AND expires_at > ${now})`);
+  return currentInvite(db, me, now);
 }
 
 /** A live Invite's Group; a regenerated (deleted) link is 404, a lapsed one INVITE_EXPIRED. */

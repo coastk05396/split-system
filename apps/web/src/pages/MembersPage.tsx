@@ -1,8 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { formatAmount, type Group, type Member } from "@split/shared";
-import { Check, ChevronDown, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import {
@@ -101,8 +101,8 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
                 </span>
               )}
             </span>
-            {isAdmin && !m.isMe && (
-              <MemberControls group={group} member={m} onBlocked={setBlocked} />
+            {(m.status === "placeholder" || (isAdmin && !m.isMe)) && (
+              <MemberControls group={group} member={m} isAdmin={isAdmin} onBlocked={setBlocked} />
             )}
           </li>
         ))}
@@ -128,15 +128,21 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
 function MemberControls({
   group,
   member,
+  isAdmin,
   onBlocked,
 }: {
   group: Group;
   member: Member;
+  isAdmin: boolean;
   onBlocked: (message: string | null) => void;
 }) {
   const patch = usePatchMember(group.id);
   const remove = useRemoveMember(group.id);
   const [confirming, setConfirming] = useState<"promote" | "remove" | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const renameTriggerRef = useRef<HTMLButtonElement>(null);
+  const [draftName, setDraftName] = useState(member.displayName);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const name = localName(member.displayName);
   const report = (error: unknown) => {
     onBlocked(
@@ -161,10 +167,9 @@ function MemberControls({
         <Menu.Root>
           <Menu.Trigger
             aria-label={t("members.role", { name })}
-            className="press-pill flex min-h-11 items-center gap-1 rounded-full border border-sprout-200 bg-sprout-100 py-1 pr-2 pl-4 text-sm font-bold text-sprout-800 hover:border-sprout-500"
+            className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-150"
           >
-            {t(member.role === "admin" ? "members.admin" : "members.member")}
-            <ChevronDown aria-hidden="true" className="size-4" />
+            <Pencil aria-hidden="true" className="size-5" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content
@@ -192,17 +197,100 @@ function MemberControls({
           </Menu.Portal>
         </Menu.Root>
       )}
-      <button
-        type="button"
-        aria-label={t("members.removeAria", { name })}
-        onClick={() => {
-          if (member.balance !== 0) report(new ApiFailure("BALANCE_NOT_ZERO", 409));
-          else setConfirming("remove");
-        }}
-        className="press-icon flex size-11 items-center justify-center rounded-full text-red-700 hover:bg-red-50"
-      >
-        <Trash2 aria-hidden="true" className="size-5" />
-      </button>
+      {member.status === "placeholder" && (
+        <button
+          type="button"
+          ref={renameTriggerRef}
+          aria-label={t("members.rename", { name })}
+          onClick={() => {
+            setDraftName(member.displayName);
+            setRenameError(null);
+            setRenaming(true);
+          }}
+          className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-150"
+        >
+          <Pencil aria-hidden="true" className="size-5" />
+        </button>
+      )}
+      <Dialog.Root open={renaming} onOpenChange={setRenaming}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
+          <Dialog.Content
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              renameTriggerRef.current?.focus();
+            }}
+            className="fixed top-1/2 left-1/2 z-40 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl"
+          >
+            <Dialog.Title className="text-xl font-bold">{t("members.renameTitle")}</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-ink-muted">
+              {t("members.renameDescription")}
+            </Dialog.Description>
+            <form
+              className="mt-4 flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setRenameError(null);
+                patch.mutate(
+                  { memberId: member.id, patch: { placeholderName: draftName.trim() } },
+                  {
+                    onSuccess: () => {
+                      setRenaming(false);
+                    },
+                    onError: (error) => {
+                      setRenameError(failureMessage(error));
+                    },
+                  },
+                );
+              }}
+            >
+              <label className="flex flex-col gap-2 text-sm font-bold">
+                {t("members.renameLabel")}
+                <input
+                  autoFocus
+                  required
+                  maxLength={50}
+                  value={draftName}
+                  onChange={(event) => {
+                    setDraftName(event.target.value);
+                  }}
+                  className="rounded-xl border border-sprout-200 px-4 py-3"
+                />
+              </label>
+              {renameError !== null && (
+                <p role="alert" className="text-sm text-red-700">
+                  {renameError}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <Dialog.Close className="flex-1 rounded-full border border-sprout-200 px-4 py-3 font-bold">
+                  {t("common.cancel")}
+                </Dialog.Close>
+                <button
+                  type="submit"
+                  disabled={!draftName.trim() || patch.isPending}
+                  className="flex-1 rounded-full bg-sprout-600 px-4 py-3 font-bold text-white disabled:opacity-50"
+                >
+                  {t("members.renameSave")}
+                </button>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      {isAdmin && (
+        <button
+          type="button"
+          aria-label={t("members.removeAria", { name })}
+          onClick={() => {
+            if (member.balance !== 0) report(new ApiFailure("BALANCE_NOT_ZERO", 409));
+            else setConfirming("remove");
+          }}
+          className="press-icon flex size-11 items-center justify-center rounded-full text-red-700 hover:bg-red-50"
+        >
+          <Trash2 aria-hidden="true" className="size-5" />
+        </button>
+      )}
       <ConfirmDialog
         open={confirming === "promote"}
         title={t("members.confirmPromoteTitle", { name })}

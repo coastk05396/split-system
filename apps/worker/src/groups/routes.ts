@@ -16,6 +16,7 @@ import { createGroup, deleteGroup, listGroups, loadGroup, patchGroup } from "./g
 import {
   claimPlaceholder,
   currentInvite,
+  ensureInvite,
   joinGroup,
   previewInvite,
   regenerateInvite,
@@ -94,6 +95,11 @@ export function groupRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(await regenerateInvite(db, me, deps.now()), 201);
+    })
+    .post("/groups/:id/invite/ensure", signedIn, async (c) => {
+      const db = createDb(c.env.DB);
+      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      return c.json(await ensureInvite(db, me, deps.now()), 200);
     })
     .get("/invites/:token", signedIn, async (c) => {
       const db = createDb(c.env.DB);
