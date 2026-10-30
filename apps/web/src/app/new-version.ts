@@ -32,7 +32,12 @@ export function reloadForNewVersion(
   },
 ): boolean {
   if (reloadedRecently(now)) return false;
-  window.sessionStorage.setItem(RELOADED_AT_KEY, String(now));
+  try {
+    window.sessionStorage.setItem(RELOADED_AT_KEY, String(now));
+  } catch {
+    // Not able to remember it, so not safe to reload: a second failure would loop.
+    return false;
+  }
   reload();
   return true;
 }

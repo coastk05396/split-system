@@ -35,6 +35,17 @@ describe("reloadForNewVersion", () => {
     expect(reload).toHaveBeenCalledTimes(2);
   });
 
+  it("does not reload when it cannot write down that it did", () => {
+    const reload = vi.fn();
+    vi.spyOn(window.sessionStorage.constructor.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota");
+    });
+
+    expect(reloadForNewVersion(1_000_000, reload)).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
   it("does not reload when it cannot remember having done so", () => {
     const reload = vi.fn();
     vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
