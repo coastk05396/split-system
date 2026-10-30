@@ -437,7 +437,7 @@ function SettlementHistory({
             {t("settle.droppedToggle", { count: dropped.length })}
             <ChevronDown
               aria-hidden="true"
-              className={`size-4 transition-transform ${showDropped ? "rotate-180" : ""}`}
+              className={`size-4 transition-transform motion-reduce:transition-none ${showDropped ? "rotate-180" : ""}`}
             />
           </button>
           {showDropped && (

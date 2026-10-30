@@ -24,29 +24,35 @@ export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
   const [visible, setVisible] = useState(true);
   const [leaving, setLeaving] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [held, setHeld] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const held = sharing || hovered || focused;
 
   // The note stays while the dialog is open or the pointer or focus is on it.
   useEffect(() => {
-    if (sharing || held) return;
+    if (held) {
+      setLeaving(false);
+      return;
+    }
+    if (leaving || !visible) return;
     const timer = window.setTimeout(() => {
       setLeaving(true);
     }, VISIBLE_MS);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [sharing, held]);
+  }, [held, leaving, visible]);
 
   // It slips back the way it rose before it is taken away.
   useEffect(() => {
-    if (!leaving) return;
+    if (!leaving || held) return;
     const timer = window.setTimeout(() => {
       setVisible(false);
     }, LEAVE_MS);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [leaving]);
+  }, [leaving, held]);
 
   return (
     <>
@@ -54,18 +60,18 @@ export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
         <div
           role="status"
           onMouseEnter={() => {
-            setHeld(true);
+            setHovered(true);
           }}
           onMouseLeave={() => {
-            setHeld(false);
+            setHovered(false);
           }}
           onFocus={() => {
-            setHeld(true);
+            setFocused(true);
           }}
-          onBlur={() => {
-            setHeld(false);
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
           }}
-          className={`${leaving ? "toast-leave" : "rise"} fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full bg-sprout-900 py-2 pr-2 pl-5 text-sm font-bold text-white shadow-lg md:bottom-8`}
+          className={`saved-toast ${leaving ? "is-leaving" : ""} fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full bg-sprout-900 py-2 pr-2 pl-5 text-sm font-bold text-white shadow-lg md:bottom-8`}
         >
           <span aria-hidden="true">🌱</span>
           <span>

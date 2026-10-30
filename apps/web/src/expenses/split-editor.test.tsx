@@ -11,11 +11,17 @@ const members = [
   { id: "m-3", displayName: "Gulu" },
 ];
 
-function Harness({ amountMinor }: { amountMinor: number | null }) {
-  const [draft, setDraft] = useState<SplitDraft>(() => newSplitDraft(members.map((m) => m.id)));
+function Harness({
+  amountMinor,
+  people = members,
+}: {
+  amountMinor: number | null;
+  people?: typeof members;
+}) {
+  const [draft, setDraft] = useState<SplitDraft>(() => newSplitDraft(people.map((m) => m.id)));
   return (
     <SplitEditor
-      members={members}
+      members={people}
       amountMinor={amountMinor}
       currency="TWD"
       payerIds={["m-1"]}
@@ -70,6 +76,31 @@ describe("split editor", () => {
 
     await user.click(screen.getByRole("button", { name: "全選" }));
     expect(screen.getByRole("button", { name: /參與分帳/ })).toHaveTextContent("全部 3 人");
+  });
+
+  it("updates every participant immediately when selecting a large group", async () => {
+    const user = userEvent.setup();
+    const people = Array.from({ length: 30 }, (_, i) => ({
+      id: `m-${String(i + 1)}`,
+      displayName: `Member ${String(i + 1)}`,
+    }));
+    render(<Harness amountMinor={3000} people={people} />);
+    await user.click(screen.getByRole("button", { name: /參與分帳/ }));
+    expect(row("Member 30").getByRole("checkbox")).toBeChecked();
+    expect(row("Member 30").getByText("NT$ 100")).toBeVisible();
+    await user.click(row("Member 30").getByRole("checkbox"));
+    expect(row("Member 30").getByText("不參與")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "全選" }));
+    expect(row("Member 30").getByRole("checkbox")).toBeChecked();
+    expect(row("Member 30").getByText("NT$ 100")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "清空" }));
+    expect(screen.getAllByRole("checkbox").every((checkbox) => !checkbox.matches(":checked"))).toBe(
+      true,
+    );
+    await user.click(screen.getByRole("button", { name: "全選" }));
+    expect(screen.getAllByRole("checkbox").every((checkbox) => checkbox.matches(":checked"))).toBe(
+      true,
+    );
   });
 
   it("shows the remaining amount while exact amounts do not add up", async () => {

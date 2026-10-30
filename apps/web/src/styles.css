@@ -468,22 +468,8 @@
   animation: swap-in 260ms var(--ease-spring);
 }
 
-/* A checkbox bounces as it ticks. --wave staggers a bulk 全選 down the list like a ripple. */
-@keyframes tick-pop {
-  from {
-    transform: scale(0.8);
-  }
-  to {
-    transform: none;
-  }
-}
-.tick-pop:checked {
-  animation: tick-pop 320ms var(--ease-spring) calc(var(--wave, 0) * 35ms) backwards;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .swap-in,
-  .tick-pop:checked {
+  .swap-in {
     animation: none;
   }
 }
@@ -638,7 +624,7 @@ body::before {
   animation: twinkle 1.8s ease-in-out infinite;
 }
 
-/* What leaves goes the way it came: a member row shrinks away, the saved note slips back down. */
+/* A member row shrinks away. */
 @keyframes row-leave {
   from {
     opacity: 1;
@@ -653,24 +639,33 @@ body::before {
   animation: row-leave 200ms var(--ease-out-expo) forwards;
   pointer-events: none;
 }
-@keyframes toast-leave {
-  from {
-    opacity: 1;
-    transform: none;
-  }
-  to {
+.saved-toast {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 180ms var(--ease-out-expo),
+    transform 180ms var(--ease-out-expo);
+  @starting-style {
     opacity: 0;
     transform: translateY(12px);
   }
 }
-.toast-leave {
-  animation: toast-leave 180ms ease-out forwards;
+.saved-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(12px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row-leave,
-  .toast-leave {
+  .row-leave {
     animation-name: none;
+  }
+  .saved-toast,
+  .saved-toast.is-leaving {
+    transform: none;
+    transition: opacity 120ms ease-out;
+    @starting-style {
+      transform: none;
+    }
   }
   .mascot-bob,
   .mascot-eye,
