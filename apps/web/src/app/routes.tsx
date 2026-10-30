@@ -32,23 +32,10 @@ export function safeNext(next: string | null): string {
   return next !== null && next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }
 
-/**
- * LIFF opens `liff.line.me/<id>/new` as the site root with `liff.state=/new`, and only
- * `liff.init()` acts on it. That runs only for a signed-out person, so a signed-in one stayed on
- * the home page whatever menu button they pressed. Go to the path ourselves, same-site only.
- */
-export function liffStatePath(state: string | null): string | null {
-  if (state === null) return null;
-  return safeNext(state.startsWith("/") ? state : `/${state}`);
-}
-
 /** Signed in: the app. Signed out: the landing page at `/`, sign-in everywhere else. */
 function Gate() {
   const { state } = useAuth();
   const location = useLocation();
-  const [params] = useSearchParams();
-  const liffPath = liffStatePath(params.get("liff.state"));
-  if (liffPath !== null) return <Navigate to={liffPath} replace />;
   if (state.status === "loading") return <Splash />;
   if (state.status === "signedOut") {
     // A chosen sign-out anywhere returns to the landing page, not to sign-in.

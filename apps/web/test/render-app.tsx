@@ -34,6 +34,8 @@ export interface RenderedApp {
   lineLogins: string[];
   /** Messages sent through the LINE share target picker. */
   lineShares: string[];
+  /** How many times the app started LIFF on arrival. */
+  linePrepares: { count: number };
   /** Messages shared through the picker as Flex cards or other non-text messages. */
   lineShareMessages: LineMessage[];
   /** Messages posted straight into the current LINE chat. */
@@ -47,11 +49,16 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   options.seed?.(api.groups);
   const lineLogins: string[] = [];
   const lineShares: string[] = [];
+  const linePrepares = { count: 0 };
   const lineShareMessages: LineMessage[] = [];
   const lineChatMessages: LineMessage[] = [];
 
   const line: LineSignIn = {
     isInClient: () => options.insideLine !== undefined,
+    prepare: () => {
+      linePrepares.count++;
+      return Promise.resolve();
+    },
     autoSignIn: () => Promise.resolve(options.insideLine?.idToken ?? null),
     login: () => {
       lineLogins.push(window.location.href);
@@ -103,5 +110,5 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
       <RouterProvider router={router} />
     </AppProviders>,
   );
-  return { api, router, lineLogins, lineShares, lineShareMessages, lineChatMessages };
+  return { api, router, lineLogins, lineShares, linePrepares, lineShareMessages, lineChatMessages };
 }

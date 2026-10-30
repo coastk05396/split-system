@@ -24,20 +24,76 @@ vi.mock("@line/liff", () => ({ default: liff }));
 
 beforeEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
   vi.clearAllMocks();
   liff.init.mockResolvedValue(undefined);
 });
 
 it("keeps the LINE return marker through a LIFF initialization redirect", async () => {
   await createLineSignIn("liff-id").login();
-  expect(sessionStorage.getItem("split.lineLogin")).toBe("1");
+  expect(localStorage.getItem("split.lineLogin")).not.toBeNull();
 
   liff.init.mockRejectedValueOnce(new Error("page is redirecting"));
   await expect(createLineSignIn("liff-id").autoSignIn()).rejects.toThrow("page is redirecting");
-  expect(sessionStorage.getItem("split.lineLogin")).toBe("1");
+  expect(localStorage.getItem("split.lineLogin")).not.toBeNull();
 
   await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBe("line-id-token");
-  expect(sessionStorage.getItem("split.lineLogin")).toBeNull();
+  expect(localStorage.getItem("split.lineLogin")).toBeNull();
+});
+
+describe("coming back from LINE Login in a new tab", () => {
+  const chrome = "Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36";
+  beforeEach(() => {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, value: chrome });
+    liff.isInClient.mockReturnValue(false);
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "userAgent");
+    window.history.replaceState(null, "", "/");
+    liff.isInClient.mockReturnValue(true);
+  });
+
+  it("finds the marker the login left in another tab, where sessionStorage is empty", async () => {
+    await createLineSignIn("liff-id").login();
+    sessionStorage.clear();
+
+    await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBe("line-id-token");
+  });
+
+  it("recognises LIFF's own return address with no marker at all", async () => {
+    window.history.replaceState(null, "", "/?liff.state=%2Fsign-in");
+
+    await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBe("line-id-token");
+  });
+
+  it("ignores a marker from a login that never came back", async () => {
+    localStorage.setItem("split.lineLogin", String(Date.now() - 11 * 60 * 1000));
+
+    await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBeNull();
+    expect(liff.init).not.toHaveBeenCalled();
+  });
+
+  it("starts LIFF on arrival only when a login is coming back", async () => {
+    await createLineSignIn("liff-id").prepare();
+    expect(liff.init).not.toHaveBeenCalled();
+
+    window.history.replaceState(null, "", "/?liff.state=%2Fnew");
+    await createLineSignIn("liff-id").prepare();
+    expect(liff.init).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("starts LIFF on arrival inside the LINE app, even for a signed-in person", async () => {
+  Object.defineProperty(navigator, "userAgent", {
+    configurable: true,
+    value: "Mozilla/5.0 Line/14.0",
+  });
+  try {
+    await createLineSignIn("liff-id").prepare();
+    expect(liff.init).toHaveBeenCalledTimes(1);
+  } finally {
+    Reflect.deleteProperty(navigator, "userAgent");
+  }
 });
 
 it("drops a stale browser LIFF login before the button starts a new one", async () => {

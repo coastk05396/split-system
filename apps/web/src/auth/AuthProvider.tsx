@@ -56,6 +56,9 @@ export function AuthProvider({
     const settle = (next: AuthState) => {
       if (!cancelled) setState(next);
     };
+    // Started now, not after the session check: LIFF's own redirects must run on arrival, and a
+    // person who is already signed in never gets as far as `autoSignIn`.
+    void line.prepare().catch(() => undefined);
     void (async () => {
       try {
         const restored = await session.restore();
