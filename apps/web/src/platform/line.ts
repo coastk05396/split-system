@@ -45,6 +45,15 @@ const RETURNING_TTL_MS = 10 * 60 * 1000;
 /** LIFF adds these to the address when it sends the browser back from LINE. */
 const LIFF_RETURN_PARAM = /[?&](liff\.state|liffClientId|liffRedirectUri)=/;
 
+/**
+ * LIFF's `init()` on Android checks for this query parameter after a browser login; without it,
+ * LIFF opens a `<lui-alert>` ("You have logged in" / "Continue") whose promise never resolves and
+ * whose `window.open(..., "_blank")` is blocked inside LINE's in-app browser, leaving `/sign-in`
+ * stuck on the loading screen. Keeping the parameter present while `liff.init()` runs skips that
+ * workaround.
+ */
+const ANDROID_ESCAPE_PARAM = "liffIsEscapedFromApp";
+
 /** The LINE in-app browser adds "Line/<version>" to its user agent. */
 function looksLikeLineApp(userAgent: string): boolean {
   return / Line\//i.test(userAgent);
@@ -79,13 +88,37 @@ function isReturning(): boolean {
   );
 }
 
+async function initLiffWithoutAndroidPrompt(
+  liff: (typeof import("@line/liff"))["default"],
+  liffId: string,
+): Promise<void> {
+  if (LIFF_RETURN_PARAM.test(window.location.search)) markReturning();
+  const before = new URL(window.location.href);
+  const addedEscapeParam = !before.searchParams.has(ANDROID_ESCAPE_PARAM);
+  if (addedEscapeParam) {
+    before.searchParams.set(ANDROID_ESCAPE_PARAM, "true");
+    window.history.replaceState(window.history.state, "", before);
+  }
+  try {
+    await liff.init({ liffId });
+  } finally {
+    if (addedEscapeParam) {
+      const after = new URL(window.location.href);
+      if (after.searchParams.has(ANDROID_ESCAPE_PARAM)) {
+        after.searchParams.delete(ANDROID_ESCAPE_PARAM);
+        window.history.replaceState(window.history.state, "", after);
+      }
+    }
+  }
+}
+
 export function createLineSignIn(liffId: string | undefined): LineSignIn {
   let liffReady: Promise<(typeof import("@line/liff"))["default"]> | null = null;
 
   async function loadLiff() {
     if (liffId === undefined || liffId === "") return null;
     liffReady ??= import("@line/liff").then(async ({ default: liff }) => {
-      await liff.init({ liffId });
+      await initLiffWithoutAndroidPrompt(liff, liffId);
       return liff;
     });
     try {

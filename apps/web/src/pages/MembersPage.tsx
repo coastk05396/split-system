@@ -37,7 +37,6 @@ export function MembersPage() {
 
 function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const seated = members.filter((m) => m.status !== "former");
-  const former = members.filter((m) => m.status === "former");
   const isAdmin = group.me.role === "admin";
   const add = useAddPlaceholder(group.id);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -107,19 +106,6 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
           </li>
         ))}
       </ul>
-      {former.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="font-bold">{t("members.former")}</h2>
-          <ul aria-label={t("members.former")} className="flex flex-col gap-2">
-            {former.map((m) => (
-              <li key={m.id} className="flex items-center gap-3 px-4 text-ink-muted">
-                <Avatar name={m.displayName} pictureUrl={m.pictureUrl} className="size-8 text-sm" />
-                {localName(m.displayName)}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       <InviteSection group={group} />
     </div>
   );

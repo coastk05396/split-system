@@ -66,6 +66,24 @@ describe("coming back from LINE Login in a new tab", () => {
     await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBe("line-id-token");
   });
 
+  it("sets liffIsEscapedFromApp during liff.init so Android does not hang on the Continue alert", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/sign-in?next=%2Fjoin%2Ftok-1&code=abc&liffClientId=123",
+    );
+    let searchDuringInit = "";
+    liff.init.mockImplementationOnce(() => {
+      searchDuringInit = window.location.search;
+      return Promise.resolve();
+    });
+
+    await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBe("line-id-token");
+    expect(new URLSearchParams(searchDuringInit).get("liffIsEscapedFromApp")).toBe("true");
+    expect(new URLSearchParams(window.location.search).get("liffIsEscapedFromApp")).toBeNull();
+    expect(new URLSearchParams(window.location.search).get("next")).toBe("/join/tok-1");
+  });
+
   it("ignores a marker from a login that never came back", async () => {
     localStorage.setItem("split.lineLogin", String(Date.now() - 11 * 60 * 1000));
 
