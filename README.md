@@ -115,3 +115,35 @@ pnpm e2e
 ├── e2e/              # Playwright E2E test suites
 └── docs/             # Product specifications, wayfinder decision records & release checklist
 ```
+
+---
+
+## 系統架構與設計圖 (System Design & Architecture)
+
+### 1. 前後端系統架構圖 (System Architecture)
+
+展示 React SPA 前端、LINE LIFF、Cloudflare Workers 邊緣運算層、D1 關聯式資料庫及外部 OAuth 身分驗證的整合架構：
+
+![前後端系統架構圖](docs/diagrams/architecture.svg)
+
+> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+
+---
+
+### 2. LINE 登入流程時序圖 (LINE Authentication Sequence)
+
+展示使用者從點擊 LINE 登入、LIFF SDK 換取 OpenID Token、Cloudflare Worker 進行 JWKS 簽章驗證、寫入 D1 資料庫並建立 Session 的完整時序：
+
+![LINE 登入流程時序圖](docs/diagrams/line-auth-sequence.svg)
+
+> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/line-auth-sequence.html`](docs/diagrams/line-auth-sequence.html)
+
+---
+
+### 3. D1 資料庫實體關聯圖 (Database Schema & ER)
+
+展示核心資料表（`users`、`identities`、`groups`、`members`、`expenses`）之欄位、SQL 型態、主鍵與外鍵級聯（Cascade）關聯：
+
+![D1 資料庫實體關聯圖](docs/diagrams/db-schema-er.svg)
+
+> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/db-schema-er.html`](docs/diagrams/db-schema-er.html)
