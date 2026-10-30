@@ -1,4 +1,4 @@
-import { type CurrencyCode, convertBalance, formatAmount, RATE_SCALE } from "@split/shared";
+import { type CurrencyCode, formatAmount } from "@split/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Link } from "react-router";
@@ -11,8 +11,8 @@ import { categoryLabel } from "../i18n/format.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { CountUp } from "../shell/CountUp.js";
+import { convertSpending, type SpendingRow } from "./spending-conversion.js";
 
-type SpendingRow = { month: string; category: string; currency: CurrencyCode; amount: number };
 type Detail = {
   id: string;
   groupId: string;
@@ -140,14 +140,9 @@ export function StatsPage() {
     }),
   );
   const ratePending = rates.some((rate) => rate.isPending);
-  const converted = rows.map((row) => {
-    const rate = row.currency === preferred ? RATE_SCALE : rateByCurrency.get(row.currency);
-    if (rate === undefined) return null;
-    const result = convertBalance(row.amount, row.currency, preferred, rate);
-    return result.ok ? { ...row, amount: result.value } : null;
-  });
-  const unavailable = converted.some((row) => row === null);
-  const data = converted.filter((row): row is NonNullable<typeof row> => row !== null);
+  const converted = convertSpending(rows, preferred, rateByCurrency);
+  const unavailable = converted === null;
+  const data = converted ?? [];
   const totals = months.map((month) =>
     data.filter((row) => row.month === month).reduce((sum, row) => sum + row.amount, 0),
   );
@@ -159,14 +154,12 @@ export function StatsPage() {
         map.set(row.category, (map.get(row.category) ?? 0) + row.amount);
         return map;
       }, new Map<string, number>()),
-  ]
-    .filter(([, amount]) => amount > 0)
-    .sort((a, b) => b[1] - a[1]);
+  ].sort((a, b) => b[1] - a[1]);
   const total = categories.reduce((sum, [, amount]) => sum + amount, 0);
   let offset = 0;
   const segments = categories.map(([, amount], i) => {
     const start = offset;
-    offset += (amount / total) * 100;
+    offset += total === 0 ? 0 : (amount / total) * 100;
     return { start, length: offset - start, color: COLOURS[i % COLOURS.length] };
   });
 
@@ -259,7 +252,7 @@ export function StatsPage() {
             <h2 id="stats-categories" className="text-lg font-bold">
               {t("stats.categories")}
             </h2>
-            {total === 0 ? (
+            {categories.length === 0 ? (
               <p className="py-8 text-center text-sm text-ink-muted">
                 {data.length === 0 ? t("stats.noData") : t("stats.empty")}
               </p>
@@ -294,6 +287,16 @@ export function StatsPage() {
                         />
                       </mask>
                     </defs>
+                    {total === 0 && (
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        stroke="#e4f9e9"
+                        strokeWidth="16"
+                      />
+                    )}
                     <g mask={`url(#${ringMask})`} transform="rotate(-90 50 50)">
                       {segments.map((segment, i) => (
                         <circle
@@ -352,7 +355,7 @@ export function StatsPage() {
                           {categoryLabel(name)}
                         </span>
                         <span className="text-xs text-ink-muted">
-                          {Math.round((amount / total) * 100)}%
+                          {total === 0 ? "—" : `${String(Math.round((amount / total) * 100))}%`}
                         </span>
                         <span className="text-sm tabular-nums">
                           {formatAmount(amount, preferred)}

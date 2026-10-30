@@ -53,4 +53,25 @@ describe("personal spending stats", () => {
     api.spendingStats.push({ month: month(0), category: "餐飲", currency: "USD", amount: 100 });
     expect(await screen.findByRole("alert")).toHaveTextContent("暫時無法取得匯率");
   });
+
+  it("keeps tiny converted categories visible while showing a consistent monthly total", async () => {
+    const { api } = renderApp({ path: "/stats", cookieUser: makeUser("小宇") });
+    api.spendingStats.push(
+      { month: month(0), category: "餐飲", currency: "USD", amount: 1 },
+      { month: month(0), category: "交通", currency: "USD", amount: 1 },
+    );
+    const categories = await screen.findByRole("region", { name: "花在哪裡？" });
+    expect(await within(categories).findByRole("button", { name: /餐飲/ })).toBeVisible();
+    expect(within(categories).getByRole("button", { name: /交通/ })).toBeVisible();
+    expect((await screen.findAllByText("NT$ 1"))[0]).toBeVisible();
+  });
+
+  it("still shows categories when the converted month rounds to zero", async () => {
+    const { api } = renderApp({ path: "/stats", cookieUser: makeUser("小宇") });
+    api.spendingStats.push({ month: month(0), category: "餐飲", currency: "USD", amount: 1 });
+    const categories = await screen.findByRole("region", { name: "花在哪裡？" });
+    expect(await within(categories).findByRole("button", { name: /餐飲/ })).toBeVisible();
+    expect(within(categories).getByText("—")).toBeVisible();
+    expect(within(categories).queryByText(/NaN/)).toBeNull();
+  });
 });
