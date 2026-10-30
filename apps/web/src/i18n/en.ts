@@ -182,11 +182,10 @@ export const en: Record<MessageId, string> = {
   "members.member": "Member",
   "members.me": " (you)",
   "members.placeholder": " (not joined)",
-  "members.former": "Former members",
   "members.role": "Role of {name}",
   "members.removeAria": "Remove {name}",
   "members.confirmRemoveTitle": "Remove {name}?",
-  "members.confirmRemoveBody": "{name} moves to Former members. This can't be undone.",
+  "members.confirmRemoveBody": "{name} will be removed from the group. This can't be undone.",
   "members.confirmRemove": "Remove",
   "members.confirmPromoteTitle": "Make {name} an admin?",
   "members.confirmPromoteBody":

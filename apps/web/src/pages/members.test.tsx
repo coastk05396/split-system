@@ -23,7 +23,7 @@ const rows = async () =>
   within(await screen.findByRole("list", { name: "群組成員" })).getAllByRole("listitem");
 
 describe("members", () => {
-  it("lists Members with roles, Placeholders and Former Members", async () => {
+  it("lists Members with roles and Placeholders while hiding Former Members", async () => {
     membersOf({
       name: "台南",
       others: [
@@ -39,8 +39,7 @@ describe("members", () => {
       expect.stringMatching(/宜庭.*成員/),
       expect.stringMatching(/阿哲（未加入）/),
     ]);
-    const former = within(screen.getByRole("list", { name: "已離開的成員" }));
-    expect(former.getByText("Gulu")).toBeVisible();
+    expect(screen.queryByText("Gulu")).toBeNull();
   });
 
   it("lets an Admin promote, demote and remove with the role pill and trash button", async () => {
@@ -59,8 +58,10 @@ describe("members", () => {
     await user.click(screen.getByRole("button", { name: "移除 阿哲" }));
     expect(await screen.findByRole("heading", { name: "移除 阿哲？" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "移除" }));
-    const former = await screen.findByRole("list", { name: "已離開的成員" });
-    expect(within(former).getByText("阿哲")).toBeVisible();
+    await waitFor(async () => {
+      expect(await rows()).toHaveLength(2);
+    });
+    expect(screen.queryByText("阿哲")).toBeNull();
     expect(api.groups.members(id()).find((m) => m.name === "阿哲")?.status).toBe("former");
   });
 
