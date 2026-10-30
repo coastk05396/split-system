@@ -1,4 +1,8 @@
 import { useNavigate, useParams } from "react-router";
+import { useDeps } from "../app/AppProviders.js";
+import { buildExpenseCard, expenseFlexMessage } from "../expenses/expense-card.js";
+import type { ChatSendResult, SavedShare } from "../expenses/ExpenseSavedToast.js";
+import { memberNames } from "../expenses/ExpenseList.js";
 import { ExpenseForm } from "../expenses/ExpenseForm.js";
 import { useExpenses } from "../expenses/api.js";
 import { useGroup, useMembers } from "../groups/api.js";
@@ -12,6 +16,7 @@ import { t } from "../i18n/messages.js";
 export function NewExpensePage() {
   const id = useParams().id ?? "";
   const navigate = useNavigate();
+  const { line } = useDeps();
   const group = useGroup(id);
   const members = useMembers(id);
   const expenses = useExpenses(id);
@@ -24,12 +29,25 @@ export function NewExpensePage() {
   const startCurrency = expenses.data?.pages[0]?.expenses[0]?.originalCurrency;
   return (
     <div className="flex max-w-2xl flex-col">
-      <ScreenHeader title={t("expense.new")} back={`/groups/${id}`} subtitle={group.data.name} />
+      <ScreenHeader compact title={t("expense.new")} back={`/groups/${id}`} />
       <ExpenseForm
         group={group.data}
         members={members.data}
         {...(startCurrency === undefined ? {} : { startCurrency })}
-        onSaved={(saved) => void navigate(`/groups/${id}`, { state: { newExpenseId: saved.id } })}
+        onSaved={(saved, { sendToChat }) => {
+          void (async () => {
+            const card = buildExpenseCard(saved, group.data, memberNames(members.data));
+            let chat: ChatSendResult = "none";
+            if (sendToChat) {
+              chat = await line
+                .sendToChat([expenseFlexMessage(card)])
+                .then((): ChatSendResult => "sent")
+                .catch((): ChatSendResult => "failed");
+            }
+            const share: SavedShare = { card, chat };
+            void navigate(`/groups/${id}`, { state: { newExpenseId: saved.id, share } });
+          })();
+        }}
       />
     </div>
   );

@@ -110,6 +110,7 @@ describe("Invite share", () => {
       await user.click(screen.getByRole("button", { name: "更多方式…" }));
       expect(share).toHaveBeenCalledWith({
         title: "台南",
+        text: "一起用小芽分帳記「台南」的開銷吧！",
         url: `${window.location.origin}/join/tok-device`,
       });
     } finally {

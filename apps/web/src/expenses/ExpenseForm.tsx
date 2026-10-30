@@ -11,8 +11,9 @@ import {
   type Member,
 } from "@split/shared";
 import { ArrowRight, Check, ChevronDown, Users } from "lucide-react";
-import { type SubmitEvent, useRef, useState } from "react";
+import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
+import { useDeps } from "../app/AppProviders.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
@@ -53,8 +54,10 @@ export function ExpenseForm({
   expense?: Expense;
   /** The currency a new Expense starts in; the Settlement currency when absent. */
   startCurrency?: CurrencyCode;
-  onSaved: (expense: Expense) => void;
+  /** `sendToChat` says whether to post it into the LINE chat the app was opened from. */
+  onSaved: (expense: Expense, options: { sendToChat: boolean }) => void;
 }) {
+  const { line } = useDeps();
   const selectable: SplitMember[] = members
     .filter((m) => m.status !== "former")
     .map((m) => ({
@@ -75,6 +78,19 @@ export function ExpenseForm({
         })
       : expenseDraftFrom(expense, group.settlementCurrency),
   );
+  // Only a new Expense opened from a LINE chat can be posted back into that chat.
+  const [chatAvailable, setChatAvailable] = useState(false);
+  const [sendToChat, setSendToChat] = useState(false);
+  useEffect(() => {
+    if (expense !== undefined) return;
+    let current = true;
+    void line.canSendToChat().then((available) => {
+      if (current) setChatAvailable(available);
+    });
+    return () => {
+      current = false;
+    };
+  }, [expense, line]);
   // One key for this form's create, kept across retries (decision 15).
   const idempotencyKey = useRef(crypto.randomUUID());
   const rate = useRate(draft.date, draft.currency, group.settlementCurrency);
@@ -96,7 +112,11 @@ export function ExpenseForm({
       expense === undefined
         ? { kind: "create", input: body, idempotencyKey: idempotencyKey.current }
         : { kind: "edit", input: body, expense },
-      { onSuccess: onSaved },
+      {
+        onSuccess: (saved) => {
+          onSaved(saved, { sendToChat });
+        },
+      },
     );
   };
 
@@ -257,6 +277,20 @@ export function ExpenseForm({
                 ? failureMessage(save.error)
                 : t("expense.networkError")}
             </p>
+          )}
+          {chatAvailable && (
+            <label className="press-card flex cursor-pointer items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3 font-bold">
+              <input
+                type="checkbox"
+                checked={sendToChat}
+                onChange={(e) => {
+                  setSendToChat(e.target.checked);
+                }}
+                className="size-5 accent-sprout-500"
+              />
+              <span aria-hidden="true">💬</span>
+              {t("expenseShare.sendToChat")}
+            </label>
           )}
           <button
             type="submit"

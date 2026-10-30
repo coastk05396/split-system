@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { AppProviders, type AppDeps } from "../src/app/AppProviders.js";
 import { routes } from "../src/app/routes.js";
 import type { GoogleSignIn } from "../src/platform/google.js";
-import type { LineSignIn } from "../src/platform/line.js";
+import type { LineMessage, LineSignIn } from "../src/platform/line.js";
 import { createFakeApi, type FakeApi } from "./fake-api.js";
 import type { FakeGroups } from "./fake-groups.js";
 
@@ -15,6 +15,10 @@ export interface RenderAppOptions {
   cookieUser?: Me;
   /** Opened inside the LINE app, where LIFF hands over this ID token. */
   insideLine?: { idToken: string | null };
+  /** The app was opened from a LINE chat that the LIFF app may post into. */
+  lineChat?: boolean;
+  /** Make posting into the chat fail. */
+  lineChatFails?: boolean;
   /** Whether the Google button can load (a client ID is configured). */
   googleAvailable?: boolean;
   testSignIn?: boolean;
@@ -30,6 +34,10 @@ export interface RenderedApp {
   lineLogins: string[];
   /** Messages sent through the LINE share target picker. */
   lineShares: string[];
+  /** Messages shared through the picker as Flex cards or other non-text messages. */
+  lineShareMessages: LineMessage[];
+  /** Messages posted straight into the current LINE chat. */
+  lineChatMessages: LineMessage[];
 }
 
 /** Renders the whole SPA over the fake API with fake LINE and Google sign-in. */
@@ -39,6 +47,8 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   options.seed?.(api.groups);
   const lineLogins: string[] = [];
   const lineShares: string[] = [];
+  const lineShareMessages: LineMessage[] = [];
+  const lineChatMessages: LineMessage[] = [];
 
   const line: LineSignIn = {
     isInClient: () => options.insideLine !== undefined,
@@ -50,6 +60,16 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     share: (text) => {
       lineShares.push(text);
       return Promise.resolve(true);
+    },
+    shareMessages: (messages) => {
+      lineShareMessages.push(...messages);
+      return Promise.resolve(true);
+    },
+    canSendToChat: () => Promise.resolve(options.lineChat === true),
+    sendToChat: (messages) => {
+      if (options.lineChatFails === true) return Promise.reject(new Error("chat send failed"));
+      lineChatMessages.push(...messages);
+      return Promise.resolve();
     },
   };
   const google: GoogleSignIn = {
@@ -83,5 +103,5 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
       <RouterProvider router={router} />
     </AppProviders>,
   );
-  return { api, router, lineLogins, lineShares };
+  return { api, router, lineLogins, lineShares, lineShareMessages, lineChatMessages };
 }

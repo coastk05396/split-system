@@ -1,9 +1,10 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, Plus, Trash2, UserPlus } from "lucide-react";
-import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
+import { ExpenseSavedToast, type SavedShare } from "../expenses/ExpenseSavedToast.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
@@ -34,11 +35,25 @@ function GroupDetail({ group }: { group: Group }) {
   ];
   // `?tab=trip` or `?tab=settle` opens a tab directly
   const asked = useSearchParams()[0].get("tab") ?? "";
+  // The note after saving an Expense arrives in router state; keep it, then drop it from the
+  // history entry so a reload does not show it again. `newExpenseId` stays for the highlight.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const arrived = location.state as { newExpenseId?: string; share?: SavedShare } | null;
+  const [saved] = useState(arrived?.share);
+  useEffect(() => {
+    if (arrived?.share === undefined) return;
+    void navigate(
+      { pathname: location.pathname, search: location.search },
+      { replace: true, state: { newExpenseId: arrived.newExpenseId } },
+    );
+  }, [arrived, location.pathname, location.search, navigate]);
   const [activeTab, setActiveTab] = useState(
     tabs.some((tab) => tab.value === asked) ? asked : "expenses",
   );
   return (
     <div className="flex flex-col gap-6">
+      {saved !== undefined && <ExpenseSavedToast saved={saved} />}
       <ScreenHeader
         compact
         centered
