@@ -1,6 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type CurrencyCode, formatAmount, type InvitePreview } from "@split/shared";
-import { Users } from "lucide-react";
 import { useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
@@ -15,6 +14,7 @@ import {
   secondaryButton,
 } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 
 type Placeholder = InvitePreview["placeholders"][number];
 
@@ -73,8 +73,8 @@ function JoinForm({ token, preview }: { token: string; preview: InvitePreview })
       <section
         className={`${card} line-bubble-card flex flex-col items-center gap-3 p-6 text-center`}
       >
-        <span className="flex size-20 items-center justify-center rounded-full bg-sprout-100 shadow-xs">
-          <Users aria-hidden="true" className="size-9 text-sprout-500" />
+        <span className="empty-bloom inline-flex">
+          <SproutMascot className="size-24" />
         </span>
         <p className="text-sm text-ink-muted">{t("join.title")}</p>
         <h1 className="text-2xl font-bold">{preview.groupName}</h1>

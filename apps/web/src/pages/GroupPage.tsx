@@ -10,6 +10,7 @@ import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 import { SettlePanel } from "../settlements/SettlePanel.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 import { TripPanel } from "../trip/TripPanel.js";
@@ -74,6 +75,9 @@ function GroupDetail({ group }: { group: Group }) {
       />
       {group.memberCount === 1 && (
         <section className="flex items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3">
+          <span className="sprout-greet inline-flex">
+            <SproutMascot className="size-14" />
+          </span>
           <div className="min-w-0 flex-1">
             <h2 className="font-bold">{t("group.alone.title")}</h2>
             <p className="text-sm text-ink-muted">{t("group.alone.body")}</p>
