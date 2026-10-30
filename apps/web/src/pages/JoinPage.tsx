@@ -41,17 +41,7 @@ export function JoinPage() {
     if (known === undefined) {
       return <LoadError error={preview.error} onRetry={() => void preview.refetch()} />;
     }
-    return (
-      <div className="flex max-w-md flex-col items-start gap-4">
-        <h1 className="text-2xl font-bold">{t("join.title")}</h1>
-        <p role="alert" className="rounded-2xl bg-peach p-4">
-          {t(known)}
-        </p>
-        <Link to="/" className={`${secondaryButton} py-3`}>
-          {t("join.home")}
-        </Link>
-      </div>
-    );
+    return <InviteProblem message={t(known)} />;
   }
   // Only a page of this very Group: a link must not send anyone anywhere else.
   const next =
@@ -67,6 +57,20 @@ export function JoinPage() {
     return <JoinAtOnce token={token} preview={preview.data} next={next} />;
   }
   return <JoinForm token={token} preview={preview.data} next={next} />;
+}
+
+function InviteProblem({ message }: { message: string }) {
+  return (
+    <div className="flex max-w-md flex-col items-start gap-4">
+      <h1 className="text-2xl font-bold">{t("join.title")}</h1>
+      <p role="alert" className="rounded-2xl bg-peach p-4">
+        {message}
+      </p>
+      <Link to="/" className={`${secondaryButton} py-3`}>
+        {t("join.home")}
+      </Link>
+    </div>
+  );
 }
 
 function JoinAtOnce({
@@ -91,17 +95,7 @@ function JoinAtOnce({
 
   if (join.isError) {
     const known = join.error instanceof ApiFailure ? INVITE_ERRORS[join.error.code] : undefined;
-    return (
-      <div className="flex max-w-md flex-col items-start gap-4">
-        <h1 className="text-2xl font-bold">{t("join.title")}</h1>
-        <p role="alert" className="rounded-2xl bg-peach p-4">
-          {known === undefined ? failureMessage(join.error) : t(known)}
-        </p>
-        <Link to="/" className={`${secondaryButton} py-3`}>
-          {t("join.home")}
-        </Link>
-      </div>
-    );
+    return <InviteProblem message={known === undefined ? failureMessage(join.error) : t(known)} />;
   }
   return <Loading />;
 }

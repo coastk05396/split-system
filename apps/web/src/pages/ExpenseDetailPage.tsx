@@ -43,6 +43,12 @@ export function ExpenseDetailPage() {
   return <Detail group={group.data} expense={expense.data} nameOf={nameOf} pictureOf={pictureOf} />;
 }
 
+/** The Group a person has just joined by opening this Expense, carried in the router state. */
+function joinedGroupName(state: unknown): string | undefined {
+  if (typeof state !== "object" || state === null || !("joined" in state)) return undefined;
+  return typeof state.joined === "string" ? state.joined : undefined;
+}
+
 function Detail({
   group,
   expense,
@@ -56,7 +62,7 @@ function Detail({
 }) {
   const canChange = expense.creatorMemberId === group.me.memberId || group.me.role === "admin";
   const [sharing, setSharing] = useState(false);
-  const joined = (useLocation().state as { joined?: string } | null)?.joined;
+  const joined = joinedGroupName(useLocation().state);
   const ensureInvite = useEnsureInvite(group.id);
   const settlement = group.settlementCurrency;
   const foreign = expense.originalCurrency !== settlement;
