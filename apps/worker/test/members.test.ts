@@ -57,6 +57,32 @@ describe("GET /groups/:id/members", () => {
 });
 
 describe("PATCH /groups/:id/members/:mid", () => {
+  it("lets any member rename placeholders while protecting joined members and names", async () => {
+    const { admin, group, others } = await groupWith("小宇", "阿明");
+    const created = await send(admin, "POST", `/groups/${group.id}/members`, { name: "成員1" });
+    const placeholder: { id: string } = await created.json();
+    const path = `/groups/${group.id}/members/${placeholder.id}`;
+    const renamed = await send(at(others, 0), "PATCH", path, { placeholderName: "小明" });
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toMatchObject({
+      id: placeholder.id,
+      displayName: "小明",
+      status: "placeholder",
+    });
+    expect((await send(admin, "PATCH", path, { placeholderName: "阿明" })).status).toBe(409);
+    const joined = at(await listMembers(admin, group.id), 1);
+    expect(
+      (
+        await send(at(others, 0), "PATCH", `/groups/${group.id}/members/${joined.id}`, {
+          placeholderName: "冒名",
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (await send(await person("路人"), "PATCH", path, { placeholderName: "冒名" })).status,
+    ).toBe(404);
+  });
+
   it("lets an Admin promote a Member, after which either Admin may be demoted", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");
     const ming = at(await listMembers(admin, group.id), 1);

@@ -4,6 +4,7 @@ import { buildExpenseCard, expenseFlexMessage } from "../expenses/expense-card.j
 import type { ChatSendResult, SavedShare } from "../expenses/ExpenseSavedToast.js";
 import { memberNames } from "../expenses/ExpenseList.js";
 import { ExpenseForm } from "../expenses/ExpenseForm.js";
+import { ExpenseGroupBadge } from "../expenses/ExpenseGroupBadge.js";
 import { useExpenses } from "../expenses/api.js";
 import { useGroup, useMembers } from "../groups/api.js";
 import { LoadError, Loading, ScreenHeader } from "../groups/ui.js";
@@ -29,7 +30,12 @@ export function NewExpensePage() {
   const startCurrency = expenses.data?.pages[0]?.expenses[0]?.originalCurrency;
   return (
     <div className="flex max-w-2xl flex-col">
-      <ScreenHeader compact title={t("expense.new")} back={`/groups/${id}`} />
+      <ScreenHeader
+        compact
+        title={t("expense.new")}
+        back={`/groups/${id}`}
+        action={<ExpenseGroupBadge name={group.data.name} />}
+      />
       <ExpenseForm
         group={group.data}
         members={members.data}

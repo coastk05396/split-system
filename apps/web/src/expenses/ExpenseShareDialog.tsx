@@ -29,13 +29,15 @@ function CardPreview({ card }: { card: ExpenseCard }) {
         </p>
         <div className="flex items-center justify-between gap-3">
           <p className="text-3xl font-bold tabular-nums">{card.amount}</p>
-          <span className="shrink-0 rounded-full bg-sprout-150 px-3 py-1.5 text-xs font-bold text-sprout-500">
+          <span className="shrink-0 rounded-full bg-sprout-150 px-3 py-1.5 text-[10px] font-bold text-sprout-500">
             {card.split}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-sprout-200 pt-3 text-sm">
-          <span className="text-ink-muted">{card.payer}</span>
-          {card.each !== null && <span className="font-bold text-sprout-500">{card.each}</span>}
+        <div className="flex items-start justify-between gap-3 border-t border-sprout-200 pt-3 text-xs">
+          <span className="min-w-0 break-words text-ink-muted">{card.payer}</span>
+          {card.each !== null && (
+            <span className="min-w-0 text-right font-bold text-sprout-500">{card.each}</span>
+          )}
         </div>
         <p className="flex items-center justify-center gap-2 rounded-2xl bg-sprout-500 py-3.5 font-bold text-white">
           {t("expenseShare.view")} <span aria-hidden="true">↗</span>

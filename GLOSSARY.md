@@ -109,5 +109,5 @@ The name a Member chooses to be shown by in one Group, defaulting to their LINE 
 _Avoid_: Alias, display name (when meaning the per-Group name)
 
 **Placeholder Member**:
-A numbered Member profile created before the person has joined, with no account, that can be claimed later through an Invite.
+A Member profile created before the person has joined, with no account, that can be claimed later through an Invite. It starts with a numbered name that any Member can change until it is claimed.
 _Avoid_: Virtual member, guest, dummy

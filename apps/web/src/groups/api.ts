@@ -62,20 +62,6 @@ export function useMembers(id: string) {
   });
 }
 
-/** The Group's live Invite, or null when none is live (the Worker answers 404). */
-export function useInvite(id: string) {
-  const api = useApi();
-  return useQuery({
-    queryKey: groupKeys.invite(id),
-    queryFn: async () => {
-      const res: Response = await api.groups[":id"].invite.$get({ param: { id } });
-      if (res.status === 404) return null;
-      if (!res.ok) throw await toApiFailure(res);
-      return (await res.json()) as Invite;
-    },
-  });
-}
-
 export function useInvitePreview(token: string) {
   const api = useApi();
   return useQuery({
@@ -148,11 +134,11 @@ export function useRemoveMember(id: string) {
   });
 }
 
-export function useRegenerateInvite(id: string) {
+export function useEnsureInvite(id: string) {
   const api = useApi();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => read<Invite>(api.groups[":id"].invite.$post({ param: { id } })),
+    mutationFn: () => read<Invite>(api.groups[":id"].invite.ensure.$post({ param: { id } })),
     onSuccess: (invite) => {
       client.setQueryData(groupKeys.invite(id), invite);
     },

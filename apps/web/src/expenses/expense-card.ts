@@ -183,7 +183,7 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
                   {
                     type: "text",
                     text: card.split,
-                    size: "xs",
+                    size: "xxs",
                     weight: "bold",
                     color: COLOR.sprout,
                   },
@@ -196,14 +196,22 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
             type: "box",
             layout: "horizontal",
             contents: [
-              { type: "text", text: card.payer, size: "sm", color: COLOR.muted, flex: 1 },
+              {
+                type: "text",
+                text: card.payer,
+                size: "xs",
+                color: COLOR.muted,
+                flex: 1,
+                wrap: true,
+              },
               ...(card.each === null
                 ? []
                 : [
                     {
                       type: "text" as const,
                       text: card.each,
-                      size: "sm",
+                      size: "xs",
+                      wrap: true,
                       weight: "bold" as const,
                       color: COLOR.sprout,
                       align: "end" as const,

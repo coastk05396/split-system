@@ -118,7 +118,13 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
 
   async function shareMessages(messages: LineMessage[]): Promise<boolean> {
     const liff = await loadLiff();
-    if (liff === null || !liff.isApiAvailable("shareTargetPicker")) {
+    if (liff === null) throw new LineShareUnavailableError("LIFF is not configured");
+    if (!liff.isLoggedIn() && !liff.isInClient()) {
+      markReturning();
+      liff.login({ redirectUri: window.location.href });
+      return false;
+    }
+    if (!liff.isApiAvailable("shareTargetPicker")) {
       throw new LineShareUnavailableError("The LINE share target picker is not available");
     }
     const result = await liff.shareTargetPicker(messages);

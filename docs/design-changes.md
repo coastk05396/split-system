@@ -69,3 +69,15 @@ Collected by **Reconcile the designs with the decisions**. `docs/split.pen` is n
 - Keep 誰先付錢 and the 多人付款 toggle on one header row, with the payer card immediately below, to reduce vertical space.
 - Show a visible amount label and group the currency picker with the large, left-aligned amount. Align calculation results and errors to the same left edge.
 - Preserve currency selection, amount expressions, and single/multiple payer behavior.
+
+- Show the current group in a pale-green sprout badge to the right of the title on both new and edit expense screens; truncate long names to preserve the header layout.
+
+## Placeholder member names and role controls (2026-10-30)
+
+- Any group member may use the pencil to rename an unclaimed placeholder. Names must be unique among current members. Claiming preserves the member and its balances, and replaces the temporary name with the joining user’s name.
+- Admins use the pencil on joined members to change their role; promotion still requires confirmation.
+
+## Invite and expense sharing (2026-10-30)
+
+- Label the invite action 邀請成員. Remove the manual regenerate and device share controls. Any member opening the invite gets the current link or a new one valid for 12 hours; already issued links retain their original expiry.
+- Send the expense Flex card via LINE’s share target picker; Telegram and copied messages contain the expense summary and link. Keep secondary card text small and allow payer details to wrap.

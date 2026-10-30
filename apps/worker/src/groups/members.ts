@@ -80,6 +80,29 @@ export async function patchMember(
   patch: MemberPatch,
 ): Promise<Member> {
   const target = await findMember(db, me.groupId, memberId);
+  if (patch.placeholderName !== undefined) {
+    if (target.status !== "placeholder") throw new ApiError("MEMBER_NOT_ACTIVE");
+    const name = patch.placeholderName;
+    const updated = await db
+      .update(members)
+      .set({ placeholderName: name })
+      .where(
+        and(
+          eq(members.id, target.id),
+          eq(members.status, "placeholder"),
+          sql`NOT EXISTS (SELECT 1 FROM members other LEFT JOIN users u ON u.id = other.user_id
+        WHERE other.group_id = ${me.groupId} AND other.id <> ${target.id}
+        AND other.status IN ('active', 'placeholder') AND COALESCE(u.display_name, other.placeholder_name) = ${name})`,
+        ),
+      )
+      .returning({ id: members.id });
+    if (updated.length === 0) {
+      const current = await findMember(db, me.groupId, memberId);
+      if (current.status !== "placeholder") throw new ApiError("MEMBER_NOT_ACTIVE");
+      throw new ApiError("PLACEHOLDER_NAME_TAKEN");
+    }
+    return oneMember(db, me, target.id);
+  }
   if (patch.role !== undefined) {
     requireAdmin(me);
     if (target.status !== "active") throw new ApiError("MEMBER_NOT_ACTIVE");
@@ -88,9 +111,13 @@ export async function patchMember(
   const demotes = patch.role === "member" && target.role === "admin";
   const updated = await db
     .update(members)
-    .set(patch)
+    .set({ role: patch.role })
     .where(
-      and(eq(members.id, target.id), demotes ? anotherAdmin(me.groupId, target.id) : undefined),
+      and(
+        eq(members.id, target.id),
+        eq(members.status, "active"),
+        demotes ? anotherAdmin(me.groupId, target.id) : undefined,
+      ),
     )
     .returning({ id: members.id });
   if (updated.length === 0) throw new ApiError("LAST_ADMIN");

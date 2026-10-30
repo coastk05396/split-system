@@ -151,7 +151,7 @@ CREATE TABLE members (
   UNIQUE(group_id, user_id)
 );
 
--- 6. 群組邀請碼 (7天時效、可重設)
+-- 6. 群組邀請碼 (12 小時時效)
 CREATE TABLE invites (
   id TEXT PRIMARY KEY,
   group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -266,7 +266,7 @@ CREATE TABLE fx_rates (
 | | `PATCH /groups/:id/members/:mid` | 變更角色 (Admin/Member) 或設定暱稱 |
 | | `DELETE /groups/:id/members/:mid`| 移除成員 (餘額需歸零) |
 | | `POST /groups/:id/claim-placeholder`| 正式用戶認領虛擬成員 |
-| **Invites**| `POST /groups/:id/invite` | 產生/重新產生 7 天邀請碼 |
+| **Invites**| `POST /groups/:id/invite` | 管理員重新產生 12 小時邀請碼 |
 | | `GET /invites/:token` | 邀請資訊預覽 (群組名稱、成員數) |
 | | `POST /invites/:token/join` | 確認加入群組 |
 | **Expenses**| `GET, POST /groups/:id/expenses` | 開銷列表 (遊標分頁 50 筆) / 新增支出 (`D1.batch()`) |
@@ -331,3 +331,5 @@ CREATE TABLE fx_rates (
   - 配置 GitHub Actions 自動化部署管線 (Staging -> Production)。
   - 設定 Cloudflare WAF 限流規則與 `split.rickchen.si` 路由。
   - 執行 Playwright E2E 測試與手動發布檢核表 (Release Checklist)。
+
+群組成員開啟邀請時，使用 `POST /groups/:id/invite/ensure` 取得現有有效邀請，或在沒有有效邀請時產生 12 小時邀請。已發出的邀請依照各自儲存的到期時間失效。
