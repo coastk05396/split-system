@@ -1,5 +1,5 @@
 import { CURRENCY_CODES, LANGUAGES, PROVIDERS, type Me, type Provider } from "@split/shared";
-import { ChevronRight, Coins, FileText, Globe, LogOut, ShieldCheck, Trash2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { createApiClient, withJson } from "../api/client.js";
@@ -14,6 +14,10 @@ const card = "surface-card rounded-3xl border border-sprout-200 bg-white";
 
 const rowBase =
   "press-card group flex w-full items-center gap-3 px-4 py-4 text-left font-bold hover:bg-sprout-50";
+
+/** The divider between rows starts after the icon box, as in the approved demo. */
+const rowDivider =
+  "relative not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-[3.25rem] not-first:before:h-px not-first:before:bg-sprout-150";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -30,8 +34,8 @@ function IconBox({ children, danger = false }: { children: ReactNode; danger?: b
   return (
     <span
       aria-hidden="true"
-      className={`flex size-8 shrink-0 items-center justify-center rounded-[10px] ${
-        danger ? "bg-red-50 text-red-700" : "bg-sprout-150 text-sprout-600"
+      className={`flex size-8 shrink-0 items-center justify-center rounded-[10px] text-base ${
+        danger ? "bg-red-50" : "bg-sprout-150"
       }`}
     >
       {children}
@@ -49,12 +53,13 @@ function Chevron() {
 }
 
 /** A settings row that shows its current value and opens the native picker when tapped. */
-function PickerRow(props: { icon: ReactNode; value: string; children: ReactNode }) {
+function PickerRow(props: { icon: ReactNode; label: string; value: string; children: ReactNode }) {
   return (
     <div
       className={`${rowBase} relative focus-within:ring-2 focus-within:ring-sprout-500/40 focus-within:ring-inset`}
     >
       <IconBox>{props.icon}</IconBox>
+      {props.label}
       <span className="ml-auto font-semibold text-sprout-600">{props.value}</span>
       <Chevron />
       {props.children}
@@ -128,7 +133,8 @@ export function SettingsPage() {
       <Section title={t("settings.currencySection")}>
         <div className={`${card} overflow-hidden`}>
           <PickerRow
-            icon={<Coins className="size-[18px]" />}
+            icon="💰"
+            label={t("settings.currencyLabel")}
             value={t(`currency.${user.preferredCurrency}`)}
           >
             <select
@@ -161,7 +167,8 @@ export function SettingsPage() {
       <Section title={t("settings.languageSection")}>
         <div className={`${card} overflow-hidden`}>
           <PickerRow
-            icon={<Globe className="size-[18px]" />}
+            icon="🌐"
+            label={t("settings.languageSection")}
             value={t(`language.${user.language}`)}
           >
             <select
@@ -186,12 +193,15 @@ export function SettingsPage() {
       </Section>
 
       <Section title={t("settings.securitySection")}>
-        <ul aria-label={t("settings.accounts")} className={`${card} divide-y divide-sprout-150`}>
+        <ul aria-label={t("settings.accounts")} className={`${card} overflow-hidden`}>
           {/* Only accounts already linked are shown: nobody is offered a second sign-in method. */}
           {PROVIDERS.filter((provider) => linked.has(provider)).map((provider) => {
             const name = PROVIDER_NAME[provider];
             return (
-              <li key={provider} className="flex flex-wrap items-center gap-x-3 px-4 py-4">
+              <li
+                key={provider}
+                className={`${rowDivider} flex flex-wrap items-center gap-x-3 px-4 py-4`}
+              >
                 <span
                   aria-hidden="true"
                   className={`mr-0.5 size-2.5 rounded-full ${
@@ -225,18 +235,16 @@ export function SettingsPage() {
       </Section>
 
       <Section title={t("settings.privacySection")}>
-        <ul className={`${card} divide-y divide-sprout-150 overflow-hidden`}>
+        <ul className={`${card} overflow-hidden`}>
           {(
             [
-              ["/privacy", ShieldCheck, "settings.privacy"],
-              ["/terms", FileText, "settings.terms"],
+              ["/privacy", "🛡️", "settings.privacy"],
+              ["/terms", "📄", "settings.terms"],
             ] as const
-          ).map(([to, Icon, label]) => (
-            <li key={to}>
+          ).map(([to, icon, label]) => (
+            <li key={to} className={rowDivider}>
               <Link to={to} className={rowBase}>
-                <IconBox>
-                  <Icon className="size-[18px]" />
-                </IconBox>
+                <IconBox>{icon}</IconBox>
                 <span className="flex-1">{t(label)}</span>
                 <Chevron />
               </Link>
@@ -245,11 +253,9 @@ export function SettingsPage() {
         </ul>
       </Section>
 
-      <div className={`${card} mt-7 divide-y divide-sprout-150 overflow-hidden`}>
-        <button type="button" onClick={() => void leave()} className={rowBase}>
-          <IconBox>
-            <LogOut className="size-[18px]" />
-          </IconBox>
+      <div className={`${card} mt-7 overflow-hidden`}>
+        <button type="button" onClick={() => void leave()} className={`${rowBase} ${rowDivider}`}>
+          <IconBox>👋</IconBox>
           {t("settings.signOut")}
         </button>
         <button
@@ -258,11 +264,9 @@ export function SettingsPage() {
           onClick={() => {
             setConfirmingDelete(true);
           }}
-          className={`${rowBase} text-red-700 hover:bg-red-50`}
+          className={`${rowBase} ${rowDivider} text-red-700 hover:bg-red-50`}
         >
-          <IconBox danger>
-            <Trash2 className="size-[18px]" />
-          </IconBox>
+          <IconBox danger>🗑️</IconBox>
           {t("settings.deleteAccount")}
         </button>
       </div>

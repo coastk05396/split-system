@@ -370,6 +370,7 @@ const zhTW = {
   "settings.heading": "我的設定",
   "settings.signOut": "登出",
   "settings.currencySection": "偏好幣別",
+  "settings.currencyLabel": "幣別",
   "settings.languageSection": "語言",
   "settings.privacySection": "帳號與隱私",
   "settings.privacy": "隱私權政策",

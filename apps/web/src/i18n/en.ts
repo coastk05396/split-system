@@ -374,6 +374,7 @@ export const en: Record<MessageId, string> = {
   "settings.heading": "My settings",
   "settings.signOut": "Sign out",
   "settings.currencySection": "Preferred currency",
+  "settings.currencyLabel": "Currency",
   "settings.languageSection": "Language",
   "settings.privacySection": "Account and privacy",
   "settings.privacy": "Privacy Policy",
