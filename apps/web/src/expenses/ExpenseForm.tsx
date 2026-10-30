@@ -10,8 +10,16 @@ import {
   type Group,
   type Member,
 } from "@split/shared";
-import { ArrowRight, Check, ChevronDown, Users } from "lucide-react";
-import { type SubmitEvent, useEffect, useRef, useState } from "react";
+import {
+  ArrowRight,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  Clock,
+  type LucideIcon,
+  Users,
+} from "lucide-react";
+import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
 import { Odometer } from "../shell/Odometer.js";
@@ -179,32 +187,32 @@ export function ExpenseForm({
               stale: rate.data?.stale === true,
             }}
             update={update}
+            aside={
+              <>
+                <PickerPill text={t("expense.date")} icon={CalendarDays}>
+                  <input
+                    type="date"
+                    required
+                    className={pillInput}
+                    value={draft.date}
+                    onChange={(e) => {
+                      update({ date: e.target.value, stopId: null });
+                    }}
+                  />
+                </PickerPill>
+                <PickerPill text={t("expense.time")} icon={Clock}>
+                  <input
+                    type="time"
+                    className={pillInput}
+                    value={draft.time}
+                    onChange={(e) => {
+                      update({ time: e.target.value });
+                    }}
+                  />
+                </PickerPill>
+              </>
+            }
           />
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className={label}>{t("expense.date")}</span>
-              <input
-                type="date"
-                required
-                className={input}
-                value={draft.date}
-                onChange={(e) => {
-                  update({ date: e.target.value, stopId: null });
-                }}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className={label}>{t("expense.time")}</span>
-              <input
-                type="time"
-                className={input}
-                value={draft.time}
-                onChange={(e) => {
-                  update({ time: e.target.value });
-                }}
-              />
-            </label>
-          </div>
           <fieldset className="flex flex-col gap-2">
             <legend className={`${label} mb-2`}>{t("expense.category")}</legend>
             <div className="flex flex-wrap gap-2">
@@ -319,32 +327,39 @@ function AmountSection({
   settlementCurrency,
   rate,
   update,
+  aside,
 }: {
   draft: ExpenseDraft;
   evaluation: DraftEvaluation;
   settlementCurrency: CurrencyCode;
   rate: { loading: boolean; unavailable: boolean; date: string | undefined; stale?: boolean };
   update: (patch: Partial<ExpenseDraft>) => void;
+  /** The date and time, stacked beside the amount. */
+  aside: ReactNode;
 }) {
   const { amount, conversion } = evaluation;
   return (
     <section className="flex flex-col gap-3">
-      <label htmlFor="expense-amount" className="text-sm font-bold">
-        {t("expense.amount")}
-      </label>
-      <div className="flex items-baseline gap-3 border-b-2 border-sprout-500 pb-2">
-        <CurrencyPicker
-          value={draft.currency}
-          onChange={(currency) => {
-            update({ currency, conversion: { source: "reference" } });
-          }}
-        />
-        <div className="min-w-0 flex-1">
+      {/* The amount takes the larger part and the date and time share the rest, so the three
+          line up as one block; the working-out and the conversion stay full width below. */}
+      <div className="grid grid-cols-[1.3fr_1fr] gap-3 min-[480px]:grid-cols-2">
+        <div className="surface-card row-span-2 flex min-w-0 flex-col justify-between gap-3 rounded-[1.75rem] border border-sprout-200/80 bg-white p-4 focus-within:border-sprout-500 focus-within:ring-3 focus-within:ring-sprout-500/15">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="expense-amount" className="text-xs font-bold text-ink-muted">
+              {t("expense.amount")}
+            </label>
+            <CurrencyPicker
+              value={draft.currency}
+              onChange={(currency) => {
+                update({ currency, conversion: { source: "reference" } });
+              }}
+            />
+          </div>
           <input
             id="expense-amount"
             inputMode="decimal"
             autoComplete="off"
-            className="w-full bg-transparent text-left text-4xl font-bold text-sprout-900 outline-none"
+            className={`w-full min-w-0 bg-transparent text-left font-bold text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
             placeholder={t("expense.amountPlaceholder")}
             value={draft.amountText}
             onChange={(e) => {
@@ -352,6 +367,7 @@ function AmountSection({
             }}
           />
         </div>
+        {aside}
       </div>
       {amount.kind === "ok" && amount.isExpression && (
         <p className="font-bold text-sprout-600">
@@ -380,6 +396,40 @@ function AmountSection({
   );
 }
 
+/** A longer amount steps down a size, so it keeps fitting its half of the row. */
+function amountSize(text: string): string {
+  const length = text.trim().length;
+  if (length <= 4) return "text-4xl";
+  if (length <= 7) return "text-3xl";
+  return "text-2xl";
+}
+
+// The native picker's own button stretches over the whole pill, so a tap anywhere opens it.
+const pillInput =
+  "w-full min-w-0 bg-transparent pr-4 text-[13px] font-bold text-sprout-900 outline-none [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0";
+
+/** A small captioned field for the date or the time, with its icon on the right. */
+function PickerPill({
+  text,
+  icon: Icon,
+  children,
+}: {
+  text: string;
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <label className="surface-card relative flex min-w-0 flex-col justify-center rounded-2xl border border-sprout-200/80 bg-white px-3 py-2 focus-within:border-sprout-500 focus-within:ring-3 focus-within:ring-sprout-500/15">
+      <span className="text-[11px] font-bold text-ink-muted">{text}</span>
+      {children}
+      <Icon
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-sprout-600"
+      />
+    </label>
+  );
+}
+
 function CurrencyPicker({
   value,
   onChange,
@@ -391,7 +441,7 @@ function CurrencyPicker({
     <Menu.Root>
       <Menu.Trigger
         aria-label={`${t("expense.currency")} ${value}`}
-        className="flex items-center gap-1 rounded-xl px-2 py-1 text-xl font-bold text-ink-muted"
+        className="press-pill flex items-center gap-1 rounded-full bg-sprout-100 px-2.5 py-1 text-sm font-bold text-sprout-700"
       >
         {value}
         <ChevronDown aria-hidden="true" className="size-4" />

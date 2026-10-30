@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { AppProviders, type AppDeps } from "./app/AppProviders.js";
+import { reloadForNewVersion } from "./app/new-version.js";
 import { routes } from "./app/routes.js";
 import { detectLocale } from "./i18n/detect.js";
 import { setLocale } from "./i18n/messages.js";
@@ -18,6 +19,11 @@ const deps: AppDeps = {
 
 // Speak the device's language from the first paint; a signed-in User's own choice takes over.
 setLocale(detectLocale());
+
+// Vite raises this when a file of an older build is gone after a deploy: load the new page.
+window.addEventListener("vite:preloadError", (event) => {
+  if (reloadForNewVersion()) event.preventDefault();
+});
 
 const root = document.getElementById("root");
 if (root === null) throw new Error("index.html has no #root");
