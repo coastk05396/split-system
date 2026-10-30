@@ -269,6 +269,7 @@ export const en: Record<MessageId, string> = {
   "split.allPeople": "All {count} people",
   "split.checked": "{count} / {total} selected",
   "split.selectAll": "Select all",
+  "split.clear": "Clear",
   "split.takesPart": "{name} shares",
   "split.notIn": "Not sharing",
   "split.amountOf": "{name}'s amount",

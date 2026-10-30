@@ -268,6 +268,7 @@ const zhTW = {
   "split.allPeople": "全部 {count} 人",
   "split.checked": "已勾選 {count} / {total} 人",
   "split.selectAll": "全選",
+  "split.clear": "清空",
   "split.takesPart": "{name} 參與分帳",
   "split.notIn": "不參與",
   "split.amountOf": "{name} 的金額",
