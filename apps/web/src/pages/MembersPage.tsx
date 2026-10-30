@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import {
+  isUnsavedMember,
   useAddPlaceholder,
   useGroup,
   useMembers,
@@ -45,7 +46,10 @@ function useLeavingRows(seated: Member[]): { member: Member; leaving: boolean }[
   const previous = useRef<Member[]>(seated);
   const [leaving, setLeaving] = useState<Member[]>([]);
   useEffect(() => {
-    const gone = previous.current.filter((m) => !seated.some((now) => now.id === m.id));
+    // An unsaved Member changing into its saved self is the same row, not someone leaving.
+    const gone = previous.current.filter(
+      (m) => !isUnsavedMember(m) && !seated.some((now) => now.id === m.id),
+    );
     previous.current = seated;
     if (gone.length === 0) return;
     setLeaving((rows) => [...rows, ...gone]);
@@ -68,19 +72,23 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const isAdmin = group.me.role === "admin";
   const add = useAddPlaceholder(group.id);
   const [blocked, setBlocked] = useState<string | null>(null);
-  const [freshMemberId, setFreshMemberId] = useState<string | null>(null);
+  // Saved Member id -> the unsaved id its row began as, so the row is kept when the server answers.
+  const [rowKeys, setRowKeys] = useState<Record<string, string>>({});
 
-  async function addMember() {
+  function addMember() {
     const names = new Set(members.map((member) => member.displayName));
     let number = 1;
     while (names.has(`成員${number}`)) number++;
     setBlocked(null);
-    try {
-      const member = await add.mutateAsync(`成員${number}`);
-      setFreshMemberId(member.id);
-    } catch (error) {
-      setBlocked(failureMessage(error));
-    }
+    add.mutate(`成員${number}`, {
+      onSuccess: (member, _name, context) => {
+        const tempId = context?.tempId;
+        if (tempId !== undefined) setRowKeys((keys) => ({ ...keys, [member.id]: tempId }));
+      },
+      onError: (error) => {
+        setBlocked(failureMessage(error));
+      },
+    });
   }
 
   return (
@@ -95,9 +103,8 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
         <h2 className="text-lg font-bold text-sprout-900">{t("members.title")}</h2>
         <button
           type="button"
-          disabled={add.isPending}
-          onClick={() => void addMember()}
-          className="press-pill flex min-h-11 items-center gap-1 rounded-full bg-sprout-150 px-4 text-sm font-bold text-sprout-700 hover:bg-sprout-200 disabled:opacity-50"
+          onClick={addMember}
+          className="press-pill flex min-h-11 items-center gap-1 rounded-full bg-sprout-150 px-4 text-sm font-bold text-sprout-700 hover:bg-sprout-200"
         >
           <Plus aria-hidden="true" className="size-5" />
           {t("members.addTrigger")}
@@ -106,9 +113,9 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
       <ul aria-label={t("members.title")} className="flex flex-col gap-3">
         {rows.map(({ member: m, leaving }) => (
           <li
-            key={m.id}
+            key={rowKeys[m.id] ?? m.id}
             aria-hidden={leaving ? true : undefined}
-            className={`${card} flex items-center gap-4 p-4 ${leaving ? "row-leave" : m.id === freshMemberId ? "row-arrive" : ""}`}
+            className={`${card} flex items-center gap-4 p-4 ${leaving ? "row-leave" : isUnsavedMember(m) || m.id in rowKeys ? "row-arrive" : ""}`}
           >
             <Avatar
               name={m.displayName}
@@ -129,9 +136,11 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
                 </span>
               )}
             </span>
-            {!leaving && (m.status === "placeholder" || (isAdmin && !m.isMe)) && (
-              <MemberControls group={group} member={m} isAdmin={isAdmin} onBlocked={setBlocked} />
-            )}
+            {!leaving &&
+              !isUnsavedMember(m) &&
+              (m.status === "placeholder" || (isAdmin && !m.isMe)) && (
+                <MemberControls group={group} member={m} isAdmin={isAdmin} onBlocked={setBlocked} />
+              )}
           </li>
         ))}
       </ul>
@@ -246,14 +255,13 @@ function MemberControls({
               onSubmit={(event) => {
                 event.preventDefault();
                 setRenameError(null);
+                setRenaming(false);
                 patch.mutate(
                   { memberId: member.id, patch: { placeholderName: draftName.trim() } },
                   {
-                    onSuccess: () => {
-                      setRenaming(false);
-                    },
                     onError: (error) => {
                       setRenameError(failureMessage(error));
+                      setRenaming(true);
                     },
                   },
                 );

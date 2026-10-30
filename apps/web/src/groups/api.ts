@@ -102,25 +102,118 @@ function useRefreshGroup(id: string) {
   return () => client.invalidateQueries({ queryKey: groupKeys.group(id) });
 }
 
+const TEMP_ID_PREFIX = "tmp-";
+
+/** A Member the browser has shown but the server has not yet confirmed. */
+export function isUnsavedMember(member: Member): boolean {
+  return member.id.startsWith(TEMP_ID_PREFIX);
+}
+
+type MembersEdit = {
+  members: Member[];
+  /** Takes back only this edit, leaving any later edit in place. */
+  undo: (members: Member[]) => Member[];
+  tempId?: string;
+};
+type MembersEditContext = { undo?: MembersEdit["undo"]; tempId?: string | undefined };
+
+/**
+ * Shows a Member change in the cached list at once, takes back just that change if the server
+ * refuses it, and re-reads the Group once the last pending edit is done so the server's answer
+ * wins. Only for changes the browser can compute exactly; never use it for anything that moves a
+ * Balance (docs/adr/0004).
+ */
+function useOptimisticMembers<TVariables>(
+  id: string,
+  edit: (members: Member[], variables: TVariables) => MembersEdit,
+) {
+  const client = useQueryClient();
+  const key = groupKeys.members(id);
+  const mutationKey = [...key, "edit"] as const;
+  return {
+    mutationKey,
+    onMutate: async (variables: TVariables): Promise<MembersEditContext> => {
+      await client.cancelQueries({ queryKey: key });
+      const current = client.getQueryData<Member[]>(key);
+      if (current === undefined) return {};
+      const { members, undo, tempId } = edit(current, variables);
+      client.setQueryData(key, members);
+      return { undo, tempId };
+    },
+    onError: (_error: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
+      const undo = context?.undo;
+      if (undo !== undefined)
+        client.setQueryData<Member[]>(key, (members) => members && undo(members));
+    },
+    onSettled: () => {
+      // The edit being settled still counts as pending here; an early re-read could drop a later
+      // edit's row, so only the last one to finish asks.
+      if (client.isMutating({ mutationKey }) > 1) return;
+      void client.invalidateQueries({ queryKey: groupKeys.group(id) });
+    },
+  };
+}
+
 export function useAddPlaceholder(id: string) {
   const api = useApi();
-  const refresh = useRefreshGroup(id);
+  const optimistic = useOptimisticMembers(id, (members, name: string): MembersEdit => {
+    const tempId = `${TEMP_ID_PREFIX}${crypto.randomUUID()}`;
+    const unsaved: Member = {
+      id: tempId,
+      userId: null,
+      displayName: name,
+      pictureUrl: null,
+      role: "member",
+      status: "placeholder",
+      balance: 0,
+      isMe: false,
+    };
+    return {
+      members: [...members, unsaved],
+      undo: (current) => current.filter((member) => member.id !== tempId),
+      tempId,
+    };
+  });
   return useMutation({
     mutationFn: (name: string) =>
       read<Member>(api.groups[":id"].members.$post({ param: { id } }, withJson({ name }))),
-    onSuccess: refresh,
+    ...optimistic,
   });
 }
 
+type PatchMemberVariables = { memberId: string; patch: MemberPatch };
+
 export function usePatchMember(id: string) {
   const api = useApi();
-  const refresh = useRefreshGroup(id);
+  const optimistic = useOptimisticMembers(
+    id,
+    (members, { memberId, patch }: PatchMemberVariables): MembersEdit => {
+      const before = members.find((member) => member.id === memberId);
+      const apply = (member: Member): Member =>
+        member.id === memberId
+          ? {
+              ...member,
+              role: patch.role ?? member.role,
+              displayName: patch.placeholderName ?? member.displayName,
+            }
+          : member;
+      return {
+        members: members.map(apply),
+        undo: (current) =>
+          current.map((member) =>
+            member.id === memberId && before !== undefined
+              ? { ...member, role: before.role, displayName: before.displayName }
+              : member,
+          ),
+      };
+    },
+  );
   return useMutation({
-    mutationFn: ({ memberId, patch }: { memberId: string; patch: MemberPatch }) =>
+    mutationFn: ({ memberId, patch }: PatchMemberVariables) =>
       read<Member>(
         api.groups[":id"].members[":mid"].$patch({ param: { id, mid: memberId } }, withJson(patch)),
       ),
-    onSuccess: refresh,
+    ...optimistic,
   });
 }
 
