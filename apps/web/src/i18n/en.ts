@@ -185,7 +185,7 @@ export const en: Record<MessageId, string> = {
   "members.role": "Role of {name}",
   "members.removeAria": "Remove {name}",
   "members.confirmRemoveTitle": "Remove {name}?",
-  "members.confirmRemoveBody": "{name} will be removed from the group. This can't be undone.",
+  "members.confirmRemoveBody": "{name} will leave the group, but past expenses keep their name. This can't be undone.",
   "members.confirmRemove": "Remove",
   "members.confirmPromoteTitle": "Make {name} an admin?",
   "members.confirmPromoteBody":
