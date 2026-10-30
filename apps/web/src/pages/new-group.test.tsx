@@ -18,7 +18,7 @@ afterEach(() => {
 const me = makeUser("小宇");
 
 describe("create Group", () => {
-  it("creates a Trip with its Settlement currency, then opens the Invite", async () => {
+  it("creates a Trip with its Settlement currency, then opens Members and Invites", async () => {
     const user = userEvent.setup();
     const { api, router } = renderApp({ path: "/groups/new?usage=trip", cookieUser: me });
 
@@ -27,9 +27,9 @@ describe("create Group", () => {
     await user.selectOptions(screen.getByLabelText("結算幣別"), "USD");
     await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
 
-    expect(await screen.findByRole("heading", { name: "邀請成員" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "成員與邀請" })).toBeVisible();
     const id = router.state.location.pathname.split("/")[2] ?? "";
-    expect(router.state.location.pathname).toBe(`/groups/${id}/invite`);
+    expect(router.state.location.pathname).toBe(`/groups/${id}/members`);
     expect(api.groups.members(id)).toHaveLength(1);
     expect(api.groups.summary(id)).toEqual({
       name: "週末台南小旅行",

@@ -14,6 +14,7 @@
   --color-ink-muted: #4f6b5b;
   --color-peach: #ffe3ca;
   --color-line: #06c755;
+  --color-telegram: #229ed9;
 
   --font-sans:
     "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
@@ -464,6 +465,19 @@
   transform-origin: 50% 90%;
   animation: sprout-sway 1.6s ease-in-out infinite;
 }
+@keyframes invite-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+.invite-pulse {
+  animation: invite-pulse 1.8s ease-out infinite;
+}
 
 /* Everything above moves less, or not at all, for a user who asked for it. The tints and the
    final states stay: only the movement goes. */
@@ -476,6 +490,7 @@
   .rise,
   .digit-roll,
   .sprout-sway,
+  .invite-pulse,
   .tab-panel[data-state="active"],
   .menu-content[data-state="open"],
   .menu-content[data-state="closed"],

@@ -1,6 +1,6 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
-import { Plane, Plus, UserPlus, Users } from "lucide-react";
+import { Plane, Plus, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
@@ -13,12 +13,9 @@ import { SettlePanel } from "../settlements/SettlePanel.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 import { TripPanel } from "../trip/TripPanel.js";
 
-const headerIcon =
-  "press-icon flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2 hover:bg-sprout-150";
-
 /**
  * Screen 3 as amended: the same tabs everywhere, 帳目, 行程 (Trips only) and 結算, with the
- * delete action for Admins only. The tab contents arrive with the Expense, Trip and
+ * Admin-only menu holding the delete action. The tab contents arrive with the Expense, Trip and
  * Settlement screens.
  */
 export function GroupPage() {
@@ -44,31 +41,13 @@ function GroupDetail({ group }: { group: Group }) {
     <div className="flex flex-col gap-6">
       <ScreenHeader
         compact
+        centered
         title={group.name}
         back="/groups"
-        action={
-          <span className="flex items-center">
-            <Link
-              to={`/groups/${group.id}/members`}
-              aria-label={t("group.summary", { count: group.memberCount })}
-              className={headerIcon}
-            >
-              <Users aria-hidden="true" className="size-6" />
-              <span className="text-sm font-bold">{group.memberCount}</span>
-            </Link>
-            <Link
-              to={`/groups/${group.id}/invite`}
-              aria-label={t("group.invite")}
-              className={headerIcon}
-            >
-              <UserPlus aria-hidden="true" className="size-6" />
-            </Link>
-            {group.me.role === "admin" && <DeleteGroupDialog group={group} />}
-          </span>
-        }
+        action={<GroupActions group={group} />}
         subtitle={
           group.isTrip ? (
-            <span className="flex flex-wrap items-center gap-3">
+            <span className="flex flex-wrap items-center justify-center gap-3">
               <span className="flex items-center gap-1 rounded-full bg-peach px-3 py-1 text-xs font-bold text-sprout-700">
                 <Plane aria-hidden="true" className="size-3.5" />
                 {t("group.tripBadge")}
@@ -85,7 +64,7 @@ function GroupDetail({ group }: { group: Group }) {
             <p className="text-sm text-ink-muted">{t("group.alone.body")}</p>
           </div>
           <Link
-            to={`/groups/${group.id}/invite`}
+            to={`/groups/${group.id}/members`}
             className="press-pill shrink-0 rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-500/90"
           >
             {t("group.alone.invite")}
@@ -165,5 +144,51 @@ function GroupDetail({ group }: { group: Group }) {
         })}
       </Tabs.Root>
     </div>
+  );
+}
+
+/** Icon-only header controls: the members and invite page, and (Admins) delete the Group. */
+function GroupActions({ group }: { group: Group }) {
+  const [deleting, setDeleting] = useState(false);
+  const alone = group.memberCount === 1;
+  return (
+    <span className="flex items-center">
+      <Link
+        to={`/groups/${group.id}/members`}
+        aria-label={
+          alone ? t("group.aloneShort") : t("group.summary", { count: group.memberCount })
+        }
+        className="press-icon relative flex size-11 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-150"
+      >
+        {alone && (
+          <span
+            aria-hidden="true"
+            className="invite-pulse absolute inset-1.5 rounded-full bg-sprout-500/30"
+          />
+        )}
+        <UserPlus aria-hidden="true" className="relative size-6" />
+        <span
+          aria-hidden="true"
+          className="absolute top-1 right-0.5 flex min-w-4 items-center justify-center rounded-full bg-sprout-600 px-1 text-[0.625rem] leading-4 font-bold text-white"
+        >
+          {group.memberCount}
+        </span>
+      </Link>
+      {group.me.role === "admin" && (
+        <>
+          <button
+            type="button"
+            aria-label={t("group.delete")}
+            onClick={() => {
+              setDeleting(true);
+            }}
+            className="press-icon flex size-11 items-center justify-center rounded-full text-red-700 hover:bg-red-50"
+          >
+            <Trash2 aria-hidden="true" className="size-6" />
+          </button>
+          <DeleteGroupDialog group={group} open={deleting} onOpenChange={setDeleting} />
+        </>
+      )}
+    </span>
   );
 }

@@ -25,24 +25,23 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     await page.getByLabel("群組名稱").fill("台南吃透透");
     await page.getByRole("button", { name: "建立群組，繼續" }).click();
 
-    // 5. Lands on invite page, return to group page
-    await expect(page).toHaveURL(/\/groups\/[^/]+\/invite/);
-    const groupId = new URL(page.url()).pathname.match(/^\/groups\/([^/]+)\/invite$/)?.[1];
-    if (!groupId) throw new Error("Expected an invite URL with a group ID");
+    // 5. Lands on the combined Members and Invite page, return to group page
+    await expect(page).toHaveURL(/\/groups\/[^/]+\/members/);
+    const groupId = new URL(page.url()).pathname.match(/^\/groups\/([^/]+)\/members$/)?.[1];
+    if (!groupId) throw new Error("Expected a members URL with a group ID");
     await page.goto(`/groups/${groupId}`);
     await expect(page.getByRole("heading", { name: "台南吃透透" })).toBeVisible();
 
     // 6. Add a placeholder member
-    await page.getByRole("link", { name: /位成員/ }).click();
+    await page.getByRole("link", { name: "只有你" }).click();
     await expect(page).toHaveURL(`/groups/${groupId}/members`);
-    await page.getByLabel("名字").fill("阿哲");
-    await page.getByRole("button", { name: "新增" }).click();
-    await expect(page.getByText("阿哲")).toBeVisible();
+    await page.getByRole("button", { name: "新增成員" }).click();
+    await expect(page.getByText("成員1（未加入）")).toBeVisible();
 
     // Return to group page
     await page.goto(`/groups/${groupId}`);
 
-    // 7. Add an expense: $200 equally split between 小宇 and 阿哲
+    // 7. Add an expense: $200 equally split between 小宇 and 成員1
     await page.getByRole("link", { name: "新增支出" }).click();
     await expect(page).toHaveURL(`/groups/${groupId}/expenses/new`);
     await page.getByLabel("名稱").fill("度小月擔仔麵");
@@ -53,10 +52,10 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     await expect(page).toHaveURL(`/groups/${groupId}`);
     await page.getByRole("tab", { name: "結算" }).click();
 
-    // 9. Payment plan shows 阿哲 owes 小宇 NT$ 100 (小宇 is "你" in the signed-in view)
+    // 9. Payment plan shows 成員1 owes 小宇 NT$ 100 (小宇 is "你" in the signed-in view)
     const planList = page.getByRole("list", { name: "要付給誰" });
     await expect(planList).toBeVisible({ timeout: 15_000 });
-    const planItem = planList.getByRole("listitem").filter({ hasText: "阿哲付給你" });
+    const planItem = planList.getByRole("listitem").filter({ hasText: "成員1付給你" });
     await expect(planItem).toContainText("NT$ 100");
 
     // 10. Receiver confirms the settlement
@@ -69,7 +68,7 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     await expect(page.getByText("大家都結清了！")).toBeVisible({ timeout: 10_000 });
     // The confirmed payment is in the history, one line under its day.
     const historyList = page.getByRole("list", { name: "結算紀錄" });
-    await expect(historyList).toContainText("阿哲付給你");
+    await expect(historyList).toContainText("成員1付給你");
     await expect(historyList).toContainText("NT$ 100");
   });
 });

@@ -1,26 +1,28 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { formatAmount, type Group } from "@split/shared";
-import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { t } from "../i18n/messages.js";
 import { useDeleteGroup, useMembers } from "./api.js";
 import { failureMessage, input, secondaryButton } from "./ui.js";
 
+const CONFIRM_WORD = "delete";
+
 /**
- * Screen 31 (decision 10): an Admin types the Group's name, sees what is still unsettled,
+ * Screen 31 (decision 10): an Admin types the word delete, sees what is still unsettled,
  * and deletes the Group and everything in it for good.
  */
-export function DeleteGroupDialog({ group }: { group: Group }) {
-  const [open, setOpen] = useState(false);
+export function DeleteGroupDialog({
+  group,
+  open,
+  onOpenChange,
+}: {
+  group: Group;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger
-        aria-label={t("group.delete")}
-        className="press-icon rounded-full p-2 text-red-700 hover:bg-red-50"
-      >
-        <Trash2 aria-hidden="true" className="size-6" />
-      </Dialog.Trigger>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
         <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
@@ -73,7 +75,7 @@ function DeleteForm({ group }: { group: Group }) {
         </Dialog.Close>
         <button
           type="button"
-          disabled={typed !== group.name || remove.isPending}
+          disabled={typed.trim().toLowerCase() !== CONFIRM_WORD || remove.isPending}
           onClick={() => {
             remove.mutate(undefined, {
               onSuccess: () => void navigate("/groups", { replace: true }),

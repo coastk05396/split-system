@@ -16,6 +16,8 @@ export interface LineSignIn {
   share(text: string): Promise<boolean>;
 }
 
+export class LineShareUnavailableError extends Error {}
+
 const RETURNING_KEY = "split.lineLogin";
 
 /** The LINE in-app browser adds "Line/<version>" to its user agent. */
@@ -32,11 +34,20 @@ function storage(): Storage | null {
 }
 
 export function createLineSignIn(liffId: string | undefined): LineSignIn {
+  let liffReady: Promise<(typeof import("@line/liff"))["default"]> | null = null;
+
   async function loadLiff() {
     if (liffId === undefined || liffId === "") return null;
-    const { default: liff } = await import("@line/liff");
-    await liff.init({ liffId });
-    return liff;
+    liffReady ??= import("@line/liff").then(async ({ default: liff }) => {
+      await liff.init({ liffId });
+      return liff;
+    });
+    try {
+      return await liffReady;
+    } catch (error) {
+      liffReady = null;
+      throw error;
+    }
   }
 
   // Started once per page load: React may mount the auth provider twice in dev.
@@ -45,14 +56,19 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
   async function startAutoSignIn(): Promise<string | null> {
     const returning = storage()?.getItem(RETURNING_KEY) === "1";
     if (!returning && !looksLikeLineApp(navigator.userAgent)) return null;
-    storage()?.removeItem(RETURNING_KEY);
     const liff = await loadLiff();
-    if (liff === null) return null;
+    if (liff === null) {
+      storage()?.removeItem(RETURNING_KEY);
+      return null;
+    }
     if (!liff.isLoggedIn()) {
+      storage()?.removeItem(RETURNING_KEY);
       if (liff.isInClient()) liff.login();
       return null;
     }
-    return liff.getIDToken();
+    const idToken = liff.getIDToken();
+    storage()?.removeItem(RETURNING_KEY);
+    return idToken;
   }
 
   return {
@@ -76,10 +92,12 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     async share(text) {
       const liff = await loadLiff();
       if (liff === null || !liff.isApiAvailable("shareTargetPicker")) {
-        throw new Error("The LINE share target picker is not available");
+        throw new LineShareUnavailableError("The LINE share target picker is not available");
       }
       const result = await liff.shareTargetPicker([{ type: "text", text }]);
-      return result !== undefined;
+      if (result === undefined) return false;
+      if (liff.isInClient()) liff.closeWindow();
+      return true;
     },
   };
 }
