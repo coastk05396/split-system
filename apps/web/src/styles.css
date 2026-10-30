@@ -337,6 +337,7 @@
     clip-path: inset(0);
   }
 }
+
 @keyframes bar-grow-left {
   from {
     clip-path: inset(0 0 0 100%);
@@ -350,6 +351,37 @@
 }
 .bar-grow-left {
   animation: bar-grow-left 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The statistics chart draws itself once when its page opens. */
+@keyframes stats-bar-enter {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.stats-bar-enter {
+  transform-origin: bottom;
+  animation: stats-bar-enter 650ms var(--ease-out-expo) both;
+}
+@keyframes stats-ring-enter {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.stats-ring-enter {
+  animation: stats-ring-enter 650ms var(--ease-out-expo) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stats-bar-enter,
+  .stats-ring-enter {
+    animation: none;
+  }
 }
 
 /* The tick that settles into "everyone is settled". */

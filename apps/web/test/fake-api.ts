@@ -1,4 +1,4 @@
-import type { Me } from "@split/shared";
+import type { CurrencyCode, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
 /**
@@ -27,6 +27,16 @@ export interface FakeApi {
   requests: { route: string; headers: Headers; body: string | null }[];
   /** Reference rates by "BASE-QUOTE" (scaled by 1,000,000); a missing pair answers 503 RATE_UNAVAILABLE. */
   rates: Map<string, { rateScaled: number; rateDate?: string; stale?: boolean }>;
+  spendingStats: { month: string; category: string; currency: CurrencyCode; amount: number }[];
+  spendingDetails: {
+    id: string;
+    groupId: string;
+    groupName: string;
+    description: string;
+    date: string;
+    currency: CurrencyCode;
+    amount: number;
+  }[];
 }
 
 export function makeUser(displayName: string, provider: "google" | "line" = "google"): Me {
@@ -97,6 +107,8 @@ export function createFakeApi(): FakeApi {
     testSignInEnabled: true,
     refuseLink: null,
     requests,
+    spendingStats: [],
+    spendingDetails: [],
     rates: new Map([
       ["USD-TWD", { rateScaled: 31_523_400 }],
       ["TWD-USD", { rateScaled: 31_723 }],
@@ -150,6 +162,12 @@ export function createFakeApi(): FakeApi {
     }
 
     switch (`${method} ${url.pathname}`) {
+      case "GET /api/v1/stats/spending":
+        return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.spendingStats);
+      case "GET /api/v1/stats/expenses":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ items: api.spendingDetails, nextCursor: null });
       case "POST /api/v1/auth/refresh":
         return cookieUser === null ? error("UNAUTHORIZED", 401) : issue(cookieUser);
       case "POST /api/v1/auth/google":

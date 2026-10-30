@@ -48,8 +48,15 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
     await page.getByRole("textbox", { name: "金額" }).fill("200");
     await page.getByRole("button", { name: "新增支出" }).click();
 
-    // 8. Returned to group page, switch to "結算" tab
+    // 8. Stats count this Member's share, and open its underlying Expense.
     await expect(page).toHaveURL(`/groups/${groupId}`);
+    await page.getByRole("link", { name: "統計", exact: true }).last().click();
+    await expect(page.getByText("NT$ 100").first()).toBeAttached();
+    await page.getByRole("button", { name: /其他/ }).click();
+    await expect(page.getByRole("link", { name: /度小月擔仔麵/ })).toBeVisible();
+
+    // Return to the Group and switch to the Settlement tab.
+    await page.goto(`/groups/${groupId}`);
     await page.getByRole("tab", { name: "結算" }).click();
 
     // 9. Payment plan shows 成員1 owes 小宇 NT$ 100 (小宇 is "你" in the signed-in view)
