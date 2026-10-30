@@ -4,4 +4,6 @@ Member changes (add a Placeholder Member, rename it, set a role) show on screen 
 
 We did this because a Balance is the server's answer to a currency conversion and a Split method, and the browser can only guess it. A wrong guess flashing on a money screen, even for a second, is worse than a short wait.
 
-The cost is that those two actions feel slower than member changes; we answer with an immediate move to the next screen and a placeholder in place of the amount, not with a guess. Deleting a Member or an Expense stays unguessed too, since the server can refuse it (for instance while a Balance is not zero), and a row that vanishes and comes back reads as a bug.
+The cost is that those two actions are not sped up this way. Any later speed-up for them, such as moving to the next screen straight away, must not put an amount on screen before the server has answered. Deleting a Member or an Expense stays unguessed too, since the server can refuse it (for instance while a Balance is not zero), and a row that vanishes and comes back reads as a bug.
+
+Member changes made in quick succession are each taken back on their own if refused, and the Group is re-read only after the last one finishes, so one refusal cannot erase a later edit.
