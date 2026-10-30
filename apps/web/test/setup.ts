@@ -23,8 +23,34 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// Node's own experimental `localStorage` global hides jsdom's and throws or is undefined here:
+// give the tests an in-memory one, emptied after each test like the DOM.
+const memoryStorage = (() => {
+  let items = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return items.size;
+    },
+    clear: () => {
+      items = new Map();
+    },
+    getItem: (key) => items.get(key) ?? null,
+    key: (index) => [...items.keys()][index] ?? null,
+    removeItem: (key) => {
+      items.delete(key);
+    },
+    setItem: (key, value) => {
+      items.set(key, value);
+    },
+  };
+  return storage;
+})();
+Object.defineProperty(window, "localStorage", { configurable: true, value: memoryStorage });
+Object.defineProperty(globalThis, "localStorage", { configurable: true, value: memoryStorage });
+
 afterEach(() => {
   cleanup();
+  memoryStorage.clear();
   // A test that switches to English must not leave the next one in it.
   setLocale("zh-TW");
 });

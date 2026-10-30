@@ -44,6 +44,16 @@ describe("app shell", () => {
     expect(await screen.findByRole("heading", { name: /阿芽/ })).toBeVisible();
   });
 
+  it("starts LIFF on arrival in LINE even when the session is restored", async () => {
+    const { linePrepares } = renderApp({
+      cookieUser: makeUser("小宇"),
+      insideLine: { idToken: null },
+    });
+
+    expect(await screen.findByRole("heading", { name: /小宇/ })).toBeVisible();
+    expect(linePrepares.count).toBe(1);
+  });
+
   it("offers LINE and Google outside LINE, with the data summary and consent", async () => {
     const { lineLogins } = renderApp({ path: "/sign-in" });
 
