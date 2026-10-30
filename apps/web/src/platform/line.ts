@@ -50,7 +50,8 @@ const LIFF_RETURN_PARAM = /[?&](liff\.state|liffClientId|liffRedirectUri)=/;
  * LIFF opens a `<lui-alert>` ("You have logged in" / "Continue") whose promise never resolves and
  * whose `window.open(..., "_blank")` is blocked inside LINE's in-app browser, leaving `/sign-in`
  * stuck on the loading screen. Keeping the parameter present while `liff.init()` runs skips that
- * workaround.
+ * workaround. It is an undocumented LIFF internal, last checked against @line/liff 2.31.2; re-test
+ * LINE sign-in on Android when upgrading LIFF.
  */
 const ANDROID_ESCAPE_PARAM = "liffIsEscapedFromApp";
 

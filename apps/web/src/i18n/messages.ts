@@ -187,7 +187,7 @@ const zhTW = {
   "members.role": "{name} 的角色",
   "members.removeAria": "移除 {name}",
   "members.confirmRemoveTitle": "移除 {name}？",
-  "members.confirmRemoveBody": "{name} 會從群組中移除，這個動作無法復原。",
+  "members.confirmRemoveBody": "{name} 會離開群組，但過去的費用仍保留其姓名，這個動作無法復原。",
   "members.confirmRemove": "移除",
   "members.confirmPromoteTitle": "設 {name} 為管理員？",
   "members.confirmPromoteBody": "管理員可以移除成員、重設邀請連結和刪除群組。",
