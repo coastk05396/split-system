@@ -90,6 +90,77 @@ describe("join through an Invite", () => {
     expect(router.state.location.pathname).toBe(`/groups/${id}`);
   });
 
+  it("joins at once from a shared Expense and lands on it, without asking", async () => {
+    let id = "";
+    const { router, api } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(ty, {
+          name: "台南",
+          others: [{ name: "宜庭" }],
+          expenses: [{ description: "火鍋", amount: 2160 }],
+          invite: { token: "tok-1" },
+        });
+      },
+      pathFor: () => `/join/tok-1?next=${encodeURIComponent(`/groups/${id}/expenses/e-火鍋`)}`,
+    });
+
+    expect(await screen.findByText("已加入「台南」")).toBeVisible();
+    expect(router.state.location.pathname).toBe(`/groups/${id}/expenses/e-火鍋`);
+    expect(api.groups.members(id).map((m) => m.name)).toContain("小宇");
+  });
+
+  it("opens the shared Expense for someone already in the Group, with no joining note", async () => {
+    let id = "";
+    const { router } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, {
+          name: "台南",
+          expenses: [{ description: "火鍋", amount: 2160 }],
+          invite: { token: "tok-1" },
+        });
+      },
+      pathFor: () => `/join/tok-1?next=${encodeURIComponent(`/groups/${id}/expenses/e-火鍋`)}`,
+    });
+
+    expect(await screen.findByRole("button", { name: "分享" })).toBeVisible();
+    expect(router.state.location.pathname).toBe(`/groups/${id}/expenses/e-火鍋`);
+    expect(screen.queryByText(/已加入/)).toBeNull();
+  });
+
+  it("still asks who I am when the Group has Placeholders, even from a shared Expense", async () => {
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(ty, {
+          name: "台南",
+          others: [{ name: "阿哲", status: "placeholder" }],
+          expenses: [{ description: "火鍋", amount: 2160 }],
+          invite: { token: "tok-1" },
+        });
+      },
+      pathFor: () => `/join/tok-1?next=${encodeURIComponent(`/groups/${id}/expenses/e-火鍋`)}`,
+    });
+
+    expect(await screen.findByText("你是這些人之一嗎？")).toBeVisible();
+  });
+
+  it("never follows a next that leaves the Group", async () => {
+    let id = "";
+    const { router } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "台南", invite: { token: "tok-1" } });
+      },
+      pathFor: () => `/join/tok-1?next=${encodeURIComponent("/settings")}`,
+    });
+
+    expect(await screen.findByRole("heading", { level: 1, name: "台南" })).toBeVisible();
+    expect(router.state.location.pathname).toBe(`/groups/${id}`);
+  });
+
   it("brings a signed-out visitor back to the join screen after sign-in", async () => {
     const user = userEvent.setup();
     const { router } = joining({ name: "台南" }, { signedIn: false });

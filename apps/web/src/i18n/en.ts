@@ -185,7 +185,8 @@ export const en: Record<MessageId, string> = {
   "members.role": "Role of {name}",
   "members.removeAria": "Remove {name}",
   "members.confirmRemoveTitle": "Remove {name}?",
-  "members.confirmRemoveBody": "{name} will leave the group, but past expenses keep their name. This can't be undone.",
+  "members.confirmRemoveBody":
+    "{name} will leave the group, but past expenses keep their name. This can't be undone.",
   "members.confirmRemove": "Remove",
   "members.confirmPromoteTitle": "Make {name} an admin?",
   "members.confirmPromoteBody":
@@ -259,7 +260,9 @@ export const en: Record<MessageId, string> = {
   "join.claimConfirm": "Confirm claim",
   "join.asNew": "That's not me, join as new",
   "join.expired": "This invite link has expired. Ask a group admin for a new one.",
-  "join.revoked": "This invite link no longer works; an admin may have made a new one.",
+  "join.joined": "Joined “{name}”",
+  "join.revoked":
+    "This invite link no longer works; an admin may have made a new one. Ask a member to share it again.",
   "join.full": "This group already has 30 members and cannot take more.",
   "join.home": "Back to Home",
 

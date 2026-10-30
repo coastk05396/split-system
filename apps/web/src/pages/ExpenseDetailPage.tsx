@@ -2,13 +2,13 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { type Expense, formatAmount, formatRate, type Group } from "@split/shared";
 import { Pencil, Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
 import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
 import { buildExpenseCard } from "../expenses/expense-card.js";
 import { ExpenseShareDialog } from "../expenses/ExpenseShareDialog.js";
 import { dateHeading, memberNames, memberPictures } from "../expenses/ExpenseList.js";
-import { useGroup, useMembers } from "../groups/api.js";
+import { useEnsureInvite, useGroup, useMembers } from "../groups/api.js";
 import {
   Avatar,
   card,
@@ -43,6 +43,12 @@ export function ExpenseDetailPage() {
   return <Detail group={group.data} expense={expense.data} nameOf={nameOf} pictureOf={pictureOf} />;
 }
 
+/** The Group a person has just joined by opening this Expense, carried in the router state. */
+function joinedGroupName(state: unknown): string | undefined {
+  if (typeof state !== "object" || state === null || !("joined" in state)) return undefined;
+  return typeof state.joined === "string" ? state.joined : undefined;
+}
+
 function Detail({
   group,
   expense,
@@ -56,10 +62,17 @@ function Detail({
 }) {
   const canChange = expense.creatorMemberId === group.me.memberId || group.me.role === "admin";
   const [sharing, setSharing] = useState(false);
+  const joined = joinedGroupName(useLocation().state);
+  const ensureInvite = useEnsureInvite(group.id);
   const settlement = group.settlementCurrency;
   const foreign = expense.originalCurrency !== settlement;
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      {joined !== undefined && (
+        <p role="status" className="rounded-2xl bg-sprout-150 px-4 py-2 text-sm font-bold">
+          {t("join.joined", { name: joined })}
+        </p>
+      )}
       <ScreenHeader
         title={t("expense.detail")}
         back={`/groups/${group.id}`}
@@ -69,7 +82,15 @@ function Detail({
               type="button"
               aria-label={t("expenseShare.action")}
               onClick={() => {
-                setSharing(true);
+                // The card carries the Group's Invite, so whoever opens it can get in.
+                void ensureInvite.mutateAsync().then(
+                  () => {
+                    setSharing(true);
+                  },
+                  () => {
+                    setSharing(true);
+                  },
+                );
               }}
               className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-600 hover:bg-sprout-150"
             >
@@ -182,7 +203,7 @@ function Detail({
       </section>
       {canChange && <DeleteExpense group={group} expense={expense} />}
       <ExpenseShareDialog
-        card={buildExpenseCard(expense, group, nameOf)}
+        card={buildExpenseCard(expense, group, nameOf, ensureInvite.data?.token ?? null)}
         open={sharing}
         onOpenChange={setSharing}
       />

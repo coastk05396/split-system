@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type CurrencyCode, formatAmount, type InvitePreview } from "@split/shared";
-import { useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import { useInvitePreview, useJoin } from "../groups/api.js";
 import {
@@ -32,6 +32,7 @@ const INVITE_ERRORS: Partial<Record<string, MessageId>> = {
 export function JoinPage() {
   const token = useParams().token ?? "";
   const preview = useInvitePreview(token);
+  const requested = useSearchParams()[0].get("next");
 
   if (preview.isPending) return <Loading />;
   if (preview.isError) {
@@ -40,30 +41,85 @@ export function JoinPage() {
     if (known === undefined) {
       return <LoadError error={preview.error} onRetry={() => void preview.refetch()} />;
     }
-    return (
-      <div className="flex max-w-md flex-col items-start gap-4">
-        <h1 className="text-2xl font-bold">{t("join.title")}</h1>
-        <p role="alert" className="rounded-2xl bg-peach p-4">
-          {t(known)}
-        </p>
-        <Link to="/" className={`${secondaryButton} py-3`}>
-          {t("join.home")}
-        </Link>
-      </div>
-    );
+    return <InviteProblem message={t(known)} />;
   }
-  if (preview.data.isMember) return <Navigate to={`/groups/${preview.data.groupId}`} replace />;
-  return <JoinForm token={token} preview={preview.data} />;
+  // Only a page of this very Group: a link must not send anyone anywhere else.
+  const next =
+    requested !== null && requested.startsWith(`/groups/${preview.data.groupId}/`)
+      ? requested
+      : null;
+  if (preview.data.isMember) {
+    return <Navigate to={next ?? `/groups/${preview.data.groupId}`} replace />;
+  }
+  // Opened from a shared Expense: with no Placeholder Member to choose from, there is nothing to
+  // ask, so the person joins at once and lands on that Expense.
+  if (next !== null && preview.data.placeholders.length === 0) {
+    return <JoinAtOnce token={token} preview={preview.data} next={next} />;
+  }
+  return <JoinForm token={token} preview={preview.data} next={next} />;
 }
 
-function JoinForm({ token, preview }: { token: string; preview: InvitePreview }) {
+function InviteProblem({ message }: { message: string }) {
+  return (
+    <div className="flex max-w-md flex-col items-start gap-4">
+      <h1 className="text-2xl font-bold">{t("join.title")}</h1>
+      <p role="alert" className="rounded-2xl bg-peach p-4">
+        {message}
+      </p>
+      <Link to="/" className={`${secondaryButton} py-3`}>
+        {t("join.home")}
+      </Link>
+    </div>
+  );
+}
+
+function JoinAtOnce({
+  token,
+  preview,
+  next,
+}: {
+  token: string;
+  preview: InvitePreview;
+  next: string;
+}) {
+  const navigate = useNavigate();
+  const join = useJoin(token);
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    join.mutate(null, {
+      onSuccess: () => void navigate(next, { replace: true, state: { joined: preview.groupName } }),
+    });
+  }, [join, navigate, next, preview.groupName]);
+
+  if (join.isError) {
+    const known = join.error instanceof ApiFailure ? INVITE_ERRORS[join.error.code] : undefined;
+    return <InviteProblem message={known === undefined ? failureMessage(join.error) : t(known)} />;
+  }
+  return <Loading />;
+}
+
+function JoinForm({
+  token,
+  preview,
+  next,
+}: {
+  token: string;
+  preview: InvitePreview;
+  next: string | null;
+}) {
   const navigate = useNavigate();
   const join = useJoin(token);
   const [claiming, setClaiming] = useState<Placeholder | null>(null);
 
   const submit = (memberId: string | null) => {
     join.mutate(memberId, {
-      onSuccess: (result) => void navigate(`/groups/${result.groupId}`, { replace: true }),
+      onSuccess: (result) =>
+        void navigate(next ?? `/groups/${result.groupId}`, {
+          replace: true,
+          ...(next === null ? {} : { state: { joined: preview.groupName } }),
+        }),
     });
   };
   const hasPlaceholders = preview.placeholders.length > 0;

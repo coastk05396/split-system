@@ -6,7 +6,7 @@ import { memberNames } from "../expenses/ExpenseList.js";
 import { ExpenseForm } from "../expenses/ExpenseForm.js";
 import { ExpenseGroupBadge } from "../expenses/ExpenseGroupBadge.js";
 import { useExpenses } from "../expenses/api.js";
-import { useGroup, useMembers } from "../groups/api.js";
+import { useEnsureInvite, useGroup, useMembers } from "../groups/api.js";
 import { LoadError, Loading, ScreenHeader } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 
@@ -21,6 +21,7 @@ export function NewExpensePage() {
   const group = useGroup(id);
   const members = useMembers(id);
   const expenses = useExpenses(id);
+  const ensureInvite = useEnsureInvite(id);
   if (group.isError) return <LoadError error={group.error} onRetry={() => void group.refetch()} />;
   if (members.isError) {
     return <LoadError error={members.error} onRetry={() => void members.refetch()} />;
@@ -41,7 +42,14 @@ export function NewExpensePage() {
         members={members.data}
         {...(startCurrency === undefined ? {} : { startCurrency })}
         onSaved={async (saved, { sendToChat }) => {
-          const card = buildExpenseCard(saved, group.data, memberNames(members.data));
+          // The card carries the Group's Invite, so whoever opens it can get in.
+          const invite = await ensureInvite.mutateAsync().catch(() => null);
+          const card = buildExpenseCard(
+            saved,
+            group.data,
+            memberNames(members.data),
+            invite?.token ?? null,
+          );
           let chat: ChatSendResult = "none";
           if (sendToChat) {
             chat = await line
