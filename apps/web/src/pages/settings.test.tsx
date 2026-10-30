@@ -1,5 +1,5 @@
 import type { Me } from "@split/shared";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { beforeAll, describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -11,7 +11,13 @@ function bothLinked(name: string): Me {
 
 async function accounts() {
   await screen.findByRole("heading", { level: 1, name: "我的設定" });
-  return within(screen.getByRole("region", { name: "已連結的帳號" }));
+  return within(screen.getByRole("list", { name: "已連結的帳號" }));
+}
+
+async function row(provider: "LINE" | "Google") {
+  const item = (await accounts()).getByText(provider).closest("li");
+  if (item === null) throw new Error(`No account row for ${provider}`);
+  return item;
 }
 
 // The landing page is a lazy chunk whose first import can outlast findBy's 1 s under load.
@@ -30,8 +36,8 @@ describe("settings (screen 11)", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "我的設定" })).toBeVisible();
     expect(screen.getByText("小宇")).toBeVisible();
-    expect((await accounts()).getByText("LINE 已連結")).toBeVisible();
-    expect((await accounts()).getByText("Google 未連結")).toBeVisible();
+    expect(await row("LINE")).toHaveTextContent("已連結");
+    expect((await accounts()).queryByText("Google")).toBeNull();
     // The only Identity cannot be unlinked.
     expect((await accounts()).queryByRole("button", { name: /解除連結/ })).toBeNull();
   });
@@ -50,38 +56,24 @@ describe("settings (screen 11)", () => {
     expect(screen.getByRole("option", { name: "THB 泰銖" })).toBeVisible();
   });
 
-  it("links Google with the Google button", async () => {
-    const user = userEvent.setup();
-    const { api } = renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
+  it("offers no Google link to someone signed in with LINE", async () => {
+    renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
 
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
-
-    expect(await (await accounts()).findByText("Google 已連結")).toBeVisible();
-    expect(api.calls).toContain("POST /api/v1/auth/link/google");
+    expect(await row("LINE")).toHaveTextContent("已連結");
+    expect((await accounts()).queryByText("Google")).toBeNull();
+    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
   });
 
-  it("explains when the Google account already belongs to another 小芽 account", async () => {
-    const user = userEvent.setup();
-    const { api } = renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
-    api.refuseLink = "IDENTITY_LINKED_ELSEWHERE";
-
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("這個帳號已經是另一個小芽帳號。");
-    expect((await accounts()).getByText("Google 未連結")).toBeVisible();
-  });
-
-  it("links LINE inside the LINE app", async () => {
-    const user = userEvent.setup();
+  it("offers no LINE link to someone signed in with Google, even inside the LINE app", async () => {
     renderApp({
       path: "/settings",
       cookieUser: makeUser("小宇", "google"),
       insideLine: { idToken: "fake|l-1|小宇" },
     });
 
-    await user.click(await (await accounts()).findByRole("button", { name: "連結 LINE" }));
-
-    expect(await (await accounts()).findByText("LINE 已連結")).toBeVisible();
+    expect(await row("Google")).toHaveTextContent("已連結");
+    expect((await accounts()).queryByText("LINE")).toBeNull();
+    expect(screen.queryByRole("button", { name: "連結 LINE" })).toBeNull();
   });
 
   it("unlinks one of two accounts", async () => {
@@ -90,18 +82,21 @@ describe("settings (screen 11)", () => {
 
     await user.click(await (await accounts()).findByRole("button", { name: "解除連結 Google" }));
 
-    expect(await (await accounts()).findByText("Google 未連結")).toBeVisible();
+    await waitFor(async () => {
+      expect((await accounts()).queryByText("Google")).toBeNull();
+    });
     expect((await accounts()).queryByRole("button", { name: /解除連結/ })).toBeNull();
   });
 
-  it("signs out every device and returns to the landing page", async () => {
+  it("signs out and returns to the landing page, with no sign-out-everywhere row", async () => {
     const user = userEvent.setup();
-    const { api } = renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
+    renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
 
-    await user.click(await screen.findByRole("button", { name: "登出所有裝置" }));
+    expect(await screen.findByRole("button", { name: "刪除帳號" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "登出所有裝置" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "登出" }));
 
     expect(await landingHeading()).toBeVisible();
-    expect(api.calls).toContain("POST /api/v1/auth/logout-all");
   });
 
   it("deletes the account only after confirming", async () => {
