@@ -67,7 +67,15 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       return null;
     }
     const idToken = liff.getIDToken();
+    const expiresAt = liff.getDecodedIDToken()?.exp;
     storage()?.removeItem(RETURNING_KEY);
+    // LIFF keeps its login for hours but an ID token lives about one, so a returning
+    // browser can hold a token the server will refuse. Start a fresh login instead.
+    if (idToken === null || (expiresAt !== undefined && expiresAt * 1000 <= Date.now())) {
+      liff.logout();
+      if (liff.isInClient()) liff.login();
+      return null;
+    }
     return idToken;
   }
 
@@ -86,6 +94,7 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
         storage()?.removeItem(RETURNING_KEY);
         throw new Error("LIFF ID is not configured");
       }
+      if (liff.isLoggedIn()) liff.logout();
       liff.login({ redirectUri: window.location.href });
     },
 
