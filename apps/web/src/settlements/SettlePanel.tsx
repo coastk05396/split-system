@@ -6,7 +6,7 @@ import {
   type Settlement,
 } from "@split/shared";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, CircleCheck } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import {
   AvatarTip,
   card,
@@ -20,6 +20,7 @@ import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
 import { useMembers } from "../groups/api.js";
 import { CountUp } from "../shell/CountUp.js";
+import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
@@ -252,13 +253,15 @@ export function SettlePanel({ group }: { group: Group }) {
 
 function SettledMessage({ celebrate }: { celebrate: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-2 rounded-2xl bg-sprout-150 px-4 py-5 font-bold text-sprout-700">
-      <span aria-hidden="true" className="relative">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-[1.75rem] bg-sprout-150 px-4 py-6 font-bold text-sprout-700">
+      <span aria-hidden="true" className="relative inline-flex">
         {celebrate && (
-          <span className="settle-ring absolute inset-0 rounded-full border-2 border-sprout-500" />
+          <span className="settle-ring absolute inset-2 rounded-full border-2 border-sprout-500" />
         )}
         <span className={`relative inline-flex ${celebrate ? "settle-pop" : ""}`}>
-          <CircleCheck className="size-6" />
+          <Sparkles>
+            <SproutMascot className="size-24" mood="cheer" />
+          </Sparkles>
         </span>
       </span>
       <p>{t("settle.allSettled")}</p>

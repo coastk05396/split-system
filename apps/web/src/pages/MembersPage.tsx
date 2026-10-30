@@ -2,7 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { formatAmount, type Group, type Member } from "@split/shared";
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import {
@@ -35,8 +35,36 @@ export function MembersPage() {
   return <MemberList group={group.data} members={members.data} />;
 }
 
+const LEAVE_MS = 200;
+
+/**
+ * The seated Members, plus anyone who has just left, kept in place for a moment so their row can
+ * shrink away instead of vanishing.
+ */
+function useLeavingRows(seated: Member[]): { member: Member; leaving: boolean }[] {
+  const previous = useRef<Member[]>(seated);
+  const [leaving, setLeaving] = useState<Member[]>([]);
+  useEffect(() => {
+    const gone = previous.current.filter((m) => !seated.some((now) => now.id === m.id));
+    previous.current = seated;
+    if (gone.length === 0) return;
+    setLeaving((rows) => [...rows, ...gone]);
+    const timer = window.setTimeout(() => {
+      setLeaving((rows) => rows.filter((row) => !gone.some((g) => g.id === row.id)));
+    }, LEAVE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [seated]);
+  return [
+    ...seated.map((member) => ({ member, leaving: false })),
+    ...leaving.map((member) => ({ member, leaving: true })),
+  ];
+}
+
 function MemberList({ group, members }: { group: Group; members: Member[] }) {
-  const seated = members.filter((m) => m.status !== "former");
+  const seated = useMemo(() => members.filter((m) => m.status !== "former"), [members]);
+  const rows = useLeavingRows(seated);
   const isAdmin = group.me.role === "admin";
   const add = useAddPlaceholder(group.id);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -76,10 +104,11 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
         </button>
       </div>
       <ul aria-label={t("members.title")} className="flex flex-col gap-3">
-        {seated.map((m) => (
+        {rows.map(({ member: m, leaving }) => (
           <li
             key={m.id}
-            className={`${card} flex items-center gap-4 p-4 ${m.id === freshMemberId ? "row-arrive" : ""}`}
+            aria-hidden={leaving ? true : undefined}
+            className={`${card} flex items-center gap-4 p-4 ${leaving ? "row-leave" : m.id === freshMemberId ? "row-arrive" : ""}`}
           >
             <Avatar
               name={m.displayName}
@@ -100,7 +129,7 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
                 </span>
               )}
             </span>
-            {(m.status === "placeholder" || (isAdmin && !m.isMe)) && (
+            {!leaving && (m.status === "placeholder" || (isAdmin && !m.isMe)) && (
               <MemberControls group={group} member={m} isAdmin={isAdmin} onBlocked={setBlocked} />
             )}
           </li>

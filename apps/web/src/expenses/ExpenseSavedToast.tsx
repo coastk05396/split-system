@@ -14,6 +14,7 @@ export interface SavedShare {
 }
 
 const VISIBLE_MS = 6000;
+const LEAVE_MS = 180;
 
 /**
  * The note after saving an Expense: it fades after a few seconds, and Share opens the
@@ -21,6 +22,7 @@ const VISIBLE_MS = 6000;
  */
 export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
   const [visible, setVisible] = useState(true);
+  const [leaving, setLeaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [held, setHeld] = useState(false);
 
@@ -28,12 +30,23 @@ export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
   useEffect(() => {
     if (sharing || held) return;
     const timer = window.setTimeout(() => {
-      setVisible(false);
+      setLeaving(true);
     }, VISIBLE_MS);
     return () => {
       window.clearTimeout(timer);
     };
   }, [sharing, held]);
+
+  // It slips back the way it rose before it is taken away.
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => {
+      setVisible(false);
+    }, LEAVE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [leaving]);
 
   return (
     <>
@@ -52,7 +65,7 @@ export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
           onBlur={() => {
             setHeld(false);
           }}
-          className="rise fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full bg-sprout-900 py-2 pr-2 pl-5 text-sm font-bold text-white shadow-lg md:bottom-8"
+          className={`${leaving ? "toast-leave" : "rise"} fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full bg-sprout-900 py-2 pr-2 pl-5 text-sm font-bold text-white shadow-lg md:bottom-8`}
         >
           <span aria-hidden="true">🌱</span>
           <span>

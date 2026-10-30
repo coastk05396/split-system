@@ -229,6 +229,6 @@ export function MaintenanceTag() {
     </span>
   );
 }
-export const card = "surface-card rounded-3xl border border-sprout-200 bg-white";
+export const card = "surface-card rounded-[1.75rem] border border-sprout-200/80 bg-white";
 export const input =
   "w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none transition-[border-color,box-shadow] duration-180 focus:border-sprout-500 focus:ring-3 focus:ring-sprout-500/15";
