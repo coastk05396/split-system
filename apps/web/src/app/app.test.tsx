@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -36,6 +36,59 @@ describe("app shell", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "我的群組" })).toBeVisible();
     expect(router.state.location.pathname).toBe("/groups");
+  });
+
+  describe("LINE menu links (liff.state)", () => {
+    it.each([
+      ["%2Fnew", "/new"],
+      ["%2Fgroups", "/groups"],
+      ["%2F", "/"],
+      ["new", "/new"],
+    ])("opens the page %s asks for when already signed in", async (state, path) => {
+      const { router } = renderApp({
+        path: `/?liff.state=${state}`,
+        cookieUser: makeUser("小宇"),
+      });
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(path);
+      });
+      expect(router.state.location.search).toBe("");
+    });
+
+    it("keeps the query of the path it opens", async () => {
+      const { router } = renderApp({
+        path: "/?liff.state=%2Fgroups%3Fcreate%3Drunning-tab",
+        cookieUser: makeUser("小宇"),
+      });
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/groups");
+      });
+      expect(router.state.location.search).toBe("?create=running-tab");
+    });
+
+    it("signs a signed-out person in first and then opens the page", async () => {
+      const { router } = renderApp({
+        path: "/?liff.state=%2Fnew",
+        insideLine: { idToken: "fake|line-1|阿芽" },
+      });
+
+      expect(await screen.findByRole("heading", { name: "記在哪個群組？" })).toBeVisible();
+      expect(router.state.location.pathname).toBe("/new");
+    });
+
+    it("ignores a value that would leave the site", async () => {
+      const { router } = renderApp({
+        path: "/?liff.state=%2F%2Fevil.example",
+        cookieUser: makeUser("小宇"),
+      });
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
+      expect(router.state.location.search).toBe("");
+    });
   });
 
   it("signs in automatically inside LINE", async () => {
