@@ -1,6 +1,6 @@
 # Release setup for 小芽分帳
 
-The production hostname is `https://split.rickchen.si`. Keep staging and production resources separate. This document prepares a release; creating resources or merging code does not deploy the app.
+The production hostname is `https://split.rickchen.si`. Keep staging and production resources separate. This document prepares a release. Creating resources does not deploy the app; merging to `main` deploys production (see Release gate).
 
 ## Values to collect
 
@@ -35,4 +35,4 @@ Create or select a Messaging API channel for the bot. Set the webhook URL to `ht
 
 ## Release gate
 
-Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, actionlint, and secret scanning. Confirm `TEST_SIGN_IN` is absent from deployed Worker vars and secrets; the production-config E2E test requires the route to answer 404. Apply migrations before deploying the Worker. Deploy production only through the manual production workflow after staging sign-off.
+Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, actionlint, and secret scanning. Confirm `TEST_SIGN_IN` is absent from deployed Worker vars and secrets; the production-config E2E test requires the route to answer 404. Apply migrations before deploying the Worker. The pull request's CI runs the full gate, including E2E, actionlint and secret scanning; merging to `main` then runs the production workflow, which repeats typecheck, lint and tests, applies D1 migrations and deploys. Check risky changes on staging before merging; the production workflow can still be run by hand.

@@ -4,6 +4,7 @@ import { createLineSignIn, LineShareUnavailableError } from "./line.js";
 const liff = vi.hoisted(() => ({
   init: vi.fn(),
   login: vi.fn(),
+  logout: vi.fn(),
   isLoggedIn: vi.fn(() => true),
   getIDToken: vi.fn(() => "line-id-token"),
   isApiAvailable: vi.fn(() => true),
@@ -32,6 +33,32 @@ it("keeps the LINE return marker through a LIFF initialization redirect", async 
 
   await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBe("line-id-token");
   expect(sessionStorage.getItem("split.lineLogin")).toBeNull();
+});
+
+it("drops a stale browser LIFF login before the button starts a new one", async () => {
+  liff.isInClient.mockReturnValueOnce(false);
+  await createLineSignIn("liff-id").login();
+
+  expect(liff.logout).toHaveBeenCalledTimes(1);
+  expect(liff.login).toHaveBeenCalledTimes(1);
+  expect(liff.logout.mock.invocationCallOrder[0]).toBeLessThan(
+    liff.login.mock.invocationCallOrder[0] ?? Number.NaN,
+  );
+});
+
+it("leaves the LINE app's own login alone", async () => {
+  await createLineSignIn("liff-id").login();
+
+  expect(liff.logout).not.toHaveBeenCalled();
+});
+
+it("does not log out a browser that is not logged in to LIFF", async () => {
+  liff.isInClient.mockReturnValueOnce(false);
+  liff.isLoggedIn.mockReturnValueOnce(false);
+  await createLineSignIn("liff-id").login();
+
+  expect(liff.logout).not.toHaveBeenCalled();
+  expect(liff.login).toHaveBeenCalledTimes(1);
 });
 
 it("initializes LIFF once when signing in and sharing on the same page", async () => {

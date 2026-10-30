@@ -86,6 +86,10 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
         storage()?.removeItem(RETURNING_KEY);
         throw new Error("LIFF ID is not configured");
       }
+      // A browser LIFF still counts as logged in keeps its old ID token (valid one hour):
+      // `liff.init` ignores the new login's code while logged in. Drop it first. The LINE
+      // app signs in by itself, and LIFF does not allow logging in or out there.
+      if (!liff.isInClient() && liff.isLoggedIn()) liff.logout();
       liff.login({ redirectUri: window.location.href });
     },
 
