@@ -64,6 +64,11 @@ export const en: Record<MessageId, string> = {
   "home.tab.hint": "Good for: dinners, flatmates, everyday plans",
   "home.create": "Add a split or trip",
 
+  "error.newVersion.title": "Sprout Split has a new version",
+  "error.newVersion.body": "Reload to switch to the latest one.",
+  "error.generic.title": "Something went wrong",
+  "error.generic.body": "Reload and try again. If it keeps happening, come back in a little while.",
+  "error.reload": "Reload",
   "common.back": "Back",
   "common.retry": "Try again",
   "common.cancel": "Cancel",

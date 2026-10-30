@@ -67,6 +67,11 @@ const zhTW = {
   "home.tab.hint": "適合：聚餐分帳、室友合租、日常活動",
   "home.create": "新增分帳或旅程",
 
+  "error.newVersion.title": "小芽分帳有新版本了",
+  "error.newVersion.body": "請重新整理，就會換成最新的版本。",
+  "error.generic.title": "出了點問題",
+  "error.generic.body": "請重新整理再試一次；如果還是不行，請稍後再回來。",
+  "error.reload": "重新整理",
   "common.back": "返回",
   "common.retry": "再試一次",
   "common.cancel": "取消",

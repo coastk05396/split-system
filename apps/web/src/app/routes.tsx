@@ -8,6 +8,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
+import { RouteError } from "./RouteError.js";
 import { Loading } from "../groups/ui.js";
 import { AppShell } from "../shell/AppShell.js";
 import { HomePage } from "../pages/HomePage.js";
@@ -76,13 +77,22 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, n
 }
 
 export const routes: RouteObject[] = [
-  { path: "/sign-in", Component: SignInRoute },
+  { path: "/sign-in", Component: SignInRoute, ErrorBoundary: RouteError },
   // Policy pages are public: linked from sign-in, readable signed in or out.
-  { path: "/privacy", lazy: page(() => import("../pages/LegalPage.js"), "PrivacyPage") },
-  { path: "/terms", lazy: page(() => import("../pages/LegalPage.js"), "TermsPage") },
+  {
+    path: "/privacy",
+    lazy: page(() => import("../pages/LegalPage.js"), "PrivacyPage"),
+    ErrorBoundary: RouteError,
+  },
+  {
+    path: "/terms",
+    lazy: page(() => import("../pages/LegalPage.js"), "TermsPage"),
+    ErrorBoundary: RouteError,
+  },
   {
     path: "/",
     Component: Gate,
+    ErrorBoundary: RouteError,
     children: [
       { index: true, Component: HomePage },
       { path: "groups", lazy: page(() => import("../pages/GroupsPage.js"), "GroupsPage") },
