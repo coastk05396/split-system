@@ -25,7 +25,7 @@ function CardPreview({ card }: { card: ExpenseCard }) {
           <p className="min-w-0 truncate text-sm font-bold text-ink-muted">{card.groupName}</p>
         </div>
         <p className="text-lg font-bold">
-          {card.title} {card.emoji}
+          {card.title} <span aria-hidden="true">{card.emoji}</span>
         </p>
         <div className="flex items-center justify-between gap-3">
           <p className="text-3xl font-bold tabular-nums">{card.amount}</p>

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -29,14 +29,18 @@ async function recordDinner(user: ReturnType<typeof userEvent.setup>) {
 describe("sharing a new Expense", () => {
   it("offers Share after saving, and the dialog previews the card with LINE and Telegram links", async () => {
     const user = userEvent.setup();
-    const { id } = openNewExpense();
+    const { id, router } = openNewExpense();
 
     await recordDinner(user);
 
     expect(await screen.findByText(/已新增 ✓/)).toBeVisible();
+    // The note is not kept in the history entry, so a reload does not show it again.
+    await waitFor(() => {
+      expect((router.state.location.state as { share?: unknown } | null)?.share).toBeUndefined();
+    });
     await user.click(screen.getByRole("button", { name: "分享" }));
 
-    const dialog = within(await screen.findByRole("dialog", { name: "分享這筆花費" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "分享這筆開銷" }));
     expect(dialog.getByText("室友")).toBeVisible();
     expect(dialog.getByText(/火鍋/)).toBeVisible();
     expect(dialog.getByText("NT$ 2,160")).toBeVisible();
@@ -91,7 +95,7 @@ describe("posting into the current LINE chat", () => {
     await user.click(await screen.findByRole("checkbox", { name: /LINE 對話框/ }));
     await recordDinner(user);
 
-    expect(await screen.findByText(/已發送到對話框/)).toBeVisible();
+    expect(await screen.findByText("已新增，並發送到對話框 ✓")).toBeVisible();
     expect(lineChatMessages).toHaveLength(1);
     expect(lineChatMessages[0]).toMatchObject({ type: "flex", altText: "火鍋 NT$ 2,160" });
   });
@@ -104,7 +108,7 @@ describe("posting into the current LINE chat", () => {
     await recordDinner(user);
 
     expect(await screen.findByText(/已新增 ✓/)).toBeVisible();
-    expect(screen.queryByText(/已發送到對話框/)).toBeNull();
+    expect(screen.queryByText(/發送到對話框/)).toBeNull();
     expect(lineChatMessages).toHaveLength(0);
   });
 
@@ -142,7 +146,7 @@ describe("sharing an older Expense", () => {
 
     await user.click(await screen.findByRole("button", { name: "分享" }));
 
-    const dialog = within(await screen.findByRole("dialog", { name: "分享這筆花費" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "分享這筆開銷" }));
     expect(dialog.getByText("室友")).toBeVisible();
     expect(dialog.getByText(/火鍋/)).toBeVisible();
   });

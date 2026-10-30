@@ -77,7 +77,7 @@ export function buildExpenseCard(
 
 /** The same without the link, for services that take the link separately. */
 export function expenseTextWithoutLink(card: ExpenseCard): string {
-  const detail = [card.payer, card.split, card.each].filter((part) => part !== null).join("・");
+  const detail = [card.payer, card.split, card.each].filter((part) => part !== null).join(" · ");
   return `${card.groupName}\n${card.emoji} ${card.title}  ${card.amount}\n${detail}`;
 }
 
@@ -102,7 +102,13 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
         header: { backgroundColor: COLOR.peach },
         body: { backgroundColor: COLOR.white },
       },
-      header: { type: "box", layout: "vertical", paddingAll: "3px", contents: [] },
+      // LINE rejects a box with no contents, so the thin peach strip holds one empty filler.
+      header: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "3px",
+        contents: [{ type: "filler" }],
+      },
       body: {
         type: "box",
         layout: "vertical",

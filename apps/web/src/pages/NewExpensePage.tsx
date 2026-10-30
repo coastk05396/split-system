@@ -34,19 +34,17 @@ export function NewExpensePage() {
         group={group.data}
         members={members.data}
         {...(startCurrency === undefined ? {} : { startCurrency })}
-        onSaved={(saved, { sendToChat }) => {
-          void (async () => {
-            const card = buildExpenseCard(saved, group.data, memberNames(members.data));
-            let chat: ChatSendResult = "none";
-            if (sendToChat) {
-              chat = await line
-                .sendToChat([expenseFlexMessage(card)])
-                .then((): ChatSendResult => "sent")
-                .catch((): ChatSendResult => "failed");
-            }
-            const share: SavedShare = { card, chat };
-            void navigate(`/groups/${id}`, { state: { newExpenseId: saved.id, share } });
-          })();
+        onSaved={async (saved, { sendToChat }) => {
+          const card = buildExpenseCard(saved, group.data, memberNames(members.data));
+          let chat: ChatSendResult = "none";
+          if (sendToChat) {
+            chat = await line
+              .sendToChat([expenseFlexMessage(card)])
+              .then((): ChatSendResult => "sent")
+              .catch((): ChatSendResult => "failed");
+          }
+          const share: SavedShare = { card, chat };
+          await navigate(`/groups/${id}`, { state: { newExpenseId: saved.id, share } });
         }}
       />
     </div>

@@ -55,7 +55,7 @@ export function ExpenseForm({
   /** The currency a new Expense starts in; the Settlement currency when absent. */
   startCurrency?: CurrencyCode;
   /** `sendToChat` says whether to post it into the LINE chat the app was opened from. */
-  onSaved: (expense: Expense, options: { sendToChat: boolean }) => void;
+  onSaved: (expense: Expense, options: { sendToChat: boolean }) => void | Promise<void>;
 }) {
   const { line } = useDeps();
   const selectable: SplitMember[] = members
@@ -81,6 +81,8 @@ export function ExpenseForm({
   // Only a new Expense opened from a LINE chat can be posted back into that chat.
   const [chatAvailable, setChatAvailable] = useState(false);
   const [sendToChat, setSendToChat] = useState(false);
+  // Saved, but the caller is still finishing (posting to the chat): no second submit meanwhile.
+  const [finishing, setFinishing] = useState(false);
   useEffect(() => {
     if (expense !== undefined) return;
     let current = true;
@@ -107,14 +109,17 @@ export function ExpenseForm({
   const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = evaluation.input;
-    if (body === null || save.isPending) return;
+    if (body === null || save.isPending || finishing) return;
     save.mutate(
       expense === undefined
         ? { kind: "create", input: body, idempotencyKey: idempotencyKey.current }
         : { kind: "edit", input: body, expense },
       {
         onSuccess: (saved) => {
-          onSaved(saved, { sendToChat });
+          setFinishing(true);
+          void Promise.resolve(onSaved(saved, { sendToChat })).finally(() => {
+            setFinishing(false);
+          });
         },
       },
     );
@@ -295,9 +300,9 @@ export function ExpenseForm({
           <button
             type="submit"
             className={`${primaryButton} justify-between`}
-            disabled={evaluation.input === null || save.isPending}
+            disabled={evaluation.input === null || save.isPending || finishing}
           >
-            {save.isPending
+            {save.isPending || finishing
               ? t("expense.saving")
               : t(expense === undefined ? "expense.submit" : "expense.save")}
             <ArrowRight aria-hidden="true" className="size-5" />

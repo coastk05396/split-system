@@ -106,7 +106,7 @@ describe("expense share card", () => {
 
   it("falls back to plain text with the link for services that cannot show a card", () => {
     expect(expenseText(buildExpenseCard(expense(), group, nameOf))).toBe(
-      `東京小旅行\n🍽️ 火鍋  NT$ 2,160\n小宇先付・4 人一起分・每人約 NT$ 540\n${window.location.origin}/groups/g-1/expenses/e-1`,
+      `東京小旅行\n🍽️ 火鍋  NT$ 2,160\n小宇先付 · 4 人一起分 · 每人約 NT$ 540\n${window.location.origin}/groups/g-1/expenses/e-1`,
     );
   });
 });

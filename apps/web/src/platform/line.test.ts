@@ -99,38 +99,48 @@ describe("posting into the current LINE chat", () => {
       value: "Mozilla/5.0 Line/14.0",
     });
   };
-  const outsideLine = Object.getOwnPropertyDescriptor(navigator, "userAgent");
+
+  beforeEach(() => {
+    liff.getContext.mockReset();
+    liff.getContext.mockReturnValue({ type: "group" });
+    liff.permission.query.mockReset();
+    liff.permission.query.mockResolvedValue({ state: "granted" });
+  });
+  // jsdom's userAgent is a getter on the prototype: drop the override we put on the instance.
   afterEach(() => {
-    if (outsideLine) Object.defineProperty(navigator, "userAgent", outsideLine);
+    Reflect.deleteProperty(navigator, "userAgent");
   });
 
-  it("is offered in a chat when the LIFF app may write there", async () => {
-    inLineApp();
-    await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(true);
-  });
+  it.each(["utou", "group", "room"])(
+    "is offered in a %s chat when the scope is there",
+    async (type) => {
+      inLineApp();
+      liff.getContext.mockReturnValue({ type });
+      await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(true);
+    },
+  );
 
-  it.each(["utou", "group", "room"])("works from a %s chat", async (type) => {
+  it("is hidden when the app was not opened from a chat", async () => {
     inLineApp();
-    liff.getContext.mockReturnValueOnce({ type });
-    await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(true);
-  });
-
-  it("is hidden outside a chat, without the scope, and outside the LINE app", async () => {
-    inLineApp();
-    liff.getContext.mockReturnValueOnce({ type: "none" });
+    liff.getContext.mockReturnValue({ type: "none" });
     await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
+  });
 
-    liff.permission.query.mockResolvedValueOnce({ state: "unavailable" });
+  it("is hidden when the LIFF app lacks the chat_message.write scope", async () => {
+    inLineApp();
+    liff.permission.query.mockResolvedValue({ state: "unavailable" });
     await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
+  });
 
+  it("is hidden outside the LINE app without asking LIFF anything", async () => {
     Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Chrome/120" });
     await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
-    expect(liff.permission.query).toHaveBeenCalledTimes(1);
+    expect(liff.permission.query).not.toHaveBeenCalled();
   });
 
   it("is hidden when LIFF cannot say, rather than failing the form", async () => {
     inLineApp();
-    liff.permission.query.mockRejectedValueOnce(new Error("no permission module"));
+    liff.permission.query.mockRejectedValue(new Error("no access token"));
     await expect(createLineSignIn("liff-id").canSendToChat()).resolves.toBe(false);
   });
 

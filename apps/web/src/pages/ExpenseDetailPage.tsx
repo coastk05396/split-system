@@ -71,7 +71,7 @@ function Detail({
               onClick={() => {
                 setSharing(true);
               }}
-              className="press-icon rounded-full p-2 text-sprout-600 hover:bg-sprout-150"
+              className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-600 hover:bg-sprout-150"
             >
               <Share2 aria-hidden="true" className="size-6" />
             </button>
