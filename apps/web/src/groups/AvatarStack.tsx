@@ -17,12 +17,12 @@ export function AvatarStack({
   return (
     <span
       aria-hidden="true"
-      className="mt-1 flex items-center -space-x-2.5 transition-[gap] group-hover:-space-x-1 motion-reduce:transition-none"
+      className="mt-1 flex items-center -space-x-2.5 group-hover:-space-x-1 motion-reduce:group-hover:-space-x-2.5"
     >
       {members.map((m, i) => (
         <span
           key={`${m.name}-${String(i)}`}
-          className="rounded-full ring-2 ring-white transition-[margin] duration-200"
+          className="rounded-full ring-2 ring-white transition-[margin] duration-200 motion-reduce:transition-none"
         >
           <Avatar name={m.name} pictureUrl={m.pictureUrl} className="size-7 text-xs" />
         </span>

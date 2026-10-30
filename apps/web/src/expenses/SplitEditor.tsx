@@ -1,6 +1,6 @@
 import { type CurrencyCode, formatAmount, type SplitMethod } from "@split/shared";
 import { Check, ChevronDown } from "lucide-react";
-import { type CSSProperties, useState } from "react";
+import { useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { ShareBar, ShareRing } from "./ShareRing.js";
@@ -68,10 +68,7 @@ export function SplitEditor({
   const included = new Set(value.included);
   // Each person's share in the order of the list, for the ring: 0 for anyone not sharing.
   const shares = members.map((m) => amounts.get(m.id) ?? 0);
-  // A bulk 全選/清空 ripples down the list; a single tick should answer at once.
-  const [wave, setWave] = useState(false);
   const toggle = (id: string) => {
-    setWave(false);
     onChange({
       ...value,
       included: included.has(id) ? value.included.filter((x) => x !== id) : [...value.included, id],
@@ -88,7 +85,6 @@ export function SplitEditor({
       type="button"
       className="press-pill rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold text-sprout-600 hover:bg-sprout-200"
       onClick={() => {
-        setWave(true);
         onChange({ ...value, included: everyoneIn ? [] : order });
       }}
     >
@@ -143,7 +139,7 @@ export function SplitEditor({
             </span>
             <ChevronDown
               aria-hidden="true"
-              className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
+              className={`size-4 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
             />
           </button>
         </div>
@@ -164,7 +160,7 @@ export function SplitEditor({
       <ShareBar shares={shares} />
       {(!equal || open) && (
         <ul className="collapse-enter flex flex-col gap-2">
-          {members.map((m, index) => {
+          {members.map((m) => {
             const takesPart = included.has(m.id);
             const amount = amounts.get(m.id);
             return (
@@ -211,8 +207,7 @@ export function SplitEditor({
                 <input
                   type="checkbox"
                   aria-label={t("split.takesPart", { name: m.displayName })}
-                  className="tick-pop size-5 accent-sprout-500"
-                  style={wave ? ({ "--wave": index } as CSSProperties) : undefined}
+                  className="size-5 accent-sprout-500"
                   checked={takesPart}
                   onChange={() => {
                     toggle(m.id);
