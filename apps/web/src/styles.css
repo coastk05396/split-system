@@ -62,9 +62,10 @@
 
 /* Frosted glass surfaces with specular top highlight and ambient depth. */
 .glass-nav {
-  background-color: rgb(255 255 255 / 0.8);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  /* A small blur: this bar sits over scrolling content, so the blur is redone every scroll frame. */
+  background-color: rgb(255 255 255 / 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.75),
     0 -8px 24px -22px #143f2a;
@@ -75,9 +76,8 @@
   -webkit-backdrop-filter: blur(4px);
 }
 .glass-dialog {
+  /* At 94% opacity a blur would hardly show, yet it is redone every frame the dialog animates. */
   background-color: rgb(255 255 255 / 0.94);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.9),
     0 24px 48px -18px rgb(20 63 42 / 0.28);
@@ -175,8 +175,6 @@
 .menu-content {
   transform-origin: var(--radix-dropdown-menu-content-transform-origin, 50% 0%);
   background-color: rgb(255 255 255 / 0.95);
-  backdrop-filter: blur(18px) saturate(180%);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.9),
     0 16px 32px -12px rgb(20 63 42 / 0.22);
@@ -574,7 +572,9 @@ body::before {
     radial-gradient(60% 40% at 80% 100%, rgb(190 240 214 / 0.5) 0%, transparent 70%);
 }
 
-/* 小芽 the mascot bobs and blinks; its leaves sway once in a while. */
+/* 小芽 the mascot bobs and blinks; its leaves sway once in a while. Only the outer bob loops
+   forever (the compositor can do it); the face and leaves live inside the SVG, which repaints
+   on the main thread, so they stop after a few rounds. */
 @keyframes mascot-bob {
   0%,
   100% {
@@ -609,12 +609,12 @@ body::before {
 .mascot-eye {
   transform-box: fill-box;
   transform-origin: center;
-  animation: mascot-blink 4.6s infinite;
+  animation: mascot-blink 4.6s 6;
 }
 .mascot-leaves {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: mascot-sway 3.4s ease-in-out infinite;
+  animation: mascot-sway 3.4s ease-in-out 6;
 }
 
 /* Little four-point stars that twinkle around a cheering mascot. */
