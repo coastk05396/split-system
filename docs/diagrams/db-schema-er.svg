@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1100 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="split-d1-title split-d1-desc" id="db-schema-er-root">
+        <title id="split-d1-title">D1 資料庫實體關聯圖</title>
+        <desc id="split-d1-desc">展示 Split 核心資料表 (users, identities, groups, members, expenses) 之實體欄位、SQL 型態、主鍵與外鍵級聯關聯。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #db-schema-er-root { --color-paper:   #f6fff8;
+      --color-paper-2: #e8f5eb;
+      --color-ink:     #163d2a;
+      --color-muted:   #26684b;
+      --color-accent:  #1b7a43;
+      --color-link:    #06c755;
+      --font-sans:     'Geist', 'Noto Sans TC', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace; }
+      #db-schema-er-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #db-schema-er-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#db-schema-er-root .diagram-container { overflow-x: visible; }
+}</style>
+          <pattern id="db-schema-er-dots" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="#163d2a" fill-opacity="0.08"/>
+          </pattern>
+          <marker id="db-schema-er-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#26684b"/>
+          </marker>
+          <marker id="db-schema-er-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1b7a43"/>
+          </marker>
+        </defs>
+
+        <!-- Background -->
+        <rect width="100%" height="100%" fill="#f6fff8"/>
+        <rect width="100%" height="100%" fill="url(#db-schema-er-dots)" opacity="0.6"/>
+
+        <!-- =================================================================
+             FK CONNECTORS (drawn before boxes so lines stay behind tables)
+             ================================================================= -->
+        <!-- FK 1: identities.user_id -> users.id (CASCADE, Focal) -->
+        <path d="M 60,408 H 36 Q 28,408 28,400 V 136 Q 28,128 36,128 H 60" fill="none" stroke="#1b7a43" stroke-width="1.4" marker-end="url(#db-schema-er-arrow-accent)"/>
+        <rect x="2" y="260" width="56" height="13" rx="2" fill="#f6fff8"/>
+        <text x="30" y="270" fill="#1b7a43" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">CASCADE</text>
+
+        <!-- FK 2: members.user_id -> users.id (SET NULL) -->
+        <path d="M 420,432 H 368 Q 360,432 360,424 V 136 Q 360,128 352,128 H 320" fill="none" stroke="#26684b" stroke-width="1.2" marker-end="url(#db-schema-er-arrow)"/>
+        <rect x="330" y="278" width="60" height="13" rx="2" fill="#f6fff8"/>
+        <text x="360" y="288" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">SET NULL</text>
+
+        <!-- FK 3: members.group_id -> groups.id (CASCADE) -->
+        <path d="M 690,408 H 720 Q 728,408 728,400 V 136 Q 728,128 720,128 H 690" fill="none" stroke="#26684b" stroke-width="1.2" marker-end="url(#db-schema-er-arrow)"/>
+        <rect x="702" y="260" width="52" height="13" rx="2" fill="#f6fff8"/>
+        <text x="728" y="270" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">CASCADE</text>
+
+        <!-- FK 4: expenses.group_id -> groups.id (CASCADE) -->
+        <path d="M 780,264 H 740 Q 732,264 732,256 V 154 Q 732,146 724,146 H 690" fill="none" stroke="#26684b" stroke-width="1.2" marker-end="url(#db-schema-er-arrow)"/>
+        <rect x="710" y="196" width="52" height="13" rx="2" fill="#f6fff8"/>
+        <text x="736" y="206" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">CASCADE</text>
+
+        <!-- FK 5: expenses.creator_member_id -> members.id (RESTRICT/NO ACTION) -->
+        <path d="M 780,288 H 748 Q 740,288 740,296 V 376 Q 740,384 732,384 H 690" fill="none" stroke="#26684b" stroke-width="1.2" marker-end="url(#db-schema-er-arrow)"/>
+        <rect x="712" y="328" width="56" height="13" rx="2" fill="#f6fff8"/>
+        <text x="740" y="338" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">NO ACTION</text>
+
+        <!-- =================================================================
+             TABLE 1: USERS (FOCAL USER IDENTITY)
+             Pos: (60, 90) w=260 h=176
+             ================================================================= -->
+        <g id="table-users">
+          <rect x="60" y="90" width="260" height="176" rx="6" fill="#f6fff8" stroke="#1b7a43" stroke-width="1.4"/>
+          <rect x="60" y="90" width="260" height="28" rx="6" fill="#1b7a43" fill-opacity="0.08"/>
+          <text x="72" y="108" fill="#163d2a" font-size="12" font-family="'Geist Mono', monospace" font-weight="600">users</text>
+          <rect x="270" y="96" width="42" height="14" rx="2" fill="#1b7a43"/>
+          <text x="291" y="106" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">TABLE</text>
+          <line x1="60" y1="118" x2="320" y2="118" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.14"/>
+
+          <!-- Row 1: id (PK) -->
+          <rect x="60" y="118" width="260" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="72" y="134" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">id</text>
+          <rect x="140" y="123" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="149" y="132" fill="#1b7a43" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">PK</text>
+          <text x="308" y="134" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 2: display_name -->
+          <text x="72" y="158" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">display_name</text>
+          <rect x="160" y="147" width="20" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="170" y="156" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">NN</text>
+          <text x="308" y="158" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 3: picture_url -->
+          <rect x="60" y="166" width="260" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="72" y="182" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">picture_url</text>
+          <text x="308" y="182" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 4: created_at -->
+          <text x="72" y="206" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">created_at</text>
+          <text x="308" y="206" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <!-- Row 5: updated_at -->
+          <rect x="60" y="214" width="260" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="72" y="230" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">updated_at</text>
+          <text x="308" y="230" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <line x1="60" y1="238" x2="320" y2="238" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
+          <text x="72" y="254" fill="#4f6b5b" font-size="8" font-family="'Geist Mono', monospace">+ rate_counters, sessions</text>
+        </g>
+
+        <!-- =================================================================
+             TABLE 2: IDENTITIES
+             Pos: (60, 360) w=260 h=176
+             ================================================================= -->
+        <g id="table-identities">
+          <rect x="60" y="360" width="260" height="176" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
+          <rect x="60" y="360" width="260" height="28" rx="6" fill="#e8f5eb"/>
+          <text x="72" y="378" fill="#163d2a" font-size="12" font-family="'Geist Mono', monospace" font-weight="600">identities</text>
+          <rect x="270" y="366" width="42" height="14" rx="2" fill="#26684b"/>
+          <text x="291" y="376" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">TABLE</text>
+          <line x1="60" y1="388" x2="320" y2="388" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.14"/>
+
+          <!-- Row 1: id -->
+          <rect x="60" y="388" width="260" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="72" y="404" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">id</text>
+          <rect x="140" y="393" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="149" y="402" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">PK</text>
+          <text x="308" y="404" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 2: user_id (FK) -->
+          <text x="72" y="428" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">user_id</text>
+          <rect x="140" y="417" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="149" y="426" fill="#1b7a43" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">FK</text>
+          <text x="308" y="428" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 3: provider (line/google) -->
+          <rect x="60" y="436" width="260" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="72" y="452" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">provider</text>
+          <text x="308" y="452" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text ('line'|'google')</text>
+
+          <!-- Row 4: provider_sub -->
+          <text x="72" y="476" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">provider_sub</text>
+          <rect x="160" y="465" width="20" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="170" y="474" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">UQ</text>
+          <text x="308" y="476" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 5: created_at -->
+          <rect x="60" y="484" width="260" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="72" y="500" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">created_at</text>
+          <text x="308" y="500" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <line x1="60" y1="508" x2="320" y2="508" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
+          <text x="72" y="524" fill="#4f6b5b" font-size="8" font-family="'Geist Mono', monospace">INDEX uq_provider_sub (provider, sub)</text>
+        </g>
+
+        <!-- =================================================================
+             TABLE 3: GROUPS
+             Pos: (420, 90) w=270 h=200
+             ================================================================= -->
+        <g id="table-groups">
+          <rect x="420" y="90" width="270" height="200" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
+          <rect x="420" y="90" width="270" height="28" rx="6" fill="#e8f5eb"/>
+          <text x="432" y="108" fill="#163d2a" font-size="12" font-family="'Geist Mono', monospace" font-weight="600">groups</text>
+          <rect x="638" y="96" width="42" height="14" rx="2" fill="#26684b"/>
+          <text x="659" y="106" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">TABLE</text>
+          <line x1="420" y1="118" x2="690" y2="118" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.14"/>
+
+          <!-- Row 1: id -->
+          <rect x="420" y="118" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="432" y="134" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">id</text>
+          <rect x="500" y="123" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="509" y="132" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">PK</text>
+          <text x="678" y="134" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 2: name -->
+          <text x="432" y="158" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">name</text>
+          <text x="678" y="158" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 3: settlement_currency -->
+          <rect x="420" y="166" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="432" y="182" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">settlement_currency</text>
+          <text x="678" y="182" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text ('TWD'|...)</text>
+
+          <!-- Row 4: default_expense_currency -->
+          <text x="432" y="206" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">default_expense_curr</text>
+          <text x="678" y="206" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 5: is_trip -->
+          <rect x="420" y="214" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="432" y="230" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">is_trip</text>
+          <text x="678" y="230" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer (0|1)</text>
+
+          <!-- Row 6: created_at -->
+          <text x="432" y="254" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">created_at / updated_at</text>
+          <text x="678" y="254" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <line x1="420" y1="262" x2="690" y2="262" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
+          <text x="432" y="278" fill="#4f6b5b" font-size="8" font-family="'Geist Mono', monospace">+ trip_dates, notes, invites</text>
+        </g>
+
+        <!-- =================================================================
+             TABLE 4: MEMBERS
+             Pos: (420, 360) w=270 h=218
+             ================================================================= -->
+        <g id="table-members">
+          <rect x="420" y="360" width="270" height="218" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
+          <rect x="420" y="360" width="270" height="28" rx="6" fill="#e8f5eb"/>
+          <text x="432" y="378" fill="#163d2a" font-size="12" font-family="'Geist Mono', monospace" font-weight="600">members</text>
+          <rect x="638" y="366" width="42" height="14" rx="2" fill="#26684b"/>
+          <text x="659" y="376" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">TABLE</text>
+          <line x1="420" y1="388" x2="690" y2="388" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.14"/>
+
+          <!-- Row 1: id -->
+          <rect x="420" y="388" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="432" y="404" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">id</text>
+          <rect x="500" y="393" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="509" y="402" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">PK</text>
+          <text x="678" y="404" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 2: group_id (FK) -->
+          <text x="432" y="428" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">group_id</text>
+          <rect x="500" y="417" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="509" y="426" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">FK</text>
+          <text x="678" y="428" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 3: user_id (FK nullable) -->
+          <rect x="420" y="436" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="432" y="452" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">user_id</text>
+          <rect x="500" y="441" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="509" y="450" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">FK</text>
+          <text x="678" y="452" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text (nullable)</text>
+
+          <!-- Row 4: role -->
+          <text x="432" y="476" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">role</text>
+          <text x="678" y="476" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text ('admin'|'member')</text>
+
+          <!-- Row 5: status -->
+          <rect x="420" y="484" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="432" y="500" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">status</text>
+          <text x="678" y="500" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text ('active'|'former'|..)</text>
+
+          <!-- Row 6: net_balance -->
+          <text x="432" y="524" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">net_balance</text>
+          <text x="678" y="524" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <line x1="420" y1="532" x2="690" y2="532" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
+          <text x="432" y="548" fill="#4f6b5b" font-size="8" font-family="'Geist Mono', monospace">+ nickname, placeholder_name</text>
+        </g>
+
+        <!-- =================================================================
+             TABLE 5: EXPENSES
+             Pos: (780, 220) w=270 h=250
+             ================================================================= -->
+        <g id="table-expenses">
+          <rect x="780" y="220" width="270" height="250" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
+          <rect x="780" y="220" width="270" height="28" rx="6" fill="#e8f5eb"/>
+          <text x="792" y="238" fill="#163d2a" font-size="12" font-family="'Geist Mono', monospace" font-weight="600">expenses</text>
+          <rect x="998" y="226" width="42" height="14" rx="2" fill="#26684b"/>
+          <text x="1019" y="236" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">TABLE</text>
+          <line x1="780" y1="248" x2="1050" y2="248" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.14"/>
+
+          <!-- Row 1: id -->
+          <rect x="780" y="248" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="792" y="264" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">id</text>
+          <rect x="860" y="253" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="869" y="262" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">PK</text>
+          <text x="1038" y="264" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 2: group_id (FK) -->
+          <text x="792" y="288" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">group_id</text>
+          <rect x="860" y="277" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="869" y="286" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">FK</text>
+          <text x="1038" y="288" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 3: creator_member_id (FK) -->
+          <rect x="780" y="296" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="792" y="312" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">creator_member_id</text>
+          <rect x="912" y="301" width="18" height="12" rx="2" fill="#e8f5eb"/>
+          <text x="921" y="310" fill="#245b41" font-size="7" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">FK</text>
+          <text x="1038" y="312" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 4: description -->
+          <text x="792" y="336" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">description</text>
+          <text x="1038" y="336" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text</text>
+
+          <!-- Row 5: original_amount -->
+          <rect x="780" y="344" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="792" y="360" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">original_amount</text>
+          <text x="1038" y="360" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <!-- Row 6: settlement_amount -->
+          <text x="792" y="384" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">settlement_amount</text>
+          <text x="1038" y="384" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">integer</text>
+
+          <!-- Row 7: split_type -->
+          <rect x="780" y="392" width="270" height="24" fill="#163d2a" fill-opacity="0.02"/>
+          <text x="792" y="408" fill="#163d2a" font-size="11" font-family="'Geist Mono', monospace">split_type</text>
+          <text x="1038" y="408" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="end">text ('equal'|..)</text>
+
+          <line x1="780" y1="416" x2="1050" y2="416" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
+          <text x="792" y="432" fill="#4f6b5b" font-size="8" font-family="'Geist Mono', monospace">+ expense_payers, expense_splits</text>
+        </g>
+
+        <!-- Legend -->
+        <g id="legend" transform="translate(60, 600)">
+          <line x1="0" y1="0" x2="990" y2="0" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
+          <rect x="10" y="10" width="12" height="12" rx="2" fill="#1b7a43" stroke="#1b7a43" stroke-width="1.2" fill-opacity="0.08"/>
+          <text x="28" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Primary Entity (users)</text>
+          <line x1="190" y1="16" x2="220" y2="16" stroke="#1b7a43" stroke-width="1.4" marker-end="url(#db-schema-er-arrow-accent)"/>
+          <text x="230" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Cascade Foreign Key</text>
+          <line x1="400" y1="16" x2="430" y2="16" stroke="#26684b" stroke-width="1.2" marker-end="url(#db-schema-er-arrow)"/>
+          <text x="440" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Standard Foreign Key (Set Null / Restrict)</text>
+        </g>
+      </svg>

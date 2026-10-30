@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>時序圖 · LINE 登入與驗證流程</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f6fff8;
+      --color-paper-2: #e8f5eb;
+      --color-ink:     #163d2a;
+      --color-muted:   #26684b;
+      --color-accent:  #1b7a43;
+      --color-link:    #06c755;
+      --font-sans:     'Geist', 'Noto Sans TC', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1100px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: 2.2rem;
+      font-weight: 400;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Sequence · Authentication</p>
+    <h1>LINE 登入流程時序圖 (LINE Auth Sequence)</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="split-seq-title split-seq-desc">
+        <title id="split-seq-title">LINE 登入流程時序圖</title>
+        <desc id="split-seq-desc">展示從使用者點擊 LINE 登入按鈕、LIFF SDK 換取 OpenID Token、傳送至 Cloudflare Worker 進行 JWKS 簽章驗證、寫入 D1 資料庫並回發 Session 的完整時序。</desc>
+        <defs>
+          <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(22,61,42,0.08)"/>
+          </pattern>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#26684b"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1b7a43"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#06c755"/>
+          </marker>
+        </defs>
+
+        <!-- Background -->
+        <rect width="100%" height="100%" fill="#f6fff8"/>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.6"/>
+
+        <!-- =================================================================
+             LIFELINES (dashed vertical lines from actor centers to bottom)
+             Actor centers: 130, 370, 630, 870
+             ================================================================= -->
+        <line x1="130" y1="90" x2="130" y2="520" stroke="rgba(22,61,42,0.22)" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="370" y1="90" x2="370" y2="520" stroke="rgba(22,61,42,0.22)" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="630" y1="90" x2="630" y2="520" stroke="rgba(22,61,42,0.22)" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="870" y1="90" x2="870" y2="520" stroke="rgba(22,61,42,0.22)" stroke-width="1" stroke-dasharray="4,4"/>
+
+        <!-- =================================================================
+             ACTIVATION BARS (w=8, centered on lifelines: x-4)
+             ================================================================= -->
+        <!-- User activation: 130 -> 126 -->
+        <rect x="126" y="110" width="8" height="40" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
+        <rect x="126" y="470" width="8" height="40" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
+
+        <!-- LIFF activation: 370 -> 366 -->
+        <rect x="366" y="120" width="8" height="370" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
+
+        <!-- Worker activation: 630 -> 626 -->
+        <rect x="626" y="210" width="8" height="260" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
+
+        <!-- D1 & KV activation: 870 -> 866 -->
+        <rect x="866" y="270" width="8" height="70" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
+        <rect x="866" y="370" width="8" height="70" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
+
+        <!-- =================================================================
+             COMBINED FRAGMENT (OPT: JWKS Cache Lookup)
+             ================================================================= -->
+        <rect x="530" y="260" width="420" height="90" rx="4" fill="rgba(22,61,42,0.02)" stroke="rgba(22,61,42,0.20)" stroke-width="1"/>
+        <rect x="530" y="260" width="36" height="15" rx="2" fill="#f6fff8" stroke="rgba(22,61,42,0.20)" stroke-width="1"/>
+        <text x="548" y="271" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">OPT</text>
+        <text x="576" y="271" fill="#26684b" font-size="8" font-family="'Geist Mono', monospace">[Cache miss: query LINE certs]</text>
+
+        <!-- =================================================================
+             MESSAGES & LABELS
+             ================================================================= -->
+        <!-- 1. User -> LIFF: Click login -->
+        <line x1="134" y1="130" x2="366" y2="130" stroke="#26684b" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="186" y="118" width="124" height="14" rx="2" fill="#f6fff8"/>
+        <text x="248" y="128" fill="#163d2a" font-size="9" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">1. 點擊「使用 LINE 登入」</text>
+
+        <!-- 2. LIFF Self Loop: liff.login() -->
+        <path d="M 374,150 H 420 Q 428,150 428,158 V 170 Q 428,178 420,178 H 374" fill="none" stroke="#06c755" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <rect x="436" y="156" width="134" height="14" rx="2" fill="#f6fff8"/>
+        <text x="503" y="166" fill="#06c755" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">liff.login() 取得 ID Token</text>
+
+        <!-- 3. LIFF -> Worker API: POST /api/v1/auth/line -->
+        <line x1="374" y1="220" x2="626" y2="220" stroke="#06c755" stroke-width="1.4" marker-end="url(#arrow-link)"/>
+        <rect x="420" y="208" width="160" height="14" rx="2" fill="#f6fff8"/>
+        <text x="500" y="218" fill="#163d2a" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">POST /auth/line { idToken }</text>
+
+        <!-- 4. Inside OPT: Worker -> KV / LINE -->
+        <line x1="634" y1="290" x2="866" y2="290" stroke="#26684b" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="674" y="278" width="150" height="14" rx="2" fill="#f6fff8"/>
+        <text x="749" y="288" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Get JWKS (JWKS_CACHE)</text>
+
+        <line x1="866" y1="324" x2="634" y2="324" stroke="#26684b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <rect x="688" y="312" width="124" height="14" rx="2" fill="#f6fff8"/>
+        <text x="750" y="322" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Verify Public Keys (RS256)</text>
+
+        <!-- 5. Worker -> D1 DB: Find or create identity & user -->
+        <line x1="634" y1="384" x2="866" y2="384" stroke="#26684b" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="668" y="372" width="164" height="14" rx="2" fill="#f6fff8"/>
+        <text x="750" y="382" fill="#163d2a" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">signInIdentity() + createSession()</text>
+
+        <!-- 6. D1 DB -> Worker: Return User & Refresh Hash -->
+        <line x1="866" y1="418" x2="634" y2="418" stroke="#26684b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <rect x="674" y="406" width="150" height="14" rx="2" fill="#f6fff8"/>
+        <text x="749" y="416" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">D1 Insert OK (User, Session)</text>
+
+        <!-- 7. HEADLINE SUCCESS: Worker -> LIFF -->
+        <line x1="626" y1="460" x2="374" y2="460" stroke="#1b7a43" stroke-width="1.8" marker-end="url(#arrow-accent)"/>
+        <rect x="414" y="446" width="170" height="16" rx="2" fill="#1b7a43"/>
+        <text x="499" y="457" fill="#ffffff" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">200 OK: accessToken + Cookie</text>
+
+        <!-- 8. LIFF -> User: Redirect to Home / Dashboard -->
+        <line x1="366" y1="490" x2="134" y2="490" stroke="#26684b" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <rect x="180" y="478" width="140" height="14" rx="2" fill="#f6fff8"/>
+        <text x="250" y="488" fill="#163d2a" font-size="9" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">完成登入，導向群組首頁</text>
+
+        <!-- =================================================================
+             ACTOR BOXES (at top, drawn over lifelines)
+             ================================================================= -->
+        <!-- Actor 1: User -->
+        <g id="actor-user">
+          <rect x="50" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
+          <text x="130" y="62" fill="#163d2a" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">使用者 (Client)</text>
+          <text x="130" y="78" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Browser / Mobile</text>
+        </g>
+
+        <!-- Actor 2: LINE LIFF -->
+        <g id="actor-liff">
+          <rect x="290" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#06c755" stroke-width="1.4"/>
+          <text x="370" y="62" fill="#163d2a" font-size="12" font-family="'Geist', sans-serif" font-weight="600" text-anchor="middle">LINE LIFF SDK</text>
+          <text x="370" y="78" fill="#06c755" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">@line/liff Client</text>
+        </g>
+
+        <!-- Actor 3: Cloudflare Worker API -->
+        <g id="actor-worker">
+          <rect x="540" y="40" width="180" height="50" rx="6" fill="rgba(27,122,67,0.06)" stroke="#1b7a43" stroke-width="1.6"/>
+          <text x="630" y="62" fill="#163d2a" font-size="12" font-family="'Geist', sans-serif" font-weight="600" text-anchor="middle">Worker Auth API</text>
+          <text x="630" y="78" fill="#1b7a43" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle">Hono · /api/v1/auth</text>
+        </g>
+
+        <!-- Actor 4: Storage (D1 & KV) -->
+        <g id="actor-storage">
+          <rect x="790" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
+          <text x="870" y="62" fill="#163d2a" font-size="12" font-family="'Geist', sans-serif" font-weight="600" text-anchor="middle">D1 DB &amp; KV Cache</text>
+          <text x="870" y="78" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SQLite &amp; JWKS_CACHE</text>
+        </g>
+
+        <!-- Legend -->
+        <g id="legend" transform="translate(50, 560)">
+          <line x1="0" y1="0" x2="900" y2="0" stroke="rgba(22,61,42,0.12)" stroke-width="0.8"/>
+          <rect x="10" y="10" width="12" height="12" rx="2" fill="#1b7a43"/>
+          <text x="28" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Headline Token Issue</text>
+          <line x1="190" y1="16" x2="220" y2="16" stroke="#06c755" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+          <text x="230" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">LINE OpenID Protocol</text>
+          <line x1="420" y1="16" x2="450" y2="16" stroke="#26684b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+          <text x="460" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Internal Return / Cache</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>
