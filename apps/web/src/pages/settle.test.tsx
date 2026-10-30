@@ -55,8 +55,15 @@ describe("Balances and the Payment plan", () => {
     expect(
       within(chart)
         .getAllByRole("listitem")
-        .map((li) => li.textContent),
-    ).toEqual(["小宇（你）+NT$ 300", "宜庭-NT$ 100", "阿哲-NT$ 200"]);
+        .map((li) => [
+          within(li).getByRole("button").getAttribute("aria-label"),
+          li.textContent.match(/[+-]NT\$ \d+/)?.[0],
+        ]),
+    ).toEqual([
+      ["小宇（你）", "+NT$ 300"],
+      ["宜庭", "-NT$ 100"],
+      ["阿哲", "-NT$ 200"],
+    ]);
     expect(screen.getByText("其他 1 人已結清")).toBeVisible();
     expect(screen.getByText("紅色是要付，綠色是可收")).toBeVisible();
   });
