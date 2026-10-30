@@ -21,6 +21,11 @@ export interface ShareContent {
   copiedNotice: string;
 }
 
+/** LINE's own share link: it sends text, never a card. */
+function lineShareLink(text: string): string {
+  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
+}
+
 const brandButton =
   "press-pill flex w-full items-center gap-3 rounded-full px-3 py-2.5 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)]";
 
@@ -41,6 +46,7 @@ export function ShareButtons({
   invite?: boolean;
 }) {
   const { line } = useDeps();
+  const insideLine = line.isInClient();
   const [notice, setNotice] = useState("");
   const [justCopied, setJustCopied] = useState(false);
 
@@ -58,15 +64,16 @@ export function ShareButtons({
     try {
       const sent =
         content.lineMessages === undefined
-          ? await line.share(content.text)
-          : await line.shareMessages(content.lineMessages);
+          ? await line.share(content.text, { stayOpen: invite })
+          : await line.shareMessages(content.lineMessages, { stayOpen: invite });
       if (sent) setNotice(t("invite.shared"));
     } catch (error) {
-      setNotice(
-        error instanceof LineShareUnavailableError
-          ? t("invite.shareUnavailable")
-          : failureMessage(null),
-      );
+      if (error instanceof LineShareUnavailableError) {
+        // No picker here (an ordinary web page inside LINE): LINE's own link still sends the text.
+        window.location.assign(lineShareLink(content.text));
+        return;
+      }
+      setNotice(failureMessage(null));
     }
   }
 
@@ -100,7 +107,7 @@ export function ShareButtons({
     <>
       <div className="flex flex-col gap-3">
         {invite && copyButton}
-        {!invite ? (
+        {!invite || insideLine ? (
           <button
             type="button"
             onClick={() => void share()}
@@ -110,7 +117,7 @@ export function ShareButtons({
           </button>
         ) : (
           <a
-            href={`https://line.me/R/share?text=${encodeURIComponent(content.text)}`}
+            href={lineShareLink(content.text)}
             className={`${brandButton} bg-line hover:bg-line/90`}
           >
             {lineLabel}

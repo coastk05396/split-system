@@ -215,6 +215,11 @@ const zhTW = {
   "invite.shared": "已分享到 LINE",
   "invite.shareUnavailable": "無法開啟 LINE 選人畫面，請複製連結並貼給朋友。",
   "invite.shareMessage": "一起用小芽分帳記「{name}」的開銷吧！{url}",
+  "invite.card.alt": "邀請你加入「{name}」一起分帳",
+  "invite.card.app": "小芽分帳",
+  "invite.card.badge": "邀請你加入",
+  "invite.card.body": "加入後，大家的開銷與結算都在同一個地方。",
+  "invite.card.join": "加入群組",
   "invite.regenerate": "重新產生連結",
   "invite.noneMember": "目前沒有有效的邀請連結，請管理員產生新的連結。",
 

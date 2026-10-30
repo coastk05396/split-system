@@ -2,6 +2,7 @@ import { type Expense, formatAmount, type Group } from "@split/shared";
 import { categoryLabel } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import type { LineMessage } from "../platform/line.js";
+import { liffLink } from "../platform/liff-link.js";
 
 /** What a shared Expense says, kept plain so it can ride in router state and become text or a card. */
 export interface ExpenseCard {
@@ -16,6 +17,8 @@ export interface ExpenseCard {
   /** What each person owes under an equal split; null for the other split methods. */
   each: string | null;
   url: string;
+  /** The same page as a LIFF address, for what goes into LINE. */
+  lineUrl: string;
 }
 
 const EMOJI: Readonly<Record<string, string>> = {
@@ -30,7 +33,7 @@ const EMOJI: Readonly<Record<string, string>> = {
 };
 
 /** Brand colours of the card, the same sprout palette as the app. */
-const COLOR = {
+export const COLOR = {
   mint: "#E8F5EB",
   line: "#DBEDE0",
   peach: "#FFE3CA",
@@ -54,6 +57,7 @@ export function buildExpenseCard(
   group: Group,
   nameOf: (memberId: string) => string,
 ): ExpenseCard {
+  const url = `${window.location.origin}/groups/${group.id}/expenses/${expense.id}`;
   const [payer, ...otherPayers] = expense.payers;
   const eachMinor = Math.max(0, ...expense.splits.map((split) => split.amountMinor));
   return {
@@ -71,7 +75,8 @@ export function buildExpenseCard(
       expense.splitMethod === "equal" && expense.splits.length > 1
         ? t("expenseShare.each", { amount: formatAmount(eachMinor, expense.originalCurrency) })
         : null,
-    url: `${window.location.origin}/groups/${group.id}/expenses/${expense.id}`,
+    url,
+    lineUrl: liffLink(url),
   };
 }
 
@@ -83,7 +88,7 @@ export function expenseTextWithoutLink(card: ExpenseCard): string {
 
 /** The plain-text version, for Telegram, the system share menu, copy and the LINE link. */
 export function expenseText(card: ExpenseCard): string {
-  return `${expenseTextWithoutLink(card)}\n${card.url}`;
+  return `${expenseTextWithoutLink(card)}\n${card.lineUrl}`;
 }
 
 /**
@@ -226,7 +231,7 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
             cornerRadius: "18px",
             backgroundColor: COLOR.sprout,
             paddingAll: "14px",
-            action: { type: "uri", label: t("expenseShare.view"), uri: card.url },
+            action: { type: "uri", label: t("expenseShare.view"), uri: card.lineUrl },
             contents: [
               {
                 type: "text",

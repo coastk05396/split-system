@@ -27,7 +27,9 @@ describe("Invite share", () => {
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: /複製邀請連結/ }));
 
-    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/join/tok-abc`);
+    expect(await navigator.clipboard.readText()).toBe(
+      `一起用小芽分帳記「週末台南小旅行」的開銷吧！${window.location.origin}/join/tok-abc`,
+    );
     expect(await screen.findByRole("status")).toHaveTextContent("已複製邀請連結");
     await user.click(screen.getByRole("button", { name: "關閉 QR Code" }));
     expect(screen.getByRole("button", { name: "邀請成員" })).toHaveFocus();
@@ -53,7 +55,7 @@ describe("Invite share", () => {
   it("opens LINE's recipient picker directly inside LINE", async () => {
     const user = userEvent.setup();
     let id = "";
-    renderApp({
+    const { lineShareMessages } = renderApp({
       cookieUser: me,
       insideLine: { idToken: null },
       seed: (groups) => {
@@ -62,9 +64,15 @@ describe("Invite share", () => {
       pathFor: () => `/groups/${id}/members`,
     });
     await user.click(await screen.findByRole("button", { name: "邀請成員" }));
-    expect(await screen.findByRole("link", { name: "透過 LINE 分享" })).toHaveAttribute(
-      "href",
-      `https://line.me/R/share?text=${encodeURIComponent(`一起用小芽分帳記「台南」的開銷吧！${window.location.origin}/join/tok-line`)}`,
+    await user.click(await screen.findByRole("button", { name: "透過 LINE 分享" }));
+
+    expect(lineShareMessages).toHaveLength(1);
+    expect(lineShareMessages[0]).toMatchObject({
+      type: "flex",
+      altText: "邀請你加入「台南」一起分帳",
+    });
+    expect(JSON.stringify(lineShareMessages[0])).toContain(
+      `${window.location.origin}/join/tok-line`,
     );
   });
 
