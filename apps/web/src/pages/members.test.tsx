@@ -61,7 +61,10 @@ describe("members", () => {
     await waitFor(async () => {
       expect(await rows()).toHaveLength(2);
     });
-    expect(screen.queryByText("阿哲")).toBeNull();
+    // The row shrinks away for a moment before it is taken out.
+    await waitFor(() => {
+      expect(screen.queryByText("阿哲")).toBeNull();
+    });
     expect(api.groups.members(id()).find((m) => m.name === "阿哲")?.status).toBe("former");
   });
 

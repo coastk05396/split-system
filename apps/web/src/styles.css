@@ -638,7 +638,40 @@ body::before {
   animation: twinkle 1.8s ease-in-out infinite;
 }
 
+/* What leaves goes the way it came: a member row shrinks away, the saved note slips back down. */
+@keyframes row-leave {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateX(8px);
+  }
+}
+.row-leave {
+  animation: row-leave 200ms var(--ease-out-expo) forwards;
+  pointer-events: none;
+}
+@keyframes toast-leave {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.toast-leave {
+  animation: toast-leave 180ms ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .row-leave,
+  .toast-leave {
+    animation-name: none;
+  }
   .mascot-bob,
   .mascot-eye,
   .mascot-leaves,
