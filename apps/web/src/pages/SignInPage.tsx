@@ -5,7 +5,7 @@ import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleButton } from "../auth/GoogleButton.js";
 import { errorMessage, t } from "../i18n/messages.js";
-import { SproutMark } from "../shell/SproutMark.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 
 const TestSignInForm = lazy(() =>
   import("./TestSignInForm.js").then((m) => ({ default: m.TestSignInForm })),
@@ -22,7 +22,7 @@ export function SignInPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-16 pb-8">
       <div className="flex justify-end">
-        <SproutMark className="size-28" />
+        <SproutMascot className="size-32" />
       </div>
       <h1 className="mt-8 text-4xl leading-tight font-black whitespace-pre-line">
         {t("signIn.title").split("，").join("，\n")}

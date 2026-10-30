@@ -99,8 +99,10 @@
 }
 .surface-card {
   box-shadow:
-    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
-    0 5px 16px -15px #143f2a;
+    inset 0 1px 0 0 rgb(255 255 255 / 0.95),
+    inset 0 -3px 8px -4px rgb(46 157 113 / 0.1),
+    0 12px 26px -16px rgb(46 157 113 / 0.4),
+    0 2px 4px rgb(20 63 42 / 0.04);
 }
 
 /* Digital receipt perforated divider with half-circle side notches. */
@@ -556,5 +558,94 @@
   .press-pill:active:not(:disabled),
   .press-icon:active:not(:disabled) {
     transform: none;
+  }
+}
+
+/* Pastel aurora behind every screen: peach and lavender glows over the mint page. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 40% at 0% 0%, rgb(255 227 202 / 0.55) 0%, transparent 70%),
+    radial-gradient(50% 35% at 100% 12%, rgb(224 216 255 / 0.45) 0%, transparent 70%),
+    radial-gradient(60% 40% at 80% 100%, rgb(190 240 214 / 0.5) 0%, transparent 70%);
+}
+
+/* 小芽 the mascot bobs and blinks; its leaves sway once in a while. */
+@keyframes mascot-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes mascot-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes mascot-sway {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+.mascot-bob {
+  animation: mascot-bob 3.4s ease-in-out infinite;
+}
+.mascot-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascot-blink 4.6s infinite;
+}
+.mascot-leaves {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: mascot-sway 3.4s ease-in-out infinite;
+}
+
+/* Little four-point stars that twinkle around a cheering mascot. */
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+}
+.sparkle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #ffc27a;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  animation: twinkle 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-bob,
+  .mascot-eye,
+  .mascot-leaves,
+  .sparkle {
+    animation: none;
+  }
+  .sparkle {
+    opacity: 0.8;
   }
 }
