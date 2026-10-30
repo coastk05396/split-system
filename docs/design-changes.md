@@ -15,7 +15,7 @@ Collected by **Reconcile the designs with the decisions**. `docs/split.pen` is n
 | # | Screen | Change |
 | --- | --- | --- |
 | 1 | 歡迎登入 | 小芽分帳 headline and copy; keep the LINE and Google buttons |
-| 2 | 首頁 | 目前淨收付 shown as one amount in the Preferred currency (other currencies converted at the latest reference rate); no count line or settlement link; 待結算的群組 lists only Groups still owing, each opening the settle tab; 快速開始 cards (快速分帳 first, 旅行分帳 under maintenance) always shown |
+| 2 | 首頁 | 目前淨收付 shown as one amount in the Preferred currency (other currencies converted at the latest reference rate); no count line or settlement link; 待結算的群組 lists only Groups still owing, each opening the settle tab; 快速開始 cards (快速分帳 first, 旅行行程 under maintenance (renamed from 旅行分帳)) always shown |
 | 3 | 群組詳情 | Tabs 帳目, 行程 (Trips only), 結算. The header centres the Group name; a UserPlus icon (with the Member count, pulsing when alone) opens 成員與邀請, and admins get a trash icon for delete. Deleting asks the admin to type the word `delete`, not the Group name |
 | 4 | 新增支出 | Tabs 花費 and 轉帳 (no 收入); date and optional time; item name and category; currency, amount with a calculator, rate, and a typed converted amount (the rate is then derived); 誰先付錢 with several payers behind an advanced icon; split list with 全選, everyone checked by default; note; one receipt photo (only if R2 needs no payment method); "同時發送至當前 LINE 對話框" checkbox shown only inside a LINE chat; an easy way to say the other person paid and only you owe |
 | 5 | 結算與債務 | Whole dollars; plan label "最少筆數" or "至多 N−1 筆"; per-payment actions replace the big 標記已結清 button; "我已付款" action; "待確認" badge; cancel |

@@ -25,7 +25,7 @@ describe("language", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "我的設定" })).toBeVisible();
   });
 
-  it("joins the linked accounts with an English comma in English", async () => {
+  it("shows each linked account as Linked in English", async () => {
     renderApp({
       path: "/settings",
       cookieUser: {
@@ -35,7 +35,7 @@ describe("language", () => {
       },
     });
 
-    expect(await screen.findByText("Linked Google, LINE")).toBeVisible();
+    expect(await screen.findAllByText("Linked")).toHaveLength(2);
   });
 
   it("opens in the language saved on the account", async () => {

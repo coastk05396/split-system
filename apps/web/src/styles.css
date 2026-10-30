@@ -478,6 +478,18 @@
 .invite-pulse {
   animation: invite-pulse 1.8s ease-out infinite;
 }
+@keyframes link-ping {
+  70% {
+    box-shadow: 0 0 0 8px rgb(6 199 85 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(6 199 85 / 0);
+  }
+}
+.link-ping {
+  box-shadow: 0 0 0 0 rgb(6 199 85 / 0.5);
+  animation: link-ping 2s infinite;
+}
 
 /* Everything above moves less, or not at all, for a user who asked for it. The tints and the
    final states stay: only the movement goes. */
@@ -491,6 +503,7 @@
   .digit-roll,
   .sprout-sway,
   .invite-pulse,
+  .link-ping,
   .tab-panel[data-state="active"],
   .menu-content[data-state="open"],
   .menu-content[data-state="closed"],

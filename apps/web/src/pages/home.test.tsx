@@ -130,10 +130,10 @@ describe("home", () => {
 
     const quick = await screen.findByRole("link", { name: /快速分帳/ });
     expect(quick).toHaveAttribute("href", "/groups/new?usage=tab");
-    expect(screen.queryByRole("link", { name: /旅行分帳/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /旅行行程/ })).toBeNull();
     const tag = screen.getByText("保養中");
     expect(tag).toBeVisible();
-    expect(screen.getByText("旅行分帳")).toBeVisible();
+    expect(screen.getByText("旅行行程")).toBeVisible();
     expect(screen.getByText("適合：聚餐分帳、室友合租、日常活動")).toBeVisible();
     // The quick-split card comes first, the Trip card under it.
     expect(quick.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

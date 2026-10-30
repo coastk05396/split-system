@@ -23,7 +23,7 @@ describe("create Group", () => {
     const { api, router } = renderApp({ path: "/groups/new?usage=trip", cookieUser: me });
 
     await user.type(await screen.findByLabelText("群組名稱"), "週末台南小旅行");
-    expect(screen.getByRole("radio", { name: /旅行分帳/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /旅行行程/ })).toBeChecked();
     await user.selectOptions(screen.getByLabelText("結算幣別"), "USD");
     await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
 
@@ -51,7 +51,7 @@ describe("create Group", () => {
     trip.enabled = false;
     renderApp({ path: "/groups/new?usage=trip", cookieUser: me });
 
-    expect(await screen.findByRole("radio", { name: /旅行分帳/ })).toBeDisabled();
+    expect(await screen.findByRole("radio", { name: /旅行行程/ })).toBeDisabled();
     expect(screen.getByText("保養中")).toBeVisible();
     expect(screen.getByRole("radio", { name: /快速分帳/ })).toBeChecked();
   });

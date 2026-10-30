@@ -34,7 +34,7 @@ describe("group detail", () => {
       "href",
       `/groups/${id}/members`,
     );
-    expect(screen.getByText("旅行模式")).toBeVisible();
+    expect(screen.getByText("旅行行程")).toBeVisible();
     const tabs = within(screen.getByRole("tablist", { name: "群組分頁" }));
     expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "帳目",
@@ -77,7 +77,7 @@ describe("group detail", () => {
 
     const tabs = within(await screen.findByRole("tablist", { name: "群組分頁" }));
     expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["帳目", "結算"]);
-    expect(screen.queryByText("旅行模式")).toBeNull();
+    expect(screen.queryByText("旅行行程")).toBeNull();
     expect(screen.queryByRole("button", { name: "刪除群組" })).toBeNull();
   });
 
