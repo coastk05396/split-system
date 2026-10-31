@@ -102,8 +102,7 @@ export function settlementOperation(
     if (amount > maxAmount) throw new ApiError("SETTLEMENT_EXCEEDS_DEBT", { maxAmount });
   };
   const canConfirm = (payer: Party, receiver: Party) =>
-    actor.id === receiver.id ||
-    (actor.role === "admin" && (actor.id !== payer.id || receiver.status === "placeholder"));
+    actor.id === payer.id || actor.id === receiver.id || actor.role === "admin";
   if (op.action === "create") {
     if (op.key === undefined) throw new ApiError("VALIDATION_FAILED");
     const storedKey = `${actor.id}:${op.key}`;
@@ -119,23 +118,22 @@ export function settlementOperation(
     if (actor.id !== found.payer.id && actor.id !== found.receiver.id && actor.role !== "admin")
       throw new ApiError("FORBIDDEN");
     withinDebt(found.payer, found.receiver, input.amount);
-    const confirmed = canConfirm(found.payer, found.receiver);
     const group = sql.exec<{ id: string }>("SELECT id FROM ledger_group WHERE deleted=0").one();
     const item: Settlement = {
       id: newSortableId(op.now),
       groupId: group.id,
       ...input,
-      status: confirmed ? "confirmed" : "pending",
+      status: "confirmed",
       createdByMemberId: actor.id,
-      confirmedByMemberId: confirmed ? actor.id : null,
-      confirmedAt: confirmed ? op.now : null,
+      confirmedByMemberId: actor.id,
+      confirmedAt: op.now,
       undoneByMemberId: null,
       undoneAt: null,
       createdAt: op.now,
       updatedAt: op.now,
     };
     save(item, storedKey);
-    if (confirmed) move(item, 1);
+    move(item, 1);
     return { data: item, changed: true, id: item.id };
   }
   if (op.id === undefined) throw new ApiError("NOT_FOUND");
@@ -168,7 +166,12 @@ export function settlementOperation(
     item.status = "cancelled";
   } else {
     if (item.status !== "confirmed") throw new ApiError("SETTLEMENT_NOT_CONFIRMED");
-    if (actor.id !== item.confirmedByMemberId && actor.role !== "admin")
+    if (
+      actor.id !== item.payerMemberId &&
+      actor.id !== item.receiverMemberId &&
+      actor.id !== item.confirmedByMemberId &&
+      actor.role !== "admin"
+    )
       throw new ApiError("FORBIDDEN");
     parties(item.payerMemberId, item.receiverMemberId);
     item.status = "undone";

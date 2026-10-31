@@ -21,11 +21,13 @@ export interface ConfirmTarget {
  */
 export function ConfirmSettlementDialog({
   trigger,
+  tone = "receive",
   target,
   currency,
   submit,
 }: {
   trigger: string;
+  tone?: "pay" | "receive" | "behalf";
   target: ConfirmTarget;
   currency: CurrencyCode;
   /** Sends the confirmed amount; resolves once saved, rejects with the API failure. */
@@ -33,6 +35,14 @@ export function ConfirmSettlementDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
+  const triggerClass =
+    tone === "behalf"
+      ? "press-pill self-end rounded-full border border-dashed border-ink-muted/45 bg-sprout-50/60 px-3 py-1 text-xs font-bold text-ink-muted hover:border-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-muted"
+      : `press-pill w-full rounded-full px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          tone === "pay"
+            ? "bg-red-700 hover:bg-red-800 focus-visible:outline-red-700"
+            : "bg-sprout-500 hover:bg-sprout-600 focus-visible:outline-sprout-600"
+        }`;
   return (
     <Dialog.Root
       open={open}
@@ -41,9 +51,7 @@ export function ConfirmSettlementDialog({
         setOpen(next);
       }}
     >
-      <Dialog.Trigger className="press-pill rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600">
-        {trigger}
-      </Dialog.Trigger>
+      <Dialog.Trigger className={triggerClass}>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
         <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">

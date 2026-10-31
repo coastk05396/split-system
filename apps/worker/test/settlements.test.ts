@@ -34,14 +34,13 @@ async function owingGroup() {
 }
 
 describe("Settlements", () => {
-  it("updates each Member's Group list Balance after confirmation", async () => {
+  it("updates each Member's Group list Balance after recording", async () => {
     const { group, admin, ming, ids } = await owingGroup();
-    const pending = await record(ming, group.id, {
+    await record(ming, group.id, {
       payerMemberId: ids.ming,
       receiverMemberId: ids.admin,
       amount: 100,
     });
-    expect((await send(admin, "POST", `/settlements/${pending.id}/confirm`)).status).toBe(200);
     const adminGroups = await (
       await send(admin, "GET", "/groups")
     ).json<{ id: string; me: { balance: number } }[]>();
@@ -88,41 +87,21 @@ describe("Settlements", () => {
     expect(signal).toMatchObject({ version: 1, type: "sync needed" });
     socket.close();
   });
-  it("a payer's 我已付款 is pending and moves no Balance until the receiver confirms it", async () => {
+  it("a payer's Settlement is confirmed at once and moves Balances immediately", async () => {
     const { group, admin, ming, ids } = await owingGroup();
 
-    const pending = await record(ming, group.id, {
+    const confirmed = await record(ming, group.id, {
       payerMemberId: ids.ming,
       receiverMemberId: ids.admin,
       amount: 300,
     });
-    expect(pending.status).toBe("pending");
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-300);
-
-    const res = await send(admin, "POST", `/settlements/${pending.id}/confirm`);
-    expect(res.status).toBe(200);
-    const confirmed = await res.json<Settlement>();
     expect(confirmed.status).toBe("confirmed");
-    expect(confirmed.confirmedByMemberId).toBe(ids.admin);
+    expect(confirmed.confirmedByMemberId).toBe(ids.ming);
     expect(Object.fromEntries(await balances(admin, group.id))).toEqual({
       [ids.admin]: 300,
       [ids.ming]: 0,
       [ids.mei]: -300,
     });
-  });
-
-  it("a payer cannot confirm their own payment, and a third Member cannot either", async () => {
-    const { group, ming, mei, ids } = await owingGroup();
-    const pending = await record(ming, group.id, {
-      payerMemberId: ids.ming,
-      receiverMemberId: ids.admin,
-      amount: 300,
-    });
-
-    const own = await send(ming, "POST", `/settlements/${pending.id}/confirm`);
-    expect(own.status).toBe(403);
-    const third = await send(mei, "POST", `/settlements/${pending.id}/confirm`);
-    expect(third.status).toBe(403);
   });
 
   it("a payment the receiver records is confirmed at once and can be partial", async () => {
@@ -165,57 +144,16 @@ describe("Settlements", () => {
     expect((await balances(admin, group.id)).get(ids.ming)).toBe(-300);
   });
 
-  it("the confirmer can change a pending amount only down, not up; a second confirm is refused", async () => {
-    const { group, admin, ming, ids } = await owingGroup();
-    // Debt is 300; ming records 150
-    const pending = await record(ming, group.id, {
-      payerMemberId: ids.ming,
-      receiverMemberId: ids.admin,
-      amount: 150,
-    });
-    const confirm = (amount: number) =>
-      send(admin, "POST", `/settlements/${pending.id}/confirm`, { amount });
-
-    // Raising above recorded amount is rejected even if within debt
-    const raised = await confirm(200);
-    expect(raised.status).toBe(400);
-    expect(JSON.stringify(await raised.json())).toContain("AMOUNT_EXCEEDS_RECORDED_SETTLEMENT");
-
-    // Lowering to 100 succeeds
-    const lowered = await confirm(100);
-    expect(lowered.status).toBe(200);
-    expect((await lowered.json<Settlement>()).amount).toBe(100);
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-200);
-
-    expect(await errorCode(await confirm(50))).toBe("SETTLEMENT_NOT_PENDING");
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-200);
-  });
-
-  it("a second pending payment cannot be confirmed once the first cleared the debt", async () => {
-    const { group, admin, ming, ids } = await owingGroup();
-    const body = { payerMemberId: ids.ming, receiverMemberId: ids.admin, amount: 300 };
-    const first = await record(ming, group.id, body);
-    const second = await record(ming, group.id, body);
-
-    expect((await send(admin, "POST", `/settlements/${first.id}/confirm`)).status).toBe(200);
-    const res = await send(admin, "POST", `/settlements/${second.id}/confirm`);
-
-    expect(await errorCode(res)).toBe("SETTLEMENT_EXCEEDS_DEBT");
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(0);
-  });
-
   it("undoing a confirmed Settlement restores Balances and keeps it in the history as undone", async () => {
     const { group, admin, ming, mei, ids } = await owingGroup();
-    const pending = await record(ming, group.id, {
+    const settled = await record(ming, group.id, {
       payerMemberId: ids.ming,
       receiverMemberId: ids.admin,
       amount: 300,
     });
-    await send(admin, "POST", `/settlements/${pending.id}/confirm`);
 
-    expect((await send(ming, "POST", `/settlements/${pending.id}/undo`)).status).toBe(403);
-    expect((await send(mei, "POST", `/settlements/${pending.id}/undo`)).status).toBe(403);
-    const res = await send(admin, "POST", `/settlements/${pending.id}/undo`);
+    expect((await send(mei, "POST", `/settlements/${settled.id}/undo`)).status).toBe(403);
+    const res = await send(admin, "POST", `/settlements/${settled.id}/undo`);
     expect(res.status).toBe(200);
     const undone = await res.json<Settlement>();
     expect(undone.status).toBe("undone");
@@ -226,17 +164,17 @@ describe("Settlements", () => {
       [ids.mei]: -300,
     });
 
-    const again = await send(admin, "POST", `/settlements/${pending.id}/undo`);
+    const again = await send(admin, "POST", `/settlements/${settled.id}/undo`);
     expect(await errorCode(again)).toBe("SETTLEMENT_NOT_CONFIRMED");
     expect((await balances(admin, group.id)).get(ids.ming)).toBe(-300);
 
     const list = await send(mei, "GET", `/groups/${group.id}/settlements`);
     const page = await list.json<SettlementPage>();
-    expect(page.settlements.map((s) => [s.id, s.status])).toEqual([[pending.id, "undone"]]);
+    expect(page.settlements.map((s) => [s.id, s.status])).toEqual([[settled.id, "undone"]]);
     expect(page.nextCursor).toBeNull();
   });
 
-  it("the receiver who confirmed can undo; a Member cannot undo an Admin's confirm", async () => {
+  it("the payer, the receiver, or an Admin can undo a confirmed Settlement", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明", "小美");
     const [ming, mei] = others;
     const [a, b, c] = (await listMembers(admin, group.id)).map((m) => m.id);
@@ -250,7 +188,8 @@ describe("Settlements", () => {
       receiverMemberId: b,
       amount: 50,
     });
-    expect((await send(ming, "POST", `/settlements/${byReceiver.id}/undo`)).status).toBe(200);
+    // Payer (mei) can undo receiver's confirm
+    expect((await send(mei, "POST", `/settlements/${byReceiver.id}/undo`)).status).toBe(200);
 
     const byAdmin = await record(admin, group.id, {
       payerMemberId: c,
@@ -258,8 +197,9 @@ describe("Settlements", () => {
       amount: 50,
     });
     expect(byAdmin.status).toBe("confirmed");
-    expect((await send(ming, "POST", `/settlements/${byAdmin.id}/undo`)).status).toBe(403);
-    expect((await balances(admin, group.id)).get(c)).toBe(-150);
+    // Receiver (ming) can also undo a Settlement involving them
+    expect((await send(ming, "POST", `/settlements/${byAdmin.id}/undo`)).status).toBe(200);
+    expect((await balances(admin, group.id)).get(c)).toBe(-200);
   });
 
   it("a Settlement with a Member who has since left can no longer be undone", async () => {
@@ -275,24 +215,6 @@ describe("Settlements", () => {
 
     expect(await errorCode(res)).toBe("MEMBER_NOT_ACTIVE");
     expect((await balances(admin, group.id)).get(ids.ming)).toBe(0);
-  });
-
-  it("the payer cancels a pending Settlement; it can then no longer be confirmed", async () => {
-    const { group, admin, ming, mei, ids } = await owingGroup();
-    const pending = await record(ming, group.id, {
-      payerMemberId: ids.ming,
-      receiverMemberId: ids.admin,
-      amount: 300,
-    });
-
-    expect((await send(mei, "POST", `/settlements/${pending.id}/cancel`)).status).toBe(403);
-    const res = await send(ming, "POST", `/settlements/${pending.id}/cancel`);
-    expect(res.status).toBe(200);
-    expect((await res.json<Settlement>()).status).toBe("cancelled");
-
-    const confirm = await send(admin, "POST", `/settlements/${pending.id}/confirm`);
-    expect(await errorCode(confirm)).toBe("SETTLEMENT_NOT_PENDING");
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-300);
   });
 
   it("nobody but an Admin records a payment between two other Members", async () => {
@@ -346,10 +268,10 @@ describe("Settlements", () => {
     const keyless = await send(ming, "POST", `/groups/${group.id}/settlements`, body);
     expect(await errorCode(keyless)).toBe("IDEMPOTENCY_KEY_REQUIRED");
 
-    const pending = await record(ming, group.id, body);
+    const settled = await record(ming, group.id, body);
     const { admin: outsider } = await groupWith("路人");
-    expect((await send(outsider, "POST", `/settlements/${pending.id}/confirm`)).status).toBe(404);
+    expect((await send(outsider, "POST", `/settlements/${settled.id}/undo`)).status).toBe(404);
     expect((await send(outsider, "GET", `/groups/${group.id}/settlements`)).status).toBe(404);
-    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-300);
+    expect((await balances(admin, group.id)).get(ids.ming)).toBe(-200);
   });
 });

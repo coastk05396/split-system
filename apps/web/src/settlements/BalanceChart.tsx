@@ -37,6 +37,7 @@ export function BalanceChart({
       <ul aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
         {open.map((r, index) => {
           const owed = r.balance > 0;
+          const name = localName(r.displayName);
           // Rows set off one after another, capped so a long list is not a long wait.
           const delay = `${String(Math.min(index, 6) * 60)}ms`;
           const width = `${String(Math.max(4, Math.round((Math.abs(r.balance) / largest) * 100)))}%`;
@@ -48,13 +49,16 @@ export function BalanceChart({
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <AvatarTip
-                  name={localName(r.displayName)}
-                  pictureUrl={pictureOf(r.memberId)}
-                  placeholder={r.status === "placeholder"}
-                  isMe={r.memberId === myMemberId}
-                  className="size-9"
-                />
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <AvatarTip
+                    name={name}
+                    pictureUrl={pictureOf(r.memberId)}
+                    placeholder={r.status === "placeholder"}
+                    isMe={r.memberId === myMemberId}
+                    className="size-9"
+                  />
+                  <span className="min-w-0 truncate text-sm font-bold text-ink">{name}</span>
+                </div>
                 <span
                   className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-red-700"}`}
                 >
