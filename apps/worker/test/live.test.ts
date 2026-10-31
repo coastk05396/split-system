@@ -3,6 +3,50 @@ import { z } from "zod";
 import { call } from "./auth-harness.js";
 import { createGroup, person } from "./groups-harness.js";
 
+it("signals connected Members after a Group is renamed", async () => {
+  const { send } = await import("./groups-harness.js");
+  const admin = await person("rename live");
+  const group = await createGroup(admin);
+  const response = await call(`/groups/${group.id}/live`, {
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${admin.accessToken}` },
+  });
+  const socket = response.webSocket;
+  if (socket === null) throw new Error("missing socket");
+  socket.accept();
+  const message = new Promise<string>((resolve) => {
+    socket.addEventListener(
+      "message",
+      (event) => {
+        resolve(String(event.data));
+      },
+      { once: true },
+    );
+  });
+  expect(
+    (
+      await send(
+        admin,
+        "PATCH",
+        `/groups/${group.id}`,
+        { name: "新的名稱" },
+        { "If-Match": String(group.updatedAt) },
+      )
+    ).status,
+  ).toBe(200);
+  const payload: unknown = JSON.parse(
+    await Promise.race([
+      message,
+      new Promise<string>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("no signal"));
+        }, 1000);
+      }),
+    ]),
+  );
+  expect(payload).toMatchObject({ version: 1, type: "sync needed" });
+  socket.close();
+});
+
 it("closes a removed Member's live connection", async () => {
   const { groupWith, listMembers, send } = await import("./groups-harness.js");
   const { admin, group, others } = await groupWith("admin", "member");

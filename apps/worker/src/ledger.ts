@@ -169,7 +169,9 @@ export class GroupLedger extends DurableObject<Bindings> {
       )
         return null;
       const dirty = sql
-        .exec<{ rev: number }>("SELECT max(rev) AS rev FROM ledger_dirty HAVING count(*) > 0")
+        .exec<{ rev: number }>(
+          "SELECT rev FROM ledger_meta WHERE EXISTS (SELECT 1 FROM ledger_dirty)",
+        )
         .toArray()[0];
       if (dirty === undefined) return null;
       const expenseIds = sql
@@ -922,10 +924,18 @@ export class GroupLedger extends DurableObject<Bindings> {
         return "OK";
       });
       if (result !== "OK") return Response.json({ error: result }, { status: 409 });
-      await this.drain();
       const rev = this.ctx.storage.sql
         .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
         .one().rev;
+      const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
+      for (const socket of this.ctx.getWebSockets()) {
+        try {
+          socket.send(JSON.stringify(signal));
+        } catch {
+          /* socket closed */
+        }
+      }
+      await this.drain();
       return Response.json({ rev });
     }
     if (new URL(request.url).pathname === "/delete" && request.method === "POST") {
@@ -940,6 +950,15 @@ export class GroupLedger extends DurableObject<Bindings> {
         );
         return sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev;
       });
+      const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
+      for (const socket of this.ctx.getWebSockets()) {
+        try {
+          socket.send(JSON.stringify(signal));
+          socket.close(4003, "Group deleted");
+        } catch {
+          /* socket closed */
+        }
+      }
       await this.drain();
       return Response.json({ rev });
     }
