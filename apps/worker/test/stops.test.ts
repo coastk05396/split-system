@@ -256,13 +256,23 @@ it("sends a live signal after a Stop is recorded", async () => {
   const socket = response.webSocket;
   if (socket === null) throw new Error("missing socket");
   socket.accept();
-  const signal = new Promise<string>((resolve) =>
-    socket.addEventListener("message", (event) => resolve(String(event.data)), { once: true }),
-  );
+  const signal = new Promise<string>((resolve) => {
+    socket.addEventListener(
+      "message",
+      (event) => {
+        resolve(String(event.data));
+      },
+      { once: true },
+    );
+  });
   await addStop(admin, group.id, { title: "海邊" });
   const received = await Promise.race([
     signal,
-    new Promise<string>((_, reject) => setTimeout(() => reject(new Error("missing signal")), 1000)),
+    new Promise<string>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("missing signal"));
+      }, 1000);
+    }),
   ]);
   expect(JSON.parse(received) as unknown).toMatchObject({
     version: 1,
@@ -294,6 +304,7 @@ it("signals Stop edits and deletion, but not a refused write", async () => {
     { "If-Match": String(stop.updatedAt) },
   );
   expect(edited.status).toBe(200);
+  expect(edited.headers.get("X-Group-Rev")).toBe("2");
   const refused = await send(
     admin,
     "PATCH",
@@ -302,7 +313,11 @@ it("signals Stop edits and deletion, but not a refused write", async () => {
     { "If-Match": String(stop.updatedAt) },
   );
   expect(refused.status).toBe(409);
-  expect((await send(admin, "DELETE", `/groups/${group.id}/stops/${stop.id}`)).status).toBe(204);
-  await vi.waitFor(() => expect(received.map((message) => message.rev)).toEqual([2, 3]));
+  const removed = await send(admin, "DELETE", `/groups/${group.id}/stops/${stop.id}`);
+  expect(removed.status).toBe(204);
+  expect(removed.headers.get("X-Group-Rev")).toBe("3");
+  await vi.waitFor(() => {
+    expect(received.map((message) => message.rev)).toEqual([2, 3]);
+  });
   socket.close();
 });

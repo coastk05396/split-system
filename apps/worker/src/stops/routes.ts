@@ -9,7 +9,11 @@ import { requireMember } from "../groups/membership.js";
 import { parseBody, requireIfMatch } from "../request-guards.js";
 import type { Bindings } from "../env.js";
 
-async function stopRequest(env: Bindings, groupId: string, operation: object): Promise<unknown> {
+async function stopRequest(
+  env: Bindings,
+  groupId: string,
+  operation: object,
+): Promise<{ value: unknown; rev: string }> {
   const ledger = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId));
   const response = await ledger.fetch("https://ledger.internal/stop-op", {
     method: "POST",
@@ -29,7 +33,9 @@ async function stopRequest(env: Bindings, groupId: string, operation: object): P
       );
     throw new ApiError("INTERNAL");
   }
-  return "value" in result ? result.value : undefined;
+  const rev = response.headers.get("X-Group-Rev");
+  if (rev === null) throw new ApiError("INTERNAL");
+  return { value: "value" in result ? result.value : undefined, rev };
 }
 
 /** Any active Member can read and edit their Group's Trip Stops. */
@@ -40,37 +46,42 @@ export function stopRoutes(deps: AppDeps) {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const query = stopListQuerySchema.safeParse(c.req.query());
       if (!query.success) throw new ApiError("VALIDATION_FAILED");
-      return c.json(
-        await stopRequest(c.env, me.groupId, { action: "list", day: query.data.day }),
-        200,
-      );
+      const result = await stopRequest(c.env, me.groupId, { action: "list", day: query.data.day });
+      c.header("X-Group-Rev", result.rev);
+      return c.json(result.value, 200);
     })
     .post("/groups/:id/stops", signedIn, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const input = await parseBody(c, stopInputSchema);
-      return c.json(
-        await stopRequest(c.env, me.groupId, { action: "create", input, now: deps.now() }),
-        201,
-      );
+      const result = await stopRequest(c.env, me.groupId, {
+        action: "create",
+        input,
+        now: deps.now(),
+      });
+      c.header("X-Group-Rev", result.rev);
+      return c.json(result.value, 201);
     })
     .patch("/groups/:id/stops/:sid", signedIn, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const expected = requireIfMatch(c);
       const input = await parseBody(c, stopPatchSchema);
-      return c.json(
-        await stopRequest(c.env, me.groupId, {
-          action: "patch",
-          id: c.req.param("sid"),
-          input,
-          expected,
-          now: deps.now(),
-        }),
-        200,
-      );
+      const result = await stopRequest(c.env, me.groupId, {
+        action: "patch",
+        id: c.req.param("sid"),
+        input,
+        expected,
+        now: deps.now(),
+      });
+      c.header("X-Group-Rev", result.rev);
+      return c.json(result.value, 200);
     })
     .delete("/groups/:id/stops/:sid", signedIn, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
-      await stopRequest(c.env, me.groupId, { action: "delete", id: c.req.param("sid") });
+      const result = await stopRequest(c.env, me.groupId, {
+        action: "delete",
+        id: c.req.param("sid"),
+      });
+      c.header("X-Group-Rev", result.rev);
       return c.body(null, 204);
     });
 }
