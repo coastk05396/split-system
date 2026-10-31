@@ -2,6 +2,41 @@ import { describe, expect, it } from "vitest";
 import { call } from "./auth-harness.js";
 import { createGroup, person } from "./groups-harness.js";
 
+it("closes a removed Member's live connection", async () => {
+  const { groupWith, listMembers, send } = await import("./groups-harness.js");
+  const { admin, group, others } = await groupWith("admin", "member");
+  const member = others[0];
+  if (member === undefined) throw new Error("missing Member");
+  const row = (await listMembers(admin, group.id)).find((item) => item.userId === member.userId);
+  if (row === undefined) throw new Error("missing Member row");
+  const response = await call(`/groups/${group.id}/live`, {
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${member.accessToken}` },
+  });
+  const socket = response.webSocket;
+  if (socket === null) throw new Error("missing socket");
+  socket.accept();
+  const closed = new Promise<number>((resolve) => {
+    socket.addEventListener(
+      "close",
+      (event) => {
+        resolve(event.code);
+      },
+      { once: true },
+    );
+  });
+  expect((await send(admin, "DELETE", `/groups/${group.id}/members/${row.id}`)).status).toBe(204);
+  expect(
+    await Promise.race([
+      closed,
+      new Promise<number>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("socket remained open"));
+        }, 1000);
+      }),
+    ]),
+  ).toBe(4003);
+});
+
 describe("Group live connection", () => {
   it("requires authentication before connecting", async () => {
     const admin = await person("live-admin");

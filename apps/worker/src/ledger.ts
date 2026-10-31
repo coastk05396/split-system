@@ -531,7 +531,14 @@ export class GroupLedger extends DurableObject<Bindings> {
       if ((await this.ctx.storage.getAlarm()) === null)
         await this.ctx.storage.setAlarm(Date.now() + 2000);
       const result = this.ctx.storage.transactionSync(
-        (): { memberId?: string; rev?: number; error?: string; details?: unknown } => {
+        (): {
+          memberId?: string;
+          rev?: number;
+          error?: string;
+          details?: unknown;
+          closeUserId?: string | null;
+          changed?: boolean;
+        } => {
           const sql = this.ctx.storage.sql;
           const all = sql
             .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
@@ -547,6 +554,7 @@ export class GroupLedger extends DurableObject<Bindings> {
                   name,
             );
           let memberId = op.targetMemberId;
+          let closeUserId: string | null = null;
           if (op.action !== "join" && op.action !== "claim" && actor === undefined)
             return { error: "NOT_FOUND" };
           if (op.action === "add") {
@@ -569,6 +577,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               return {
                 memberId: existing.id,
                 rev: sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev,
+                changed: false,
               };
             if (seated.length >= 30) return { error: "GROUP_FULL" };
             if (existing !== undefined) {
@@ -664,6 +673,7 @@ export class GroupLedger extends DurableObject<Bindings> {
                 leaving.id,
               );
             memberId = leaving.id;
+            closeUserId = leaving.user_id;
           }
           sql.exec("UPDATE ledger_meta SET rev=rev+1");
           sql.exec(
@@ -673,10 +683,30 @@ export class GroupLedger extends DurableObject<Bindings> {
           return {
             memberId,
             rev: sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev,
+            changed: true,
+            closeUserId,
           };
         },
       );
       if (result.error !== undefined) return Response.json(result, { status: 409 });
+      if (result.changed && result.rev !== undefined) {
+        if (result.closeUserId)
+          for (const socket of this.ctx.getWebSockets(result.closeUserId))
+            socket.close(4003, "Membership ended");
+        const signal: SyncNeeded = {
+          version: 1,
+          type: "sync needed",
+          rev: result.rev,
+          timestamp: Date.now(),
+        };
+        for (const socket of this.ctx.getWebSockets()) {
+          try {
+            socket.send(JSON.stringify(signal));
+          } catch {
+            /* socket closed */
+          }
+        }
+      }
       await this.drain();
       return Response.json(result);
     }
