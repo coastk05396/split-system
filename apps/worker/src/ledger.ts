@@ -1177,7 +1177,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
           );
           sql.exec(
-            "INSERT INTO ledger_meta SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
+            "INSERT INTO ledger_meta (schema_version, rev) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
           );
           this.upgradeSchema();
           if (sql.exec("SELECT id FROM ledger_group LIMIT 1").toArray().length > 0) return false;
@@ -1209,6 +1209,208 @@ export class GroupLedger extends DurableObject<Bindings> {
       });
       if (inserted) await this.drain();
       return new Response(null, { status: inserted ? 201 : 409 });
+    }
+    if (new URL(request.url).pathname === "/import" && request.method === "POST") {
+      const { snapshot, now } = await request.json<{
+        snapshot: {
+          group: Record<string, unknown>;
+          members: Array<Record<string, unknown>>;
+          invites: Array<Record<string, unknown>>;
+          expenses: Array<Record<string, unknown>>;
+          payers: Array<Record<string, unknown>>;
+          splits: Array<Record<string, unknown>>;
+          settlements: Array<Record<string, unknown>>;
+          stops: Array<Record<string, unknown>>;
+        };
+        now: number;
+      }>();
+      const toNullableStr = (v: unknown): string | null => {
+        if (typeof v === "string") return v;
+        if (typeof v === "number") return String(v);
+        return null;
+      };
+      await this.ctx.blockConcurrencyWhile(async () => {
+        this.ctx.storage.transactionSync(() => {
+          const sql = this.ctx.storage.sql;
+          sql.exec(
+            "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
+          );
+          sql.exec(
+            "INSERT INTO ledger_meta (schema_version, rev) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
+          );
+          this.upgradeSchema();
+          const existing = sql.exec<{ id: string }>("SELECT id FROM ledger_group LIMIT 1").toArray();
+          if (existing.length > 0) return;
+
+          const g = snapshot.group;
+          sql.exec(
+            `INSERT INTO ledger_group (id, name, settlement_currency, default_expense_currency, is_trip,
+            trip_destination, trip_start_date, trip_end_date, trip_notes, created_at, updated_at, deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            g.id,
+            g.name,
+            g.settlement_currency,
+            g.default_expense_currency ?? g.settlement_currency,
+            g.is_trip ? 1 : 0,
+            g.trip_destination ?? null,
+            g.trip_start_date ?? null,
+            g.trip_end_date ?? null,
+            g.trip_notes ?? null,
+            g.created_at ?? now,
+            g.updated_at ?? now,
+          );
+
+          for (const m of snapshot.members) {
+            sql.exec(
+              `INSERT INTO ledger_members (id, user_id, placeholder_name, nickname, created_by_member_id, role, status, net_balance, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              m.id,
+              m.user_id ?? null,
+              m.placeholder_name ?? null,
+              m.nickname ?? null,
+              m.created_by_member_id ?? null,
+              m.role,
+              m.status,
+              m.net_balance ?? 0,
+              m.created_at ?? now,
+            );
+          }
+
+          if (snapshot.invites.length > 0) {
+            const inv = snapshot.invites[0];
+            if (inv) {
+              sql.exec(
+                "INSERT INTO ledger_invite (token, expires_at, created_at) VALUES (?, ?, ?)",
+                inv.token,
+                inv.expires_at,
+                inv.created_at ?? now,
+              );
+            }
+          }
+
+          const payersByExpense = new Map<string, Array<{ memberId: string; amountMinor: number; settlementAmount: number }>>();
+          for (const p of snapshot.payers) {
+            const eid = String(p.expense_id);
+            let list = payersByExpense.get(eid);
+            if (!list) {
+              list = [];
+              payersByExpense.set(eid, list);
+            }
+            list.push({
+              memberId: String(p.member_id),
+              amountMinor: Number(p.amount_minor),
+              settlementAmount: Number(p.settlement_amount),
+            });
+          }
+
+          const splitsByExpense = new Map<string, Array<{ memberId: string; shares: number | null; amountMinor: number; settlementAmount: number }>>();
+          for (const s of snapshot.splits) {
+            const eid = String(s.expense_id);
+            let list = splitsByExpense.get(eid);
+            if (!list) {
+              list = [];
+              splitsByExpense.set(eid, list);
+            }
+            list.push({
+              memberId: String(s.member_id),
+              shares: s.shares !== null && s.shares !== undefined ? Number(s.shares) : null,
+              amountMinor: Number(s.amount_minor),
+              settlementAmount: Number(s.settlement_amount),
+            });
+          }
+
+          for (const e of snapshot.expenses) {
+            const eid = String(e.id);
+            const expenseItem = {
+              id: eid,
+              groupId: String(e.group_id),
+              creatorMemberId: String(e.creator_member_id),
+              description: String(e.description),
+              category: String(e.category),
+              originalAmount: Number(e.original_amount),
+              originalCurrency: String(e.original_currency),
+              fxRateScaled: Number(e.fx_rate_scaled),
+              fxDate: String(e.fx_date),
+              isCustomRate: Boolean(e.is_custom_rate),
+              settlementAmount: Number(e.settlement_amount),
+              splitMethod: e.split_method,
+              payers: payersByExpense.get(eid) ?? [],
+              splits: splitsByExpense.get(eid) ?? [],
+              expenseDate: String(e.expense_date),
+              expenseTime: toNullableStr(e.expense_time),
+              stopId: toNullableStr(e.stop_id),
+              createdAt: Number(e.created_at ?? now),
+              updatedAt: Number(e.updated_at ?? now),
+            };
+            sql.exec(
+              "INSERT INTO ledger_expenses (id, creator_member_id, idempotency_key, data, deleted) VALUES (?, ?, ?, ?, 0)",
+              eid,
+              expenseItem.creatorMemberId,
+              eid,
+              JSON.stringify(expenseItem),
+            );
+            sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES (?, 1)", `expense:${eid}`);
+          }
+
+          for (const s of snapshot.settlements) {
+            const sid = String(s.id);
+            const settlementItem = {
+              id: sid,
+              groupId: String(s.group_id),
+              payerMemberId: String(s.payer_member_id),
+              receiverMemberId: String(s.receiver_member_id),
+              amount: Number(s.amount),
+              currency: String(s.currency),
+              status: s.status,
+              note: toNullableStr(s.note),
+              createdByMemberId: String(s.created_by_member_id),
+              confirmedByMemberId: toNullableStr(s.confirmed_by_member_id),
+              confirmedAt: s.confirmed_at ? Number(s.confirmed_at) : null,
+              undoneByMemberId: toNullableStr(s.undone_by_member_id),
+              undoneAt: s.undone_at ? Number(s.undone_at) : null,
+              createdAt: Number(s.created_at ?? now),
+              updatedAt: Number(s.updated_at ?? now),
+            };
+            sql.exec(
+              "INSERT INTO ledger_settlements (id, data, idempotency_key) VALUES (?, ?, ?)",
+              sid,
+              JSON.stringify(settlementItem),
+              sid,
+            );
+            sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES (?, 1)", `settlement:${sid}`);
+          }
+
+          for (const st of snapshot.stops) {
+            const stid = String(st.id);
+            const stopItem = {
+              id: stid,
+              dayDate: String(st.day_date),
+              startTime: toNullableStr(st.start_time),
+              endTime: toNullableStr(st.end_time),
+              title: String(st.title),
+              category: String(st.category),
+              locationName: toNullableStr(st.location_name),
+              notes: toNullableStr(st.notes),
+              createdAt: Number(st.created_at ?? now),
+              updatedAt: Number(st.updated_at ?? now),
+            };
+            sql.exec(
+              "INSERT INTO ledger_stops (id, data) VALUES (?, ?)",
+              stid,
+              JSON.stringify(stopItem),
+            );
+          }
+
+          sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES ('group', 1)");
+          sql.exec("UPDATE ledger_meta SET rev = 1");
+        });
+        while (
+          this.ctx.storage.sql.exec("SELECT kind FROM ledger_dirty LIMIT 1").toArray().length > 0
+        ) {
+          await this.push();
+        }
+      });
+      return new Response(null, { status: 200 });
     }
     if (new URL(request.url).pathname === "/initialise" && request.method === "POST") {
       this.ctx.storage.transactionSync(() => {
