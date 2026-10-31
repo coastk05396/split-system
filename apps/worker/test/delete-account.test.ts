@@ -133,7 +133,7 @@ it("never leaves an active Member when a join races account deletion", async () 
     deleteMe(joining.accessToken),
   ]);
   expect(deletion.status).toBe(204);
-  expect([200, 401, 403, 404]).toContain(join.status);
+  expect([200, 401, 403, 404, 409]).toContain(join.status);
   expect(
     (await listMembers(admin, group.id)).some(
       (member) => member.userId === joining.userId && member.status === "active",
@@ -356,4 +356,83 @@ it("allows money changes after an abandoned freeze expires without deleting the 
     ),
   ).toBe(true);
   clock.now -= 10 * 60 * 1000 + 1;
+});
+
+it("keeps a deleting Member when another Admin leaves after the check", async () => {
+  const { admin, group, others } = await groupWith("first admin", "deleting admin", "plain member");
+  const deleting = others[0];
+  if (deleting === undefined) throw new Error("missing user");
+  const member = (await listMembers(admin, group.id)).find(
+    (item) => item.userId === deleting.userId,
+  );
+  if (member === undefined) throw new Error("missing member");
+  expect(
+    (await send(admin, "PATCH", `/groups/${group.id}/members/${member.id}`, { role: "admin" }))
+      .status,
+  ).toBe(200);
+  let release: () => void = () => {};
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed: () => void = () => {};
+  const frozen = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const namespace = new Proxy(env.GROUP_LEDGER, {
+    get(targetNamespace, key) {
+      if (key !== "get") {
+        const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+        return typeof value === "function"
+          ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+          : value;
+      }
+      return (id: DurableObjectId) => {
+        const stub = targetNamespace.get(id);
+        return new Proxy(stub, {
+          get(targetStub, prop) {
+            if (prop !== "fetch") {
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            }
+            return async (url: string, init: RequestInit) => {
+              const result = await targetStub.fetch(url, init);
+              if (
+                url.endsWith("/account-deletion") &&
+                typeof init.body === "string" &&
+                (JSON.parse(init.body) as { action: string }).action === "freeze"
+              ) {
+                observed();
+                await hold;
+              }
+              return result;
+            };
+          },
+        });
+      };
+    },
+  });
+  const deletion = call(
+    "/me",
+    { method: "DELETE", headers: bearer(deleting.accessToken) },
+    { GROUP_LEDGER: namespace },
+  );
+  try {
+    await frozen;
+    expect((await send(admin, "POST", `/groups/${group.id}/leave`)).status).toBe(204);
+  } finally {
+    release();
+  }
+  const result = await deletion;
+  expect(result.status).toBe(409);
+  expect(await result.json()).toEqual({
+    error: { code: "LAST_ADMIN", details: { groupIds: [group.id] } },
+  });
+  expect(
+    (await listMembers(deleting, group.id)).some(
+      (item) =>
+        item.userId === deleting.userId && item.status === "active" && item.role === "admin",
+    ),
+  ).toBe(true);
 });

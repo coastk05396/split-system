@@ -1,3 +1,4 @@
+import { stopOperation } from "./ledger-stops.js";
 import {
   assertFrozenBalancesUnchanged,
   frozenBalances,
@@ -37,6 +38,7 @@ const memberOpSchema = z.object({
   input: z.unknown().optional(),
   now: z.number().int(),
   names: z.record(z.string(), z.string()).optional(),
+  inviteToken: z.string().optional(),
   targetBalance: z.number().optional(),
   hasHistory: z.boolean().optional(),
 });
@@ -150,6 +152,16 @@ export class GroupLedger extends DurableObject<Bindings> {
       );
       sql.exec("UPDATE ledger_meta SET schema_version = 6");
     }
+    if (meta.schema_version < 7) {
+      sql.exec(
+        "CREATE TABLE ledger_invite (token TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL)",
+      );
+      sql.exec("UPDATE ledger_meta SET schema_version = 7");
+    }
+    if (meta.schema_version < 8) {
+      sql.exec("CREATE TABLE IF NOT EXISTS ledger_stops (id TEXT PRIMARY KEY, data TEXT NOT NULL)");
+      sql.exec("UPDATE ledger_meta SET schema_version = 8");
+    }
   }
 
   private drain(): Promise<void> {
@@ -188,6 +200,11 @@ export class GroupLedger extends DurableObject<Bindings> {
       );
       return {
         rev: dirty.rev,
+        invite: sql
+          .exec<{ token: string; expires_at: number; created_at: number }>(
+            "SELECT * FROM ledger_invite LIMIT 1",
+          )
+          .toArray()[0],
         expenseIds,
         group: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one(),
         expenses: expenseRows.map((row) => expenseSchema.parse(JSON.parse(row.data) as unknown)),
@@ -214,6 +231,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     if (snapshot === null) return;
     const {
       group: g,
+      invite,
       members,
       settlements,
       deletedStops,
@@ -259,6 +277,25 @@ export class GroupLedger extends DurableObject<Bindings> {
               rev,
             ),
         );
+        statements.push(
+          db.prepare(`DELETE FROM invites WHERE group_id=? AND ${fence}`).bind(g.id, g.id, rev),
+        );
+        if (invite)
+          statements.push(
+            db
+              .prepare(
+                `INSERT INTO invites (id,group_id,token,expires_at,created_at) SELECT ?,?,?,?,? WHERE ${fence}`,
+              )
+              .bind(
+                invite.token,
+                g.id,
+                invite.token,
+                invite.expires_at,
+                invite.created_at,
+                g.id,
+                rev,
+              ),
+          );
         const ids = members.map((member) => member.id);
         if (ids.length > 0) {
           statements.push(
@@ -466,38 +503,71 @@ export class GroupLedger extends DurableObject<Bindings> {
   }
 
   override async fetch(request: Request): Promise<Response> {
-    if (new URL(request.url).pathname === "/delete-stop" && request.method === "POST") {
-      const input = z.object({ stopId: z.string() }).safeParse(await request.json());
-      if (!input.success) return new Response(null, { status: 400 });
-      if ((await this.ctx.storage.getAlarm()) === null)
-        await this.ctx.storage.setAlarm(Date.now() + 2000);
-      const rev = this.ctx.storage.transactionSync(() => {
-        const sql = this.ctx.storage.sql;
-        for (const row of sql
-          .exec<{ id: string; data: string }>("SELECT id,data FROM ledger_expenses WHERE deleted=0")
-          .toArray()) {
-          const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
-          if (expense.stopId !== input.data.stopId) continue;
-          expense.stopId = null;
-          sql.exec("UPDATE ledger_expenses SET data=? WHERE id=?", JSON.stringify(expense), row.id);
+    if (new URL(request.url).pathname === "/stop-op" && request.method === "POST") {
+      const op: unknown = await request.json();
+      try {
+        const result = this.ctx.storage.transactionSync(() => {
+          const sql = this.ctx.storage.sql;
+          const outcome = stopOperation(sql, op);
+          if (outcome.changed) {
+            if (outcome.deletedId !== undefined) {
+              for (const row of sql
+                .exec<{ id: string; data: string }>(
+                  "SELECT id,data FROM ledger_expenses WHERE deleted=0",
+                )
+                .toArray()) {
+                const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+                if (expense.stopId !== outcome.deletedId) continue;
+                expense.stopId = null;
+                sql.exec(
+                  "UPDATE ledger_expenses SET data=? WHERE id=?",
+                  JSON.stringify(expense),
+                  row.id,
+                );
+              }
+            }
+            sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            const kind = outcome.deletedId === undefined ? "group" : `stop:${outcome.deletedId}`;
+            sql.exec(
+              "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+              kind,
+            );
+          }
+          return {
+            ...outcome,
+            rev: sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev,
+          };
+        });
+        if (result.changed) {
+          const signal: SyncNeeded = {
+            version: 1,
+            type: "sync needed",
+            rev: result.rev,
+            timestamp: Date.now(),
+          };
+          for (const socket of this.ctx.getWebSockets()) {
+            try {
+              socket.send(JSON.stringify(signal));
+            } catch {
+              /* socket closed */
+            }
+          }
+          if ((await this.ctx.storage.getAlarm()) === null)
+            await this.ctx.storage.setAlarm(Date.now() + 2000);
+          await this.drain();
         }
-        sql.exec("UPDATE ledger_meta SET rev=rev+1");
-        sql.exec(
-          "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
-          `stop:${input.data.stopId}`,
+        return Response.json(
+          { value: result.value },
+          { headers: { "X-Group-Rev": String(result.rev) } },
         );
-        return sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev;
-      });
-      const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
-      for (const socket of this.ctx.getWebSockets()) {
-        try {
-          socket.send(JSON.stringify(signal));
-        } catch {
-          /* socket closed */
-        }
+      } catch (error) {
+        if (error instanceof ApiError)
+          return Response.json(
+            { error: error.code, details: error.details },
+            { status: error.status },
+          );
+        throw error;
       }
-      await this.drain();
-      return new Response(null, { status: 204, headers: { "X-Group-Rev": String(rev) } });
     }
     if (new URL(request.url).pathname === "/placeholder-counts" && request.method === "GET") {
       const counts: Record<string, number> = {};
@@ -708,6 +778,15 @@ export class GroupLedger extends DurableObject<Bindings> {
           changed?: boolean;
         } => {
           const sql = this.ctx.storage.sql;
+          if (op.action === "join" || op.action === "claim") {
+            const invite = sql
+              .exec<{ token: string; expires_at: number }>(
+                "SELECT token,expires_at FROM ledger_invite LIMIT 1",
+              )
+              .toArray()[0];
+            if (!invite || invite.token !== op.inviteToken) return { error: "NOT_FOUND" };
+            if (invite.expires_at <= op.now) return { error: "INVITE_EXPIRED" };
+          }
           if (
             (op.action === "join" || op.action === "claim") &&
             op.userId !== undefined &&
@@ -899,6 +978,80 @@ export class GroupLedger extends DurableObject<Bindings> {
       await this.drain();
       return Response.json(result);
     }
+    if (new URL(request.url).pathname === "/invite" && request.method === "POST") {
+      const parsed = z
+        .object({
+          action: z.enum(["get", "regenerate", "ensure", "validate"]),
+          token: z.string().optional(),
+          actorMemberId: z.string().optional(),
+          now: z.number().int(),
+          expiresAt: z.number().int().optional(),
+        })
+        .safeParse(await request.json());
+      if (!parsed.success) return new Response(null, { status: 400 });
+      const op = parsed.data;
+      const result = this.ctx.storage.transactionSync(() => {
+        const sql = this.ctx.storage.sql;
+        const existing = sql
+          .exec<{ token: string; expires_at: number }>(
+            "SELECT token,expires_at FROM ledger_invite LIMIT 1",
+          )
+          .toArray()[0];
+        if (op.action !== "validate") {
+          const actor = sql
+            .exec<{ role: string }>(
+              "SELECT role FROM ledger_members WHERE id=? AND status='active'",
+              op.actorMemberId ?? "",
+            )
+            .toArray()[0];
+          if (!actor) return { error: "NOT_FOUND" };
+          if (op.action === "regenerate" && actor.role !== "admin") return { error: "FORBIDDEN" };
+        }
+        if (op.action === "validate")
+          return !existing || existing.token !== op.token
+            ? { error: "NOT_FOUND" }
+            : existing.expires_at <= op.now
+              ? { error: "INVITE_EXPIRED" }
+              : { token: existing.token, expiresAt: existing.expires_at };
+        if (op.action === "get")
+          return !existing || existing.expires_at <= op.now
+            ? { error: "NOT_FOUND" }
+            : { token: existing.token, expiresAt: existing.expires_at };
+        if (op.action === "ensure" && existing && existing.expires_at > op.now)
+          return { token: existing.token, expiresAt: existing.expires_at };
+        if (!op.token || op.expiresAt === undefined) return { error: "VALIDATION_FAILED" };
+        sql.exec("DELETE FROM ledger_invite");
+        sql.exec(
+          "INSERT INTO ledger_invite(token,expires_at,created_at) VALUES (?,?,?)",
+          op.token,
+          op.expiresAt,
+          op.now,
+        );
+        sql.exec("UPDATE ledger_meta SET rev=rev+1");
+        sql.exec(
+          "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+        );
+        return { token: op.token, expiresAt: op.expiresAt, changed: true };
+      });
+      if ("error" in result) return Response.json(result, { status: 404 });
+      if ("changed" in result) {
+        if ((await this.ctx.storage.getAlarm()) === null)
+          await this.ctx.storage.setAlarm(Date.now() + 2000);
+        const rev = this.ctx.storage.sql
+          .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+          .one().rev;
+        const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
+        for (const socket of this.ctx.getWebSockets()) {
+          try {
+            socket.send(JSON.stringify(signal));
+          } catch {
+            /* socket closed */
+          }
+        }
+        await this.drain();
+      }
+      return Response.json({ token: result.token, expiresAt: result.expiresAt });
+    }
     if (new URL(request.url).pathname === "/state" && request.method === "GET") {
       const group = this.ctx.storage.sql
         .exec<LedgerGroup>("SELECT * FROM ledger_group WHERE deleted = 0")
@@ -909,7 +1062,12 @@ export class GroupLedger extends DurableObject<Bindings> {
         this.ctx.storage.sql
           .exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0")
           .one().n > 0;
-      return Response.json({ group, rev: meta.rev, locked });
+      const seated = this.ctx.storage.sql
+        .exec<LedgerMember>(
+          "SELECT * FROM ledger_members WHERE status IN ('active','placeholder') ORDER BY created_at,rowid",
+        )
+        .toArray();
+      return Response.json({ group, rev: meta.rev, locked, seated });
     }
     if (new URL(request.url).pathname === "/patch" && request.method === "POST") {
       const schema = z.object({
@@ -1064,7 +1222,26 @@ export class GroupLedger extends DurableObject<Bindings> {
       this.upgrade();
       return new Response(null, { status: 204 });
     }
-    if (new URL(request.url).pathname !== "/live") return new Response(null, { status: 404 });
+    const pathname = new URL(request.url).pathname;
+    if (pathname !== "/live" && pathname !== "/member-check")
+      return new Response(null, { status: 404 });
+    const candidate = request.headers.get("X-User-Id");
+    const sql = this.ctx.storage.sql;
+    const exists = sql
+      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_members'")
+      .toArray();
+    if (
+      candidate === null ||
+      exists.length === 0 ||
+      sql
+        .exec(
+          "SELECT m.id FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'",
+          candidate,
+        )
+        .toArray().length === 0
+    )
+      return new Response(null, { status: 404 });
+    if (pathname === "/member-check") return new Response(null, { status: 204 });
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];

@@ -9,7 +9,7 @@ import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { requireMember } from "../groups/membership.js";
 import { expenseLedgerOperation } from "../groups/ledger-client.js";
-import { fxRates, stops } from "../db/schema.js";
+import { fxRates } from "../db/schema.js";
 import { rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey, requireIfMatch } from "../request-guards.js";
 import { personalSpending } from "./personal-spending.js";
@@ -110,14 +110,6 @@ export function expenseRoutes(deps: AppDeps) {
       const key = requireIdempotencyKey(c);
       const input = await parseBody(c, expenseInputSchema);
       const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
-      const stopValid =
-        input.stopId == null ||
-        (
-          await db
-            .select()
-            .from(stops)
-            .where(and(eq(stops.groupId, me.groupId), eq(stops.id, input.stopId)))
-        ).length > 0;
       const result = await expenseLedgerOperation(c.env, me.groupId, {
         action: "create",
         memberId: me.id,
@@ -129,7 +121,6 @@ export function expenseRoutes(deps: AppDeps) {
           quote: r.quoteCurrency,
           rate: r.rateScaled,
         })),
-        stopValid,
       });
       return c.json(result, 201);
     })
@@ -147,14 +138,6 @@ export function expenseRoutes(deps: AppDeps) {
       const expected = requireIfMatch(c);
       const input = await parseBody(c, expenseInputSchema);
       const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
-      const stopValid =
-        input.stopId == null ||
-        (
-          await db
-            .select()
-            .from(stops)
-            .where(and(eq(stops.groupId, me.groupId), eq(stops.id, input.stopId)))
-        ).length > 0;
       const updated = await expenseLedgerOperation(c.env, me.groupId, {
         action: "update",
         id: c.req.param("eid"),
@@ -167,7 +150,6 @@ export function expenseRoutes(deps: AppDeps) {
           quote: r.quoteCurrency,
           rate: r.rateScaled,
         })),
-        stopValid,
       });
       return c.json(updated, 200);
     })

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 import { clock, type Session } from "./auth-harness.js";
 import { at, createGroup, errorCode, groupWith, person, send } from "./groups-harness.js";
@@ -245,4 +245,79 @@ describe("DELETE /groups/:id/stops/:sid", () => {
     const res = await send(other.admin, "DELETE", `/groups/${other.group.id}/stops/${stop.id}`);
     expect(res.status).toBe(404);
   });
+});
+
+it("sends a live signal after a Stop is recorded", async () => {
+  const { call } = await import("./auth-harness.js");
+  const { admin, group } = await tripFor("live-stop");
+  const response = await call(`/groups/${group.id}/live`, {
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${admin.accessToken}` },
+  });
+  const socket = response.webSocket;
+  if (socket === null) throw new Error("missing socket");
+  socket.accept();
+  const signal = new Promise<string>((resolve) => {
+    socket.addEventListener(
+      "message",
+      (event) => {
+        resolve(String(event.data));
+      },
+      { once: true },
+    );
+  });
+  await addStop(admin, group.id, { title: "海邊" });
+  const received = await Promise.race([
+    signal,
+    new Promise<string>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("missing signal"));
+      }, 1000);
+    }),
+  ]);
+  expect(JSON.parse(received) as unknown).toMatchObject({
+    version: 1,
+    type: "sync needed",
+    rev: 1,
+  });
+  socket.close();
+});
+
+it("signals Stop edits and deletion, but not a refused write", async () => {
+  const { call } = await import("./auth-harness.js");
+  const { admin, group } = await tripFor("live-stop-changes");
+  const stop = await addStop(admin, group.id, { title: "初名" });
+  const response = await call(`/groups/${group.id}/live`, {
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${admin.accessToken}` },
+  });
+  const socket = response.webSocket;
+  if (socket === null) throw new Error("missing socket");
+  socket.accept();
+  const received: { rev: number }[] = [];
+  socket.addEventListener("message", (event) => {
+    received.push(JSON.parse(String(event.data)) as { rev: number });
+  });
+  const edited = await send(
+    admin,
+    "PATCH",
+    `/groups/${group.id}/stops/${stop.id}`,
+    { title: "新名" },
+    { "If-Match": String(stop.updatedAt) },
+  );
+  expect(edited.status).toBe(200);
+  expect(edited.headers.get("X-Group-Rev")).toBe("2");
+  const refused = await send(
+    admin,
+    "PATCH",
+    `/groups/${group.id}/stops/${stop.id}`,
+    { title: "過期" },
+    { "If-Match": String(stop.updatedAt) },
+  );
+  expect(refused.status).toBe(409);
+  const removed = await send(admin, "DELETE", `/groups/${group.id}/stops/${stop.id}`);
+  expect(removed.status).toBe(204);
+  expect(removed.headers.get("X-Group-Rev")).toBe("3");
+  await vi.waitFor(() => {
+    expect(received.map((message) => message.rev)).toEqual([2, 3]);
+  });
+  socket.close();
 });

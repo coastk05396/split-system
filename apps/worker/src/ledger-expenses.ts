@@ -24,7 +24,6 @@ export type ExpenseOperation =
       key: string;
       now: number;
       rates: { base: string; quote: string; rate: number }[];
-      stopValid: boolean;
     }
   | {
       action: "update";
@@ -34,7 +33,6 @@ export type ExpenseOperation =
       expected: number;
       now: number;
       rates: { base: string; quote: string; rate: number }[];
-      stopValid: boolean;
     };
 
 function read(row: Row): Expense {
@@ -123,7 +121,11 @@ export function expenseOperation(
       throw invalid("payers", "MEMBER_NOT_IN_GROUP");
     if (refs.some((id) => roster.some((m) => m.id === id && m.status === "former")))
       throw new ApiError("MEMBER_NOT_ACTIVE");
-    if (!op.stopValid) throw invalid("stopId", "STOP_NOT_IN_GROUP");
+    if (
+      op.input.stopId != null &&
+      sql.exec("SELECT id FROM ledger_stops WHERE id=?", op.input.stopId).toArray().length === 0
+    )
+      throw invalid("stopId", "STOP_NOT_IN_GROUP");
     const rate = op.rates.find(
       (r) => r.base === op.input.originalCurrency && r.quote === group.settlement_currency,
     );
