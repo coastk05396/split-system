@@ -40,6 +40,7 @@ export const ERROR_STATUS = {
   INTERNAL: 500,
   /** No Exchange rate source answered and none is cached: the user types a custom rate. */
   RATE_UNAVAILABLE: 503,
+  MAINTENANCE: 503,
 } as const satisfies Record<string, ContentfulStatusCode>;
 
 export type ErrorCode = keyof typeof ERROR_STATUS;

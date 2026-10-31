@@ -102,6 +102,16 @@ describe("add Expense form", () => {
     expect(submit()).toBeDisabled();
   });
 
+  it("shows the maintenance message when saving is blocked", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openForm();
+    await user.type(await screen.findByLabelText("名稱"), "晚餐");
+    await user.type(screen.getByLabelText("金額"), "360");
+    api.failNext(`POST /api/v1/groups/${id()}/expenses`, "MAINTENANCE", 503);
+    await user.click(submit());
+    expect(await screen.findByRole("alert")).toHaveTextContent("小芽正在維護中");
+  });
+
   it("does not record the Expense twice when a submit is retried after a network error", async () => {
     const user = userEvent.setup();
     const { api, id, router } = openForm();
