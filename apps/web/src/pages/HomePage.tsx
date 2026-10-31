@@ -10,6 +10,7 @@ import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js"
 import { LoadError, MaintenanceTag } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
+import { useIsUpdating } from "../groups/cache-persistence.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
@@ -21,6 +22,7 @@ export function HomePage() {
   const preferred = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   const groupsQuery = useGroups();
   const groups = groupsQuery.data ?? [];
+  const isUpdating = useIsUpdating(["groups"]);
   const intro = useIntro();
 
   return (
@@ -37,7 +39,12 @@ export function HomePage() {
       ) : (
         <>
           <div {...rise(intro, 0)}>
-            <BalanceCard groups={groups} preferred={preferred} isSuccess={groupsQuery.isSuccess} />
+            <BalanceCard
+              groups={groups}
+              preferred={preferred}
+              isSuccess={groupsQuery.isSuccess}
+              isUpdating={isUpdating}
+            />
           </div>
           {groupsQuery.isSuccess && (
             <>
@@ -70,8 +77,13 @@ function useIntro(): boolean {
 const rise = (intro: boolean, step: number) =>
   intro ? { className: "rise", style: { animationDelay: `${String(step * 60)}ms` } } : {};
 
-function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSuccess: boolean }) {
-  const { groups, preferred, isSuccess } = props;
+function BalanceCard(props: {
+  groups: Group[];
+  preferred: CurrencyCode;
+  isSuccess: boolean;
+  isUpdating?: boolean | undefined;
+}) {
+  const { groups, preferred, isSuccess, isUpdating } = props;
   const summary = pendingTotals(groups, preferred);
   const [main, ...rest] = summary.totals;
   // Another currency with something pending is converted into the Preferred currency.
@@ -127,6 +139,7 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
                 value={converting ? total : main.amount}
                 format={(n) => formatAmount(n, main.currency)}
                 onDark
+                updating={isUpdating}
               />
             </span>
             {sideBySide &&

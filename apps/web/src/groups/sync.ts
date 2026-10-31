@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useDeps } from "../app/AppProviders.js";
+import { setQueryRestored } from "./cache-persistence.js";
 
 const clientRevs = new WeakMap<QueryClient, Map<string, number>>();
 
@@ -56,19 +57,23 @@ export async function readWithRev<T>(
   if (!res.ok) throw await toApiFailure(res);
 
   const revHeader = res.headers.get("X-Group-Rev");
-  if (revHeader !== null && context) {
-    const rev = Number(revHeader);
-    if (!Number.isNaN(rev)) {
-      const client = context.client;
-      const queryKey = context.queryKey;
-      const currentRev = getQueryRev(client, queryKey);
-      if (currentRev !== undefined && rev < currentRev) {
-        const existing = client.getQueryData<T>(queryKey);
-        if (existing !== undefined) {
-          return existing;
+  if (context) {
+    const client = context.client;
+    const queryKey = context.queryKey;
+    setQueryRestored(client, queryKey, false);
+
+    if (revHeader !== null) {
+      const rev = Number(revHeader);
+      if (!Number.isNaN(rev)) {
+        const currentRev = getQueryRev(client, queryKey);
+        if (currentRev !== undefined && rev < currentRev) {
+          const existing = client.getQueryData<T>(queryKey);
+          if (existing !== undefined) {
+            return existing;
+          }
         }
+        setQueryRev(client, queryKey, rev);
       }
-      setQueryRev(client, queryKey, rev);
     }
   }
 

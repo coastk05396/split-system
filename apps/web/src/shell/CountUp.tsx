@@ -1,34 +1,32 @@
 import { useLayoutEffect, useRef } from "react";
 import { prefersReducedMotion } from "./motion.js";
 
-// Long enough to see the digits run, and a soft ease-out (not exponential, which is at 90% by
-// the first third and reads as a jump) so the count is steady and only slows near the end.
-const DURATION_MS = 1100;
-const easeOut = (x: number) => 1 - (1 - Math.min(x, 1)) ** 2.4;
+// ADR 0004 & Ticket 10: Amounts never count step-by-step through guessed numbers.
+// When an amount changes, the old amount fades out and the new amount slides in
+// over ~240ms (120ms fade out, 120ms slide in). With reduced motion, it swaps instantly.
+const TOTAL_MS = 240;
+const HALF_MS = 120;
 
-/**
- * A number that counts to its value: from 0 the first time it appears, from the old value after
- * that. The text is the final value from the first render (screen readers, tests, no script), and
- * the frames only rewrite it in between, so nothing is hidden if the animation never runs.
- */
 export function CountUp({
   value,
   format,
   className = "",
   goodWhen = "up",
   onDark = false,
+  updating = false,
 }: {
   value: number;
   format: (value: number) => string;
   className?: string;
-  /** Which way is good news while it counts: more (up) or less (down), e.g. a shrinking debt. */
+  /** Which way is good news while it changes: more (up) or less (down), e.g. a shrinking debt. */
   goodWhen?: "up" | "down";
   /** On a dark card the tints are the light ones. */
   onDark?: boolean;
+  /** True while the amount is restored from cache and awaiting server confirmation. */
+  updating?: boolean | undefined;
 }) {
   const node = useRef<HTMLSpanElement>(null);
   const shown = useRef<number | null>(null);
-  // A new inline `format` on every render must not restart the count, only a new value does.
   const formatRef = useRef(format);
   formatRef.current = format;
 
@@ -36,41 +34,63 @@ export function CountUp({
     const el = node.current;
     if (el === null) return;
     const fmt = (n: number) => formatRef.current(n);
-    const from = shown.current ?? 0;
-    if (from === value || prefersReducedMotion()) {
+    const from = shown.current;
+
+    // Initial mount or unchanged: show immediately without animation
+    if (from === null || from === value || prefersReducedMotion()) {
       shown.current = value;
+      el.textContent = fmt(value);
       return;
     }
 
     let frame = 0;
-    let current = from;
-    // Green for good news, red for bad, only while the number is on the move.
+    // Green for good news, red for bad, only while the number transitions
     el.dataset.count = value > from === (goodWhen === "up") ? "good" : "bad";
     const start = performance.now();
-    el.textContent = fmt(from);
+
     const step = (now: number) => {
-      const progress = easeOut((now - start) / DURATION_MS);
-      current = progress >= 1 ? value : Math.round(from + (value - from) * progress);
-      el.textContent = fmt(current);
-      if (progress < 1) frame = requestAnimationFrame(step);
-      else {
+      const elapsed = now - start;
+      if (elapsed < HALF_MS) {
+        // Phase 1: Old amount fades out
+        const p = Math.min(1, elapsed / HALF_MS);
+        el.textContent = fmt(from);
+        el.style.opacity = String(1 - p);
+        el.style.transform = `translateY(-${p * 4}px)`;
+        frame = requestAnimationFrame(step);
+      } else if (elapsed < TOTAL_MS) {
+        // Phase 2: New amount slides in
+        const p = Math.min(1, (elapsed - HALF_MS) / HALF_MS);
+        el.textContent = fmt(value);
+        el.style.opacity = String(p);
+        el.style.transform = `translateY(${(1 - p) * 4}px)`;
+        frame = requestAnimationFrame(step);
+      } else {
+        // Transition complete
         shown.current = value;
+        el.textContent = fmt(value);
+        el.style.opacity = "";
+        el.style.transform = "";
         delete el.dataset.count;
       }
     };
+
     frame = requestAnimationFrame(step);
     return () => {
       cancelAnimationFrame(frame);
-      // Stopped early (a new value, or StrictMode's trial run in development): the next count
-      // starts from the number that was on screen, never from the target it never reached.
-      shown.current = current;
-      el.textContent = fmt(current);
+      shown.current = value;
+      el.textContent = fmt(value);
+      el.style.opacity = "";
+      el.style.transform = "";
       delete el.dataset.count;
     };
-  }, [value]);
+  }, [value, goodWhen]);
 
   return (
-    <span ref={node} className={`count-up ${onDark ? "count-dark" : ""} ${className}`}>
+    <span
+      ref={node}
+      className={`count-up ${onDark ? "count-dark" : ""} ${className}`}
+      data-updating={updating ? "true" : undefined}
+    >
       {format(value)}
     </span>
   );

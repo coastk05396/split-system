@@ -27,9 +27,11 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
   body {
     @apply bg-sprout-50 text-ink font-sans antialiased;
+    overscroll-behavior: none;
   }
 }
 
@@ -401,7 +403,10 @@
 
 /* A number on the move is tinted by what the move means, then settles back to its own colour. */
 .count-up {
-  transition: color 300ms ease-out;
+  transition: color 300ms ease-out, opacity 200ms ease-out;
+}
+.count-up[data-updating="true"] {
+  opacity: 0.55;
 }
 .count-up[data-count="good"] {
   color: var(--color-sprout-500);

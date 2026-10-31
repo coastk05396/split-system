@@ -4,6 +4,7 @@ import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { AppProviders, type AppDeps } from "../src/app/AppProviders.js";
 import { routes } from "../src/app/routes.js";
+import type { CacheStorage } from "../src/groups/cache-persistence.js";
 import type { GoogleSignIn } from "../src/platform/google.js";
 import type { LineMessage, LineSignIn } from "../src/platform/line.js";
 import { createFakeApi, type FakeApi } from "./fake-api.js";
@@ -26,6 +27,8 @@ export interface RenderAppOptions {
   seed?: (groups: FakeGroups) => void;
   /** The start path, read after seeding (for paths holding seeded ids). */
   pathFor?: () => string;
+  /** Fake storage for query cache persistence. */
+  cacheStorage?: CacheStorage | undefined;
 }
 
 export interface RenderedApp {
@@ -98,6 +101,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     line,
     google,
     testSignIn: options.testSignIn ?? false,
+    cacheStorage: options.cacheStorage,
   };
   const router = createMemoryRouter(routes, {
     initialEntries: [options.pathFor?.() ?? options.path ?? "/"],
