@@ -218,3 +218,36 @@ it("sends no signal for a refused Expense or an idempotent retry", async () => {
   expect(revisions[1]).toBe((revisions[0] ?? 0) + 1);
   socket.close();
 });
+it("connects a newly joined Member while the Group summary is delayed", async () => {
+  const { inviteToken, send } = await import("./groups-harness.js");
+  const { failDirectoryWrites } = await import("./d1-faults.js");
+  const admin = await person("live-delay-admin");
+  const member = await person("live-delay-member");
+  const group = await createGroup(admin);
+  const token = await inviteToken(admin, group.id);
+  const restore = await failDirectoryWrites();
+  try {
+    expect((await send(member, "POST", `/invites/${token}/join`)).status).toBe(200);
+    const response = await call(`/groups/${group.id}/live`, {
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${member.accessToken}` },
+    });
+    expect(response.status).toBe(101);
+    const groupResponse = await send(member, "GET", `/groups/${group.id}`);
+    expect(groupResponse.status).toBe(200);
+    expect((await groupResponse.json<{ memberCount: number }>()).memberCount).toBe(2);
+    response.webSocket?.accept();
+    response.webSocket?.close();
+  } finally {
+    await restore();
+  }
+});
+
+it("limits repeated live membership probes for unknown Groups", async () => {
+  const stranger = await person("live-prober");
+  for (let i = 0; i < 31; i++) {
+    const response = await call(`/groups/${crypto.randomUUID()}/live`, {
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${stranger.accessToken}` },
+    });
+    expect(response.status).toBe(i < 30 ? 404 : 429);
+  }
+});
