@@ -24,7 +24,14 @@ import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
-import { type BalanceRow, canCancel, canConfirm, canUndo, maxPayable } from "./model.js";
+import {
+  type BalanceRow,
+  balancesAfterPending,
+  canCancel,
+  canConfirm,
+  canUndo,
+  maxPayable,
+} from "./model.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
 /** Each Member's picture by id, for the avatars deep inside the payment cards. */
@@ -44,9 +51,14 @@ const smallButton =
 export function SettlePanel({ group }: { group: Group }) {
   const balances = useBalances(group.id);
   const settlements = useSettlements(group.id);
-  const plan = usePaymentPlan(
-    balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
+  // Pending Settlements move no Balance until confirmed, so the plan is drawn from the Balances
+  // as they will stand once they are: it then shows only what is still to be paid.
+  const waiting = (settlements.data?.pages.flatMap((p) => p.settlements) ?? []).filter(
+    (s) => s.status === "pending",
   );
+  const adjusted =
+    balances.data === undefined ? undefined : balancesAfterPending(balances.data.balances, waiting);
+  const plan = usePaymentPlan(adjusted);
   const action = useSettlementAction(group.id);
   // Whether I was last owed or owing: a debt that shrinks to 0 is good news, a credit that does not.
   const owedSign = useRef(0);
@@ -66,7 +78,15 @@ export function SettlePanel({ group }: { group: Group }) {
   const currency = balances.data.settlementCurrency;
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
+  // The top is the confirmed Balance and stays the same whether or not a payment is waiting.
+  // Below it splits into what is already paid and waiting for confirmation (under 待確認) and
+  // what is still to be paid (the plan, drawn net of the waiting payments), so the two always
+  // add up to the top. `rows` also keeps the confirmed Balances a confirmation is checked against.
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
+  const stillToPay = Math.abs(
+    adjusted?.find((b) => b.memberId === group.me.memberId)?.amountMinor ?? mine,
+  );
+  const waitingMine = Math.abs(mine) - stillToPay;
   if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const pending = all.filter(
@@ -75,17 +95,15 @@ export function SettlePanel({ group }: { group: Group }) {
       (s.payerMemberId === group.me.memberId || s.receiverMemberId === group.me.memberId),
   );
   const history = all.filter((s) => s.status !== "pending");
-  // A payment already sent and waiting for its receiver shows once, under 待確認, not here too.
+  // The plan already leaves out what waiting payments cover, so a payment sent and waiting for
+  // its receiver shows once, under 待確認, and the plan lists only the rest.
   const planned = plan.status === "ready" ? plan.plan.payments : [];
-  const unsent = planned.filter(
-    (p) =>
-      involvesMe(group, p) &&
-      !pending.some(
-        (s) => s.payerMemberId === p.fromMemberId && s.receiverMemberId === p.toMemberId,
-      ),
-  );
+  const unsent = planned.filter((p) => involvesMe(group, p));
   if (mine !== 0 || pending.length > 0 || unsent.length > 0) sawWork.current = true;
-  const everythingSent = planned.length > 0 && unsent.length === 0;
+  // Nothing of mine left to send: either the plan is empty because payments are waiting for
+  // confirmation (not "settled" yet), or the rest of the plan is between other Members.
+  const everythingSent =
+    plan.status === "ready" && unsent.length === 0 && (planned.length > 0 || waiting.length > 0);
 
   return (
     <PictureContext value={memberPictures(members.data)}>
@@ -113,6 +131,14 @@ export function SettlePanel({ group }: { group: Group }) {
               goodWhen={owedSign.current >= 0 ? "up" : "down"}
             />
           </p>
+          {waitingMine > 0 && (
+            <p className="text-sm text-ink-muted">
+              {t(mine < 0 ? "settle.splitPay" : "settle.splitGet", {
+                sent: formatAmount(waitingMine, currency),
+                rest: formatAmount(stillToPay, currency),
+              })}
+            </p>
+          )}
         </section>
 
         <BalanceChart

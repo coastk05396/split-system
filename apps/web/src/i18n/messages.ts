@@ -386,6 +386,8 @@ const zhTW = {
   "settle.pendingTitle": "待確認",
   "settle.historyTitle": "結算紀錄",
   "settle.status.pending": "待確認",
+  "settle.splitPay": "其中 {sent} 已付、等對方確認，還要付 {rest}",
+  "settle.splitGet": "其中 {sent} 對方已付、等你確認，還可收 {rest}",
   "settle.status.confirmed": "已確認",
   "settle.status.undone": "已撤銷",
   "settle.status.cancelled": "已取消",

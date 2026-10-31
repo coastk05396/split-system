@@ -391,6 +391,9 @@ export const en: Record<MessageId, string> = {
   "settle.pendingTitle": "Waiting for confirmation",
   "settle.historyTitle": "Settlement history",
   "settle.status.pending": "Waiting",
+  "settle.splitPay": "{sent} already paid and waiting to be confirmed, {rest} still to pay",
+  "settle.splitGet":
+    "{sent} already paid by them and waiting for you to confirm, {rest} still to receive",
   "settle.status.confirmed": "Confirmed",
   "settle.status.undone": "Undone",
   "settle.status.cancelled": "Cancelled",

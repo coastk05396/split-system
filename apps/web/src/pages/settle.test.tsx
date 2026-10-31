@@ -282,6 +282,84 @@ describe("Recording and confirming Settlements", () => {
     expect(plannedRow.getByText("你要付")).toHaveClass("bg-red-700");
   });
 
+  it("plans what is still owed after a pending payment, not the whole pair hidden", async () => {
+    // I owe 100: 60 to 宜庭 and 40 to 阿哲. A pending 50 to 宜庭 is not yet in anyone's Balance.
+    await openSettle(
+      {
+        name: "室友",
+        myBalance: -100,
+        others: [
+          { name: "宜庭", balance: 60 },
+          { name: "阿哲", balance: 40 },
+        ],
+      },
+      (groups, gid) => {
+        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 50 }, 0);
+      },
+    );
+
+    // 50 waits for confirmation, so the plan shows the other 50: 40 to 阿哲 and 10 to 宜庭.
+    const waiting = await row("待確認", "你付給宜庭");
+    expect(waiting.getByText("NT$ 50")).toBeVisible();
+    expect(await rows()).toEqual([
+      expect.stringContaining("你付給阿哲NT$ 40"),
+      expect.stringContaining("你付給宜庭NT$ 10"),
+    ]);
+  });
+
+  it("keeps the top at the confirmed Balance and splits it into paid-waiting plus still to pay", async () => {
+    await openSettle(
+      {
+        name: "室友",
+        myBalance: -100,
+        others: [
+          { name: "宜庭", balance: 60 },
+          { name: "阿哲", balance: 40 },
+        ],
+      },
+      (groups, gid) => {
+        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 50 }, 0);
+      },
+    );
+
+    // I owe 100 whether or not a payment waits: the top says 100 and the bars are the confirmed
+    // Balances. Below, the 50 already paid (waiting for confirmation) plus the 50 still to pay
+    // (40 + 10) make the same 100.
+    expect(await screen.findByRole("heading", { name: "你要付" })).toBeVisible();
+    expect(screen.getByText("NT$ 100")).toBeVisible();
+    expect(screen.getByText("其中 NT$ 50 已付、等對方確認，還要付 NT$ 50")).toBeVisible();
+    const chart = within(await screen.findByRole("list", { name: "大家的結餘" }));
+    expect(
+      chart
+        .getAllByRole("listitem")
+        .map((li) => [
+          within(li).getByRole("button").getAttribute("aria-label"),
+          li.textContent.match(/[+-]NT\$ \d+/)?.[0],
+        ]),
+    ).toEqual([
+      ["宜庭", "+NT$ 60"],
+      ["阿哲", "+NT$ 40"],
+      ["小宇（你）", "-NT$ 100"],
+    ]);
+    expect(await rows()).toEqual([
+      expect.stringContaining("你付給阿哲NT$ 40"),
+      expect.stringContaining("你付給宜庭NT$ 10"),
+    ]);
+  });
+
+  it("does not call the Group settled while a payment waits for confirmation", async () => {
+    await openSettle(
+      { name: "室友", myBalance: -200, others: [{ name: "宜庭", balance: 200 }] },
+      (groups, gid) => {
+        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 200 }, 0);
+      },
+    );
+
+    expect(await row("待確認", "你付給宜庭")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "要付給誰" })).toBeNull();
+    expect(screen.queryByText("大家都結清了！")).toBeNull();
+  });
+
   it("hides payments and pending settlements between other Members that do not involve me", async () => {
     await openSettle(
       {
