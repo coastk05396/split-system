@@ -19,7 +19,12 @@ describe("retained Group migration snapshot", () => {
     const snapshot = await response.json<{
       group: { id: string; name: string };
       members: Array<{ user_id: string }>;
+      fingerprint: string;
     }>();
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(snapshot.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    const again = await call(path, { headers }, bindings);
+    expect((await again.json<{ fingerprint: string }>()).fingerprint).toBe(snapshot.fingerprint);
     expect(snapshot.group).toMatchObject({ id: group.id, name: "明天去哪玩" });
     expect(snapshot.members).toEqual(
       expect.arrayContaining([expect.objectContaining({ user_id: admin.userId })]),
