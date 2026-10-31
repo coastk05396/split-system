@@ -46,12 +46,10 @@ function owed(payer: Party, receiver: Party): number {
 }
 
 /**
- * The receiver confirms; an Admin may confirm for anyone except their own payment, unless
- * the receiver is a Placeholder Member, whom an Admin always confirms for (decision 31).
+ * The payer, the receiver, or an Admin confirms a Settlement (decision 31).
  */
 function canConfirm(me: MemberRow, payer: Party, receiver: Party): boolean {
-  if (me.id === receiver.id) return true;
-  return me.role === "admin" && (me.id !== payer.id || receiver.status === "placeholder");
+  return me.id === payer.id || me.id === receiver.id || me.role === "admin";
 }
 
 async function parties(db: Db, groupId: string, payerId: string, receiverId: string) {
@@ -142,10 +140,10 @@ async function findByKey(db: Db, me: MemberRow, storedKey: string): Promise<Sett
 }
 
 /**
- * Records a Settlement. The payer's 我已付款 is pending; one recorded by someone who may
- * confirm it (the receiver, or an Admin) is confirmed at once and moves Balances in the same
- * batch. Nobody else may record a payment between two other Members (decision 23). The
- * `Idempotency-Key` is kept per recording Member; a repeat returns the first Settlement.
+ * Records and immediately confirms a Settlement. The payer, the receiver, or an Admin may
+ * record it, and Balances move in the same batch. Nobody else may record a payment between
+ * two other Members (decision 23). The `Idempotency-Key` is kept per recording Member; a
+ * repeat returns the first Settlement.
  */
 export async function createSettlement(
   db: Db,
@@ -161,22 +159,17 @@ export async function createSettlement(
   const { payerMemberId: payerId, receiverMemberId: receiverId, amount } = input;
   const found = await parties(db, me.groupId, payerId, receiverId);
   if (found === null) throw invalid("payerMemberId", "MEMBER_NOT_IN_GROUP");
-  if (me.id !== payerId && me.id !== receiverId && me.role !== "admin")
-    throw new ApiError("FORBIDDEN");
-  const confirmNow = canConfirm(me, found.payer, found.receiver);
+  if (!canConfirm(me, found.payer, found.receiver)) throw new ApiError("FORBIDDEN");
 
   const id = newSortableId(now);
   const guard = sql`${seated(me.groupId, payerId, receiverId)} AND ${withinDebt(payerId, receiverId, amount)}`;
   const insert = sql`INSERT INTO settlements (id, group_id, payer_member_id, receiver_member_id, amount, status,
       created_by_member_id, confirmed_by_member_id, confirmed_at, idempotency_key, created_at, updated_at)
-    SELECT ${id}, ${me.groupId}, ${payerId}, ${receiverId}, ${amount}, ${confirmNow ? "confirmed" : "pending"},
-      ${me.id}, ${confirmNow ? me.id : null}, ${confirmNow ? now : null}, ${storedKey}, ${now}, ${now}
+    SELECT ${id}, ${me.groupId}, ${payerId}, ${receiverId}, ${amount}, 'confirmed',
+      ${me.id}, ${me.id}, ${now}, ${storedKey}, ${now}, ${now}
     WHERE ${guard}`;
   try {
-    const [inserted] = await runBatch(
-      db,
-      confirmNow ? [insert, moveBalances(payerId, receiverId, amount, 1)] : [insert],
-    );
+    const [inserted] = await runBatch(db, [insert, moveBalances(payerId, receiverId, amount, 1)]);
     if ((inserted?.meta.changes ?? 0) === 0) throw await refusal(db, me.groupId, input);
   } catch (error) {
     if (!isConstraintError(error, "UNIQUE", "settlements.idempotency_key")) throw error;
@@ -271,9 +264,9 @@ export async function cancelSettlement(
 }
 
 /**
- * Whoever confirmed it, or an Admin, undoes a confirmed Settlement: Balances move back and
- * the row stays in the history as undone (已撤銷). A Former Member's Balance stays at zero,
- * so a Settlement with one is no longer undoable.
+ * The payer, the receiver, whoever confirmed it, or an Admin undoes a confirmed Settlement:
+ * Balances move back and the row stays in the history as undone (已撤銷). A Former Member's
+ * Balance stays at zero, so a Settlement with one is no longer undoable.
  */
 export async function undoSettlement(
   db: Db,
@@ -283,7 +276,14 @@ export async function undoSettlement(
 ): Promise<Settlement> {
   const { row, me } = await settlementFor(db, settlementId, userId);
   if (row.status !== "confirmed") throw new ApiError("SETTLEMENT_NOT_CONFIRMED");
-  if (me.id !== row.confirmedByMemberId && me.role !== "admin") throw new ApiError("FORBIDDEN");
+  if (
+    me.id !== row.payerMemberId &&
+    me.id !== row.receiverMemberId &&
+    me.id !== row.confirmedByMemberId &&
+    me.role !== "admin"
+  ) {
+    throw new ApiError("FORBIDDEN");
+  }
 
   const { payerMemberId: payerId, receiverMemberId: receiverId } = row;
   const [undone] = await runBatch(db, [

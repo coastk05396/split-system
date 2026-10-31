@@ -24,14 +24,7 @@ import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
-import {
-  type BalanceRow,
-  balancesAfterPending,
-  canCancel,
-  canConfirm,
-  canUndo,
-  maxPayable,
-} from "./model.js";
+import { type BalanceRow, canConfirm, canUndo, maxPayable } from "./model.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
 /** Each Member's picture by id, for the avatars deep inside the payment cards. */
@@ -40,25 +33,18 @@ const PictureContext = createContext<(id: string) => string | null>(() => null);
 /** How many past Settlements show at first, and how many more each 查看更多 adds. */
 const HISTORY_STEP = 5;
 
-const smallButton =
-  "press-pill rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold hover:border-sprout-500";
-
 /**
  * Screen 5 as amended (decisions 12, 17, 23): my Balance, the Payment plan with its honest
- * label, per-payment actions (我已付款, confirm, 待確認 and cancel) and the Settlement history
- * with undo and the 已撤銷 line. Everything is in the Group's Settlement currency.
+ * label, per-payment confirm actions (確認付款 for the payer, 確認收款 for the receiver or an
+ * Admin) and the Settlement history with undo and the 已撤銷 line. Everything is in the Group's
+ * Settlement currency, and the Payment plan always matches the confirmed Balances.
  */
 export function SettlePanel({ group }: { group: Group }) {
   const balances = useBalances(group.id);
   const settlements = useSettlements(group.id);
-  // Pending Settlements move no Balance until confirmed, so the plan is drawn from the Balances
-  // as they will stand once they are: it then shows only what is still to be paid.
-  const waiting = (settlements.data?.pages.flatMap((p) => p.settlements) ?? []).filter(
-    (s) => s.status === "pending",
+  const plan = usePaymentPlan(
+    balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
   );
-  const adjusted =
-    balances.data === undefined ? undefined : balancesAfterPending(balances.data.balances, waiting);
-  const plan = usePaymentPlan(adjusted);
   const action = useSettlementAction(group.id);
   // Whether I was last owed or owing: a debt that shrinks to 0 is good news, a credit that does not.
   const owedSign = useRef(0);
@@ -78,32 +64,18 @@ export function SettlePanel({ group }: { group: Group }) {
   const currency = balances.data.settlementCurrency;
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
-  // The top is the confirmed Balance and stays the same whether or not a payment is waiting.
-  // Below it splits into what is already paid and waiting for confirmation (under 待確認) and
-  // what is still to be paid (the plan, drawn net of the waiting payments), so the two always
-  // add up to the top. `rows` also keeps the confirmed Balances a confirmation is checked against.
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
-  const stillToPay = Math.abs(
-    adjusted?.find((b) => b.memberId === group.me.memberId)?.amountMinor ?? mine,
-  );
-  const waitingMine = Math.abs(mine) - stillToPay;
   if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
-  const pending = all.filter(
-    (s) =>
-      s.status === "pending" &&
-      (s.payerMemberId === group.me.memberId || s.receiverMemberId === group.me.memberId),
-  );
   const history = all.filter((s) => s.status !== "pending");
-  // The plan already leaves out what waiting payments cover, so a payment sent and waiting for
-  // its receiver shows once, under 待確認, and the plan lists only the rest.
   const planned = plan.status === "ready" ? plan.plan.payments : [];
-  const unsent = planned.filter((p) => involvesMe(group, p));
-  if (mine !== 0 || pending.length > 0 || unsent.length > 0) sawWork.current = true;
-  // Nothing of mine left to send: either the plan is empty because payments are waiting for
-  // confirmation (not "settled" yet), or the rest of the plan is between other Members.
-  const everythingSent =
-    plan.status === "ready" && unsent.length === 0 && (planned.length > 0 || waiting.length > 0);
+  // Show the full Group Payment plan so it always sums to the Balance chart above; payments
+  // involving me sort first, followed by payments between other Members.
+  const orderedPlan = [
+    ...planned.filter((p) => involvesMe(group, p)),
+    ...planned.filter((p) => !involvesMe(group, p)),
+  ];
+  if (mine !== 0 || orderedPlan.length > 0) sawWork.current = true;
 
   return (
     <PictureContext value={memberPictures(members.data)}>
@@ -131,14 +103,6 @@ export function SettlePanel({ group }: { group: Group }) {
               goodWhen={owedSign.current >= 0 ? "up" : "down"}
             />
           </p>
-          {waitingMine > 0 && (
-            <p className="text-sm text-ink-muted">
-              {t(mine < 0 ? "settle.splitPay" : "settle.splitGet", {
-                sent: formatAmount(waitingMine, currency),
-                rest: formatAmount(stillToPay, currency),
-              })}
-            </p>
-          )}
         </section>
 
         <BalanceChart
@@ -154,99 +118,37 @@ export function SettlePanel({ group }: { group: Group }) {
           </p>
         )}
 
-        {pending.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-bold">{t("settle.pendingTitle")}</h2>
-            <ul aria-label={t("settle.pendingTitle")} className="flex flex-col gap-2">
-              {pending.map((s) => {
-                const payer = rows.get(s.payerMemberId);
-                const receiver = rows.get(s.receiverMemberId);
-                return (
-                  <li key={s.id} className={paymentCard()}>
-                    <PaymentLine
-                      payer={nameOf(s.payerMemberId)}
-                      receiver={nameOf(s.receiverMemberId)}
-                      payerId={s.payerMemberId}
-                      receiverId={s.receiverMemberId}
-                      myMemberId={group.me.memberId}
-                      showRole
-                      amount={s.amount}
-                      currency={currency}
-                      badge="settle.status.pending"
-                    />
-                    {payer !== undefined &&
-                      receiver !== undefined &&
-                      canConfirm(group.me, payer, receiver) && (
-                        <ConfirmSettlementDialog
-                          trigger={t("settle.confirmAction")}
-                          currency={currency}
-                          target={{
-                            payerName: localName(payer.displayName),
-                            receiverName: localName(receiver.displayName),
-                            suggested: Math.min(s.amount, maxPayable(payer, receiver)),
-                            max: maxPayable(payer, receiver),
-                          }}
-                          submit={(amount) =>
-                            action.mutateAsync({
-                              kind: "confirm",
-                              settlementId: s.id,
-                              ...(amount === s.amount ? {} : { amount }),
-                            })
-                          }
-                        />
-                      )}
-                    {canCancel(group.me, s) && (
-                      <button
-                        type="button"
-                        className={smallButton}
-                        disabled={action.isPending}
-                        onClick={() => {
-                          action.mutate({ kind: "cancel", settlementId: s.id });
-                        }}
-                      >
-                        {t("settle.cancel")}
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        {!everythingSent && (
-          <section className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="flex-1 text-lg font-bold">{t("settle.planTitle")}</h2>
-              {/* Only an approximate plan says so; the fewest-payments one needs no label. */}
-              {plan.status === "ready" &&
-                plan.plan.payments.length > 0 &&
-                plan.plan.method !== "exact" && (
-                  <span className="rounded-full bg-peach px-3 py-1 text-xs font-bold text-sprout-700">
-                    {t("settle.label.greedy", { count: plan.plan.maxPayments })}
-                  </span>
-                )}
-            </div>
-            {plan.status === "computing" && <Loading />}
-            {plan.status === "failed" && (
-              <p role="alert" className="text-red-700">
-                {t("settle.planFailed")}
-              </p>
-            )}
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="flex-1 text-lg font-bold">{t("settle.planTitle")}</h2>
+            {/* Only an approximate plan says so; the fewest-payments one needs no label. */}
             {plan.status === "ready" &&
-              (plan.plan.payments.length === 0 ? (
-                <SettledMessage celebrate={sawWork.current} />
-              ) : (
-                <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
-                  {unsent.map((p) => (
-                    <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
-                      <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
-                    </li>
-                  ))}
-                </ul>
-              ))}
-          </section>
-        )}
+              plan.plan.payments.length > 0 &&
+              plan.plan.method !== "exact" && (
+                <span className="rounded-full bg-peach px-3 py-1 text-xs font-bold text-sprout-700">
+                  {t("settle.label.greedy", { count: plan.plan.maxPayments })}
+                </span>
+              )}
+          </div>
+          {plan.status === "computing" && <Loading />}
+          {plan.status === "failed" && (
+            <p role="alert" className="text-red-700">
+              {t("settle.planFailed")}
+            </p>
+          )}
+          {plan.status === "ready" &&
+            (orderedPlan.length === 0 ? (
+              <SettledMessage celebrate={sawWork.current} />
+            ) : (
+              <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
+                {orderedPlan.map((p) => (
+                  <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
+                    <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
+                  </li>
+                ))}
+              </ul>
+            ))}
+        </section>
 
         {history.length > 0 && (
           <SettlementHistory
@@ -635,7 +537,6 @@ function PlannedRow({
   const record = useRecordSettlement(group.id);
   // One key per suggested payment, reused if a lost answer makes the person tap again.
   const key = useRef(crypto.randomUUID());
-  const [failure, setFailure] = useState<unknown>(null);
   const payer = rows.get(payment.fromMemberId);
   const receiver = rows.get(payment.toMemberId);
   if (payer === undefined || receiver === undefined) return null;
@@ -661,25 +562,10 @@ function PlannedRow({
         amount={payment.amountMinor}
         currency={currency}
       />
-      {iPay && !canConfirm(group.me, payer, receiver) && (
-        <button
-          type="button"
-          className={smallButton}
-          disabled={record.isPending}
-          onClick={() => {
-            setFailure(null);
-            record.mutate(
-              { input: input(payment.amountMinor), idempotencyKey: key.current },
-              { onSuccess: saved, onError: setFailure },
-            );
-          }}
-        >
-          {t("settle.iPaid")}
-        </button>
-      )}
       {canConfirm(group.me, payer, receiver) && (
         <ConfirmSettlementDialog
-          trigger={t("settle.markReceived")}
+          trigger={t(iPay ? "settle.markPaid" : "settle.markReceived")}
+          tone={iPay ? "pay" : "receive"}
           currency={currency}
           target={{
             payerName: localName(payer.displayName),
@@ -691,11 +577,6 @@ function PlannedRow({
             record.mutateAsync({ input: input(amount), idempotencyKey: key.current }).then(saved)
           }
         />
-      )}
-      {failure !== null && (
-        <p role="alert" className="w-full text-sm text-red-700">
-          {failureMessage(failure)}
-        </p>
       )}
     </>
   );

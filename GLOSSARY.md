@@ -77,7 +77,7 @@ The reference rate, saved with an Expense, that converts its Expense currency in
 _Avoid_: FX rate, conversion rate
 
 **Settlement**:
-One payment from one Member to another that shifts Balances toward zero once the receiver (or an Admin) confirms it; it starts pending if the payer records it, can be partial, and can be undone.
+One payment from one Member to another that shifts Balances toward zero once the payer, the receiver, or an Admin confirms it; it can be partial, and can be undone.
 _Avoid_: Payoff, clearing, transfer
 
 **Balance**:
