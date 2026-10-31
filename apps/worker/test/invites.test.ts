@@ -1,9 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { createDb } from "../src/db/client.js";
-import { invites } from "../src/db/schema.js";
-import { eq } from "drizzle-orm";
-import { clock } from "./auth-harness.js";
+import { clock, signIn, uniqueSub } from "./auth-harness.js";
 import {
   at,
   createGroup,
@@ -15,7 +12,6 @@ import {
   send,
 } from "./groups-harness.js";
 
-const db = createDb(env.DB);
 const TWELVE_HOURS = 12 * 3600 * 1000;
 
 describe("POST /groups/:id/invite", () => {
@@ -64,12 +60,17 @@ describe("POST /groups/:id/invite", () => {
 
 describe("POST /groups/:id/invite/ensure", () => {
   it("lets members reuse live links and renew expired links without revoking existing ones", async () => {
-    const { group, others, token } = await groupWith("小宇", "阿明");
-    const member = at(others, 0);
+    const admin = await person("小宇");
+    const group = await createGroup(admin);
+    const token = await inviteToken(admin, group.id);
+    const memberSub = uniqueSub("invite-renew-member");
+    let member = await signIn("google", memberSub, "阿明");
+    expect((await send(member, "POST", `/invites/${token}/join`)).status).toBe(200);
     const path = `/groups/${group.id}/invite/ensure`;
     const reuse = await send(member, "POST", path);
     expect(await reuse.json()).toMatchObject({ token });
-    await db.update(invites).set({ expiresAt: clock.now }).where(eq(invites.token, token));
+    clock.now += TWELVE_HOURS + 1;
+    member = await signIn("google", memberSub, "阿明");
     const renewed = await send(member, "POST", path);
     const fresh = await renewed.json<{ token: string; expiresAt: number }>();
     expect(fresh.token).not.toBe(token);
@@ -173,4 +174,19 @@ describe("POST /invites/:token/join", () => {
     expect(res.status).toBe(200);
     expect((await send(ming, "GET", `/groups/${group.id}`)).status).toBe(200);
   });
+});
+
+it("revokes an old Invite even while its D1 lookup update is failing", async () => {
+  const admin = await person("invite-outage-admin");
+  const stranger = await person("invite-outage-stranger");
+  const group = await createGroup(admin);
+  const old = await inviteToken(admin, group.id);
+  await env.DB.prepare(`CREATE TRIGGER test_fail_invite_delete BEFORE DELETE ON invites
+    BEGIN SELECT RAISE(ABORT, 'injected D1 outage'); END`).run();
+  try {
+    expect((await send(admin, "POST", `/groups/${group.id}/invite`)).status).toBe(201);
+    expect((await send(stranger, "POST", `/invites/${old}/join`)).status).toBe(404);
+  } finally {
+    await env.DB.exec("DROP TRIGGER IF EXISTS test_fail_invite_delete");
+  }
 });

@@ -305,17 +305,17 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id/invite", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await currentInvite(db, me, deps.now()), 200);
+      return c.json(await currentInvite(db, me, deps.now(), c.env), 200);
     })
     .post("/groups/:id/invite", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await regenerateInvite(db, me, deps.now()), 201);
+      return c.json(await regenerateInvite(db, me, deps.now(), c.env), 201);
     })
     .post("/groups/:id/invite/ensure", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await ensureInvite(db, me, deps.now()), 200);
+      return c.json(await ensureInvite(db, me, deps.now(), c.env), 200);
     })
     .get("/invites/:token", signedIn, async (c) => {
       const db = createDb(c.env.DB);
