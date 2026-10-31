@@ -4,12 +4,9 @@ import { describe, expect, it } from "vitest";
 import { createDb } from "../src/db/client.js";
 import { members } from "../src/db/schema.js";
 import { at, errorCode, groupWith, listMembers, person, send } from "./groups-harness.js";
+import { createExpense, twdExpense } from "./expenses-harness.js";
 
 const db = createDb(env.DB);
-
-async function setBalance(memberId: string, balance: number) {
-  await db.update(members).set({ netBalance: balance }).where(eq(members.id, memberId));
-}
 
 describe("a Former Member's name", () => {
   it("never revives a nickname they once chose, but keeps the system label", async () => {
@@ -158,7 +155,11 @@ describe("DELETE /groups/:id/members/:mid and POST /groups/:id/leave", () => {
   it("blocks removal while the Balance is not zero, saying how much", async () => {
     const { admin, group } = await groupWith("小宇", "阿明");
     const ming = at(await listMembers(admin, group.id), 1);
-    await setBalance(ming.id, -200);
+    await createExpense(
+      admin,
+      group.id,
+      twdExpense(group.me.memberId, [group.me.memberId, ming.id], 400),
+    );
     const res = await send(admin, "DELETE", `/groups/${group.id}/members/${ming.id}`);
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
@@ -179,7 +180,11 @@ describe("DELETE /groups/:id/members/:mid and POST /groups/:id/leave", () => {
   it("lets a Member leave at a zero Balance, and blocks it otherwise", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明", "小美");
     const list = await listMembers(admin, group.id);
-    await setBalance(at(list, 2).id, 150);
+    await createExpense(
+      admin,
+      group.id,
+      twdExpense(at(list, 2).id, [at(list, 2).id, group.me.memberId], 300),
+    );
     const blocked = await send(at(others, 1), "POST", `/groups/${group.id}/leave`);
     expect(await errorCode(blocked)).toBe("BALANCE_NOT_ZERO");
 

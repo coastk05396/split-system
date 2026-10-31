@@ -1,9 +1,11 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createDb } from "../src/db/client.js";
-import { expenses, groups, members } from "../src/db/schema.js";
-import { call, clock, type Session } from "./auth-harness.js";
+import { expenses, groups } from "../src/db/schema.js";
+import { bearer, call, clock, signIn, uniqueSub, type Session } from "./auth-harness.js";
+import { failDirectoryWrites } from "./d1-faults.js";
+import { createExpense, twdExpense } from "./expenses-harness.js";
 import {
   at,
   createGroup,
@@ -11,12 +13,10 @@ import {
   type GroupBody,
   groupWith,
   person,
-  seedExpense,
   send,
 } from "./groups-harness.js";
 
 const db = createDb(env.DB);
-const NOW = 1_750_000_000_000;
 
 describe("a Group's member preview", () => {
   it("lists the first four seated Members in joining order, for the card's avatars", async () => {
@@ -32,6 +32,34 @@ describe("a Group's member preview", () => {
 });
 
 describe("POST /groups and GET /groups/:id", () => {
+  it("returns the Group revision on creation and subsequent reads", async () => {
+    const yu = await person("小宇");
+    const created = await send(yu, "POST", "/groups", { name: "版本測試" });
+    expect(created.status).toBe(201);
+    expect(created.headers.get("X-Group-Rev")).toBe("0");
+    const group = await created.json<GroupBody>();
+    const read = await send(yu, "GET", `/groups/${group.id}`);
+    expect(read.headers.get("X-Group-Rev")).toBe("0");
+    const members = await send(yu, "GET", `/groups/${group.id}/members`);
+    expect(Array.isArray(await members.json())).toBe(true);
+    expect(members.headers.get("X-Group-Rev")).toBe("0");
+    const edited = await send(
+      yu,
+      "PATCH",
+      `/groups/${group.id}`,
+      { name: "新版" },
+      {
+        "If-Match": String(group.updatedAt),
+      },
+    );
+    expect(edited.status).toBe(200);
+    expect(edited.headers.get("X-Group-Rev")).toBe("1");
+    const removed = await send(yu, "DELETE", `/groups/${group.id}`);
+    expect(removed.status).toBe(204);
+    expect(removed.headers.get("X-Group-Rev")).toBe("2");
+    const list = await (await send(yu, "GET", "/groups")).json<GroupBody[]>();
+    expect(list.some((item) => item.id === group.id)).toBe(false);
+  });
   it("creates a Running Tab with the creator as its only Member and Admin", async () => {
     const yu = await person("小宇");
     const group = await createGroup(yu, { name: "室友帳", settlementCurrency: "USD" });
@@ -94,6 +122,40 @@ describe("POST /groups and GET /groups/:id", () => {
 });
 
 describe("GET /groups", () => {
+  it("shows the server-confirmed Balance after an Expense", async () => {
+    const { admin, group } = await groupWith("小宇", "阿明");
+    const members = await (
+      await send(admin, "GET", `/groups/${group.id}/members`)
+    ).json<{ id: string }[]>();
+    const payer = at(members, 0).id;
+    await createExpense(
+      admin,
+      group.id,
+      twdExpense(
+        payer,
+        members.map((member) => member.id),
+        600,
+      ),
+    );
+    const list = await (await send(admin, "GET", "/groups")).json<GroupBody[]>();
+    expect(list.find((item) => item.id === group.id)?.me.balance).toBe(300);
+  });
+  it("lists Groups when the ledgers cannot be reached", async () => {
+    const yu = await person("小宇");
+    const group = await createGroup(yu);
+    const unavailable = new Proxy(env.GROUP_LEDGER, {
+      get() {
+        throw new Error("ledger unavailable");
+      },
+    });
+    const response = await call(
+      "/groups",
+      { headers: bearer(yu.accessToken) },
+      { GROUP_LEDGER: unavailable },
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json<GroupBody[]>()).map((item) => item.id)).toContain(group.id);
+  });
   it("lists only the Groups the User is an active Member of", async () => {
     const yu = await person("小宇");
     const first = await createGroup(yu, { name: "室友帳" });
@@ -106,27 +168,89 @@ describe("GET /groups", () => {
   });
 
   it("refuses a 21st Group for one User", async () => {
-    const yu = await person("小宇");
-    const groupIds = Array.from({ length: 20 }, () => crypto.randomUUID());
-    for (const id of groupIds) {
-      await db.insert(groups).values({ id, name: "舊帳", createdAt: NOW, updatedAt: NOW });
-      await db.insert(members).values({
-        id: `${id}-m`,
-        groupId: id,
-        userId: yu.userId,
-        role: "admin",
-        createdAt: NOW,
-      });
+    const sub = uniqueSub("小宇");
+    let yu = await signIn("google", sub, "小宇");
+    for (let index = 0; index < 20; index++) {
+      if (index > 0 && index % 5 === 0) {
+        clock.now += 3_600_000;
+        yu = await signIn("google", sub, "小宇");
+      }
+      await createGroup(yu, { name: "舊帳" });
     }
+    clock.now += 3_600_000;
+    yu = await signIn("google", sub, "小宇");
     const res = await send(yu, "POST", "/groups", { name: "第21個" });
     expect(res.status).toBe(409);
     expect(await errorCode(res)).toBe("GROUP_LIMIT_REACHED");
   });
+
+  it("does not let two concurrent creations exceed the Group cap", async () => {
+    const sub = uniqueSub("Group cap race");
+    let user = await signIn("google", sub, "Group cap race");
+    for (let index = 0; index < 19; index++) {
+      if (index > 0 && index % 5 === 0) {
+        clock.now += 3_600_000;
+        user = await signIn("google", sub, "Group cap race");
+      }
+      await createGroup(user, { name: "已有群組" });
+    }
+    clock.now += 3_600_000;
+    user = await signIn("google", sub, "Group cap race");
+    const results = await Promise.all([
+      send(user, "POST", "/groups", { name: "第一個" }),
+      send(user, "POST", "/groups", { name: "第二個" }),
+    ]);
+    expect(results.map((response) => response.status).sort()).toEqual([201, 409]);
+  }, 20000);
 });
 
 describe("PATCH /groups/:id", () => {
   const patch = (s: Session, g: GroupBody, body: unknown, updatedAt = g.updatedAt) =>
     send(s, "PATCH", `/groups/${g.id}`, body, { "If-Match": String(updatedAt) });
+
+  it("serializes competing edits and leaves the Group list at the winning revision", async () => {
+    const yu = await person("小宇");
+    const group = await createGroup(yu);
+    const responses = await Promise.all([
+      patch(yu, group, { name: "一" }),
+      patch(yu, group, { name: "二" }),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const winner = responses.find((response) => response.status === 200);
+    if (winner === undefined) throw new Error("expected a winning edit");
+    expect(winner.headers.get("X-Group-Rev")).toBe("1");
+    const edited = await winner.json<GroupBody>();
+    const list = await (await send(yu, "GET", "/groups")).json<GroupBody[]>();
+    expect(list.find((item) => item.id === group.id)?.name).toBe(edited.name);
+  });
+
+  it("retries a failed directory push and keeps the Group edit available", async () => {
+    const yu = await person("小宇");
+    const group = await createGroup(yu);
+    const restoreWrites = await failDirectoryWrites();
+    try {
+      const response = await patch(yu, group, { name: "等待同步" });
+      expect(response.status).toBe(200);
+      const first = await response.json<GroupBody>();
+      expect(first.name).toBe("等待同步");
+      const second = await patch(yu, first, { name: "最新版本" });
+      expect(second.status).toBe(200);
+      expect((await (await send(yu, "GET", `/groups/${group.id}`)).json<GroupBody>()).name).toBe(
+        "最新版本",
+      );
+      const stale = await (await send(yu, "GET", "/groups")).json<GroupBody[]>();
+      expect(stale.find((item) => item.id === group.id)?.name).toBe(group.name);
+    } finally {
+      await restoreWrites();
+    }
+    await vi.waitFor(
+      async () => {
+        const list = await (await send(yu, "GET", "/groups")).json<GroupBody[]>();
+        expect(list.find((item) => item.id === group.id)?.name).toBe("最新版本");
+      },
+      { timeout: 8000, interval: 200 },
+    );
+  }, 12000);
 
   it("lets an Admin rename the Group and switch the Trip module on", async () => {
     const yu = await person("小宇");
@@ -184,7 +308,11 @@ describe("PATCH /groups/:id", () => {
     expect(changed.status).toBe(200);
     const usd = await changed.json<GroupBody>();
 
-    await seedExpense(group.id, usd.me.memberId);
+    await createExpense(
+      yu,
+      group.id,
+      twdExpense(usd.me.memberId, [usd.me.memberId], 600, { originalCurrency: "USD" }),
+    );
     const locked = await send(yu, "GET", `/groups/${group.id}`);
     expect((await locked.json<GroupBody>()).settlementCurrencyLocked).toBe(true);
 
@@ -199,7 +327,7 @@ describe("DELETE /groups/:id", () => {
   it("lets an Admin hard-delete the Group with its Expenses", async () => {
     const yu = await person("小宇");
     const group = await createGroup(yu);
-    await seedExpense(group.id, group.me.memberId);
+    await createExpense(yu, group.id, twdExpense(group.me.memberId, [group.me.memberId], 600));
     const res = await send(yu, "DELETE", `/groups/${group.id}`);
     expect(res.status).toBe(204);
     expect(await db.select().from(groups).where(eq(groups.id, group.id))).toEqual([]);

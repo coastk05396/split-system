@@ -1,6 +1,6 @@
 import type { Settlement, SettlementPage } from "@split/shared";
 import { describe, expect, it } from "vitest";
-import type { Session } from "./auth-harness.js";
+import { bearer, call, type Session } from "./auth-harness.js";
 import { balances, createExpense, newKey, twdExpense } from "./expenses-harness.js";
 import { errorCode, groupWith, listMembers, send } from "./groups-harness.js";
 
@@ -34,6 +34,59 @@ async function owingGroup() {
 }
 
 describe("Settlements", () => {
+  it("updates each Member's Group list Balance after recording", async () => {
+    const { group, admin, ming, ids } = await owingGroup();
+    await record(ming, group.id, {
+      payerMemberId: ids.ming,
+      receiverMemberId: ids.admin,
+      amount: 100,
+    });
+    const adminGroups = await (
+      await send(admin, "GET", "/groups")
+    ).json<{ id: string; me: { balance: number } }[]>();
+    const mingGroups = await (
+      await send(ming, "GET", "/groups")
+    ).json<{ id: string; me: { balance: number } }[]>();
+    expect(adminGroups.find((item) => item.id === group.id)?.me.balance).toBe(500);
+    expect(mingGroups.find((item) => item.id === group.id)?.me.balance).toBe(-200);
+  });
+  it("signals connected Members after a Settlement commits", async () => {
+    const { group, admin, ming, ids } = await owingGroup();
+    const live = await call(`/groups/${group.id}/live`, {
+      headers: { ...bearer(admin.accessToken), Upgrade: "websocket" },
+    });
+    expect(live.status).toBe(101);
+    const socket = live.webSocket;
+    if (socket === null) throw new Error("missing websocket");
+    socket.accept();
+    const message = new Promise<string>((resolve) => {
+      socket.addEventListener(
+        "message",
+        (event) => {
+          resolve(String(event.data));
+        },
+        { once: true },
+      );
+    });
+    const response = await postSettlement(ming, group.id, {
+      payerMemberId: ids.ming,
+      receiverMemberId: ids.admin,
+      amount: 100,
+    });
+    expect(response.status).toBe(201);
+    const signal: unknown = JSON.parse(
+      await Promise.race([
+        message,
+        new Promise<string>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("no signal"));
+          }, 1000);
+        }),
+      ]),
+    );
+    expect(signal).toMatchObject({ version: 1, type: "sync needed" });
+    socket.close();
+  });
   it("a payer's Settlement is confirmed at once and moves Balances immediately", async () => {
     const { group, admin, ming, ids } = await owingGroup();
 

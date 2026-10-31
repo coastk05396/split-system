@@ -7,10 +7,11 @@ import {
 } from "@split/shared";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { isConstraintError } from "../db/errors.js";
+import type { Bindings } from "../env.js";
+import { memberOperation } from "./ledger-client.js";
 import { groups, members, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
-import { anotherAdmin, hasFreeSeat, type MemberRow, requireAdmin } from "./membership.js";
+import { type MemberRow, requireAdmin } from "./membership.js";
 
 const isSystemLabel = (name: string | null): name is string =>
   name === DELETED_USER_NAME || name === REMOVED_PLACEHOLDER_NAME;
@@ -58,164 +59,89 @@ async function oneMember(db: Db, me: MemberRow, memberId: string): Promise<Membe
   return found;
 }
 
-async function balanceNotZero(db: Db, target: MemberRow): Promise<ApiError> {
-  const [group] = await db
-    .select({ currency: groups.settlementCurrency })
-    .from(groups)
-    .where(eq(groups.id, target.groupId));
-  return new ApiError("BALANCE_NOT_ZERO", {
-    balance: target.netBalance,
-    currency: group?.currency ?? null,
-  });
+async function namesByUser(db: Db, groupId: string): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ id: users.id, name: users.displayName })
+    .from(users)
+    .innerJoin(members, eq(members.userId, users.id))
+    .where(eq(members.groupId, groupId));
+  return Object.fromEntries(rows.map((row) => [row.id, row.name]));
 }
 
-/**
- * Sets a Member's role (Admin only) or one's own Nickname. The last active Admin cannot be
- * demoted; that is re-checked inside the update so two demotions cannot both win.
- */
 export async function patchMember(
   db: Db,
   me: MemberRow,
   memberId: string,
   patch: MemberPatch,
+  env: Bindings,
 ): Promise<Member> {
-  const target = await findMember(db, me.groupId, memberId);
-  if (patch.placeholderName !== undefined) {
-    if (target.status !== "placeholder") throw new ApiError("MEMBER_NOT_ACTIVE");
-    const name = patch.placeholderName;
-    const updated = await db
-      .update(members)
-      .set({ placeholderName: name })
-      .where(
-        and(
-          eq(members.id, target.id),
-          eq(members.status, "placeholder"),
-          sql`NOT EXISTS (SELECT 1 FROM members other LEFT JOIN users u ON u.id = other.user_id
-        WHERE other.group_id = ${me.groupId} AND other.id <> ${target.id}
-        AND other.status IN ('active', 'placeholder') AND COALESCE(u.display_name, other.placeholder_name) = ${name})`,
-        ),
-      )
-      .returning({ id: members.id });
-    if (updated.length === 0) {
-      const current = await findMember(db, me.groupId, memberId);
-      if (current.status !== "placeholder") throw new ApiError("MEMBER_NOT_ACTIVE");
-      throw new ApiError("PLACEHOLDER_NAME_TAKEN");
-    }
-    return oneMember(db, me, target.id);
-  }
-  if (patch.role !== undefined) {
-    requireAdmin(me);
-    if (target.status !== "active") throw new ApiError("MEMBER_NOT_ACTIVE");
-  }
-
-  const demotes = patch.role === "member" && target.role === "admin";
-  const updated = await db
-    .update(members)
-    .set({ role: patch.role })
-    .where(
-      and(
-        eq(members.id, target.id),
-        eq(members.status, "active"),
-        demotes ? anotherAdmin(me.groupId, target.id) : undefined,
-      ),
-    )
-    .returning({ id: members.id });
-  if (updated.length === 0) throw new ApiError("LAST_ADMIN");
-  return oneMember(db, me, target.id);
+  await memberOperation(env, me.groupId, {
+    action: "patch",
+    actorMemberId: me.id,
+    targetMemberId: memberId,
+    input: patch,
+    now: Date.now(),
+    names: await namesByUser(db, me.groupId),
+  });
+  return oneMember(db, me, memberId);
 }
 
-/**
- * A Member leaves at a zero Balance and becomes a Former Member, kept by name in old
- * Expenses. The last active Admin must promote someone or delete the Group instead.
- */
-export async function leaveGroup(db: Db, me: MemberRow): Promise<void> {
-  if (me.netBalance !== 0) throw await balanceNotZero(db, me);
-  const left = await db
-    .update(members)
-    .set({ status: "former", role: "member" })
-    .where(
-      and(
-        eq(members.id, me.id),
-        eq(members.netBalance, 0),
-        sql`(${members.role} = 'member' OR ${anotherAdmin(me.groupId, me.id)})`,
-      ),
-    )
-    .returning({ id: members.id });
-  if (left.length > 0) return;
-  const current = await findMember(db, me.groupId, me.id);
-  throw current.netBalance !== 0 ? await balanceNotZero(db, current) : new ApiError("LAST_ADMIN");
+export async function leaveGroup(db: Db, me: MemberRow, env: Bindings): Promise<void> {
+  const [group] = await db
+    .select({ currency: groups.settlementCurrency })
+    .from(groups)
+    .where(eq(groups.id, me.groupId));
+  await memberOperation(env, me.groupId, {
+    action: "leave",
+    actorMemberId: me.id,
+    targetMemberId: me.id,
+    targetBalance: me.netBalance,
+    currency: group?.currency ?? null,
+    now: Date.now(),
+  });
 }
 
-/**
- * Removes a Member (Admin only), or leaves when the target is oneself. Either way the
- * Balance must be zero. A removed Placeholder Member's typed name is deleted: the row goes
- * entirely, or, when old Expenses still name it, it stays as a Former Member with a
- * generic label (decision 31's privacy rule).
- */
-export async function removeMember(db: Db, me: MemberRow, memberId: string): Promise<void> {
-  if (memberId === me.id) return leaveGroup(db, me);
+export async function removeMember(
+  db: Db,
+  me: MemberRow,
+  memberId: string,
+  env: Bindings,
+): Promise<void> {
+  if (memberId === me.id) return leaveGroup(db, me, env);
   requireAdmin(me);
   const target = await findMember(db, me.groupId, memberId);
-  if (target.status === "former") throw new ApiError("MEMBER_NOT_ACTIVE");
-  if (target.netBalance !== 0) throw await balanceNotZero(db, target);
-
-  const atZero = and(eq(members.id, target.id), eq(members.netBalance, 0));
-  if (target.status === "active") {
-    const removed = await db
-      .update(members)
-      .set({ status: "former", role: "member" })
-      .where(atZero)
-      .returning({ id: members.id });
-    if (removed.length === 0)
-      throw await balanceNotZero(db, await findMember(db, me.groupId, memberId));
-    return;
-  }
-
-  try {
-    const removed = await db.delete(members).where(atZero).returning({ id: members.id });
-    if (removed.length === 0)
-      throw await balanceNotZero(db, await findMember(db, me.groupId, memberId));
-  } catch (error) {
-    if (!isConstraintError(error, "FOREIGN KEY")) throw error;
-    await db
-      .update(members)
-      .set({ status: "former", placeholderName: null, nickname: REMOVED_PLACEHOLDER_NAME })
-      .where(atZero);
-  }
+  const [group] = await db
+    .select({ currency: groups.settlementCurrency })
+    .from(groups)
+    .where(eq(groups.id, me.groupId));
+  const history = await db.all<{ found: number }>(
+    sql`SELECT 1 AS found FROM expense_payers WHERE member_id = ${memberId} UNION SELECT 1 AS found FROM expense_splits WHERE member_id = ${memberId} LIMIT 1`,
+  );
+  await memberOperation(env, me.groupId, {
+    action: "remove",
+    actorMemberId: me.id,
+    targetMemberId: memberId,
+    targetBalance: target.netBalance,
+    currency: group?.currency ?? null,
+    hasHistory: history.length > 0,
+    now: Date.now(),
+  });
 }
 
-/**
- * Any Member adds a Placeholder Member by name. The name must differ from every seated
- * Member's shown name, and the Placeholder takes one of the 30 seats.
- */
 export async function addPlaceholder(
   db: Db,
   me: MemberRow,
   input: PlaceholderInput,
   now: number,
+  env: Bindings,
 ): Promise<Member> {
-  const seated = (await listMembers(db, me.groupId, me.id)).filter((m) => m.status !== "former");
-  if (seated.some((m) => m.displayName === input.name)) {
-    throw new ApiError("PLACEHOLDER_NAME_TAKEN");
-  }
-  const id = crypto.randomUUID();
-  const inserted = await db.run(sql`
-    INSERT INTO members (id, group_id, user_id, placeholder_name, role, status, net_balance, created_by_member_id, created_at)
-    SELECT ${id}, ${me.groupId}, NULL, ${input.name}, 'member', 'placeholder', 0, ${me.id}, ${now}
-    WHERE ${hasFreeSeat(me.groupId)}
-      AND NOT EXISTS (SELECT 1 FROM members p WHERE p.group_id = ${me.groupId} AND p.status = 'placeholder' AND p.placeholder_name = ${input.name})`);
-  if (inserted.meta.changes === 0) {
-    const [taken] = await db
-      .select({ id: members.id })
-      .from(members)
-      .where(
-        and(
-          eq(members.groupId, me.groupId),
-          eq(members.status, "placeholder"),
-          eq(members.placeholderName, input.name),
-        ),
-      );
-    throw new ApiError(taken === undefined ? "GROUP_FULL" : "PLACEHOLDER_NAME_TAKEN");
-  }
-  return oneMember(db, me, id);
+  const result = await memberOperation(env, me.groupId, {
+    action: "add",
+    actorMemberId: me.id,
+    targetMemberId: crypto.randomUUID(),
+    input,
+    now,
+    names: await namesByUser(db, me.groupId),
+  });
+  return oneMember(db, me, result.memberId);
 }

@@ -1,8 +1,5 @@
-import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createDb } from "../src/db/client.js";
-import { expensePayers, members } from "../src/db/schema.js";
+import { createExpense, twdExpense } from "./expenses-harness.js";
 import {
   at,
   errorCode,
@@ -10,11 +7,8 @@ import {
   listMembers,
   type MemberBody,
   person,
-  seedExpense,
   send,
 } from "./groups-harness.js";
-
-const db = createDb(env.DB);
 
 async function addPlaceholder(
   s: Parameters<typeof send>[0],
@@ -27,6 +21,16 @@ async function addPlaceholder(
 }
 
 describe("POST /groups/:id/members (Placeholder Members)", () => {
+  it("advances the Group revision after adding a Placeholder Member", async () => {
+    const { admin, group } = await groupWith("小宇");
+    const before = await send(admin, "GET", `/groups/${group.id}`);
+    const added = await send(admin, "POST", `/groups/${group.id}/members`, { name: "阿凱" });
+    expect(added.status).toBe(201);
+    expect(Number(added.headers.get("X-Group-Rev"))).toBe(
+      Number(before.headers.get("X-Group-Rev")) + 1,
+    );
+  });
+
   it("lets any Member add a Placeholder by name, with no account or picture", async () => {
     const { group, others } = await groupWith("小宇", "阿明");
     const kai = await addPlaceholder(at(others, 0), group.id, "阿凱");
@@ -73,9 +77,16 @@ describe("POST /invites/:token/claim", () => {
   it("moves a Placeholder's Expenses and Balance to the joining User", async () => {
     const { admin, group, token } = await groupWith("小宇");
     const kai = await addPlaceholder(admin, group.id, "阿凱");
-    const expenseId = await seedExpense(group.id, kai.id, [kai.id, group.me.memberId]);
-    await seedExpense(group.id, group.me.memberId, [kai.id, group.me.memberId]);
-    await db.update(members).set({ netBalance: -200 }).where(eq(members.id, kai.id));
+    const expense = await createExpense(
+      admin,
+      group.id,
+      twdExpense(kai.id, [kai.id, group.me.memberId], 200),
+    );
+    await createExpense(
+      admin,
+      group.id,
+      twdExpense(group.me.memberId, [kai.id, group.me.memberId], 600),
+    );
 
     const realKai = await person("凱凱");
     const preview = await send(realKai, "GET", `/invites/${token}`);
@@ -95,11 +106,10 @@ describe("POST /invites/:token/claim", () => {
       balance: -200,
       isMe: true,
     });
-    const [payer] = await db
-      .select()
-      .from(expensePayers)
-      .where(eq(expensePayers.expenseId, expenseId));
-    expect(payer?.memberId).toBe(kai.id);
+    const saved = await (
+      await send(realKai, "GET", `/groups/${group.id}/expenses/${expense.id}`)
+    ).json<{ payers: { memberId: string }[] }>();
+    expect(saved.payers[0]?.memberId).toBe(kai.id);
     const after = await send(realKai, "GET", `/invites/${token}`);
     expect((await after.json<{ placeholders: unknown[] }>()).placeholders).toEqual([]);
   });
@@ -142,26 +152,25 @@ describe("removing a Placeholder Member", () => {
       (await send(at(others, 0), "DELETE", `/groups/${group.id}/members/${kai.id}`)).status,
     ).toBe(403);
     expect((await send(admin, "DELETE", `/groups/${group.id}/members/${kai.id}`)).status).toBe(204);
-    expect(await db.select().from(members).where(eq(members.id, kai.id))).toEqual([]);
+    expect((await listMembers(admin, group.id)).some((member) => member.id === kai.id)).toBe(false);
   });
 
   it("keeps a generic Former Member row when old Expenses still name the Placeholder", async () => {
     const { admin, group } = await groupWith("小宇");
     const kai = await addPlaceholder(admin, group.id, "阿凱");
-    await seedExpense(group.id, kai.id);
+    await createExpense(admin, group.id, twdExpense(kai.id, [kai.id], 600));
     expect((await send(admin, "DELETE", `/groups/${group.id}/members/${kai.id}`)).status).toBe(204);
-    const [row] = await db.select().from(members).where(eq(members.id, kai.id));
+    const row = (await listMembers(admin, group.id)).find((member) => member.id === kai.id);
     expect(row).toMatchObject({
       status: "former",
-      placeholderName: null,
-      nickname: "已移除的成員",
+      displayName: "已移除的成員",
     });
   });
 
   it("is blocked at a non-zero Balance", async () => {
     const { admin, group } = await groupWith("小宇");
     const kai = await addPlaceholder(admin, group.id, "阿凱");
-    await db.update(members).set({ netBalance: 300 }).where(eq(members.id, kai.id));
+    await createExpense(admin, group.id, twdExpense(kai.id, [kai.id, group.me.memberId], 600));
     const res = await send(admin, "DELETE", `/groups/${group.id}/members/${kai.id}`);
     expect(await errorCode(res)).toBe("BALANCE_NOT_ZERO");
   });
