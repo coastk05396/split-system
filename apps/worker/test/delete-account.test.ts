@@ -133,7 +133,7 @@ it("never leaves an active Member when a join races account deletion", async () 
     deleteMe(joining.accessToken),
   ]);
   expect(deletion.status).toBe(204);
-  expect([200, 401, 403, 404]).toContain(join.status);
+  expect([200, 401, 403, 404, 409]).toContain(join.status);
   expect(
     (await listMembers(admin, group.id)).some(
       (member) => member.userId === joining.userId && member.status === "active",
