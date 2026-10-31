@@ -59,8 +59,12 @@ async function oneMember(db: Db, me: MemberRow, memberId: string): Promise<Membe
   return found;
 }
 
-async function namesByUser(db: Db): Promise<Record<string, string>> {
-  const rows = await db.select({ id: users.id, name: users.displayName }).from(users);
+async function namesByUser(db: Db, groupId: string): Promise<Record<string, string>> {
+  const rows = await db
+    .select({ id: users.id, name: users.displayName })
+    .from(users)
+    .innerJoin(members, eq(members.userId, users.id))
+    .where(eq(members.groupId, groupId));
   return Object.fromEntries(rows.map((row) => [row.id, row.name]));
 }
 
@@ -77,7 +81,7 @@ export async function patchMember(
     targetMemberId: memberId,
     input: patch,
     now: Date.now(),
-    names: await namesByUser(db),
+    names: await namesByUser(db, me.groupId),
   });
   return oneMember(db, me, memberId);
 }
@@ -137,7 +141,7 @@ export async function addPlaceholder(
     targetMemberId: crypto.randomUUID(),
     input,
     now,
-    names: await namesByUser(db),
+    names: await namesByUser(db, me.groupId),
   });
   return oneMember(db, me, result.memberId);
 }

@@ -37,6 +37,7 @@ async function readLedgerGroup(env: Bindings, me: MemberRow) {
   if (!response.ok) throw new ApiError("NOT_FOUND");
   const state = await response.json<{
     rev: number;
+    locked: boolean;
     group: {
       name: string;
       settlement_currency: "TWD" | "USD" | "JPY" | "THB";
@@ -53,6 +54,7 @@ async function readLedgerGroup(env: Bindings, me: MemberRow) {
     rev: state.rev,
     group: {
       ...legacy,
+      settlementCurrencyLocked: state.locked,
       name: state.group.name,
       settlementCurrency: state.group.settlement_currency,
       isTrip: state.group.is_trip === 1,
@@ -155,14 +157,12 @@ export function groupRoutes(deps: AppDeps) {
       requireAdmin(me);
       const expected = requireIfMatch(c);
       const patch = await parseBody(c, groupPatchSchema);
-      const current = await readLedgerGroup(c.env, me);
       const response = await ledger(c.env, me.groupId).fetch("https://ledger.internal/patch", {
         method: "POST",
         body: JSON.stringify({
           patch,
           expected,
           now: deps.now(),
-          locked: current.group.settlementCurrencyLocked,
         }),
       });
       if (!response.ok) {

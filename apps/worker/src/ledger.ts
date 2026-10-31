@@ -7,7 +7,6 @@ import {
   placeholderInputSchema,
   settlementSchema,
   tripDatesValid,
-  expenseSchema,
 } from "@split/shared";
 import { z } from "zod";
 import type { Bindings } from "./env.js";
@@ -549,7 +548,13 @@ export class GroupLedger extends DurableObject<Bindings> {
             rev,
             timestamp: Date.now(),
           };
-          for (const socket of this.ctx.getWebSockets()) socket.send(JSON.stringify(signal));
+          for (const socket of this.ctx.getWebSockets()) {
+            try {
+              socket.send(JSON.stringify(signal));
+            } catch {
+              /* socket closed */
+            }
+          }
           if ((await this.ctx.storage.getAlarm()) === null)
             await this.ctx.storage.setAlarm(Date.now() + 2000);
           await this.drain();
@@ -730,9 +735,15 @@ export class GroupLedger extends DurableObject<Bindings> {
       );
       if (result.error !== undefined) return Response.json(result, { status: 409 });
       if (result.changed && result.rev !== undefined) {
-        if (result.closeUserId)
-          for (const socket of this.ctx.getWebSockets(result.closeUserId))
-            socket.close(4003, "Membership ended");
+        if (result.closeUserId) {
+          for (const socket of this.ctx.getWebSockets(result.closeUserId)) {
+            try {
+              socket.close(4003, "Membership ended");
+            } catch {
+              /* socket closed */
+            }
+          }
+        }
         const signal: SyncNeeded = {
           version: 1,
           type: "sync needed",
@@ -756,18 +767,21 @@ export class GroupLedger extends DurableObject<Bindings> {
         .toArray()[0];
       if (group === undefined) return new Response(null, { status: 404 });
       const meta = this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one();
-      return Response.json({ group, rev: meta.rev });
+      const locked =
+        this.ctx.storage.sql
+          .exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0")
+          .one().n > 0;
+      return Response.json({ group, rev: meta.rev, locked });
     }
     if (new URL(request.url).pathname === "/patch" && request.method === "POST") {
       const schema = z.object({
         patch: groupPatchSchema,
         expected: z.number().int(),
         now: z.number().int(),
-        locked: z.boolean(),
       });
       const parsed = schema.safeParse(await request.json());
       if (!parsed.success) return new Response(null, { status: 400 });
-      const { patch, expected, now, locked } = parsed.data;
+      const { patch, expected, now } = parsed.data;
       if ((await this.ctx.storage.getAlarm()) === null)
         await this.ctx.storage.setAlarm(Date.now() + 2000);
       const result = this.ctx.storage.transactionSync(() => {
@@ -782,7 +796,8 @@ export class GroupLedger extends DurableObject<Bindings> {
         const end = patch.tripEndDate === undefined ? current.trip_end_date : patch.tripEndDate;
         if (!tripDatesValid(start, end)) return "TRIP_DATES_INVALID";
         if (
-          locked &&
+          sql.exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0").one()
+            .n > 0 &&
           patch.settlementCurrency !== undefined &&
           patch.settlementCurrency !== current.settlement_currency
         )
