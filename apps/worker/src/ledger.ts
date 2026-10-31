@@ -1,3 +1,4 @@
+import { stopOperation } from "./ledger-stops.js";
 import {
   assertFrozenBalancesUnchanged,
   frozenBalances,
@@ -149,6 +150,10 @@ export class GroupLedger extends DurableObject<Bindings> {
         "CREATE TABLE IF NOT EXISTS ledger_expenses (id TEXT PRIMARY KEY, creator_member_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, data TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, UNIQUE(creator_member_id,idempotency_key))",
       );
       sql.exec("UPDATE ledger_meta SET schema_version = 6");
+    }
+    if (meta.schema_version < 8) {
+      sql.exec("CREATE TABLE IF NOT EXISTS ledger_stops (id TEXT PRIMARY KEY, data TEXT NOT NULL)");
+      sql.exec("UPDATE ledger_meta SET schema_version = 8");
     }
   }
 
@@ -466,38 +471,71 @@ export class GroupLedger extends DurableObject<Bindings> {
   }
 
   override async fetch(request: Request): Promise<Response> {
-    if (new URL(request.url).pathname === "/delete-stop" && request.method === "POST") {
-      const input = z.object({ stopId: z.string() }).safeParse(await request.json());
-      if (!input.success) return new Response(null, { status: 400 });
-      if ((await this.ctx.storage.getAlarm()) === null)
-        await this.ctx.storage.setAlarm(Date.now() + 2000);
-      const rev = this.ctx.storage.transactionSync(() => {
-        const sql = this.ctx.storage.sql;
-        for (const row of sql
-          .exec<{ id: string; data: string }>("SELECT id,data FROM ledger_expenses WHERE deleted=0")
-          .toArray()) {
-          const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
-          if (expense.stopId !== input.data.stopId) continue;
-          expense.stopId = null;
-          sql.exec("UPDATE ledger_expenses SET data=? WHERE id=?", JSON.stringify(expense), row.id);
+    if (new URL(request.url).pathname === "/stop-op" && request.method === "POST") {
+      const op: unknown = await request.json();
+      try {
+        const result = this.ctx.storage.transactionSync(() => {
+          const sql = this.ctx.storage.sql;
+          const outcome = stopOperation(sql, op);
+          if (outcome.changed) {
+            if (outcome.deletedId !== undefined) {
+              for (const row of sql
+                .exec<{ id: string; data: string }>(
+                  "SELECT id,data FROM ledger_expenses WHERE deleted=0",
+                )
+                .toArray()) {
+                const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+                if (expense.stopId !== outcome.deletedId) continue;
+                expense.stopId = null;
+                sql.exec(
+                  "UPDATE ledger_expenses SET data=? WHERE id=?",
+                  JSON.stringify(expense),
+                  row.id,
+                );
+              }
+            }
+            sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            const kind = outcome.deletedId === undefined ? "group" : `stop:${outcome.deletedId}`;
+            sql.exec(
+              "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+              kind,
+            );
+          }
+          return {
+            ...outcome,
+            rev: sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev,
+          };
+        });
+        if (result.changed) {
+          const signal: SyncNeeded = {
+            version: 1,
+            type: "sync needed",
+            rev: result.rev,
+            timestamp: Date.now(),
+          };
+          for (const socket of this.ctx.getWebSockets()) {
+            try {
+              socket.send(JSON.stringify(signal));
+            } catch {
+              /* socket closed */
+            }
+          }
+          if ((await this.ctx.storage.getAlarm()) === null)
+            await this.ctx.storage.setAlarm(Date.now() + 2000);
+          await this.drain();
         }
-        sql.exec("UPDATE ledger_meta SET rev=rev+1");
-        sql.exec(
-          "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
-          `stop:${input.data.stopId}`,
+        return Response.json(
+          { value: result.value },
+          { headers: { "X-Group-Rev": String(result.rev) } },
         );
-        return sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev;
-      });
-      const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
-      for (const socket of this.ctx.getWebSockets()) {
-        try {
-          socket.send(JSON.stringify(signal));
-        } catch {
-          /* socket closed */
-        }
+      } catch (error) {
+        if (error instanceof ApiError)
+          return Response.json(
+            { error: error.code, details: error.details },
+            { status: error.status },
+          );
+        throw error;
       }
-      await this.drain();
-      return new Response(null, { status: 204, headers: { "X-Group-Rev": String(rev) } });
     }
     if (new URL(request.url).pathname === "/placeholder-counts" && request.method === "GET") {
       const counts: Record<string, number> = {};
