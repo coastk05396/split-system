@@ -260,12 +260,13 @@ function SettleNotifyActions({
   async function shareLine() {
     if (busy) return;
     setBusy(true);
-    const card = await prepareCard();
+    let card: ReturnType<typeof buildSettleCard> | null = null;
     try {
+      card = await prepareCard();
       const sent = await line.shareMessages([settleFlexMessage(card)], { stayOpen: true });
       if (sent) onNotice(t("settleShare.sharedLine"));
     } catch (error) {
-      if (error instanceof LineShareUnavailableError) {
+      if (card !== null && error instanceof LineShareUnavailableError) {
         window.location.assign(lineShareLink(settleText(card)));
         return;
       }
@@ -282,7 +283,7 @@ function SettleNotifyActions({
           type="button"
           disabled={busy}
           onClick={() => void sendToChat()}
-          className="press-pill flex items-center gap-1.5 rounded-full border border-[#e5b890] bg-[#ffd8b5] px-3.5 py-1.5 text-xs font-bold text-sprout-900 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.65),0_2px_6px_-2px_rgb(168_85_32/0.22)] hover:bg-[#ffcea3] disabled:opacity-60"
+          className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-900 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
         >
           <Send aria-hidden="true" className="size-3.5 text-sprout-700" />
           {t("settleShare.sendToChat")}
@@ -292,7 +293,7 @@ function SettleNotifyActions({
         type="button"
         disabled={busy}
         onClick={() => void shareLine()}
-        className="press-pill flex items-center gap-1.5 rounded-full border border-[#efc9a8] bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-800 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.65),0_2px_6px_-2px_rgb(168_85_32/0.18)] hover:bg-[#ffd8b5] disabled:opacity-60"
+        className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
       >
         <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-700" />
         {t("settleShare.shareLine")}
