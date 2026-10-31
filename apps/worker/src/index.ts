@@ -1,3 +1,4 @@
+export { GroupLedger } from "./ledger.js";
 import { app } from "./app.js";
 import { createDb } from "./db/client.js";
 import { productionDeps } from "./deps.js";

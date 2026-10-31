@@ -1,6 +1,7 @@
 /** Bindings declared in wrangler.jsonc, plus Worker secrets and local `.dev.vars`. */
 export interface Bindings {
   DB: D1Database;
+  GROUP_LEDGER: DurableObjectNamespace;
   JWKS_CACHE: KVNamespace;
   ASSETS: Fetcher;
   /** Secret that signs access tokens (`wrangler secret put`; locally `.dev.vars`). */

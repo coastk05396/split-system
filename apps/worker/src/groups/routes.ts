@@ -7,6 +7,8 @@ import {
 } from "@split/shared";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
+import { verifyAccessToken } from "../auth/tokens.js";
+import { ApiError } from "../errors.js";
 import { requireUser } from "../auth/require-user.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
@@ -32,6 +34,25 @@ export function groupRoutes(deps: AppDeps) {
   const signedIn = requireUser(deps.now);
 
   return new Hono<AppEnv>()
+    .get("/groups/:id/live", async (c) => {
+      const offered = (c.req.header("Sec-WebSocket-Protocol") ?? "")
+        .split(",")
+        .map((value) => value.trim());
+      const protocol = offered[0] === "split.v1" ? offered[0] : undefined;
+      const bearer = /^Bearer (\S+)$/.exec(c.req.header("Authorization") ?? "");
+      const token = bearer?.[1] ?? (protocol === undefined ? undefined : offered[1]);
+      const userId =
+        token === undefined
+          ? null
+          : await verifyAccessToken(token, c.env.SESSION_SIGNING_KEY, deps.now());
+      if (userId === null) throw new ApiError("UNAUTHORIZED");
+      await requireMember(createDb(c.env.DB), c.req.param("id"), userId);
+      if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return c.body(null, 426);
+      const id = c.env.GROUP_LEDGER.idFromName(c.req.param("id"));
+      const headers = new Headers({ Upgrade: "websocket", "X-User-Id": userId });
+      if (protocol !== undefined) headers.set("Sec-WebSocket-Protocol", protocol);
+      return c.env.GROUP_LEDGER.get(id).fetch("https://ledger.internal/live", { headers });
+    })
     .get("/groups", signedIn, async (c) =>
       c.json(await listGroups(createDb(c.env.DB), c.var.userId), 200),
     )
