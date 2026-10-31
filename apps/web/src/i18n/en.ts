@@ -507,5 +507,7 @@ export const enErrors: Record<ErrorCode, string> = {
   SETTLEMENT_EXCEEDS_DEBT: "The amount is more than they still owe.",
   RATE_LIMITED: "Too many requests. Please try again in a moment.",
   INTERNAL: "Something went wrong on our side. Please try again later.",
+  MAINTENANCE:
+    "Split is undergoing maintenance. Changes cannot be saved right now; please try again later.",
   RATE_UNAVAILABLE: "The rate cannot be found right now. Please enter one yourself.",
 };

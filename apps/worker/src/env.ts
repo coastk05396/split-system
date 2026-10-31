@@ -1,5 +1,6 @@
 /** Bindings declared in wrangler.jsonc, plus Worker secrets and local `.dev.vars`. */
 export interface Bindings {
+  MAINTENANCE?: string;
   DB: D1Database;
   JWKS_CACHE: KVNamespace;
   ASSETS: Fetcher;
