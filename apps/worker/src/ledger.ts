@@ -909,9 +909,11 @@ export class GroupLedger extends DurableObject<Bindings> {
         this.ctx.storage.sql
           .exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0")
           .one().n > 0;
-      const seated = this.ctx.storage.sql.exec<LedgerMember>(
-        "SELECT * FROM ledger_members WHERE status IN ('active','placeholder') ORDER BY created_at,rowid",
-      ).toArray();
+      const seated = this.ctx.storage.sql
+        .exec<LedgerMember>(
+          "SELECT * FROM ledger_members WHERE status IN ('active','placeholder') ORDER BY created_at,rowid",
+        )
+        .toArray();
       return Response.json({ group, rev: meta.rev, locked, seated });
     }
     if (new URL(request.url).pathname === "/patch" && request.method === "POST") {
@@ -1072,10 +1074,20 @@ export class GroupLedger extends DurableObject<Bindings> {
       return new Response(null, { status: 404 });
     const candidate = request.headers.get("X-User-Id");
     const sql = this.ctx.storage.sql;
-    const exists = sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_members'").toArray();
-    if (candidate === null || exists.length === 0 || sql.exec(
-      "SELECT m.id FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'", candidate,
-    ).toArray().length === 0) return new Response(null, { status: 404 });
+    const exists = sql
+      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_members'")
+      .toArray();
+    if (
+      candidate === null ||
+      exists.length === 0 ||
+      sql
+        .exec(
+          "SELECT m.id FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'",
+          candidate,
+        )
+        .toArray().length === 0
+    )
+      return new Response(null, { status: 404 });
     if (pathname === "/member-check") return new Response(null, { status: 204 });
     const pair = new WebSocketPair();
     const client = pair[0];

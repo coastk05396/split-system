@@ -91,12 +91,15 @@ export function groupRoutes(deps: AppDeps) {
       const groupId = c.req.param("id");
       const summary = await c.env.DB.prepare(
         "SELECT 1 FROM group_member_summary WHERE group_id=? AND user_id=?",
-      ).bind(groupId, userId).first();
+      )
+        .bind(groupId, userId)
+        .first();
       if (summary === null)
         await consumeRateLimit(createDb(c.env.DB), userId, "membership_lookup", deps.now());
       if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
         const check = await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(groupId)).fetch(
-          "https://ledger.internal/member-check", { headers: { "X-User-Id": userId } },
+          "https://ledger.internal/member-check",
+          { headers: { "X-User-Id": userId } },
         );
         if (!check.ok) throw new ApiError("NOT_FOUND");
         return c.body(null, 426);
@@ -154,30 +157,78 @@ export function groupRoutes(deps: AppDeps) {
     })
     .get("/groups/:id", signedIn, async (c) => {
       const id = c.req.param("id");
-      const summary = await c.env.DB.prepare("SELECT 1 FROM group_member_summary WHERE group_id=? AND user_id=?")
-        .bind(id, c.var.userId).first();
-      if (summary === null) await consumeRateLimit(createDb(c.env.DB), c.var.userId, "membership_lookup", deps.now());
-      const check = await ledger(c.env, id).fetch("https://ledger.internal/member-check", { headers: { "X-User-Id": c.var.userId } });
+      const summary = await c.env.DB.prepare(
+        "SELECT 1 FROM group_member_summary WHERE group_id=? AND user_id=?",
+      )
+        .bind(id, c.var.userId)
+        .first();
+      if (summary === null)
+        await consumeRateLimit(createDb(c.env.DB), c.var.userId, "membership_lookup", deps.now());
+      const check = await ledger(c.env, id).fetch("https://ledger.internal/member-check", {
+        headers: { "X-User-Id": c.var.userId },
+      });
       if (!check.ok) throw new ApiError("NOT_FOUND");
       const response = await ledger(c.env, id).fetch("https://ledger.internal/state");
       if (!response.ok) throw new ApiError("NOT_FOUND");
       const state = await response.json<{
-        rev: number; locked: boolean;
-        group: { id: string; name: string; settlement_currency: "TWD" | "USD" | "JPY" | "THB"; is_trip: number; trip_destination: string | null; trip_start_date: string | null; trip_end_date: string | null; trip_notes: string | null; created_at: number; updated_at: number };
-        seated: Array<{ id: string; user_id: string | null; placeholder_name: string | null; role: "admin" | "member"; net_balance: number }>;
+        rev: number;
+        locked: boolean;
+        group: {
+          id: string;
+          name: string;
+          settlement_currency: "TWD" | "USD" | "JPY" | "THB";
+          is_trip: number;
+          trip_destination: string | null;
+          trip_start_date: string | null;
+          trip_end_date: string | null;
+          trip_notes: string | null;
+          created_at: number;
+          updated_at: number;
+        };
+        seated: Array<{
+          id: string;
+          user_id: string | null;
+          placeholder_name: string | null;
+          role: "admin" | "member";
+          net_balance: number;
+        }>;
       }>();
       const me = state.seated.find((member) => member.user_id === c.var.userId);
       if (!me) throw new ApiError("NOT_FOUND");
-      const preview = await Promise.all(state.seated.slice(0, 4).map(async (member) => {
-        const user = member.user_id === null ? null : await c.env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?").bind(member.user_id).first<{ display_name: string; picture_url: string | null }>();
-        return { name: user?.display_name ?? member.placeholder_name ?? "?", pictureUrl: user?.picture_url ?? null };
-      }));
+      const preview = await Promise.all(
+        state.seated.slice(0, 4).map(async (member) => {
+          const user =
+            member.user_id === null
+              ? null
+              : await c.env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?")
+                  .bind(member.user_id)
+                  .first<{ display_name: string; picture_url: string | null }>();
+          return {
+            name: user?.display_name ?? member.placeholder_name ?? "?",
+            pictureUrl: user?.picture_url ?? null,
+          };
+        }),
+      );
       c.header("X-Group-Rev", String(state.rev));
-      return c.json({ id: state.group.id, name: state.group.name, settlementCurrency: state.group.settlement_currency,
-        isTrip: state.group.is_trip === 1, tripDestination: state.group.trip_destination, tripStartDate: state.group.trip_start_date,
-        tripEndDate: state.group.trip_end_date, tripNotes: state.group.trip_notes, createdAt: state.group.created_at,
-        updatedAt: state.group.updated_at, settlementCurrencyLocked: state.locked, memberCount: state.seated.length,
-        memberPreview: preview, me: { memberId: me.id, role: me.role, balance: me.net_balance } }, 200);
+      return c.json(
+        {
+          id: state.group.id,
+          name: state.group.name,
+          settlementCurrency: state.group.settlement_currency,
+          isTrip: state.group.is_trip === 1,
+          tripDestination: state.group.trip_destination,
+          tripStartDate: state.group.trip_start_date,
+          tripEndDate: state.group.trip_end_date,
+          tripNotes: state.group.trip_notes,
+          createdAt: state.group.created_at,
+          updatedAt: state.group.updated_at,
+          settlementCurrencyLocked: state.locked,
+          memberCount: state.seated.length,
+          memberPreview: preview,
+          me: { memberId: me.id, role: me.role, balance: me.net_balance },
+        },
+        200,
+      );
     })
     .patch("/groups/:id", signedIn, async (c) => {
       const db = createDb(c.env.DB);
