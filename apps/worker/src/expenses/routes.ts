@@ -4,12 +4,12 @@ import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
 import { requireUser } from "../auth/require-user.js";
 import { createDb } from "../db/client.js";
-import { expenseSplits, expenses, groups, members } from "../db/schema.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { requireMember } from "../groups/membership.js";
 import { rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey, requireIfMatch } from "../request-guards.js";
+import { personalSpending } from "./personal-spending.js";
 import {
   createExpense,
   deleteExpense,
@@ -37,30 +37,23 @@ export function expenseRoutes(deps: AppDeps) {
       )
         throw new ApiError("VALIDATION_FAILED");
       const db = createDb(c.env.DB);
-      const month = sql<string>`substr(${expenses.expenseDate}, 1, 7)`;
+      const spending = personalSpending(db, c.var.userId);
+      const month = sql<string>`substr(${spending.date}, 1, 7)`;
       const rows = await db
         .select({
           month,
-          category: expenses.category,
-          currency: groups.settlementCurrency,
-          amount: sql<number>`sum(${expenseSplits.settlementAmount})`,
+          category: spending.category,
+          currency: spending.currency,
+          amount: sql<number>`sum(${spending.amount})`,
         })
-        .from(members)
-        .innerJoin(groups, eq(groups.id, members.groupId))
-        .innerJoin(expenses, eq(expenses.groupId, groups.id))
-        .innerJoin(
-          expenseSplits,
-          and(eq(expenseSplits.expenseId, expenses.id), eq(expenseSplits.memberId, members.id)),
-        )
+        .from(spending)
         .where(
           and(
-            eq(members.userId, c.var.userId),
-            eq(members.status, "active"),
-            from === undefined ? undefined : gte(expenses.expenseDate, `${from}-01`),
-            to === undefined ? undefined : lte(expenses.expenseDate, `${to}-31`),
+            from === undefined ? undefined : gte(spending.date, `${from}-01`),
+            to === undefined ? undefined : lte(spending.date, `${to}-31`),
           ),
         )
-        .groupBy(month, expenses.category, groups.settlementCurrency);
+        .groupBy(month, sql`${spending.category}`, sql`${spending.currency}`);
       return c.json(rows, 200);
     })
     .get("/stats/expenses", signedIn, async (c) => {
@@ -75,35 +68,28 @@ export function expenseRoutes(deps: AppDeps) {
       )
         throw new ApiError("VALIDATION_FAILED");
       const db = createDb(c.env.DB);
+      const spending = personalSpending(db, c.var.userId);
       const rows = await db
         .select({
-          id: expenses.id,
-          groupId: groups.id,
-          groupName: groups.name,
-          description: expenses.description,
-          date: expenses.expenseDate,
-          currency: groups.settlementCurrency,
-          amount: expenseSplits.settlementAmount,
+          id: spending.expenseId,
+          groupId: spending.groupId,
+          groupName: spending.groupName,
+          description: spending.description,
+          date: spending.date,
+          currency: spending.currency,
+          amount: spending.amount,
         })
-        .from(members)
-        .innerJoin(groups, eq(groups.id, members.groupId))
-        .innerJoin(expenses, eq(expenses.groupId, groups.id))
-        .innerJoin(
-          expenseSplits,
-          and(eq(expenseSplits.expenseId, expenses.id), eq(expenseSplits.memberId, members.id)),
-        )
+        .from(spending)
         .where(
           and(
-            eq(members.userId, c.var.userId),
-            eq(members.status, "active"),
-            gt(expenseSplits.settlementAmount, 0),
-            gte(expenses.expenseDate, `${month}-01`),
-            lte(expenses.expenseDate, `${month}-31`),
-            eq(expenses.category, category),
-            cursor === undefined ? undefined : lt(expenses.id, cursor),
+            gt(spending.amount, 0),
+            gte(spending.date, `${month}-01`),
+            lte(spending.date, `${month}-31`),
+            eq(spending.category, category),
+            cursor === undefined ? undefined : lt(spending.expenseId, cursor),
           ),
         )
-        .orderBy(desc(expenses.id))
+        .orderBy(desc(spending.expenseId))
         .limit(51);
       const items = rows.slice(0, 50);
       return c.json(

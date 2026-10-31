@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ExpenseSavedToast, type SavedShare } from "./ExpenseSavedToast.js";
+import { ExpenseSavedToast } from "./ExpenseSavedToast.js";
+import type { SavedShare } from "./expense-sharing.js";
 
 vi.mock("./ExpenseShareDialog.js", () => ({
   ExpenseShareDialog: ({

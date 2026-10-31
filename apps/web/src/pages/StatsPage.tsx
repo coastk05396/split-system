@@ -3,11 +3,10 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
-import { useRates } from "../expenses/api.js";
-import { localNow } from "../expenses/expense-draft.js";
+import { usePreferredRates } from "../expenses/preferred-rates.js";
 import { read } from "../groups/api.js";
 import { card, LoadError, Loading } from "../groups/ui.js";
-import { categoryLabel } from "../i18n/format.js";
+import { categoryLabel } from "../expenses/categories.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { CountUp } from "../shell/CountUp.js";
@@ -129,17 +128,8 @@ export function StatsPage() {
   });
   const rows = (query.data ?? []).filter((row) => months.includes(row.month) && row.amount > 0);
   const bases = [...new Set(rows.map((row) => row.currency).filter((c) => c !== preferred))];
-  const rates = useRates(localNow(new Date()).date, preferred, bases);
-  const rateDates = [
-    ...new Set(rates.flatMap((rate) => (rate.data ? [rate.data.rateDate] : []))),
-  ].sort();
-  const rateByCurrency = new Map(
-    bases.flatMap((base, i) => {
-      const rate = rates[i]?.data;
-      return rate === undefined ? [] : [[base, rate.rateScaled] as const];
-    }),
-  );
-  const ratePending = rates.some((rate) => rate.isPending);
+  const reference = usePreferredRates(preferred, bases);
+  const { dates: rateDates, rates: rateByCurrency, pending: ratePending } = reference;
   const converted = convertSpending(rows, preferred, rateByCurrency);
   const unavailable = converted === null;
   const data = converted ?? [];
@@ -183,7 +173,7 @@ export function StatsPage() {
             type="button"
             className="press-pill mt-3 rounded-full bg-sprout-500 px-5 py-2 font-bold text-white"
             onClick={() => {
-              for (const rate of rates) void rate.refetch();
+              reference.retry();
             }}
           >
             {t("stats.retry")}

@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
-import { useRates } from "../expenses/api.js";
-import { localNow } from "../expenses/expense-draft.js";
+import { usePreferredRates } from "../expenses/preferred-rates.js";
 import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js";
 import { LoadError, MaintenanceTag } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
@@ -77,24 +76,13 @@ function BalanceCard(props: { groups: Group[]; preferred: CurrencyCode; isSucces
   const [main, ...rest] = summary.totals;
   // Another currency with something pending is converted into the Preferred currency.
   const foreign = rest.filter((x) => x.amount !== 0);
-  const today = localNow(new Date()).date;
-  const rates = useRates(
-    today,
+  const reference = usePreferredRates(
     preferred,
     foreign.map((x) => x.currency),
   );
-  const waiting = foreign.length > 0 && rates.some((r) => r.isPending);
-  const unavailable = foreign.length > 0 && rates.some((r) => r.isError);
-  const rateByCurrency = new Map(
-    foreign.flatMap((x, i) => {
-      const rate = rates[i]?.data;
-      return rate === undefined ? [] : [[x.currency, rate.rateScaled] as const];
-    }),
-  );
-  // Each pair can answer for a different day; the note says so rather than naming one.
-  const rateDates = [
-    ...new Set(rates.flatMap((r) => (r.data === undefined ? [] : [r.data.rateDate]))),
-  ].sort();
+  const { today, dates: rateDates, rates: rateByCurrency } = reference;
+  const waiting = foreign.length > 0 && reference.pending;
+  const unavailable = foreign.length > 0 && reference.unavailable;
   const total =
     foreign.length > 0 && !unavailable
       ? convertedTotal(summary.totals, preferred, rateByCurrency)

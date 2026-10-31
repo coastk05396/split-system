@@ -1,17 +1,8 @@
 import { Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { t } from "../i18n/messages.js";
-import type { ExpenseCard } from "./expense-card.js";
+import type { SavedShare } from "./expense-sharing.js";
 import { ExpenseShareDialog } from "./ExpenseShareDialog.js";
-
-/** How the Expense reached the LINE chat the app was opened from, if the person asked for that. */
-export type ChatSendResult = "none" | "sent" | "failed";
-
-/** Carried from the add form to the Group page in router state. */
-export interface SavedShare {
-  card: ExpenseCard;
-  chat: ChatSendResult;
-}
 
 const VISIBLE_MS = 6000;
 const LEAVE_MS = 180;

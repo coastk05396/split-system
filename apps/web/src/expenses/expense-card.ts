@@ -1,5 +1,5 @@
 import { type Expense, formatAmount, type Group } from "@split/shared";
-import { categoryLabel } from "../i18n/format.js";
+import { categoryInfo, categoryLabel } from "./categories.js";
 import { t } from "../i18n/messages.js";
 import type { LineMessage } from "../platform/line.js";
 import { liffLink } from "../platform/liff-link.js";
@@ -21,17 +21,6 @@ export interface ExpenseCard {
   /** The same as a LIFF address, for what goes into LINE. */
   lineUrl: string;
 }
-
-const EMOJI: Readonly<Record<string, string>> = {
-  餐飲: "🍽️",
-  交通: "🚗",
-  住宿: "🛏️",
-  購物: "🛍️",
-  娛樂: "🎟️",
-  門票: "🎟️",
-  醫療: "💊",
-  其他: "✨",
-};
 
 /** Brand colours of the card, the same sprout palette as the app. */
 export const COLOR = {
@@ -71,7 +60,7 @@ export function buildExpenseCard(
     groupName: group.name,
     title:
       expense.description.trim() === "" ? categoryLabel(expense.category) : expense.description,
-    emoji: EMOJI[expense.category] ?? "✨",
+    emoji: categoryInfo(expense.category).emoji,
     amount: formatAmount(expense.originalAmount, expense.originalCurrency),
     split: splitText(expense),
     payer:
