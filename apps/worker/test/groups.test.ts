@@ -183,6 +183,25 @@ describe("GET /groups", () => {
     expect(res.status).toBe(409);
     expect(await errorCode(res)).toBe("GROUP_LIMIT_REACHED");
   });
+
+  it("does not let two concurrent creations exceed the Group cap", async () => {
+    const sub = uniqueSub("Group cap race");
+    let user = await signIn("google", sub, "Group cap race");
+    for (let index = 0; index < 19; index++) {
+      if (index > 0 && index % 5 === 0) {
+        clock.now += 3_600_000;
+        user = await signIn("google", sub, "Group cap race");
+      }
+      await createGroup(user, { name: "已有群組" });
+    }
+    clock.now += 3_600_000;
+    user = await signIn("google", sub, "Group cap race");
+    const results = await Promise.all([
+      send(user, "POST", "/groups", { name: "第一個" }),
+      send(user, "POST", "/groups", { name: "第二個" }),
+    ]);
+    expect(results.map((response) => response.status).sort()).toEqual([201, 409]);
+  }, 20000);
 });
 
 describe("PATCH /groups/:id", () => {
