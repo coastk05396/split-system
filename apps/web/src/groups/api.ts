@@ -7,7 +7,12 @@ import type {
   Member,
   MemberPatch,
 } from "@split/shared";
-import { useMutation, useQuery, useQueryClient, type QueryFunctionContext } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryFunctionContext,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
@@ -30,10 +35,7 @@ export function useApi() {
 }
 
 /** Reads a JSON answer, throwing ApiFailure for anything but 2xx. Records and checks X-Group-Rev. */
-export async function read<T>(
-  call: Promise<Response>,
-  context?: QueryFunctionContext,
-): Promise<T> {
+export async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
   return readWithRev<T>(call, context);
 }
 
@@ -142,6 +144,18 @@ function useOptimisticMembers<TVariables>(
       client.setQueryData(key, members);
       return { undo, tempId };
     },
+    onSuccess: (data: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
+      if (
+        context?.tempId !== undefined &&
+        typeof data === "object" &&
+        data !== null &&
+        "id" in data
+      ) {
+        client.setQueryData<Member[]>(key, (members) =>
+          members?.map((m) => (m.id === context.tempId ? (data as Member) : m)),
+        );
+      }
+    },
     onError: (_error: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
       const undo = context?.undo;
       if (undo !== undefined)
@@ -151,6 +165,7 @@ function useOptimisticMembers<TVariables>(
       // The edit being settled still counts as pending here; an early re-read could drop a later
       // edit's row, so only the last one to finish asks.
       if (client.isMutating({ mutationKey }) > 1) return;
+      void client.invalidateQueries({ queryKey: key });
       void client.invalidateQueries({ queryKey: groupKeys.group(id) });
     },
   };
