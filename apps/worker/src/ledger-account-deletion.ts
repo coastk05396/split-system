@@ -80,7 +80,8 @@ export function finalizeAccount(
         now,
       )
       .toArray().length > 0;
-  if (!owned || member.net_balance !== 0) throw new ApiError("FORBIDDEN");
+  if (!owned) throw new ApiError("FORBIDDEN");
+  if (member.net_balance !== 0) throw new ApiError("BALANCE_NOT_ZERO");
   if (
     member.role === "admin" &&
     rows.length > 1 &&

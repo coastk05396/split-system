@@ -231,7 +231,24 @@ export async function deleteAccount(
       method: "POST",
       body: JSON.stringify({ action, userId, now: clock(), expires }),
     });
-    if (!response.ok) throw new ApiError("INTERNAL");
+    if (!response.ok) {
+      const body: unknown = await response.json();
+      if (
+        action === "finalize" &&
+        typeof body === "object" &&
+        body !== null &&
+        "error" in body &&
+        typeof body.error === "object" &&
+        body.error !== null &&
+        "code" in body.error
+      ) {
+        if (body.error.code === "LAST_ADMIN")
+          throw new ApiError("LAST_ADMIN", { groupIds: [groupId] });
+        if (body.error.code === "BALANCE_NOT_ZERO")
+          throw new ApiError("BALANCE_NOT_ZERO", { groupIds: [groupId] });
+      }
+      throw new ApiError("INTERNAL");
+    }
     return response;
   };
   try {
