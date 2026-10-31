@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createDb } from "../src/db/client.js";
-import { invites, members } from "../src/db/schema.js";
+import { invites } from "../src/db/schema.js";
 import { eq } from "drizzle-orm";
 import { clock } from "./auth-harness.js";
 import {
@@ -152,13 +152,10 @@ describe("POST /invites/:token/join", () => {
     const group = await createGroup(yu);
     const token = await inviteToken(yu, group.id);
     for (let i = 1; i < 30; i += 1) {
-      await db.insert(members).values({
-        id: crypto.randomUUID(),
-        groupId: group.id,
-        placeholderName: `朋友${String(i)}`,
-        status: "placeholder",
-        createdAt: clock.now,
-      });
+      expect(
+        (await send(yu, "POST", `/groups/${group.id}/members`, { name: `朋友${String(i)}` }))
+          .status,
+      ).toBe(201);
     }
     const ming = await person("阿明");
     const res = await send(ming, "POST", `/invites/${token}/join`);

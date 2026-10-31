@@ -7,12 +7,13 @@ import {
 } from "@split/shared";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { isConstraintError } from "../db/errors.js";
+import type { Bindings } from "../env.js";
+import { memberOperation } from "./ledger-client.js";
 import { groups, invites, members } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
 import { listMembers } from "./members.js";
-import { hasFreeSeat, type MemberRow, requireAdmin } from "./membership.js";
+import { type MemberRow, requireAdmin } from "./membership.js";
 
 /** 256 random bits, base64url: unguessable, and the whole secret of the link. */
 function newToken(): string {
@@ -147,76 +148,43 @@ export async function joinGroup(
   token: string,
   userId: string,
   now: number,
+  env: Bindings,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now);
   const mine = await ownRow(db, group.id, userId);
   if (mine?.status === "active") return { groupId: group.id, memberId: mine.id };
   await assertUnderGroupCap(db, userId);
-
-  if (mine !== undefined) {
-    const back = await db
-      .update(members)
-      .set({ status: "active", role: "member" })
-      .where(and(eq(members.id, mine.id), eq(members.status, "former"), hasFreeSeat(group.id)))
-      .returning({ id: members.id });
-    if (back.length === 0) throw new ApiError("GROUP_FULL");
-    return { groupId: group.id, memberId: mine.id };
-  }
-
-  const memberId = crypto.randomUUID();
-  try {
-    const inserted = await db.run(sql`
-      INSERT INTO members (id, group_id, user_id, role, status, net_balance, created_at)
-      SELECT ${memberId}, ${group.id}, ${userId}, 'member', 'active', 0, ${now}
-      WHERE ${hasFreeSeat(group.id)}`);
-    if (inserted.meta.changes === 0) throw new ApiError("GROUP_FULL");
-  } catch (error) {
-    // A second tap raced the first one in; that row is the person's.
-    if (!isConstraintError(error, "UNIQUE")) throw error;
-    const winner = await ownRow(db, group.id, userId);
-    if (winner === undefined) throw error;
-    return { groupId: group.id, memberId: winner.id };
-  }
-  return { groupId: group.id, memberId };
+  await db.run(sql`INSERT INTO group_reservations (user_id, group_id, status, created_at)
+    VALUES (${userId}, ${group.id}, 'pending', ${now})
+    ON CONFLICT (user_id, group_id) DO NOTHING`);
+  const result = await memberOperation(env, group.id, {
+    action: "join",
+    userId,
+    targetMemberId: mine?.id ?? crypto.randomUUID(),
+    now,
+  });
+  return { groupId: group.id, memberId: result.memberId };
 }
 
-/**
- * Joins by taking over a Placeholder Member: the row becomes the User's and keeps every
- * Expense, split, Settlement and its Balance. There is no undo; the typed name is dropped.
- */
 export async function claimPlaceholder(
   db: Db,
   token: string,
   userId: string,
   placeholderId: string,
   now: number,
+  env: Bindings,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
-
-  let claimed: { id: string }[];
-  try {
-    claimed = await db
-      .update(members)
-      .set({ userId, status: "active", placeholderName: null })
-      .where(
-        and(
-          eq(members.id, placeholderId),
-          eq(members.groupId, group.id),
-          eq(members.status, "placeholder"),
-        ),
-      )
-      .returning({ id: members.id });
-  } catch (error) {
-    if (isConstraintError(error, "UNIQUE")) throw new ApiError("ALREADY_MEMBER");
-    throw error;
-  }
-  if (claimed.length > 0) return { groupId: group.id, memberId: placeholderId };
-
-  const [row] = await db
-    .select({ id: members.id })
-    .from(members)
-    .where(and(eq(members.id, placeholderId), eq(members.groupId, group.id)));
-  throw new ApiError(row === undefined ? "NOT_FOUND" : "PLACEHOLDER_CLAIMED");
+  await db.run(sql`INSERT INTO group_reservations (user_id, group_id, status, created_at)
+    VALUES (${userId}, ${group.id}, 'pending', ${now})
+    ON CONFLICT (user_id, group_id) DO NOTHING`);
+  const result = await memberOperation(env, group.id, {
+    action: "claim",
+    userId,
+    targetMemberId: placeholderId,
+    now,
+  });
+  return { groupId: group.id, memberId: result.memberId };
 }

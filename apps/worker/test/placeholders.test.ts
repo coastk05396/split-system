@@ -27,6 +27,16 @@ async function addPlaceholder(
 }
 
 describe("POST /groups/:id/members (Placeholder Members)", () => {
+  it("advances the Group revision after adding a Placeholder Member", async () => {
+    const { admin, group } = await groupWith("小宇");
+    const before = await send(admin, "GET", `/groups/${group.id}`);
+    const added = await send(admin, "POST", `/groups/${group.id}/members`, { name: "阿凱" });
+    expect(added.status).toBe(201);
+    expect(Number(added.headers.get("X-Group-Rev"))).toBe(
+      Number(before.headers.get("X-Group-Rev")) + 1,
+    );
+  });
+
   it("lets any Member add a Placeholder by name, with no account or picture", async () => {
     const { group, others } = await groupWith("小宇", "阿明");
     const kai = await addPlaceholder(at(others, 0), group.id, "阿凱");
