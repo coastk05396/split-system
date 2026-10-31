@@ -157,3 +157,30 @@ it("removes spending when an edit unticks a Member", async () => {
   ).toBe(200);
   expect(await (await send(other, "GET", "/stats/spending")).json()).toEqual([]);
 });
+
+it("retries spending projection after D1 fails without reviving a deleted Expense", async () => {
+  const { failDirectoryWrites } = await import("./d1-faults.js");
+  const { vi } = await import("vitest");
+  const admin = await person("Stats retry");
+  const group = await createGroup(admin);
+  const expense = await createExpense(
+    admin,
+    group.id,
+    twdExpense(group.me.memberId, [group.me.memberId], 600),
+  );
+  const restoreWrites = await failDirectoryWrites();
+  try {
+    expect((await send(admin, "DELETE", `/groups/${group.id}/expenses/${expense.id}`)).status).toBe(
+      204,
+    );
+    expect(await (await send(admin, "GET", "/stats/spending")).json<unknown[]>()).toHaveLength(1);
+  } finally {
+    await restoreWrites();
+  }
+  await vi.waitFor(
+    async () => {
+      expect(await (await send(admin, "GET", "/stats/spending")).json()).toEqual([]);
+    },
+    { timeout: 8000, interval: 200 },
+  );
+}, 12000);

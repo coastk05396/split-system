@@ -166,13 +166,22 @@ export class GroupLedger extends DurableObject<Bindings> {
         .exec<{ rev: number }>("SELECT max(rev) AS rev FROM ledger_dirty HAVING count(*) > 0")
         .toArray()[0];
       if (dirty === undefined) return null;
+      const expenseIds = sql
+        .exec<{ kind: string }>(
+          "SELECT kind FROM ledger_dirty WHERE kind LIKE 'expense:%' ORDER BY rev,kind LIMIT 25",
+        )
+        .toArray()
+        .map((row) => row.kind.slice(8));
+      const expenseRows = expenseIds.flatMap((id) =>
+        sql
+          .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE id=? AND deleted=0", id)
+          .toArray(),
+      );
       return {
         rev: dirty.rev,
+        expenseIds,
         group: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one(),
-        expenses: sql
-          .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
-          .toArray()
-          .map((row) => expenseSchema.parse(JSON.parse(row.data) as unknown)),
+        expenses: expenseRows.map((row) => expenseSchema.parse(JSON.parse(row.data) as unknown)),
         locked:
           sql.exec<{ n: number }>("SELECT count(*) n FROM ledger_expenses WHERE deleted=0").one()
             .n > 0,
@@ -194,7 +203,16 @@ export class GroupLedger extends DurableObject<Bindings> {
       };
     });
     if (snapshot === null) return;
-    const { group: g, members, settlements, deletedStops, rev, locked, expenses } = snapshot;
+    const {
+      group: g,
+      members,
+      settlements,
+      deletedStops,
+      rev,
+      locked,
+      expenses,
+      expenseIds,
+    } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -362,8 +380,10 @@ export class GroupLedger extends DurableObject<Bindings> {
           );
       statements.push(
         db
-          .prepare(`DELETE FROM personal_spending WHERE group_id = ? AND ${fence}`)
-          .bind(g.id, g.id, rev),
+          .prepare(
+            `DELETE FROM personal_spending WHERE group_id = ? AND (? = 1 OR expense_id IN (SELECT value FROM json_each(?))) AND ${fence}`,
+          )
+          .bind(g.id, g.deleted, JSON.stringify(expenseIds), g.id, rev),
       );
       statements.push(
         db
@@ -406,7 +426,16 @@ export class GroupLedger extends DurableObject<Bindings> {
       );
       await db.batch(statements);
       this.ctx.storage.transactionSync(() => {
-        this.ctx.storage.sql.exec("DELETE FROM ledger_dirty WHERE rev <= ?", rev);
+        this.ctx.storage.sql.exec(
+          "DELETE FROM ledger_dirty WHERE (kind='group' OR kind LIKE 'settlement:%' OR kind LIKE 'stop:%') AND rev <= ?",
+          rev,
+        );
+        for (const id of expenseIds)
+          this.ctx.storage.sql.exec(
+            "DELETE FROM ledger_dirty WHERE kind=? AND rev <= ?",
+            `expense:${id}`,
+            rev,
+          );
         this.ctx.storage.sql.exec("UPDATE ledger_meta SET retry_count = 0");
       });
       if (this.ctx.storage.sql.exec("SELECT kind FROM ledger_dirty LIMIT 1").toArray().length > 0)
@@ -532,6 +561,14 @@ export class GroupLedger extends DurableObject<Bindings> {
           const result = expenseOperation(this.ctx.storage.sql, op);
           if (result.changed) {
             this.ctx.storage.sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            if (op.action === "create" || op.action === "update" || op.action === "delete") {
+              const expenseId =
+                op.action === "create" ? expenseSchema.parse(result.value).id : op.id;
+              this.ctx.storage.sql.exec(
+                "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+                `expense:${expenseId}`,
+              );
+            }
             this.ctx.storage.sql.exec(
               "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
             );
@@ -721,6 +758,15 @@ export class GroupLedger extends DurableObject<Bindings> {
             closeUserId = leaving.user_id;
           }
           sql.exec("UPDATE ledger_meta SET rev=rev+1");
+          if (
+            op.action === "claim" ||
+            op.action === "leave" ||
+            op.action === "remove" ||
+            op.action === "join"
+          )
+            sql.exec(
+              "INSERT INTO ledger_dirty(kind,rev) SELECT 'expense:' || ledger_expenses.id,ledger_meta.rev FROM ledger_expenses,ledger_meta WHERE ledger_expenses.deleted=0 ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+            );
           sql.exec(
             "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
           );
