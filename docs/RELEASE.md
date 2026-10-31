@@ -37,6 +37,10 @@ Create or select a Messaging API channel for the bot. Set the webhook URL to `ht
 
 Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, actionlint, and secret scanning. Confirm `TEST_SIGN_IN` is absent from deployed Worker vars and secrets; the production-config E2E test requires the route to answer 404. Apply migrations before deploying the Worker. The pull request's CI runs the full gate, including E2E, actionlint and secret scanning; merging to `main` then runs the production workflow, which repeats typecheck, lint and tests, applies D1 migrations and deploys. Check risky changes on staging before merging; the production workflow can still be run by hand.
 
+### Group ledger live connection: real-device check
+
+- On iOS and Android inside LIFF, verify a live connection using the access token in WebSocket subprotocols. If LIFF rejects it, use the short-lived single-use ticket fallback described in the Group ledger spec.
+- Send the literal `ping` frame and confirm the runtime answers `pong`.
 ## Maintenance gate
 
 After the gate is deployed, set `MAINTENANCE` with `pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env staging` (or `--env production`). Enter the secret interactively. API writes return 503 while the secret is set; reads and health remain available. For verification, send the secret in the `X-Maintenance-Bypass` header over HTTPS, keeping it out of logs and shell history. Remove the gate after verification with `pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env staging` (or `--env production`). Do not set or remove the production secret until the owner decides.

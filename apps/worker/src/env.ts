@@ -2,6 +2,7 @@
 export interface Bindings {
   MAINTENANCE?: string;
   DB: D1Database;
+  GROUP_LEDGER: DurableObjectNamespace;
   JWKS_CACHE: KVNamespace;
   ASSETS: Fetcher;
   /** Secret that signs access tokens (`wrangler secret put`; locally `.dev.vars`). */
