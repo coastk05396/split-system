@@ -193,11 +193,8 @@ it("backfills claimed Placeholder spending across multiple drain batches", async
   });
   expect(placeholderResponse.status).toBe(201);
   const placeholder = await placeholderResponse.json<{ id: string }>();
-  const expenses = [];
   for (let i = 0; i < 26; i++)
-    expenses.push(
-      await createExpense(admin, group.id, twdExpense(group.me.memberId, [placeholder.id], 100)),
-    );
+    await createExpense(admin, group.id, twdExpense(group.me.memberId, [placeholder.id], 100));
   const { failDirectoryWrites } = await import("./d1-faults.js");
   const restore = await failDirectoryWrites();
   const claimant = await person("Batch claimant");
@@ -206,26 +203,24 @@ it("backfills claimed Placeholder spending across multiple drain batches", async
       (await send(claimant, "POST", `/invites/${token}/claim`, { memberId: placeholder.id }))
         .status,
     ).toBe(200);
+    expect(
+      (
+        await send(
+          admin,
+          "PATCH",
+          `/groups/${group.id}`,
+          { name: "New directory revision" },
+          { "If-Match": String(group.updatedAt) },
+        )
+      ).status,
+    ).toBe(200);
   } finally {
     await restore();
   }
-  const first = expenses[0];
-  if (!first) throw new Error("missing expense");
-  expect(
-    (
-      await send(
-        admin,
-        "PATCH",
-        `/groups/${group.id}/expenses/${first.id}`,
-        twdExpense(group.me.memberId, [placeholder.id], 200),
-        { "If-Match": String(first.updatedAt) },
-      )
-    ).status,
-  ).toBe(200);
   await vi.waitFor(
     async () => {
       expect(await (await send(claimant, "GET", "/stats/spending")).json()).toEqual([
-        { month: "2026-06", category: "food", currency: "TWD", amount: 2700 },
+        { month: "2026-06", category: "food", currency: "TWD", amount: 2600 },
       ]);
     },
     { timeout: 8000, interval: 200 },
