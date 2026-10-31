@@ -3,12 +3,16 @@ import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { FakeGroups, SeedGroup } from "../../test/fake-groups.js";
-import { renderApp } from "../../test/render-app.js";
+import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
 
 const me = makeUser("小宇");
 
 /** Opens the 結算 tab of a seeded Group; `after` seeds Settlements once the Group exists. */
-async function openSettle(seed: SeedGroup, after?: (groups: FakeGroups, id: string) => void) {
+async function openSettle(
+  seed: SeedGroup,
+  after?: (groups: FakeGroups, id: string) => void,
+  options: RenderAppOptions = {},
+) {
   let id = "";
   const app = renderApp({
     cookieUser: me,
@@ -17,6 +21,7 @@ async function openSettle(seed: SeedGroup, after?: (groups: FakeGroups, id: stri
       after?.(groups, id);
     },
     pathFor: () => `/groups/${id}`,
+    ...options,
   });
   const user = userEvent.setup();
   await user.click(await screen.findByRole("tab", { name: "結算" }));
@@ -332,6 +337,51 @@ describe("Recording and confirming Settlements", () => {
     await user.click(submitBtn);
     await waitFor(() => {
       expect(screen.queryByRole("heading", { name: "這筆款項已付清嗎？" })).toBeNull();
+    });
+  });
+});
+
+describe("Notifying the Group of the Payment plan", () => {
+  it("hides the notify buttons when everyone is settled", async () => {
+    await openSettle({ name: "室友", others: [{ name: "宜庭" }] });
+
+    expect(await screen.findByText("大家都結清了！")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "通知款項" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "傳到對話框" })).toBeNull();
+  });
+
+  it("shares the Payment plan Flex card with real Member Nicknames through the LINE picker", async () => {
+    const { user, lineShareMessages } = await openSettle(owedToMe, undefined, {
+      insideLine: { idToken: null },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "通知款項" }));
+
+    expect(await screen.findByText("已分享到 LINE ✓")).toBeVisible();
+    expect(lineShareMessages).toHaveLength(1);
+    expect(lineShareMessages[0]).toMatchObject({
+      type: "flex",
+      altText: "「台南小旅行」的結算通知",
+    });
+    const json = JSON.stringify(lineShareMessages[0]);
+    expect(json).toContain("阿哲 欠了 小宇");
+    expect(json).toContain("宜庭 欠了 小宇");
+    expect(json).not.toContain("欠了 你");
+  });
+
+  it("posts the Payment plan Flex card into the current LINE chat when opened from a chat", async () => {
+    const { user, lineChatMessages } = await openSettle(owedToMe, undefined, {
+      insideLine: { idToken: null },
+      lineChat: true,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "傳到對話框" }));
+
+    expect(await screen.findByText("已發送到對話框 ✓")).toBeVisible();
+    expect(lineChatMessages).toHaveLength(1);
+    expect(lineChatMessages[0]).toMatchObject({
+      type: "flex",
+      altText: "「台南小旅行」的結算通知",
     });
   });
 });

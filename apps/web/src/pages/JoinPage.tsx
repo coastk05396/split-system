@@ -44,8 +44,12 @@ export function JoinPage() {
     return <InviteProblem message={t(known)} />;
   }
   // Only a page of this very Group: a link must not send anyone anywhere else.
+  const groupPrefix = `/groups/${preview.data.groupId}`;
   const next =
-    requested !== null && requested.startsWith(`/groups/${preview.data.groupId}/`)
+    requested !== null &&
+    (requested === groupPrefix ||
+      requested.startsWith(`${groupPrefix}/`) ||
+      requested.startsWith(`${groupPrefix}?`))
       ? requested
       : null;
   if (preview.data.isMember) {
