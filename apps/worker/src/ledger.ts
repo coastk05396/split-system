@@ -8,6 +8,8 @@ import {
 } from "@split/shared";
 import { z } from "zod";
 import type { Bindings } from "./env.js";
+import { expenseOperation, type ExpenseOperation } from "./ledger-expenses.js";
+import { ApiError } from "./errors.js";
 
 const initialiseGroupSchema = z.object({
   id: z.uuid(),
@@ -120,11 +122,17 @@ export class GroupLedger extends DurableObject<Bindings> {
       sql.exec("ALTER TABLE ledger_meta ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0");
       sql.exec("UPDATE ledger_meta SET schema_version = 3");
     }
+    if (meta.schema_version < 6) {
+      sql.exec(
+        "CREATE TABLE IF NOT EXISTS ledger_expenses (id TEXT PRIMARY KEY, creator_member_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, data TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, UNIQUE(creator_member_id,idempotency_key))",
+      );
+      sql.exec("UPDATE ledger_meta SET schema_version = 6");
+    }
     if (meta.schema_version < 4) {
       sql.exec("ALTER TABLE ledger_members ADD COLUMN placeholder_name TEXT");
       sql.exec("ALTER TABLE ledger_members ADD COLUMN nickname TEXT");
       sql.exec("ALTER TABLE ledger_members ADD COLUMN created_by_member_id TEXT");
-      sql.exec("UPDATE ledger_meta SET schema_version = 4");
+      sql.exec("UPDATE ledger_meta SET schema_version = 6");
     }
   }
 
@@ -152,13 +160,16 @@ export class GroupLedger extends DurableObject<Bindings> {
       return {
         rev: dirty.rev,
         group: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one(),
+        locked:
+          sql.exec<{ n: number }>("SELECT count(*) n FROM ledger_expenses WHERE deleted=0").one()
+            .n > 0,
         members: sql
           .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at, rowid")
           .toArray(),
       };
     });
     if (snapshot === null) return;
-    const { group: g, members, rev } = snapshot;
+    const { group: g, members, rev, locked } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -205,7 +216,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             db
               .prepare(
                 `INSERT INTO members (id,group_id,user_id,role,status,net_balance,created_at,placeholder_name,nickname,created_by_member_id)
-                 SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,role=excluded.role,status=excluded.status,placeholder_name=excluded.placeholder_name,nickname=excluded.nickname,created_by_member_id=excluded.created_by_member_id`,
+                 SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,role=excluded.role,status=excluded.status,net_balance=excluded.net_balance,placeholder_name=excluded.placeholder_name,nickname=excluded.nickname,created_by_member_id=excluded.created_by_member_id`,
               )
               .bind(
                 member.id,
@@ -283,7 +294,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             g.deleted ? null : g.trip_start_date,
             g.deleted ? null : g.trip_end_date,
             g.deleted ? null : g.trip_notes,
-            g.deleted ? null : 0,
+            g.deleted ? null : Number(locked),
             g.deleted ? null : active.length,
             g.deleted
               ? null
@@ -322,6 +333,44 @@ export class GroupLedger extends DurableObject<Bindings> {
   }
 
   override async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === "/expense-op" && request.method === "POST") {
+      const op = (await request.json()) as ExpenseOperation;
+      try {
+        const result = this.ctx.storage.transactionSync(() => {
+          const result = expenseOperation(this.ctx.storage.sql, op);
+          if (result.changed) {
+            this.ctx.storage.sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            this.ctx.storage.sql.exec(
+              "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+            );
+          }
+          return result;
+        });
+        if (result.changed) {
+          const rev = this.ctx.storage.sql
+            .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+            .one().rev;
+          const signal: SyncNeeded = {
+            version: 1,
+            type: "sync needed",
+            rev,
+            timestamp: Date.now(),
+          };
+          for (const socket of this.ctx.getWebSockets()) socket.send(JSON.stringify(signal));
+          if ((await this.ctx.storage.getAlarm()) === null)
+            await this.ctx.storage.setAlarm(Date.now() + 2000);
+          await this.drain();
+        }
+        return Response.json({ value: result.value });
+      } catch (error) {
+        if (error instanceof ApiError)
+          return Response.json(
+            { error: error.code, details: error.details },
+            { status: error.status },
+          );
+        throw error;
+      }
+    }
     if (new URL(request.url).pathname === "/member-op" && request.method === "POST") {
       const parsed = memberOpSchema.safeParse(await request.json());
       if (!parsed.success) return Response.json({ error: "VALIDATION_FAILED" }, { status: 400 });

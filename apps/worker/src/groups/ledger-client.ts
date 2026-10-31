@@ -52,3 +52,33 @@ export async function memberOperation(
     throw new ApiError("INTERNAL");
   return { memberId: result.memberId, rev: result.rev };
 }
+
+export async function expenseLedgerOperation(
+  env: Bindings,
+  groupId: string,
+  operation: object,
+): Promise<unknown> {
+  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
+    "https://ledger.internal/expense-op",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(operation),
+    },
+  );
+  const result: unknown = await response.json();
+  if (typeof result !== "object" || result === null) throw new ApiError("INTERNAL");
+  if (!response.ok) {
+    if (
+      "error" in result &&
+      typeof result.error === "string" &&
+      Object.hasOwn(ERROR_STATUS, result.error)
+    )
+      throw new ApiError(
+        result.error as ErrorCode,
+        "details" in result ? result.details : undefined,
+      );
+    throw new ApiError("INTERNAL");
+  }
+  return "value" in result ? result.value : undefined;
+}
