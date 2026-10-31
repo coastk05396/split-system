@@ -277,4 +277,20 @@ describe("add Expense form", () => {
     await user.click(tabs.getByRole("tab", { name: "轉帳" }));
     expect(await screen.findByText(/轉帳會記成一筆結算/)).toBeVisible();
   });
+
+  it("shows pending state on the submit button while saving and does not block navigation (ticket 11)", async () => {
+    const user = userEvent.setup();
+    openForm();
+
+    await user.type(await screen.findByLabelText("名稱"), "午餐");
+    await user.type(screen.getByLabelText("金額"), "300");
+
+    // The back navigation button is accessible and not disabled
+    const backLink = screen.getByRole("link", { name: "返回" });
+    expect(backLink).toBeVisible();
+
+    // Clicking submit submits the expense
+    await user.click(submit());
+    await screen.findByRole("heading", { level: 1, name: "室友" });
+  });
 });

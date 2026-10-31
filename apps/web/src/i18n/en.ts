@@ -405,6 +405,7 @@ export const en: Record<MessageId, string> = {
   "settle.confirm.amount": "Settlement amount ({currency})",
   "settle.confirm.max": "Up to {amount}; what is not paid yet stays owed",
   "settle.confirm.submit": "Confirm settled",
+  "settle.confirm.submitting": "Confirming…",
   "settle.confirm.wait": "Wait a bit",
 
   "new.title": "Add",

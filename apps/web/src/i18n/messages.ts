@@ -398,6 +398,7 @@ const zhTW = {
   "settle.confirm.amount": "結算金額（{currency}）",
   "settle.confirm.max": "最多 {amount}，未付清的部分會繼續欠著",
   "settle.confirm.submit": "確認已結清",
+  "settle.confirm.submitting": "確認中…",
   "settle.confirm.wait": "再等等",
 
   "new.title": "新增一筆",
