@@ -302,11 +302,11 @@ export const en: Record<MessageId, string> = {
   "expense.tab.settlement": "Transfer",
   "expense.tab.transfer": "Transfer",
   "expense.settlementHint":
-    "A transfer is recorded as a settlement: what you pay someone waits for them to confirm, and what someone pays you is confirmed right away.",
+    "A transfer is recorded as a settlement: once the payer or receiver confirms it, everyone's balance updates right away.",
   "expense.goToSettlement": "Go to settle",
   "expense.hasSettlementsWarning": "This group has settlements; editing changes what is owed",
   "expense.transferStub":
-    "A transfer is recorded as a settlement: what you pay someone waits for them to confirm, and what someone pays you is confirmed right away. This is coming soon.",
+    "A transfer is recorded as a settlement: once the payer or receiver confirms it, everyone's balance updates right away. This is coming soon.",
   "expense.currency": "Currency",
   "expense.amount": "Amount",
   "expense.amountPlaceholder": "0",
@@ -384,6 +384,7 @@ export const en: Record<MessageId, string> = {
   "settle.payer": "Payer",
   "settle.receiver": "Receiver",
   "settle.iPaid": "I paid",
+  "settle.markPaid": "Confirm payment",
   "settle.markReceived": "Confirm received",
   "settle.confirmAction": "Confirm",
   "settle.cancel": "Cancel",
@@ -399,9 +400,9 @@ export const en: Record<MessageId, string> = {
   "settle.status.cancelled": "Cancelled",
   "settle.confirm.title": "Has this been paid?",
   "settle.confirm.body":
-    "Once you confirm you received it, everyone's balance updates and a settlement record is kept.",
-  "settle.confirm.amount": "Amount received ({currency})",
-  "settle.confirm.max": "Up to {amount}; what you did not receive stays owed",
+    "Once you confirm this payment, everyone's balance updates and a settlement record is kept.",
+  "settle.confirm.amount": "Settlement amount ({currency})",
+  "settle.confirm.max": "Up to {amount}; what is not paid yet stays owed",
   "settle.confirm.submit": "Confirm settled",
   "settle.confirm.wait": "Wait a bit",
 

@@ -21,11 +21,13 @@ export interface ConfirmTarget {
  */
 export function ConfirmSettlementDialog({
   trigger,
+  tone = "receive",
   target,
   currency,
   submit,
 }: {
   trigger: string;
+  tone?: "pay" | "receive";
   target: ConfirmTarget;
   currency: CurrencyCode;
   /** Sends the confirmed amount; resolves once saved, rejects with the API failure. */
@@ -33,6 +35,10 @@ export function ConfirmSettlementDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
+  const triggerTone =
+    tone === "pay"
+      ? "bg-red-700 hover:bg-red-800 focus-visible:outline-red-700"
+      : "bg-sprout-500 hover:bg-sprout-600 focus-visible:outline-sprout-600";
   return (
     <Dialog.Root
       open={open}
@@ -41,7 +47,9 @@ export function ConfirmSettlementDialog({
         setOpen(next);
       }}
     >
-      <Dialog.Trigger className="press-pill rounded-full bg-sprout-500 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600">
+      <Dialog.Trigger
+        className={`press-pill rounded-full px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 ${triggerTone}`}
+      >
         {trigger}
       </Dialog.Trigger>
       <Dialog.Portal>

@@ -124,7 +124,7 @@ const row = async (list: string, text: string) => {
 };
 
 describe("Recording and confirming Settlements", () => {
-  it("records 我已付款 as pending: no Balance moves, the row waits, and I can cancel it", async () => {
+  it("lets the payer confirm payment with a red button: Balances move at once and the record can be undone", async () => {
     const { user, api, id } = await openSettle({
       name: "室友",
       role: "member",
@@ -132,22 +132,25 @@ describe("Recording and confirming Settlements", () => {
       others: [{ name: "宜庭", balance: 200 }],
     });
 
-    await user.click(
-      (await row("要付給誰", "你付給宜庭")).getByRole("button", { name: "我已付款" }),
-    );
+    const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
+      name: "確認付款",
+    });
+    expect(payButton).toHaveClass("bg-red-700");
+    await user.click(payButton);
 
-    const pending = await row("待確認", "你付給宜庭");
-    expect(pending.getByText("NT$ 200")).toBeVisible();
-    // The sent payment shows once, under 待確認; 要付給誰 no longer lists it.
+    const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+    await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+
+    expect(await (await row("結算紀錄", "你付給宜庭")).findByText("NT$ 200")).toBeVisible();
     expect(screen.queryByRole("list", { name: "要付給誰" })).toBeNull();
-    expect(api.groups.members(id())[0]?.balance).toBe(-200);
+    expect(api.groups.members(id())[0]?.balance).toBe(0);
     const post = api.requests.find((r) => r.route === `POST /api/v1/groups/${id()}/settlements`);
     expect(post?.headers.get("Idempotency-Key")).toBeTruthy();
 
-    await user.click(pending.getByRole("button", { name: "取消" }));
+    await user.click((await row("結算紀錄", "你付給宜庭")).getByRole("button", { name: "撤銷" }));
     await user.click(await screen.findByRole("button", { name: "已取消／已撤銷 1 筆" }));
-    expect(await (await row("已取消與已撤銷", "你付給宜庭")).findByText("已取消")).toBeVisible();
-    expect(screen.queryByRole("list", { name: "待確認" })).toBeNull();
+    expect(await (await row("已取消與已撤銷", "你付給宜庭")).findByText("已撤銷")).toBeVisible();
+    expect(api.groups.members(id())[0]?.balance).toBe(-200);
   });
 
   it("lets the receiver confirm a partial payment; the rest stays a debt", async () => {
@@ -157,7 +160,7 @@ describe("Recording and confirming Settlements", () => {
       (await row("要付給誰", "阿哲付給你")).getByRole("button", { name: "確認收款" }),
     );
     const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
-    const amount = dialog.getByLabelText("實收金額（TWD）");
+    const amount = dialog.getByLabelText("結算金額（TWD）");
     expect(amount).toHaveValue("200");
     await user.clear(amount);
     await user.type(amount, "250");
@@ -168,40 +171,18 @@ describe("Recording and confirming Settlements", () => {
 
     expect(await (await row("結算紀錄", "阿哲付給你")).findByText("NT$ 150")).toBeVisible();
     expect(await (await row("要付給誰", "阿哲付給你")).findByText("NT$ 50")).toBeVisible();
-    expect(await (await row("結算紀錄", "阿哲付給你")).findByText("NT$ 150")).toBeVisible();
     expect(api.groups.settlements.list(id())[0]).toMatchObject({
       amount: 150,
       status: "confirmed",
     });
   });
 
-  it("confirms a payer's pending Settlement for the receiver", async () => {
-    const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
-      groups.addSettlement(gid, { payer: 1, receiver: 0, amount: 100 }, 1);
-    });
-
-    const waitingList = within(await screen.findByRole("list", { name: "要付給誰" }));
-    expect(waitingList.queryByText("宜庭付給你")).toBeNull();
-    await user.click((await row("待確認", "宜庭付給你")).getByRole("button", { name: "確認" }));
-    const dialog = within(await screen.findByRole("dialog"));
-    await user.click(dialog.getByRole("button", { name: "確認已結清" }));
-
-    expect(await (await row("結算紀錄", "宜庭付給你")).findByText("NT$ 100")).toBeVisible();
-    const sid = api.groups.settlements.list(id())[0]?.id ?? "";
-    expect(api.calls).toContain(`POST /api/v1/settlements/${sid}/confirm`);
-  });
-
   it("tags the cards that are mine with 你要付 or 你可收 and says 你 in every list", async () => {
-    await openSettle(owedToMe, (groups, gid) => {
-      groups.addSettlement(gid, { payer: 1, receiver: 0, amount: 50 }, 1);
-    });
+    await openSettle(owedToMe);
 
     const planned = within(await screen.findByRole("list", { name: "要付給誰" }));
     expect(planned.getAllByText("你可收").length).toBeGreaterThan(0);
     expect(planned.queryByText("你要付")).toBeNull();
-    const pending = within(await screen.findByRole("list", { name: "待確認" }));
-    expect(pending.getByText("宜庭付給你", { selector: ".sr-only" })).toBeInTheDocument();
-    expect(pending.getByText("你可收")).toBeVisible();
   });
 
   it("opens a ring around the tick when the last payment settles", async () => {
@@ -280,103 +261,31 @@ describe("Recording and confirming Settlements", () => {
     const plannedRow = await row("要付給誰", "你付給宜庭");
     expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-red-700");
     expect(plannedRow.getByText("你要付")).toHaveClass("bg-red-700");
+    expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass("bg-red-700");
   });
 
-  it("plans what is still owed after a pending payment, not the whole pair hidden", async () => {
-    // I owe 100: 60 to 宜庭 and 40 to 阿哲. A pending 50 to 宜庭 is not yet in anyone's Balance.
-    await openSettle(
-      {
-        name: "室友",
-        myBalance: -100,
-        others: [
-          { name: "宜庭", balance: 60 },
-          { name: "阿哲", balance: 40 },
-        ],
-      },
-      (groups, gid) => {
-        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 50 }, 0);
-      },
-    );
+  it("draws the full Group Payment plan matching Everyone's balance, sorting my rows first", async () => {
+    await openSettle({
+      name: "明天去哪玩",
+      role: "member",
+      myBalance: 2947,
+      others: [
+        { name: "成員A", balance: 2996 },
+        { name: "成員B", balance: -1127 },
+        { name: "成員C", balance: -2250 },
+        { name: "成員D", balance: -2566 },
+      ],
+    });
 
-    // 50 waits for confirmation, so the plan shows the other 50: 40 to 阿哲 and 10 to 宜庭.
-    const waiting = await row("待確認", "你付給宜庭");
-    expect(waiting.getByText("NT$ 50")).toBeVisible();
     expect(await rows()).toEqual([
-      expect.stringContaining("你付給阿哲NT$ 40"),
-      expect.stringContaining("你付給宜庭NT$ 10"),
+      expect.stringContaining("成員C付給你NT$ 2,250"),
+      expect.stringContaining("成員B付給你NT$ 697"),
+      expect.stringContaining("成員D付給成員ANT$ 2,566"),
+      expect.stringContaining("成員B付給成員ANT$ 430"),
     ]);
-  });
-
-  it("keeps the top at the confirmed Balance and splits it into paid-waiting plus still to pay", async () => {
-    await openSettle(
-      {
-        name: "室友",
-        myBalance: -100,
-        others: [
-          { name: "宜庭", balance: 60 },
-          { name: "阿哲", balance: 40 },
-        ],
-      },
-      (groups, gid) => {
-        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 50 }, 0);
-      },
-    );
-
-    // I owe 100 whether or not a payment waits: the top says 100 and the bars are the confirmed
-    // Balances. Below, the 50 already paid (waiting for confirmation) plus the 50 still to pay
-    // (40 + 10) make the same 100.
-    expect(await screen.findByRole("heading", { name: "你要付" })).toBeVisible();
-    expect(screen.getByText("NT$ 100")).toBeVisible();
-    expect(screen.getByText("其中 NT$ 50 已付、等對方確認，還要付 NT$ 50")).toBeVisible();
-    const chart = within(await screen.findByRole("list", { name: "大家的結餘" }));
-    expect(
-      chart
-        .getAllByRole("listitem")
-        .map((li) => [
-          within(li).getByRole("button").getAttribute("aria-label"),
-          li.textContent.match(/[+-]NT\$ \d+/)?.[0],
-        ]),
-    ).toEqual([
-      ["宜庭", "+NT$ 60"],
-      ["阿哲", "+NT$ 40"],
-      ["小宇（你）", "-NT$ 100"],
-    ]);
-    expect(await rows()).toEqual([
-      expect.stringContaining("你付給阿哲NT$ 40"),
-      expect.stringContaining("你付給宜庭NT$ 10"),
-    ]);
-  });
-
-  it("does not call the Group settled while a payment waits for confirmation", async () => {
-    await openSettle(
-      { name: "室友", myBalance: -200, others: [{ name: "宜庭", balance: 200 }] },
-      (groups, gid) => {
-        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 200 }, 0);
-      },
-    );
-
-    expect(await row("待確認", "你付給宜庭")).toBeTruthy();
-    expect(screen.queryByRole("list", { name: "要付給誰" })).toBeNull();
-    expect(screen.queryByText("大家都結清了！")).toBeNull();
-  });
-
-  it("hides payments and pending settlements between other Members that do not involve me", async () => {
-    await openSettle(
-      {
-        name: "室友",
-        myBalance: -100,
-        others: [
-          { name: "宜庭", balance: 180 },
-          { name: "阿哲", balance: -80 },
-        ],
-      },
-      (groups, gid) => {
-        groups.addSettlement(gid, { payer: 2, receiver: 1, amount: 40 }, 2);
-      },
-    );
-
-    const planned = await rows();
-    expect(planned).toEqual([expect.stringContaining("你付給宜庭NT$ 100")]);
     expect(screen.queryByRole("list", { name: "待確認" })).toBeNull();
+    // As a non-admin Member, I can confirm my own rows, while rows between others have no button.
+    const otherRow = await row("要付給誰", "成員D付給成員A");
+    expect(otherRow.queryByRole("button", { name: /確認/ })).toBeNull();
   });
 });
