@@ -1,3 +1,9 @@
+import {
+  ensureFreezeTable,
+  finalizeAccount,
+  freezeAccount,
+  isFrozen,
+} from "./ledger-account-deletion.js";
 import { DurableObject } from "cloudflare:workers";
 import {
   groupInputSchema,
@@ -606,6 +612,48 @@ export class GroupLedger extends DurableObject<Bindings> {
         throw error;
       }
     }
+    if (new URL(request.url).pathname === "/account-deletion" && request.method === "POST") {
+      const op = await request.json<{
+        action: "freeze" | "unfreeze" | "finalize";
+        userId: string;
+        now: number;
+      }>();
+      if (op.action === "freeze") {
+        const result = this.ctx.storage.transactionSync(() =>
+          freezeAccount(this.ctx.storage.sql, op.userId, op.now),
+        );
+        return Response.json(result);
+      }
+      if (op.action === "unfreeze") {
+        this.ctx.storage.transactionSync(() => {
+          ensureFreezeTable(this.ctx.storage.sql);
+          this.ctx.storage.sql.exec("DELETE FROM account_freezes WHERE user_id=?", op.userId);
+        });
+        return Response.json({ ok: true });
+      }
+      if ((await this.ctx.storage.getAlarm()) === null)
+        await this.ctx.storage.setAlarm(Date.now() + 2000);
+      const changed = this.ctx.storage.transactionSync(() =>
+        finalizeAccount(this.ctx.storage.sql, op.userId),
+      );
+      if (changed) {
+        for (const socket of this.ctx.getWebSockets(op.userId))
+          socket.close(4003, "Membership ended");
+        const rev = this.ctx.storage.sql
+          .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+          .one().rev;
+        const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
+        for (const socket of this.ctx.getWebSockets()) {
+          try {
+            socket.send(JSON.stringify(signal));
+          } catch {
+            /* socket has closed */
+          }
+        }
+        await this.drain();
+      }
+      return Response.json({ ok: true });
+    }
     if (new URL(request.url).pathname === "/member-op" && request.method === "POST") {
       const parsed = memberOpSchema.safeParse(await request.json());
       if (!parsed.success) return Response.json({ error: "VALIDATION_FAILED" }, { status: 400 });
@@ -622,6 +670,12 @@ export class GroupLedger extends DurableObject<Bindings> {
           changed?: boolean;
         } => {
           const sql = this.ctx.storage.sql;
+          if (
+            (op.action === "join" || op.action === "claim") &&
+            op.userId !== undefined &&
+            isFrozen(sql, op.userId, op.now)
+          )
+            return { error: "FORBIDDEN" };
           const all = sql
             .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
             .toArray();
@@ -897,6 +951,7 @@ export class GroupLedger extends DurableObject<Bindings> {
         await this.ctx.storage.setAlarm(Date.now() + 2000);
       const inserted = this.ctx.storage.transactionSync(() => {
         const sql = this.ctx.storage.sql;
+        if (isFrozen(sql, userId, now)) return false;
         sql.exec(
           "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
         );
