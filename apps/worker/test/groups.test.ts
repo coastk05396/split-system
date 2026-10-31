@@ -13,7 +13,6 @@ import {
   type GroupBody,
   groupWith,
   person,
-  seedExpense,
   send,
 } from "./groups-harness.js";
 
@@ -290,7 +289,11 @@ describe("PATCH /groups/:id", () => {
     expect(changed.status).toBe(200);
     const usd = await changed.json<GroupBody>();
 
-    await seedExpense(group.id, usd.me.memberId);
+    await createExpense(
+      yu,
+      group.id,
+      twdExpense(usd.me.memberId, [usd.me.memberId], 600, { originalCurrency: "USD" }),
+    );
     const locked = await send(yu, "GET", `/groups/${group.id}`);
     expect((await locked.json<GroupBody>()).settlementCurrencyLocked).toBe(true);
 
@@ -305,7 +308,7 @@ describe("DELETE /groups/:id", () => {
   it("lets an Admin hard-delete the Group with its Expenses", async () => {
     const yu = await person("小宇");
     const group = await createGroup(yu);
-    await seedExpense(group.id, group.me.memberId);
+    await createExpense(yu, group.id, twdExpense(group.me.memberId, [group.me.memberId], 600));
     const res = await send(yu, "DELETE", `/groups/${group.id}`);
     expect(res.status).toBe(204);
     expect(await db.select().from(groups).where(eq(groups.id, group.id))).toEqual([]);

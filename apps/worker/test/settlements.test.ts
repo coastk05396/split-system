@@ -34,6 +34,23 @@ async function owingGroup() {
 }
 
 describe("Settlements", () => {
+  it("updates each Member's Group list Balance after confirmation", async () => {
+    const { group, admin, ming, ids } = await owingGroup();
+    const pending = await record(ming, group.id, {
+      payerMemberId: ids.ming,
+      receiverMemberId: ids.admin,
+      amount: 100,
+    });
+    expect((await send(admin, "POST", `/settlements/${pending.id}/confirm`)).status).toBe(200);
+    const adminGroups = await (
+      await send(admin, "GET", "/groups")
+    ).json<{ id: string; me: { balance: number } }[]>();
+    const mingGroups = await (
+      await send(ming, "GET", "/groups")
+    ).json<{ id: string; me: { balance: number } }[]>();
+    expect(adminGroups.find((item) => item.id === group.id)?.me.balance).toBe(500);
+    expect(mingGroups.find((item) => item.id === group.id)?.me.balance).toBe(-200);
+  });
   it("signals connected Members after a Settlement commits", async () => {
     const { group, admin, ming, ids } = await owingGroup();
     const live = await call(`/groups/${group.id}/live`, {

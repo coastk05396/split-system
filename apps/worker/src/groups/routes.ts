@@ -240,7 +240,10 @@ export function groupRoutes(deps: AppDeps) {
     })
     .get("/invites/:token", signedIn, async (c) => {
       const db = createDb(c.env.DB);
-      return c.json(await previewInvite(db, c.req.param("token"), c.var.userId, deps.now()), 200);
+      return c.json(
+        await previewInvite(db, c.req.param("token"), c.var.userId, deps.now(), c.env),
+        200,
+      );
     })
     .post("/invites/:token/join", signedIn, rateLimit("invite_join", deps.now), async (c) => {
       const db = createDb(c.env.DB);

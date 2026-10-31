@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   groupInputSchema,
+  expenseSchema,
   groupPatchSchema,
   memberPatchSchema,
   placeholderInputSchema,
@@ -180,10 +181,16 @@ export class GroupLedger extends DurableObject<Bindings> {
             dirty.rev,
           )
           .toArray(),
+        deletedStops: sql
+          .exec<{ id: string }>(
+            "SELECT substr(kind,6) AS id FROM ledger_dirty WHERE kind LIKE 'stop:%' AND rev <= ?",
+            dirty.rev,
+          )
+          .toArray(),
       };
     });
     if (snapshot === null) return;
-    const { group: g, members, settlements, rev, locked } = snapshot;
+    const { group: g, members, settlements, deletedStops, rev, locked } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -193,6 +200,12 @@ export class GroupLedger extends DurableObject<Bindings> {
           .bind(g.id, g.id, rev),
       ];
       if (!g.deleted) {
+        for (const stop of deletedStops)
+          statements.push(
+            db
+              .prepare(`DELETE FROM stops WHERE id=? AND group_id=? AND ${fence}`)
+              .bind(stop.id, g.id, g.id, rev),
+          );
         statements.push(
           db
             .prepare(
@@ -376,6 +389,53 @@ export class GroupLedger extends DurableObject<Bindings> {
   }
 
   override async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === "/delete-stop" && request.method === "POST") {
+      const input = z.object({ stopId: z.string() }).safeParse(await request.json());
+      if (!input.success) return new Response(null, { status: 400 });
+      if ((await this.ctx.storage.getAlarm()) === null)
+        await this.ctx.storage.setAlarm(Date.now() + 2000);
+      const rev = this.ctx.storage.transactionSync(() => {
+        const sql = this.ctx.storage.sql;
+        for (const row of sql
+          .exec<{ id: string; data: string }>("SELECT id,data FROM ledger_expenses WHERE deleted=0")
+          .toArray()) {
+          const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+          if (expense.stopId !== input.data.stopId) continue;
+          expense.stopId = null;
+          sql.exec("UPDATE ledger_expenses SET data=? WHERE id=?", JSON.stringify(expense), row.id);
+        }
+        sql.exec("UPDATE ledger_meta SET rev=rev+1");
+        sql.exec(
+          "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+          `stop:${input.data.stopId}`,
+        );
+        return sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev;
+      });
+      const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
+      for (const socket of this.ctx.getWebSockets()) {
+        try {
+          socket.send(JSON.stringify(signal));
+        } catch {
+          /* socket closed */
+        }
+      }
+      await this.drain();
+      return new Response(null, { status: 204, headers: { "X-Group-Rev": String(rev) } });
+    }
+    if (new URL(request.url).pathname === "/placeholder-counts" && request.method === "GET") {
+      const counts: Record<string, number> = {};
+      for (const row of this.ctx.storage.sql
+        .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
+        .toArray()) {
+        const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+        const ids = new Set([
+          ...expense.payers.map((payer) => payer.memberId),
+          ...expense.splits.map((split) => split.memberId),
+        ]);
+        for (const id of ids) counts[id] = (counts[id] ?? 0) + 1;
+      }
+      return Response.json(counts);
+    }
     if (new URL(request.url).pathname === "/settlement-op" && request.method === "POST") {
       const payload: unknown = await request.json();
       try {
@@ -563,7 +623,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             if (leaving === undefined) return { error: "NOT_FOUND" };
             if (leaving.id !== actor?.id && actor?.role !== "admin") return { error: "FORBIDDEN" };
             if (leaving.status === "former") return { error: "MEMBER_NOT_ACTIVE" };
-            const balance = op.targetBalance ?? leaving.net_balance;
+            const balance = leaving.net_balance;
             if (balance !== 0)
               return {
                 error: "BALANCE_NOT_ZERO",
@@ -579,7 +639,19 @@ export class GroupLedger extends DurableObject<Bindings> {
               !all.some((m) => m.id !== leaving.id && m.status === "active" && m.role === "admin")
             )
               return { error: "LAST_ADMIN" };
-            if (leaving.status === "placeholder" && !op.hasHistory)
+            const hasHistory =
+              leaving.status === "placeholder" &&
+              sql
+                .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
+                .toArray()
+                .some((row) => {
+                  const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+                  return (
+                    expense.payers.some((payer) => payer.memberId === leaving.id) ||
+                    expense.splits.some((split) => split.memberId === leaving.id)
+                  );
+                });
+            if (leaving.status === "placeholder" && !hasHistory)
               sql.exec("DELETE FROM ledger_members WHERE id=?", leaving.id);
             else if (leaving.status === "placeholder")
               sql.exec(

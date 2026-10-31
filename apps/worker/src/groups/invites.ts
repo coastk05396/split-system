@@ -78,20 +78,6 @@ async function ownRow(db: Db, groupId: string, userId: string): Promise<MemberRo
   return row;
 }
 
-/** Distinct Expenses each Member pays or shares in, for the claim confirmation. */
-async function expenseCounts(db: Db, groupId: string): Promise<Map<string, number>> {
-  const rows = await db.all<{ memberId: string; n: number }>(sql`
-    SELECT x.member_id AS memberId, count(DISTINCT x.expense_id) AS n
-    FROM (
-      SELECT p.member_id, p.expense_id FROM expense_payers p
-      UNION SELECT s.member_id, s.expense_id FROM expense_splits s
-    ) x
-    JOIN members m ON m.id = x.member_id
-    WHERE m.group_id = ${groupId} AND m.status = 'placeholder'
-    GROUP BY x.member_id`);
-  return new Map(rows.map((r) => [r.memberId, r.n]));
-}
-
 /**
  * What the join screen shows: the Group, its seat count and its unclaimed Placeholder
  * Members by name, with who typed each name and what claiming it takes on.
@@ -101,6 +87,7 @@ export async function previewInvite(
   token: string,
   userId: string,
   now: number,
+  env: Bindings,
 ): Promise<InvitePreview> {
   const { group, expiresAt } = await openInvite(db, token, now);
   const mine = await ownRow(db, group.id, userId);
@@ -115,7 +102,11 @@ export async function previewInvite(
     .where(and(eq(members.groupId, group.id), eq(members.status, "placeholder")));
   const creatorOf = new Map(rows.map((r) => [r.id, r.createdBy]));
   const nameOf = new Map(everyone.map((m) => [m.id, m.displayName]));
-  const counts = await expenseCounts(db, group.id);
+  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id)).fetch(
+    "https://ledger.internal/placeholder-counts",
+  );
+  if (!response.ok) throw new ApiError("INTERNAL");
+  const counts = new Map(Object.entries(await response.json<Record<string, number>>()));
 
   return {
     groupId: group.id,

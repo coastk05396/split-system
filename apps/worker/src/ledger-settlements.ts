@@ -19,7 +19,7 @@ const commandSchema = z.object({
   amount: z.number().int().optional(),
 });
 type Party = { id: string; role: string; status: string; net_balance: number };
-interface Row {
+interface Row extends Record<string, SqlStorageValue> {
   data: string;
 }
 

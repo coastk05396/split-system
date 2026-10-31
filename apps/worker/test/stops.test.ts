@@ -1,20 +1,7 @@
-import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createDb } from "../src/db/client.js";
-import { expenses } from "../src/db/schema.js";
+import { createExpense, twdExpense } from "./expenses-harness.js";
 import { clock, type Session } from "./auth-harness.js";
-import {
-  at,
-  createGroup,
-  errorCode,
-  groupWith,
-  person,
-  seedExpense,
-  send,
-} from "./groups-harness.js";
-
-const db = createDb(env.DB);
+import { at, createGroup, errorCode, groupWith, person, send } from "./groups-harness.js";
 
 interface StopBody {
   id: string;
@@ -233,14 +220,19 @@ describe("DELETE /groups/:id/stops/:sid", () => {
   it("deletes a Stop and keeps its Expenses, only unlinking them", async () => {
     const { admin, group } = await tripFor("小宇");
     const stop = await addStop(admin, group.id, { title: "夜市" });
-    const expenseId = await seedExpense(group.id, group.me.memberId);
-    await db.update(expenses).set({ stopId: stop.id }).where(eq(expenses.id, expenseId));
+    const expense = await createExpense(
+      admin,
+      group.id,
+      twdExpense(group.me.memberId, [group.me.memberId], 600, { stopId: stop.id }),
+    );
 
     const res = await send(admin, "DELETE", `/groups/${group.id}/stops/${stop.id}`);
     expect(res.status).toBe(204);
     expect(await stopTitles(admin, group.id)).toEqual([]);
-    const [expense] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
-    expect(expense?.stopId).toBeNull();
+    const saved = await (
+      await send(admin, "GET", `/groups/${group.id}/expenses/${expense.id}`)
+    ).json<{ stopId: string | null }>();
+    expect(saved.stopId).toBeNull();
 
     const again = await send(admin, "DELETE", `/groups/${group.id}/stops/${stop.id}`);
     expect(again.status).toBe(404);
