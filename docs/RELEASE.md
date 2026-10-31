@@ -44,3 +44,15 @@ Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, ac
 ## Maintenance gate
 
 After the gate is deployed, set `MAINTENANCE` with `pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env staging` (or `--env production`). Enter the secret interactively. API writes return 503 while the secret is set; reads and health remain available. For verification, send the secret in the `X-Maintenance-Bypass` header over HTTPS, keeping it out of logs and shell history. Remove the gate after verification with `pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env staging` (or `--env production`). Do not set or remove the production secret until the owner decides.
+
+## Release 1: Group ledger cutover checklist
+
+For the detailed step-by-step procedure and disaster recovery steps, see `docs/operations/group-ledger-migration.md`. Summary checklist:
+1. **Pre-cutover backup**: Export and verify full D1 backup outside the repository.
+2. **Maintenance gate**: Activate gate via `MAINTENANCE` secret. Validate 503 on writes, 200 on reads.
+3. **Identity verification**: Query candidate ID for 「明天去哪玩」, verify fingerprint via `GET /api/v1/maintenance/migration/snapshot/:id` with bypass.
+4. **Deploy**: Apply additive D1 migrations, deploy new Worker with `GROUP_LEDGER` DO binding and SQLite migration `tag: v1`.
+5. **Import & verify**: Run `POST /api/v1/maintenance/migration/import/:id` with bypass. Verify all members, zero-sum balances, expenses, settlements, stops, sessions, and auth.
+6. **Controlled wipe**: Run `POST /api/v1/maintenance/migration/wipe-excluded/:id` with bypass to remove non-retained groups while preserving all users, identities, and sessions. Re-verify retained group and auth.
+7. **Production sign-off & gate removal**: Verify health, live WebSocket, 404 on test sign-in, remove maintenance gate, monitor observability.
+

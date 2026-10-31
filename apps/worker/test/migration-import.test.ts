@@ -160,5 +160,62 @@ describe("retained Group migration import", () => {
     expect(listGroups.status).toBe(200);
     const groupsList = await listGroups.json<Array<{ id: string; name: string }>>();
     expect(groupsList.some((g) => g.id === group.id)).toBe(true);
+
+    // Create an excluded group to verify controlled wipe
+    const otherPerson = await person("mig-other");
+    const otherGroup = await createGroup(otherPerson, { name: "週末聚餐" });
+    expect((await send(otherPerson, "GET", `/groups/${otherGroup.id}`)).status).toBe(200);
+
+    // Wipe excluded groups without bypass header is blocked
+    expect(
+      (await call(`/maintenance/migration/wipe-excluded/${group.id}`, { method: "POST" })).status,
+    ).toBe(404);
+
+    // Wipe excluded groups with wrong retained id is rejected (409 EDIT_CONFLICT)
+    expect(
+      (
+        await call(
+          `/maintenance/migration/wipe-excluded/${otherGroup.id}`,
+          { method: "POST", headers },
+          bindings,
+        )
+      ).status,
+    ).toBe(409);
+
+    // Execute wipe-excluded with verified retained group id
+    const wipeRes = await call(
+      `/maintenance/migration/wipe-excluded/${group.id}`,
+      { method: "POST", headers },
+      bindings,
+    );
+    expect(wipeRes.status).toBe(200);
+    const wipeResult = await wipeRes.json<{
+      ok: boolean;
+      retainedGroupId: string;
+      wiped: boolean;
+    }>();
+    expect(wipeResult.ok).toBe(true);
+    expect(wipeResult.retainedGroupId).toBe(group.id);
+
+    // Idempotent re-run succeeds
+    expect(
+      (
+        await call(
+          `/maintenance/migration/wipe-excluded/${group.id}`,
+          { method: "POST", headers },
+          bindings,
+        )
+      ).status,
+    ).toBe(200);
+
+    // Excluded group is gone (404)
+    expect((await send(otherPerson, "GET", `/groups/${otherGroup.id}`)).status).toBe(404);
+
+    // Retained group is still intact and accessible
+    expect((await send(admin, "GET", `/groups/${group.id}`)).status).toBe(200);
+
+    // User accounts, identities, and sessions are preserved
+    expect((await send(admin, "GET", "/me")).status).toBe(200);
+    expect((await send(otherPerson, "GET", "/me")).status).toBe(200);
   });
 });

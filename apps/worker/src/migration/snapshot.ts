@@ -147,5 +147,88 @@ export function migrationSnapshotRoutes() {
       stopsCount: snapshot.stops.length,
       fingerprint,
     });
+  })
+  .post("/maintenance/migration/wipe-excluded/:id", async (c) => {
+    const secret = c.env.MAINTENANCE;
+    if (!secret || c.req.header("X-Maintenance-Bypass") !== secret) throw new ApiError("NOT_FOUND");
+
+    const id = c.req.param("id");
+    const db = c.env.DB;
+
+    // 1. Uniquely verify the retained group "明天去哪玩"
+    const groups = await db
+      .prepare("SELECT * FROM groups WHERE name = ? ORDER BY id")
+      .bind("明天去哪玩")
+      .all();
+    if (groups.results.length !== 1 || groups.results[0]?.id !== id) {
+      throw new ApiError("EDIT_CONFLICT");
+    }
+
+    // 2. Verify that the retained group was already imported into its ledger DO
+    const ledgerCheck = await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(id)).fetch(
+      "https://ledger.internal/expense-op",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "balances" }),
+      },
+    );
+    if (!ledgerCheck.ok) {
+      throw new ApiError("EDIT_CONFLICT");
+    }
+
+    // 3. Atomically wipe all excluded groups in D1 and any ledger DOs, preserving users, identities, sessions, and the retained group
+    const excluded = await db
+      .prepare("SELECT id FROM groups WHERE id != ?")
+      .bind(id)
+      .all<{ id: string }>();
+
+    for (const row of excluded.results) {
+      try {
+        await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(row.id)).fetch(
+          "https://ledger.internal/delete",
+          { method: "POST" },
+        );
+      } catch {
+        // ledger DO may not have been created for legacy-only groups
+      }
+    }
+
+    const queries = [
+      db
+        .prepare(
+          "DELETE FROM expense_splits WHERE expense_id IN (SELECT id FROM expenses WHERE group_id != ?)",
+        )
+        .bind(id),
+      db
+        .prepare(
+          "DELETE FROM expense_payers WHERE expense_id IN (SELECT id FROM expenses WHERE group_id != ?)",
+        )
+        .bind(id),
+      db.prepare("DELETE FROM expenses WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM settlements WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM stops WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM invites WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM members WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM groups WHERE id != ?").bind(id),
+      db.prepare("DELETE FROM group_directory WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM group_member_summary WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM group_reservations WHERE group_id != ?").bind(id),
+      db.prepare("DELETE FROM personal_spending WHERE group_id != ?").bind(id),
+    ];
+    await db.batch(queries);
+
+    // 4. Verify retained group is still present
+    const remaining = await db.prepare("SELECT id FROM groups").all();
+    if (remaining.results.length !== 1 || remaining.results[0]?.id !== id) {
+      throw new ApiError("INTERNAL");
+    }
+
+    c.header("Cache-Control", "no-store");
+    return c.json({
+      ok: true,
+      retainedGroupId: id,
+      wiped: true,
+    });
   });
 }

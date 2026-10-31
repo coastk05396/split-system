@@ -44,6 +44,7 @@
       "name": "split-staging",
       "workers_dev": true,
       "durable_objects": { "bindings": [{ "name": "GROUP_LEDGER", "class_name": "GroupLedger" }] },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GroupLedger"] }],
       "d1_databases": [
         {
           "binding": "DB",
@@ -67,6 +68,7 @@
       "name": "split-prod",
       "routes": [{ "pattern": "split.rickchen.si", "custom_domain": true }],
       "durable_objects": { "bindings": [{ "name": "GROUP_LEDGER", "class_name": "GroupLedger" }] },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GroupLedger"] }],
       "d1_databases": [
         {
           "binding": "DB",
