@@ -13,6 +13,7 @@ import { createApiClient } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
+import { readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Expense, Rate and Stop routes (SPEC §5.1). */
 
@@ -29,10 +30,8 @@ function useSession() {
   return useMemo(() => ({ api: createApiClient(session.fetch), fetch: session.fetch }), [session]);
 }
 
-async function read<T>(call: Promise<Response>): Promise<T> {
-  const res: Response = await call;
-  if (!res.ok) throw await toApiFailure(res);
-  return (await res.json()) as T;
+async function read<T>(call: Promise<Response>, context?: { client: unknown; queryKey: unknown }): Promise<T> {
+  return readWithRev<T>(call, context as never);
 }
 
 /** A JSON body plus headers; the Worker reads bodies itself, so the typed client has no input. */
@@ -60,11 +59,12 @@ export function useExpenses(groupId: string) {
   return useInfiniteQuery({
     queryKey: expenseKeys.list(groupId),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
+    queryFn: (ctx) =>
       read<ExpensePage>(
         fetch(
-          path(`/api/v1/groups/${encodeURIComponent(groupId)}/expenses`, { cursor: pageParam }),
+          path(`/api/v1/groups/${encodeURIComponent(groupId)}/expenses`, { cursor: ctx.pageParam }),
         ),
+        ctx,
       ),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
@@ -74,9 +74,10 @@ export function useExpense(groupId: string, expenseId: string) {
   const { api } = useSession();
   return useQuery({
     queryKey: expenseKeys.one(groupId, expenseId),
-    queryFn: () =>
+    queryFn: (ctx) =>
       read<Expense>(
         api.groups[":id"].expenses[":eid"].$get({ param: { id: groupId, eid: expenseId } }),
+        ctx,
       ),
   });
 }

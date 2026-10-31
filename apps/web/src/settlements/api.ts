@@ -3,9 +3,9 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useMemo } from "react";
 import type { ClientRequestOptions } from "hono/client";
 import { createApiClient } from "../api/client.js";
-import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
+import { readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Balance and Settlement routes (SPEC §5.1). */
 
@@ -19,10 +19,8 @@ function useSession() {
   return useMemo(() => ({ api: createApiClient(session.fetch), fetch: session.fetch }), [session]);
 }
 
-async function read<T>(call: Promise<Response>): Promise<T> {
-  const res: Response = await call;
-  if (!res.ok) throw await toApiFailure(res);
-  return (await res.json()) as T;
+async function read<T>(call: Promise<Response>, context?: { client: unknown; queryKey: unknown }): Promise<T> {
+  return readWithRev<T>(call, context as never);
 }
 
 function jsonWith(body: unknown, headers: Record<string, string> = {}): ClientRequestOptions {
@@ -38,7 +36,7 @@ export function useBalances(groupId: string) {
   const { api } = useSession();
   return useQuery({
     queryKey: settlementKeys.balances(groupId),
-    queryFn: () => read<Balances>(api.groups[":id"].balances.$get({ param: { id: groupId } })),
+    queryFn: (ctx) => read<Balances>(api.groups[":id"].balances.$get({ param: { id: groupId } }), ctx),
   });
 }
 
@@ -48,11 +46,11 @@ export function useSettlements(groupId: string) {
   return useInfiniteQuery({
     queryKey: settlementKeys.list(groupId),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => {
+    queryFn: (ctx) => {
       const base = `/api/v1/groups/${encodeURIComponent(groupId)}/settlements`;
       const url =
-        pageParam === undefined ? base : `${base}?cursor=${encodeURIComponent(pageParam)}`;
-      return read<SettlementPage>(fetch(url));
+        ctx.pageParam === undefined ? base : `${base}?cursor=${encodeURIComponent(ctx.pageParam)}`;
+      return read<SettlementPage>(fetch(url), ctx);
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });

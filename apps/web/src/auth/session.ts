@@ -17,6 +17,8 @@ export interface Session {
   signOut(): Promise<void>;
   /** `fetch` with the access token attached; refreshes once on a 401 and retries. */
   fetch: typeof fetch;
+  /** Returns the current access token, or null if signed out. */
+  getAccessToken(): string | null;
 }
 
 export interface SessionOptions {
@@ -59,6 +61,10 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
   }
 
   return {
+    getAccessToken() {
+      return accessToken;
+    },
+
     restore: refresh,
 
     async signIn(provider, idToken) {
