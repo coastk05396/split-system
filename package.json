@@ -11,7 +11,7 @@
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "e2e": "VITE_TEST_SIGN_IN=1 pnpm build && (cd apps/worker && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8787 && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8788) && node ./node_modules/@playwright/test/cli.js test",
+    "e2e": "rm -rf /tmp/wrangler-e2e-8787 /tmp/wrangler-e2e-8788 && VITE_TEST_SIGN_IN=1 pnpm build && (cd apps/worker && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8787 && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8788) && node ./node_modules/@playwright/test/cli.js test",
     "build": "pnpm --filter @split/web build",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

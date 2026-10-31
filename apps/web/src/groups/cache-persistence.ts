@@ -97,7 +97,23 @@ export function saveCache(
   const queries = client
     .getQueryCache()
     .getAll()
-    .filter((q) => q.state.data !== undefined)
+    .filter((q) => {
+      if (q.state.data === undefined) return false;
+      if (Array.isArray(q.state.data)) {
+        if (
+          q.state.data.some(
+            (item) =>
+              typeof item === "object" &&
+              item !== null &&
+              typeof (item as { id?: unknown }).id === "string" &&
+              (item as { id: string }).id.startsWith("tmp-"),
+          )
+        ) {
+          return false;
+        }
+      }
+      return true;
+    })
     .map((q) => ({
       queryKey: q.queryKey,
       data: q.state.data,
@@ -132,7 +148,7 @@ export function restoreCache(
       return false;
     }
     for (const item of payload.queries) {
-      client.setQueryData(item.queryKey, item.data);
+      client.setQueryData(item.queryKey, item.data, { updatedAt: 0 });
       if (typeof item.rev === "number") {
         setQueryRev(client, item.queryKey, item.rev);
       }

@@ -18,7 +18,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: "**/golden-paths.spec.ts",
+      testMatch: ["**/golden-paths.spec.ts", "**/live-sync.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         launchOptions: {
