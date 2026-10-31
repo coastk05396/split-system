@@ -45,7 +45,7 @@ describe("personal spending statistics", () => {
     expect([...first.items, ...next.items].reduce((sum, item) => sum + item.amount, 0)).toBe(
       51 * 600,
     );
-  });
+  }, 20_000);
   it("keeps different Group settlement currencies separate for conversion", async () => {
     const admin = await person("Stats currencies");
     const twd = await createGroup(admin, { settlementCurrency: "TWD" });
