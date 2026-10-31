@@ -12,6 +12,8 @@ export interface AppDeps {
   google: GoogleSignIn;
   /** Shows the dev test sign-in form (local and browser tests only). */
   testSignIn: boolean;
+  /** Injectable WebSocket constructor for live sync (decision 15). */
+  webSocket?: typeof WebSocket;
 }
 
 const DepsContext = createContext<AppDeps | null>(null);
