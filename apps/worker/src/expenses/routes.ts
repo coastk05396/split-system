@@ -174,7 +174,11 @@ export function expenseRoutes(deps: AppDeps) {
     .delete("/groups/:id/expenses/:eid", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      await expenseLedgerOperation(c.env, me.groupId, { action: "delete", id: c.req.param("eid") });
+      await expenseLedgerOperation(c.env, me.groupId, {
+        action: "delete",
+        id: c.req.param("eid"),
+        now: deps.now(),
+      });
       return c.body(null, 204);
     })
     .get("/groups/:id/balances", signedIn, async (c) => {

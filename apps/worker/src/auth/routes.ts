@@ -142,7 +142,7 @@ export function authRoutes(deps: AppDeps) {
       return c.json(await requireMe(db, c.var.userId), 200);
     })
     .delete("/me", signedIn, async (c) => {
-      await deleteAccount(c.env, c.var.userId, deps.now());
+      await deleteAccount(c.env, c.var.userId, deps.now);
       clearRefreshCookie(c);
       return c.body(null, 204);
     });

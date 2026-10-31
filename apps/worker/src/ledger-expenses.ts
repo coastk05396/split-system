@@ -16,7 +16,7 @@ export type ExpenseOperation =
   | { action: "balances" }
   | { action: "list"; cursor?: string }
   | { action: "get"; id: string }
-  | { action: "delete"; id: string }
+  | { action: "delete"; id: string; now: number }
   | {
       action: "create";
       memberId: string;

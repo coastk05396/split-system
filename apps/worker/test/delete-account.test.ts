@@ -1,5 +1,6 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { bearer, call, json, signIn, uniqueSub, withCookie } from "./auth-harness.js";
+import { bearer, call, clock, json, signIn, uniqueSub, withCookie } from "./auth-harness.js";
 import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 
@@ -138,4 +139,221 @@ it("never leaves an active Member when a join races account deletion", async () 
       (member) => member.userId === joining.userId && member.status === "active",
     ),
   ).toBe(false);
+});
+
+it("unfreezes a Group after account deletion fails", async () => {
+  const { admin, group, token, others } = await groupWith("failure admin", "failure member");
+  const user = others[0];
+  if (user === undefined) throw new Error("missing member");
+  await env.DB.exec(
+    "CREATE TRIGGER fail_user_delete BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, 'injected failure'); END",
+  );
+  try {
+    expect((await deleteMe(user.accessToken)).status).toBe(500);
+  } finally {
+    await env.DB.exec("DROP TRIGGER IF EXISTS fail_user_delete");
+  }
+  expect((await call("/me", { headers: bearer(user.accessToken) })).status).toBe(200);
+  expect((await send(user, "POST", `/invites/${token}/join`)).status).toBe(200);
+  expect(
+    (await listMembers(admin, group.id)).some(
+      (member) => member.userId === user.userId && member.status === "active",
+    ),
+  ).toBe(true);
+});
+
+it("refuses a concurrent Expense that would change a frozen Member's Balance", async () => {
+  const { admin, group, others } = await groupWith("concurrent payer", "deleting member");
+  const user = others[0];
+  if (user === undefined) throw new Error("missing user");
+  const people = await listMembers(admin, group.id);
+  const payer = people.find((member) => member.userId === admin.userId);
+  const target = people.find((member) => member.userId === user.userId);
+  if (payer === undefined || target === undefined) throw new Error("missing member");
+  let release: () => void = () => {};
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed: () => void = () => {};
+  const frozen = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const namespace = new Proxy(env.GROUP_LEDGER, {
+    get(targetNamespace, key) {
+      if (key !== "get") {
+        const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+        return typeof value === "function"
+          ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+          : value;
+      }
+      return (id: DurableObjectId) => {
+        const stub = targetNamespace.get(id);
+        return new Proxy(stub, {
+          get(targetStub, prop) {
+            if (prop !== "fetch") {
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            }
+            return async (url: string, init: RequestInit) => {
+              const result = await targetStub.fetch(url, init);
+              if (
+                url.endsWith("/account-deletion") &&
+                typeof init.body === "string" &&
+                (JSON.parse(init.body) as { action: string }).action === "freeze"
+              ) {
+                observed();
+                await hold;
+              }
+              return result;
+            };
+          },
+        });
+      };
+    },
+  });
+  const deletion = call(
+    "/me",
+    { method: "DELETE", headers: bearer(user.accessToken) },
+    { GROUP_LEDGER: namespace },
+  );
+  try {
+    await frozen;
+    const { postExpense } = await import("./expenses-harness.js");
+    expect(
+      (await postExpense(admin, group.id, twdExpense(payer.id, [payer.id, target.id]))).status,
+    ).toBe(403);
+  } finally {
+    release();
+  }
+  expect((await deletion).status).toBe(204);
+});
+
+it("does not create a Group after deletion froze its pending reservation", async () => {
+  const user = await person("pending creator");
+  let release: () => void = () => {};
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed: () => void = () => {};
+  const pending = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const namespace = new Proxy(env.GROUP_LEDGER, {
+    get(targetNamespace, key) {
+      if (key !== "get") {
+        const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+        return typeof value === "function"
+          ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+          : value;
+      }
+      return (id: DurableObjectId) => {
+        const stub = targetNamespace.get(id);
+        return new Proxy(stub, {
+          get(targetStub, prop) {
+            if (prop !== "fetch") {
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            }
+            return async (url: string, init: RequestInit) => {
+              if (url.endsWith("/create")) {
+                observed();
+                await hold;
+              }
+              return targetStub.fetch(url, init);
+            };
+          },
+        });
+      };
+    },
+  });
+  const creation = call("/groups", json({ name: "pending group" }, bearer(user.accessToken)), {
+    GROUP_LEDGER: namespace,
+  });
+  try {
+    await pending;
+    expect((await deleteMe(user.accessToken)).status).toBe(204);
+  } finally {
+    release();
+  }
+  expect((await creation).status).not.toBe(201);
+  expect((await call("/me", { headers: bearer(user.accessToken) })).status).toBe(401);
+});
+
+it("allows money changes after an abandoned freeze expires without deleting the indebted User", async () => {
+  const { admin, group, others } = await groupWith("concurrent payer", "deleting member");
+  const user = others[0];
+  if (user === undefined) throw new Error("missing user");
+  const people = await listMembers(admin, group.id);
+  const payer = people.find((member) => member.userId === admin.userId);
+  const target = people.find((member) => member.userId === user.userId);
+  if (payer === undefined || target === undefined) throw new Error("missing member");
+  let release: () => void = () => {};
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed: () => void = () => {};
+  const frozen = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const namespace = new Proxy(env.GROUP_LEDGER, {
+    get(targetNamespace, key) {
+      if (key !== "get") {
+        const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+        return typeof value === "function"
+          ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+          : value;
+      }
+      return (id: DurableObjectId) => {
+        const stub = targetNamespace.get(id);
+        return new Proxy(stub, {
+          get(targetStub, prop) {
+            if (prop !== "fetch") {
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            }
+            return async (url: string, init: RequestInit) => {
+              const result = await targetStub.fetch(url, init);
+              if (
+                url.endsWith("/account-deletion") &&
+                typeof init.body === "string" &&
+                (JSON.parse(init.body) as { action: string }).action === "freeze"
+              ) {
+                observed();
+                await hold;
+              }
+              return result;
+            };
+          },
+        });
+      };
+    },
+  });
+  const deletion = call(
+    "/me",
+    { method: "DELETE", headers: bearer(user.accessToken) },
+    { GROUP_LEDGER: namespace },
+  );
+  try {
+    await frozen;
+    const { postExpense } = await import("./expenses-harness.js");
+    clock.now += 10 * 60 * 1000 + 1;
+    expect(
+      (await postExpense(admin, group.id, twdExpense(payer.id, [payer.id, target.id]))).status,
+    ).toBe(201);
+  } finally {
+    release();
+  }
+  expect((await deletion).status).toBe(500);
+  expect(
+    (await listMembers(admin, group.id)).some(
+      (member) => member.userId === user.userId && member.status === "active",
+    ),
+  ).toBe(true);
+  clock.now -= 10 * 60 * 1000 + 1;
 });

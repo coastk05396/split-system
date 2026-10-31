@@ -1,5 +1,6 @@
 import {
-  ensureFreezeTable,
+  assertFrozenBalancesUnchanged,
+  frozenBalances,
   finalizeAccount,
   freezeAccount,
   isFrozen,
@@ -525,7 +526,16 @@ export class GroupLedger extends DurableObject<Bindings> {
           await this.ctx.storage.setAlarm(Date.now() + 2000);
         }
         const result = this.ctx.storage.transactionSync(() => {
+          const now =
+            typeof payload === "object" &&
+            payload !== null &&
+            "now" in payload &&
+            typeof payload.now === "number"
+              ? payload.now
+              : Date.now();
+          const frozen = frozenBalances(this.ctx.storage.sql, now);
           const outcome = settlementOperation(this.ctx.storage.sql, payload);
+          assertFrozenBalancesUnchanged(this.ctx.storage.sql, frozen);
           if (outcome.changed) {
             this.ctx.storage.sql.exec("UPDATE ledger_meta SET rev=rev+1");
             this.ctx.storage.sql.exec(
@@ -566,7 +576,12 @@ export class GroupLedger extends DurableObject<Bindings> {
       const op = await request.json<ExpenseOperation>();
       try {
         const result = this.ctx.storage.transactionSync(() => {
+          const frozen =
+            op.action === "create" || op.action === "update" || op.action === "delete"
+              ? frozenBalances(this.ctx.storage.sql, op.now)
+              : new Map<string, number>();
           const result = expenseOperation(this.ctx.storage.sql, op);
+          assertFrozenBalancesUnchanged(this.ctx.storage.sql, frozen);
           if (result.changed) {
             this.ctx.storage.sql.exec("UPDATE ledger_meta SET rev=rev+1");
             if (op.action === "create" || op.action === "update" || op.action === "delete") {
@@ -619,25 +634,46 @@ export class GroupLedger extends DurableObject<Bindings> {
         action: "freeze" | "unfreeze" | "finalize";
         userId: string;
         now: number;
+        expires: number;
       }>();
       if (op.action === "freeze") {
         const result = this.ctx.storage.transactionSync(() =>
-          freezeAccount(this.ctx.storage.sql, op.userId, op.now),
+          freezeAccount(this.ctx.storage.sql, op.userId, op.expires),
         );
         return Response.json(result);
       }
       if (op.action === "unfreeze") {
         this.ctx.storage.transactionSync(() => {
-          ensureFreezeTable(this.ctx.storage.sql);
-          this.ctx.storage.sql.exec("DELETE FROM account_freezes WHERE user_id=?", op.userId);
+          const exists =
+            this.ctx.storage.sql
+              .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='account_freezes'")
+              .toArray().length > 0;
+          if (exists)
+            this.ctx.storage.sql.exec(
+              "DELETE FROM account_freezes WHERE user_id=? AND expires_at=?",
+              op.userId,
+              op.expires,
+            );
         });
         return Response.json({ ok: true });
       }
+      const initialized =
+        this.ctx.storage.sql
+          .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_members'")
+          .toArray().length > 0;
+      if (!initialized) return Response.json({ ok: true });
       if ((await this.ctx.storage.getAlarm()) === null)
         await this.ctx.storage.setAlarm(Date.now() + 2000);
-      const changed = this.ctx.storage.transactionSync(() =>
-        finalizeAccount(this.ctx.storage.sql, op.userId),
-      );
+      let changed: boolean;
+      try {
+        changed = this.ctx.storage.transactionSync(() =>
+          finalizeAccount(this.ctx.storage.sql, op.userId, op.now, op.expires),
+        );
+      } catch (error) {
+        if (error instanceof ApiError)
+          return Response.json(error.toBody(), { status: error.status });
+        throw error;
+      }
       if (changed) {
         for (const socket of this.ctx.getWebSockets(op.userId))
           socket.close(4003, "Membership ended");
@@ -966,43 +1002,52 @@ export class GroupLedger extends DurableObject<Bindings> {
       const parsed = initialiseGroupSchema.safeParse(await request.json());
       if (!parsed.success) return new Response(null, { status: 400 });
       const { id, memberId, userId, now, input } = parsed.data;
-      if ((await this.ctx.storage.getAlarm()) === null)
-        await this.ctx.storage.setAlarm(Date.now() + 2000);
-      const inserted = this.ctx.storage.transactionSync(() => {
-        const sql = this.ctx.storage.sql;
-        if (isFrozen(sql, userId, now)) return false;
-        sql.exec(
-          "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
-        );
-        sql.exec(
-          "INSERT INTO ledger_meta SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
-        );
-        this.upgradeSchema();
-        if (sql.exec("SELECT id FROM ledger_group LIMIT 1").toArray().length > 0) return false;
-        sql.exec(
-          `INSERT INTO ledger_group (id, name, settlement_currency, default_expense_currency, is_trip,
+      const inserted = await this.ctx.blockConcurrencyWhile(async () => {
+        const eligible = await this.env.DB.prepare(
+          `SELECT r.user_id FROM group_reservations r JOIN users u ON u.id=r.user_id
+          WHERE r.user_id=? AND r.group_id=? AND NOT EXISTS
+          (SELECT 1 FROM account_deletions d WHERE d.user_id=r.user_id AND d.expires_at>?)`,
+        )
+          .bind(userId, id, now)
+          .first();
+        if (eligible === null) return false;
+        if ((await this.ctx.storage.getAlarm()) === null)
+          await this.ctx.storage.setAlarm(Date.now() + 2000);
+        return this.ctx.storage.transactionSync(() => {
+          const sql = this.ctx.storage.sql;
+          sql.exec(
+            "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
+          );
+          sql.exec(
+            "INSERT INTO ledger_meta SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
+          );
+          this.upgradeSchema();
+          if (sql.exec("SELECT id FROM ledger_group LIMIT 1").toArray().length > 0) return false;
+          sql.exec(
+            `INSERT INTO ledger_group (id, name, settlement_currency, default_expense_currency, is_trip,
           trip_destination, trip_start_date, trip_end_date, trip_notes, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          id,
-          input.name,
-          input.settlementCurrency,
-          input.settlementCurrency,
-          input.isTrip ? 1 : 0,
-          input.tripDestination ?? null,
-          input.tripStartDate ?? null,
-          input.tripEndDate ?? null,
-          input.tripNotes ?? null,
-          now,
-          now,
-        );
-        sql.exec(
-          "INSERT INTO ledger_members (id, user_id, role, status, net_balance, created_at) VALUES (?, ?, 'admin', 'active', 0, ?)",
-          memberId,
-          userId,
-          now,
-        );
-        sql.exec("INSERT INTO ledger_dirty (kind, rev) VALUES ('group', 0)");
-        return true;
+            id,
+            input.name,
+            input.settlementCurrency,
+            input.settlementCurrency,
+            input.isTrip ? 1 : 0,
+            input.tripDestination ?? null,
+            input.tripStartDate ?? null,
+            input.tripEndDate ?? null,
+            input.tripNotes ?? null,
+            now,
+            now,
+          );
+          sql.exec(
+            "INSERT INTO ledger_members (id, user_id, role, status, net_balance, created_at) VALUES (?, ?, 'admin', 'active', 0, ?)",
+            memberId,
+            userId,
+            now,
+          );
+          sql.exec("INSERT INTO ledger_dirty (kind, rev) VALUES ('group', 0)");
+          return true;
+        });
       });
       if (inserted) await this.drain();
       return new Response(null, { status: inserted ? 201 : 409 });
