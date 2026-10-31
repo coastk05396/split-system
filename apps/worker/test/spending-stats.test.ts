@@ -184,3 +184,27 @@ it("retries spending projection after D1 fails without reviving a deleted Expens
     { timeout: 8000, interval: 200 },
   );
 }, 12000);
+
+it("backfills claimed Placeholder spending across multiple drain batches", async () => {
+  const { vi } = await import("vitest");
+  const { admin, group, token } = await groupWith("Batch owner");
+  const placeholderResponse = await send(admin, "POST", `/groups/${group.id}/members`, {
+    name: "Future member",
+  });
+  expect(placeholderResponse.status).toBe(201);
+  const placeholder = await placeholderResponse.json<{ id: string }>();
+  for (let i = 0; i < 26; i++)
+    await createExpense(admin, group.id, twdExpense(group.me.memberId, [placeholder.id], 100));
+  const claimant = await person("Batch claimant");
+  expect(
+    (await send(claimant, "POST", `/invites/${token}/claim`, { memberId: placeholder.id })).status,
+  ).toBe(200);
+  await vi.waitFor(
+    async () => {
+      expect(await (await send(claimant, "GET", "/stats/spending")).json()).toEqual([
+        { month: "2026-06", category: "food", currency: "TWD", amount: 2600 },
+      ]);
+    },
+    { timeout: 8000, interval: 200 },
+  );
+}, 20000);
