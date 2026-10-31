@@ -30,7 +30,7 @@ export function ScreenHeader({
 }) {
   if (centered) {
     return (
-      <header className={`${compact ? "mb-2" : "mb-6"} flex flex-col items-center gap-1`}>
+      <header className={`${compact ? "mb-0" : "mb-6"} flex flex-col items-center gap-1`}>
         <div className="grid w-full grid-cols-[6rem_1fr_6rem] items-center">
           <div className="flex justify-start">
             {back !== undefined && (
