@@ -57,12 +57,13 @@ describe("Balances and the Payment plan", () => {
         .getAllByRole("listitem")
         .map((li) => [
           within(li).getByRole("button").getAttribute("aria-label"),
+          within(li).getByText(/^(小宇|宜庭|阿哲)$/).textContent,
           li.textContent.match(/[+-]NT\$ \d+/)?.[0],
         ]),
     ).toEqual([
-      ["小宇（你）", "+NT$ 300"],
-      ["宜庭", "-NT$ 100"],
-      ["阿哲", "-NT$ 200"],
+      ["小宇（你）", "小宇", "+NT$ 300"],
+      ["宜庭", "宜庭", "-NT$ 100"],
+      ["阿哲", "阿哲", "-NT$ 200"],
     ]);
     expect(screen.getByText("其他 1 人已結清")).toBeVisible();
     expect(screen.getByText("紅色是要付，綠色是可收")).toBeVisible();
@@ -287,5 +288,28 @@ describe("Recording and confirming Settlements", () => {
     // As a non-admin Member, I can confirm my own rows, while rows between others have no button.
     const otherRow = await row("要付給誰", "成員D付給成員A");
     expect(otherRow.queryByRole("button", { name: /確認/ })).toBeNull();
+  });
+
+  it("renders a compact dashed 代為確認 button for an Admin on payments between other Members", async () => {
+    await openSettle({
+      name: "明天去哪玩",
+      role: "admin",
+      myBalance: 2947,
+      others: [
+        { name: "成員A", balance: 2996 },
+        { name: "成員B", balance: -1127 },
+        { name: "成員C", balance: -2250 },
+        { name: "成員D", balance: -2566 },
+      ],
+    });
+
+    const myRow = await row("要付給誰", "成員C付給你");
+    const myBtn = myRow.getByRole("button", { name: "確認收款" });
+    expect(myBtn).toHaveClass("bg-sprout-500", "w-full");
+
+    const otherRow = await row("要付給誰", "成員D付給成員A");
+    expect(otherRow.queryByRole("button", { name: "確認收款" })).toBeNull();
+    const behalfBtn = otherRow.getByRole("button", { name: "代為確認" });
+    expect(behalfBtn).toHaveClass("border-dashed", "self-end");
   });
 });

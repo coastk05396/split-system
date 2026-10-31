@@ -381,6 +381,7 @@ const zhTW = {
   "settle.iPaid": "我已付款",
   "settle.markPaid": "確認付款",
   "settle.markReceived": "確認收款",
+  "settle.markBehalf": "代為確認",
   "settle.confirmAction": "確認",
   "settle.cancel": "取消",
   "settle.undo": "撤銷",
