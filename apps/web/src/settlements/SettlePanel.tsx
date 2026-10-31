@@ -5,8 +5,9 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
-import { createContext, type ReactNode, useContext, useRef, useState } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { ArrowRight, ChevronDown, MessageCircle, Send } from "lucide-react";
+import { useDeps } from "../app/AppProviders.js";
 import {
   AvatarTip,
   card,
@@ -18,14 +19,16 @@ import {
 import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
-import { useMembers } from "../groups/api.js";
+import { useEnsureInvite, useMembers } from "../groups/api.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
+import { LineShareUnavailableError } from "../platform/line.js";
 import { CountUp } from "../shell/CountUp.js";
 import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
 import { type BalanceRow, canConfirm, canUndo, maxPayable } from "./model.js";
+import { buildSettleCard, settleFlexMessage, settleText } from "./settle-card.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
 /** Each Member's picture by id, for the avatars deep inside the payment cards. */
@@ -54,6 +57,7 @@ export function SettlePanel({ group }: { group: Group }) {
   // news worth a ring, rather than the calm state of a group that never owed anything.
   const sawWork = useRef(false);
   const members = useMembers(group.id);
+  const [shareNotice, setShareNotice] = useState<{ text: string; isError: boolean } | null>(null);
 
   if (balances.isError) {
     return <LoadError error={balances.error} onRetry={() => void balances.refetch()} />;
@@ -81,9 +85,9 @@ export function SettlePanel({ group }: { group: Group }) {
 
   return (
     <PictureContext value={memberPictures(members.data)}>
-      <div className="flex flex-col gap-6 text-ink">
+      <div className="flex flex-col gap-4 text-ink">
         <section
-          className={`flex flex-col gap-1 rounded-3xl p-6 transition-colors ${
+          className={`flex flex-col gap-0.5 rounded-2xl px-5 py-3.5 transition-colors ${
             mine > 0 ? "settle-aura-get" : mine < 0 ? "settle-aura-pay" : "settle-aura-even"
           }`}
         >
@@ -95,7 +99,7 @@ export function SettlePanel({ group }: { group: Group }) {
             {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
           </h2>
           <p
-            className={`text-4xl font-bold tabular-nums ${
+            className={`text-3xl font-bold tabular-nums ${
               mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink"
             }`}
           >
@@ -123,8 +127,8 @@ export function SettlePanel({ group }: { group: Group }) {
         )}
 
         <section className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <h2 className="flex-1 text-lg font-bold">{t("settle.planTitle")}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="mr-auto text-lg font-bold">{t("settle.planTitle")}</h2>
             {/* Only an approximate plan says so; the fewest-payments one needs no label. */}
             {plan.status === "ready" &&
               plan.plan.payments.length > 0 &&
@@ -133,7 +137,26 @@ export function SettlePanel({ group }: { group: Group }) {
                   {t("settle.label.greedy", { count: plan.plan.maxPayments })}
                 </span>
               )}
+            {plan.status === "ready" && orderedPlan.length > 0 && (
+              <SettleNotifyActions
+                group={group}
+                payments={orderedPlan}
+                currency={currency}
+                nameOf={nameOf}
+                onNotice={(text, isError = false) => {
+                  setShareNotice({ text, isError });
+                }}
+              />
+            )}
           </div>
+          {shareNotice !== null && (
+            <p
+              role={shareNotice.isError ? "alert" : "status"}
+              className={`text-right text-xs font-bold ${shareNotice.isError ? "text-red-700" : "text-sprout-700"}`}
+            >
+              {shareNotice.text}
+            </p>
+          )}
           {plan.status === "computing" && <Loading />}
           {plan.status === "failed" && (
             <p role="alert" className="text-red-700">
@@ -180,6 +203,101 @@ export function SettlePanel({ group }: { group: Group }) {
         )}
       </div>
     </PictureContext>
+  );
+}
+
+function lineShareLink(text: string): string {
+  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
+}
+
+function SettleNotifyActions({
+  group,
+  payments,
+  currency,
+  nameOf,
+  onNotice,
+}: {
+  group: Group;
+  payments: readonly PlannedPayment[];
+  currency: CurrencyCode;
+  nameOf: (id: string) => string;
+  onNotice: (text: string, isError?: boolean) => void;
+}) {
+  const { line } = useDeps();
+  const invite = useEnsureInvite(group.id);
+  const [chatAvailable, setChatAvailable] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    void line.canSendToChat().then((available) => {
+      if (current) setChatAvailable(available);
+    });
+    return () => {
+      current = false;
+    };
+  }, [line]);
+
+  async function prepareCard() {
+    const link = await invite.mutateAsync().catch(() => null);
+    return buildSettleCard(payments, group, currency, nameOf, link?.token ?? null);
+  }
+
+  async function sendToChat() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const card = await prepareCard();
+      await line.sendToChat([settleFlexMessage(card)]);
+      onNotice(t("settleShare.sentToChat"));
+    } catch (error) {
+      onNotice(failureMessage(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function shareLine() {
+    if (busy) return;
+    setBusy(true);
+    const card = await prepareCard();
+    try {
+      const sent = await line.shareMessages([settleFlexMessage(card)], { stayOpen: true });
+      if (sent) onNotice(t("settleShare.sharedLine"));
+    } catch (error) {
+      if (error instanceof LineShareUnavailableError) {
+        window.location.assign(lineShareLink(settleText(card)));
+        return;
+      }
+      onNotice(failureMessage(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {chatAvailable && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void sendToChat()}
+          className="press-pill flex items-center gap-1.5 rounded-full border border-[#e5b890] bg-[#ffd8b5] px-3.5 py-1.5 text-xs font-bold text-sprout-900 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.65),0_2px_6px_-2px_rgb(168_85_32/0.22)] hover:bg-[#ffcea3] disabled:opacity-60"
+        >
+          <Send aria-hidden="true" className="size-3.5 text-sprout-700" />
+          {t("settleShare.sendToChat")}
+        </button>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void shareLine()}
+        className="press-pill flex items-center gap-1.5 rounded-full border border-[#efc9a8] bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-800 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.65),0_2px_6px_-2px_rgb(168_85_32/0.18)] hover:bg-[#ffd8b5] disabled:opacity-60"
+      >
+        <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-700" />
+        {t("settleShare.shareLine")}
+      </button>
+    </span>
   );
 }
 
