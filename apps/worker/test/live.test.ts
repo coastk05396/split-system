@@ -92,3 +92,39 @@ it("signals both connected Members after an Expense commits", async () => {
     });
   for (const socket of sockets) socket.close();
 });
+
+it("sends no signal for a refused Expense or an idempotent retry", async () => {
+  const { groupWith, listMembers } = await import("./groups-harness.js");
+  const { newKey, postExpense, twdExpense } = await import("./expenses-harness.js");
+  const { admin, group } = await groupWith("socket-retry", "socket-member");
+  const [a, b] = (await listMembers(admin, group.id)).map((member) => member.id);
+  if (!a || !b) throw new Error("missing member");
+  const response = await call(`/groups/${group.id}/live`, {
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${admin.accessToken}` },
+  });
+  const socket = response.webSocket;
+  if (!socket) throw new Error("missing socket");
+  socket.accept();
+  const revisions: number[] = [];
+  socket.addEventListener("message", (event) => {
+    const message: { rev: number } = JSON.parse(String(event.data));
+    revisions.push(message.rev);
+  });
+  const key = newKey();
+  const first = await postExpense(admin, group.id, twdExpense(a, [a, b], 600), key);
+  expect(first.status).toBe(201);
+  expect((await postExpense(admin, group.id, twdExpense(a, [a, b], 600), key)).status).toBe(201);
+  expect(
+    (await postExpense(admin, group.id, twdExpense(a, [a, crypto.randomUUID()], 600))).status,
+  ).toBe(400);
+  const nextMessage = new Promise<void>((resolve) =>
+    socket.addEventListener("message", () => {
+      if (revisions.length >= 2) resolve();
+    }),
+  );
+  expect((await postExpense(admin, group.id, twdExpense(a, [a, b], 200))).status).toBe(201);
+  await nextMessage;
+  expect(revisions).toHaveLength(2);
+  expect(revisions[1]).toBe((revisions[0] ?? 0) + 1);
+  socket.close();
+});
