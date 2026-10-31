@@ -4,10 +4,13 @@ import {
   groupPatchSchema,
   memberPatchSchema,
   placeholderInputSchema,
+  settlementSchema,
   tripDatesValid,
 } from "@split/shared";
 import { z } from "zod";
 import type { Bindings } from "./env.js";
+import { ApiError } from "./errors.js";
+import { settlementOperation } from "./ledger-settlements.js";
 
 const initialiseGroupSchema = z.object({
   id: z.uuid(),
@@ -126,6 +129,12 @@ export class GroupLedger extends DurableObject<Bindings> {
       sql.exec("ALTER TABLE ledger_members ADD COLUMN created_by_member_id TEXT");
       sql.exec("UPDATE ledger_meta SET schema_version = 4");
     }
+    if (meta.schema_version < 5) {
+      sql.exec(
+        "CREATE TABLE ledger_settlements (id TEXT PRIMARY KEY, data TEXT NOT NULL, idempotency_key TEXT UNIQUE)",
+      );
+      sql.exec("UPDATE ledger_meta SET schema_version = 5");
+    }
   }
 
   private drain(): Promise<void> {
@@ -155,10 +164,16 @@ export class GroupLedger extends DurableObject<Bindings> {
         members: sql
           .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at, rowid")
           .toArray(),
+        settlements: sql
+          .exec<{ data: string; idempotency_key: string | null }>(
+            "SELECT data,idempotency_key FROM ledger_settlements WHERE id IN (SELECT substr(kind,12) FROM ledger_dirty WHERE kind LIKE 'settlement:%' AND rev <= ?)",
+            dirty.rev,
+          )
+          .toArray(),
       };
     });
     if (snapshot === null) return;
-    const { group: g, members, rev } = snapshot;
+    const { group: g, members, settlements, rev } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -205,7 +220,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             db
               .prepare(
                 `INSERT INTO members (id,group_id,user_id,role,status,net_balance,created_at,placeholder_name,nickname,created_by_member_id)
-                 SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,role=excluded.role,status=excluded.status,placeholder_name=excluded.placeholder_name,nickname=excluded.nickname,created_by_member_id=excluded.created_by_member_id`,
+                 SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,role=excluded.role,status=excluded.status,net_balance=excluded.net_balance,placeholder_name=excluded.placeholder_name,nickname=excluded.nickname,created_by_member_id=excluded.created_by_member_id`,
               )
               .bind(
                 member.id,
@@ -267,6 +282,35 @@ export class GroupLedger extends DurableObject<Bindings> {
             .bind(g.id, g.id, rev),
         );
       }
+      if (!g.deleted)
+        for (const row of settlements) {
+          const item = settlementSchema.parse(JSON.parse(row.data) as unknown);
+          statements.push(
+            db
+              .prepare(
+                `INSERT INTO settlements (id,group_id,payer_member_id,receiver_member_id,amount,status,created_by_member_id,confirmed_by_member_id,confirmed_at,undone_by_member_id,undone_at,idempotency_key,created_at,updated_at)
+          SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET amount=excluded.amount,status=excluded.status,confirmed_by_member_id=excluded.confirmed_by_member_id,confirmed_at=excluded.confirmed_at,undone_by_member_id=excluded.undone_by_member_id,undone_at=excluded.undone_at,updated_at=excluded.updated_at`,
+              )
+              .bind(
+                item.id,
+                item.groupId,
+                item.payerMemberId,
+                item.receiverMemberId,
+                item.amount,
+                item.status,
+                item.createdByMemberId,
+                item.confirmedByMemberId,
+                item.confirmedAt,
+                item.undoneByMemberId,
+                item.undoneAt,
+                row.idempotency_key,
+                item.createdAt,
+                item.updatedAt,
+                g.id,
+                rev,
+              ),
+          );
+        }
       const active = members.filter((m) => m.status === "active" || m.status === "placeholder");
       statements.push(
         db
@@ -322,6 +366,56 @@ export class GroupLedger extends DurableObject<Bindings> {
   }
 
   override async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === "/settlement-op" && request.method === "POST") {
+      const payload: unknown = await request.json();
+      try {
+        if (
+          typeof payload === "object" &&
+          payload !== null &&
+          "action" in payload &&
+          payload.action !== "list" &&
+          (await this.ctx.storage.getAlarm()) === null
+        ) {
+          await this.ctx.storage.setAlarm(Date.now() + 2000);
+        }
+        const result = this.ctx.storage.transactionSync(() => {
+          const outcome = settlementOperation(this.ctx.storage.sql, payload);
+          if (outcome.changed) {
+            this.ctx.storage.sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            this.ctx.storage.sql.exec(
+              "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+              `settlement:${outcome.id ?? ""}`,
+            );
+          }
+          return {
+            ...outcome,
+            rev: this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one()
+              .rev,
+          };
+        });
+        if (result.changed) {
+          const signal: SyncNeeded = {
+            version: 1,
+            type: "sync needed",
+            rev: result.rev,
+            timestamp: Date.now(),
+          };
+          for (const socket of this.ctx.getWebSockets()) {
+            try {
+              socket.send(JSON.stringify(signal));
+            } catch {
+              /* socket has closed */
+            }
+          }
+          await this.drain();
+        }
+        return Response.json(result.data, { headers: { "X-Group-Rev": String(result.rev) } });
+      } catch (error) {
+        if (error instanceof ApiError)
+          return Response.json(error.toBody(), { status: error.status });
+        throw error;
+      }
+    }
     if (new URL(request.url).pathname === "/member-op" && request.method === "POST") {
       const parsed = memberOpSchema.safeParse(await request.json());
       if (!parsed.success) return Response.json({ error: "VALIDATION_FAILED" }, { status: 400 });
@@ -432,7 +526,7 @@ export class GroupLedger extends DurableObject<Bindings> {
                 },
               };
             if (
-              leaving.id === actor?.id &&
+              leaving.id === actor.id &&
               leaving.role === "admin" &&
               !all.some((m) => m.id !== leaving.id && m.status === "active" && m.role === "admin")
             )
