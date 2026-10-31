@@ -7,6 +7,7 @@ import {
   placeholderInputSchema,
   settlementSchema,
   tripDatesValid,
+  expenseSchema,
 } from "@split/shared";
 import { z } from "zod";
 import type { Bindings } from "./env.js";
@@ -169,6 +170,10 @@ export class GroupLedger extends DurableObject<Bindings> {
       return {
         rev: dirty.rev,
         group: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one(),
+        expenses: sql
+          .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
+          .toArray()
+          .map((row) => expenseSchema.parse(JSON.parse(row.data) as unknown)),
         locked:
           sql.exec<{ n: number }>("SELECT count(*) n FROM ledger_expenses WHERE deleted=0").one()
             .n > 0,
@@ -190,7 +195,7 @@ export class GroupLedger extends DurableObject<Bindings> {
       };
     });
     if (snapshot === null) return;
-    const { group: g, members, settlements, deletedStops, rev, locked } = snapshot;
+    const { group: g, members, settlements, deletedStops, rev, locked, expenses } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -334,6 +339,41 @@ export class GroupLedger extends DurableObject<Bindings> {
               ),
           );
         }
+      const spending = g.deleted
+        ? []
+        : expenses.flatMap((expense) =>
+            expense.splits.flatMap((split) => {
+              const member = members.find(
+                (m) => m.id === split.memberId && m.status === "active" && m.user_id !== null,
+              );
+              return member?.user_id
+                ? [
+                    {
+                      expenseId: expense.id,
+                      userId: member.user_id,
+                      description: expense.description,
+                      expenseDate: expense.expenseDate,
+                      category: expense.category,
+                      currency: g.settlement_currency,
+                      amount: split.settlementAmount,
+                    },
+                  ]
+                : [];
+            }),
+          );
+      statements.push(
+        db
+          .prepare(`DELETE FROM personal_spending WHERE group_id = ? AND ${fence}`)
+          .bind(g.id, g.id, rev),
+      );
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO personal_spending (group_id,expense_id,user_id,description,expense_date,category,currency,amount,rev)
+        SELECT ?,json_extract(j.value,'$.expenseId'),json_extract(j.value,'$.userId'),json_extract(j.value,'$.description'),json_extract(j.value,'$.expenseDate'),json_extract(j.value,'$.category'),json_extract(j.value,'$.currency'),json_extract(j.value,'$.amount'),? FROM json_each(?) j WHERE ${fence}`,
+          )
+          .bind(g.id, rev, JSON.stringify(spending), g.id, rev),
+      );
       const active = members.filter((m) => m.status === "active" || m.status === "placeholder");
       statements.push(
         db
@@ -487,7 +527,7 @@ export class GroupLedger extends DurableObject<Bindings> {
       }
     }
     if (new URL(request.url).pathname === "/expense-op" && request.method === "POST") {
-      const op = (await request.json()) as ExpenseOperation;
+      const op = await request.json<ExpenseOperation>();
       try {
         const result = this.ctx.storage.transactionSync(() => {
           const result = expenseOperation(this.ctx.storage.sql, op);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { call } from "./auth-harness.js";
 import { createGroup, person } from "./groups-harness.js";
 
@@ -110,21 +111,31 @@ it("signals both connected Members after an Expense commits", async () => {
   );
   const received = sockets.map(
     (socket) =>
-      new Promise<unknown>((resolve) =>
-        socket.addEventListener("message", (event) => resolve(JSON.parse(String(event.data))), {
-          once: true,
-        }),
-      ),
+      new Promise<unknown>((resolve) => {
+        socket.addEventListener(
+          "message",
+          (event) => {
+            resolve(JSON.parse(String(event.data)));
+          },
+          {
+            once: true,
+          },
+        );
+      }),
   );
   expect((await postExpense(admin, group.id, twdExpense(a, [a, b], 600))).status).toBe(201);
   const messages = await Promise.all(received);
-  for (const message of messages)
-    expect(message).toMatchObject({
-      version: 1,
-      type: "sync needed",
-      rev: expect.any(Number),
-      timestamp: expect.any(Number),
-    });
+  for (const message of messages) {
+    const parsed = z
+      .object({
+        version: z.literal(1),
+        type: z.literal("sync needed"),
+        rev: z.number(),
+        timestamp: z.number(),
+      })
+      .parse(message);
+    expect(parsed.rev).toBeGreaterThan(0);
+  }
   for (const socket of sockets) socket.close();
 });
 
@@ -142,7 +153,7 @@ it("sends no signal for a refused Expense or an idempotent retry", async () => {
   socket.accept();
   const revisions: number[] = [];
   socket.addEventListener("message", (event) => {
-    const message: { rev: number } = JSON.parse(String(event.data));
+    const message = z.object({ rev: z.number() }).parse(JSON.parse(String(event.data)));
     revisions.push(message.rev);
   });
   const key = newKey();
@@ -152,11 +163,11 @@ it("sends no signal for a refused Expense or an idempotent retry", async () => {
   expect(
     (await postExpense(admin, group.id, twdExpense(a, [a, crypto.randomUUID()], 600))).status,
   ).toBe(400);
-  const nextMessage = new Promise<void>((resolve) =>
+  const nextMessage = new Promise<void>((resolve) => {
     socket.addEventListener("message", () => {
       if (revisions.length >= 2) resolve();
-    }),
-  );
+    });
+  });
   expect((await postExpense(admin, group.id, twdExpense(a, [a, b], 200))).status).toBe(201);
   await nextMessage;
   expect(revisions).toHaveLength(2);

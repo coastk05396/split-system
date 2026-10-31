@@ -1,28 +1,38 @@
 import type { CurrencyCode } from "@split/shared";
 import { and, eq, sql } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import type { Db } from "../db/client.js";
-import { expenseSplits, expenses, groups, members } from "../db/schema.js";
 
-/** The current User's Expense allocations in Groups they can still access. */
+const spending = sqliteTable("personal_spending", {
+  expenseId: text("expense_id").notNull(),
+  groupId: text("group_id").notNull(),
+  userId: text("user_id").notNull(),
+  description: text("description").notNull(),
+  date: text("expense_date").notNull(),
+  category: text("category").notNull(),
+  currency: text("currency").$type<CurrencyCode>().notNull(),
+  amount: integer("amount").notNull(),
+});
+const directory = sqliteTable("group_directory", {
+  groupId: text("group_id").notNull(),
+  name: text("name"),
+  deleted: integer("deleted").notNull(),
+});
+
 export function personalSpending(db: Db, userId: string) {
   return db
     .select({
-      expenseId: sql<string>`${expenses.id}`.as("expense_id"),
-      groupId: sql<string>`${groups.id}`.as("group_id"),
-      groupName: sql<string>`${groups.name}`.as("group_name"),
-      description: sql<string>`${expenses.description}`.as("description"),
-      date: sql<string>`${expenses.expenseDate}`.as("expense_date"),
-      category: sql<string>`${expenses.category}`.as("category"),
-      currency: sql<CurrencyCode>`${groups.settlementCurrency}`.as("currency"),
-      amount: sql<number>`${expenseSplits.settlementAmount}`.as("amount"),
+      expenseId: sql<string>`${spending.expenseId}`.as("expense_id"),
+      groupId: sql<string>`${spending.groupId}`.as("group_id"),
+      groupName: sql<string>`${directory.name}`.as("group_name"),
+      description: sql<string>`${spending.description}`.as("description"),
+      date: sql<string>`${spending.date}`.as("expense_date"),
+      category: sql<string>`${spending.category}`.as("category"),
+      currency: sql<CurrencyCode>`${spending.currency}`.as("currency"),
+      amount: sql<number>`${spending.amount}`.as("amount"),
     })
-    .from(members)
-    .innerJoin(groups, eq(groups.id, members.groupId))
-    .innerJoin(expenses, eq(expenses.groupId, groups.id))
-    .innerJoin(
-      expenseSplits,
-      and(eq(expenseSplits.expenseId, expenses.id), eq(expenseSplits.memberId, members.id)),
-    )
-    .where(and(eq(members.userId, userId), eq(members.status, "active")))
+    .from(spending)
+    .innerJoin(directory, eq(spending.groupId, directory.groupId))
+    .where(and(eq(spending.userId, userId), eq(directory.deleted, 0)))
     .as("personal_spending");
 }

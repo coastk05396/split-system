@@ -1,24 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
-import { createDb } from "../src/db/client.js";
-import { members } from "../src/db/schema.js";
-import { call } from "./auth-harness.js";
-import {
-  createGroup,
-  groupWith,
-  listMembers,
-  person,
-  seedExpense,
-  send,
-} from "./groups-harness.js";
+import { call, clock } from "./auth-harness.js";
+import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 
 describe("personal spending statistics", () => {
   it("keeps summary and paginated details consistent for the same User", async () => {
     const admin = await person("Stats paging");
     const group = await createGroup(admin);
-    for (let i = 0; i < 51; i++) await seedExpense(group.id, group.me.memberId);
+    const initialTime = clock.now;
+    try {
+      for (let i = 0; i < 51; i++) {
+        if (i === 25) clock.now += 60_000;
+        await createExpense(
+          admin,
+          group.id,
+          twdExpense(group.me.memberId, [group.me.memberId], 600),
+        );
+      }
+    } finally {
+      clock.now = initialTime;
+    }
     const summary = await (
       await send(admin, "GET", "/stats/spending?from=2026-06&to=2026-06")
     ).json();
@@ -118,13 +119,41 @@ describe("personal spending statistics", () => {
     expect(await (await send(admin, "GET", "/stats/spending")).json()).toEqual([
       { month: "2026-07", category: "餐飲", currency: "TWD", amount: 200 },
     ]);
-    await createDb(env.DB)
-      .update(members)
-      .set({ status: "former" })
-      .where(eq(members.id, alice.id));
+    expect(
+      (await send(admin, "PATCH", `/groups/${group.id}/members/${bob.id}`, { role: "admin" }))
+        .status,
+    ).toBe(200);
+    expect((await send(admin, "POST", `/groups/${group.id}/leave`)).status).toBe(204);
     expect(await (await send(admin, "GET", "/stats/spending")).json()).toEqual([]);
     expect(
       await (await send(admin, "GET", "/stats/expenses?month=2026-06&category=food")).json(),
     ).toEqual({ items: [], nextCursor: null });
   });
+});
+
+it("removes spending when an edit unticks a Member", async () => {
+  const { admin, group, others } = await groupWith("Edit payer", "Edit participant");
+  const [payer, participant] = await listMembers(admin, group.id);
+  const other = others[0];
+  if (!payer || !participant || !other) throw new Error("missing members");
+  const expense = await createExpense(
+    admin,
+    group.id,
+    twdExpense(payer.id, [payer.id, participant.id], 600),
+  );
+  expect(await (await send(other, "GET", "/stats/spending")).json()).toEqual([
+    { month: "2026-06", category: "food", currency: "TWD", amount: 300 },
+  ]);
+  expect(
+    (
+      await send(
+        admin,
+        "PATCH",
+        `/groups/${group.id}/expenses/${expense.id}`,
+        twdExpense(payer.id, [payer.id], 600),
+        { "If-Match": String(expense.updatedAt) },
+      )
+    ).status,
+  ).toBe(200);
+  expect(await (await send(other, "GET", "/stats/spending")).json()).toEqual([]);
 });
