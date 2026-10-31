@@ -55,8 +55,7 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
   const owed = (payer: Caller, receiver: Caller) =>
     Math.max(0, Math.min(-payer.balance, receiver.balance));
   const canConfirm = (me: Caller, payer: Caller, receiver: Caller) =>
-    me.id === receiver.id ||
-    (me.role === "admin" && (me.id !== payer.id || receiver.status === "placeholder"));
+    me.id === payer.id || me.id === receiver.id || me.role === "admin";
   const move = (payer: Caller, receiver: Caller, amount: number) => {
     payer.balance += amount;
     receiver.balance -= amount;
@@ -101,28 +100,27 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
           ) {
             return error("VALIDATION_FAILED", 400);
           }
-          if (me.id !== payer.id && me.id !== receiver.id && me.role !== "admin") {
+          if (!canConfirm(me, payer, receiver)) {
             return error("FORBIDDEN", 403);
           }
           const max = owed(payer, receiver);
           if (amount > max) return error("SETTLEMENT_EXCEEDS_DEBT", 422, { maxAmount: max });
-          const confirmNow = canConfirm(me, payer, receiver);
           const row: Settlement = {
             id: nextId("st"),
             groupId: g.id,
             payerMemberId: payer.id,
             receiverMemberId: receiver.id,
             amount,
-            status: confirmNow ? "confirmed" : "pending",
+            status: "confirmed",
             createdByMemberId: me.id,
-            confirmedByMemberId: confirmNow ? me.id : null,
-            confirmedAt: confirmNow ? now : null,
+            confirmedByMemberId: me.id,
+            confirmedAt: now,
             undoneByMemberId: null,
             undoneAt: null,
             createdAt: now,
             updatedAt: now,
           };
-          if (confirmNow) move(payer, receiver, amount);
+          move(payer, receiver, amount);
           list.push(row);
           keys.set(`${me.id}:${key}`, row.id);
           return json(row, 201);
@@ -160,7 +158,12 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
           return json(row);
         case "POST settlements/:/undo":
           if (row.status !== "confirmed") return error("SETTLEMENT_NOT_CONFIRMED", 409);
-          if (me.id !== row.confirmedByMemberId && me.role !== "admin") {
+          if (
+            me.id !== payer.id &&
+            me.id !== receiver.id &&
+            me.id !== row.confirmedByMemberId &&
+            me.role !== "admin"
+          ) {
             return error("FORBIDDEN", 403);
           }
           Object.assign(row, { status: "undone", undoneByMemberId: me.id, undoneAt: now });
