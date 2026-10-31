@@ -93,7 +93,7 @@ A time-limited, unguessable link that lets a signed-in person join a Group. Memb
 _Avoid_: Invitation code, share link
 
 **LINE chat**:
-A conversation in LINE that can receive an Invite, including a group chat. Sending an Invite there does not link the LINE chat to a Group.
+A conversation in LINE, including a group chat, where a Member can share an Invite, an Expense, or the Group's Payment plan. Sharing there does not link the LINE chat to a Group.
 _Avoid_: Group (when referring to the LINE conversation)
 
 **Admin**:

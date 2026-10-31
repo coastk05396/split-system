@@ -54,7 +54,7 @@ function GroupDetail({ group }: { group: Group }) {
     tabs.some((tab) => tab.value === asked) ? asked : "expenses",
   );
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3">
       {saved !== undefined && <ExpenseSavedToast saved={saved} />}
       <ScreenHeader
         compact
@@ -128,7 +128,7 @@ function GroupDetail({ group }: { group: Group }) {
               <Tabs.Content
                 key={tab.value}
                 value={tab.value}
-                className="tab-panel pt-4 pb-6 text-ink-muted"
+                className="tab-panel pt-3 pb-6 text-ink-muted"
               >
                 <ExpenseList groupId={group.id} settlementCurrency={group.settlementCurrency} />
               </Tabs.Content>
@@ -136,7 +136,7 @@ function GroupDetail({ group }: { group: Group }) {
           }
           if (tab.value === "trip") {
             return (
-              <Tabs.Content key={tab.value} value={tab.value} className="tab-panel pt-4 pb-6">
+              <Tabs.Content key={tab.value} value={tab.value} className="tab-panel pt-3 pb-6">
                 <TripPanel group={group} />
               </Tabs.Content>
             );
@@ -146,7 +146,7 @@ function GroupDetail({ group }: { group: Group }) {
               <Tabs.Content
                 key={tab.value}
                 value={tab.value}
-                className="tab-panel pt-4 pb-6 text-ink-muted"
+                className="tab-panel pt-3 pb-6 text-ink-muted"
               >
                 <SettlePanel group={group} />
               </Tabs.Content>
