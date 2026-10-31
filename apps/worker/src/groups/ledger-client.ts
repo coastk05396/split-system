@@ -6,6 +6,7 @@ export interface MemberOperation {
   actorMemberId?: string;
   targetMemberId?: string;
   userId?: string;
+  inviteToken?: string;
   input?: object;
   now: number;
   names?: Record<string, string>;
