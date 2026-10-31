@@ -405,7 +405,7 @@ function statusLabel(s: Settlement): MessageId {
 
 /** A payment card; faded once withdrawn or undone. */
 function paymentCard(faded = false): string {
-  return `${card} flex flex-col gap-3 p-4 [&>button]:w-full ${faded ? "opacity-70" : ""}`;
+  return `${card} flex flex-col gap-3 p-4 ${faded ? "opacity-70" : ""}`;
 }
 
 const STATUS_TONE: Partial<Record<MessageId, string>> = {
@@ -549,6 +549,13 @@ function PlannedRow({
     key.current = crypto.randomUUID();
   };
   const iPay = group.me.memberId === payer.memberId;
+  const iReceive = group.me.memberId === receiver.memberId;
+  const tone = iPay ? "pay" : iReceive ? "receive" : "behalf";
+  const triggerLabel = iPay
+    ? "settle.markPaid"
+    : iReceive
+      ? "settle.markReceived"
+      : "settle.markBehalf";
 
   return (
     <>
@@ -564,8 +571,8 @@ function PlannedRow({
       />
       {canConfirm(group.me, payer, receiver) && (
         <ConfirmSettlementDialog
-          trigger={t(iPay ? "settle.markPaid" : "settle.markReceived")}
-          tone={iPay ? "pay" : "receive"}
+          trigger={t(triggerLabel)}
+          tone={tone}
           currency={currency}
           target={{
             payerName: localName(payer.displayName),

@@ -386,6 +386,7 @@ export const en: Record<MessageId, string> = {
   "settle.iPaid": "I paid",
   "settle.markPaid": "Confirm payment",
   "settle.markReceived": "Confirm received",
+  "settle.markBehalf": "Confirm for them",
   "settle.confirmAction": "Confirm",
   "settle.cancel": "Cancel",
   "settle.undo": "Undo",
