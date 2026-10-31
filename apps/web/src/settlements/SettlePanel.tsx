@@ -78,17 +78,15 @@ export function SettlePanel({ group }: { group: Group }) {
   const currency = balances.data.settlementCurrency;
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
-  // The top of the screen shows what is still to be paid, the same numbers the plan below is
-  // drawn from, so the two always agree. Waiting payments are named once, under 待確認.
-  // `rows` keeps the confirmed Balances, which a confirmation is checked against.
-  const stillOwed = new Map((adjusted ?? []).map((b) => [b.memberId, b.amountMinor]));
-  const shown = balances.data.balances.map((b) => ({
-    ...b,
-    balance: stillOwed.get(b.memberId) ?? b.balance,
-  }));
-  const confirmedMine = rows.get(group.me.memberId)?.balance ?? 0;
-  const mine = stillOwed.get(group.me.memberId) ?? confirmedMine;
-  const waitingMine = Math.abs(confirmedMine - mine);
+  // The top is the confirmed Balance and stays the same whether or not a payment is waiting.
+  // Below it splits into what is already paid and waiting for confirmation (under 待確認) and
+  // what is still to be paid (the plan, drawn net of the waiting payments), so the two always
+  // add up to the top. `rows` also keeps the confirmed Balances a confirmation is checked against.
+  const mine = rows.get(group.me.memberId)?.balance ?? 0;
+  const stillToPay = Math.abs(
+    adjusted?.find((b) => b.memberId === group.me.memberId)?.amountMinor ?? mine,
+  );
+  const waitingMine = Math.abs(mine) - stillToPay;
   if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const pending = all.filter(
@@ -135,13 +133,16 @@ export function SettlePanel({ group }: { group: Group }) {
           </p>
           {waitingMine > 0 && (
             <p className="text-sm text-ink-muted">
-              {t("settle.waitingNote", { amount: formatAmount(waitingMine, currency) })}
+              {t(mine < 0 ? "settle.splitPay" : "settle.splitGet", {
+                sent: formatAmount(waitingMine, currency),
+                rest: formatAmount(stillToPay, currency),
+              })}
             </p>
           )}
         </section>
 
         <BalanceChart
-          rows={shown}
+          rows={balances.data.balances}
           myMemberId={group.me.memberId}
           currency={currency}
           pictureOf={memberPictures(members.data)}

@@ -307,7 +307,7 @@ describe("Recording and confirming Settlements", () => {
     ]);
   });
 
-  it("draws the top from the same numbers as the plan, so the two always agree", async () => {
+  it("keeps the top at the confirmed Balance and splits it into paid-waiting plus still to pay", async () => {
     await openSettle(
       {
         name: "室友",
@@ -322,11 +322,12 @@ describe("Recording and confirming Settlements", () => {
       },
     );
 
-    // What I still owe, the bars and the plan below are all the same 50 (40 + 10); the 50 that
-    // waits for confirmation is named once, so nothing is counted twice or goes missing.
+    // I owe 100 whether or not a payment waits: the top says 100 and the bars are the confirmed
+    // Balances. Below, the 50 already paid (waiting for confirmation) plus the 50 still to pay
+    // (40 + 10) make the same 100.
     expect(await screen.findByRole("heading", { name: "你要付" })).toBeVisible();
-    expect(screen.getAllByText("NT$ 50").length).toBeGreaterThan(0);
-    expect(screen.getByText("另有 NT$ 50 等對方確認")).toBeVisible();
+    expect(screen.getByText("NT$ 100")).toBeVisible();
+    expect(screen.getByText("其中 NT$ 50 已付、等對方確認，還要付 NT$ 50")).toBeVisible();
     const chart = within(await screen.findByRole("list", { name: "大家的結餘" }));
     expect(
       chart
@@ -336,9 +337,13 @@ describe("Recording and confirming Settlements", () => {
           li.textContent.match(/[+-]NT\$ \d+/)?.[0],
         ]),
     ).toEqual([
+      ["宜庭", "+NT$ 60"],
       ["阿哲", "+NT$ 40"],
-      ["宜庭", "+NT$ 10"],
-      ["小宇（你）", "-NT$ 50"],
+      ["小宇（你）", "-NT$ 100"],
+    ]);
+    expect(await rows()).toEqual([
+      expect.stringContaining("你付給阿哲NT$ 40"),
+      expect.stringContaining("你付給宜庭NT$ 10"),
     ]);
   });
 
