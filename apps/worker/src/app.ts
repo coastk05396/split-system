@@ -4,6 +4,7 @@ import { type AppDeps, productionDeps } from "./deps.js";
 import { expenseRoutes } from "./expenses/routes.js";
 import { groupRoutes } from "./groups/routes.js";
 import { lineRoutes } from "./line/routes.js";
+import { migrationSnapshotRoutes } from "./migration/snapshot.js";
 import { rateRoutes } from "./rates/routes.js";
 import { settlementRoutes } from "./settlements/routes.js";
 import { stopRoutes } from "./stops/routes.js";
@@ -22,6 +23,7 @@ export function createApp(deps: AppDeps) {
       const { rev } = await response.json<{ rev: number }>();
       c.header("X-Group-Rev", String(rev));
     })
+    .route("/", migrationSnapshotRoutes())
     .route("/", authRoutes(deps))
     .route("/", groupRoutes(deps))
     .route("/", expenseRoutes(deps))
