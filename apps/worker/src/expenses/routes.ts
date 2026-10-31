@@ -7,17 +7,12 @@ import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { requireMember } from "../groups/membership.js";
+import { expenseLedgerOperation } from "../groups/ledger-client.js";
+import { fxRates, stops } from "../db/schema.js";
 import { rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey, requireIfMatch } from "../request-guards.js";
 import { personalSpending } from "./personal-spending.js";
-import {
-  createExpense,
-  deleteExpense,
-  getExpense,
-  groupBalances,
-  listExpenses,
-  updateExpense,
-} from "./expenses.js";
+import { groupBalances } from "./expenses.js";
 
 /** Expenses and Balances (SPEC §5.1, decisions 15, 16, 23). Any active Member may write. */
 export function expenseRoutes(deps: AppDeps) {
@@ -100,32 +95,85 @@ export function expenseRoutes(deps: AppDeps) {
     .get("/groups/:id/expenses", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await listExpenses(db, me, c.req.query("cursor")), 200);
+      return c.json(
+        await expenseLedgerOperation(c.env, me.groupId, {
+          action: "list",
+          cursor: c.req.query("cursor"),
+        }),
+        200,
+      );
     })
     .post("/groups/:id/expenses", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const key = requireIdempotencyKey(c);
       const input = await parseBody(c, expenseInputSchema);
-      return c.json(await createExpense(db, me, input, key, deps.now()), 201);
+      const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
+      const stopValid =
+        input.stopId == null ||
+        (
+          await db
+            .select()
+            .from(stops)
+            .where(and(eq(stops.groupId, me.groupId), eq(stops.id, input.stopId)))
+        ).length > 0;
+      const result = await expenseLedgerOperation(c.env, me.groupId, {
+        action: "create",
+        memberId: me.id,
+        input,
+        key,
+        now: deps.now(),
+        rates: rates.map((r) => ({
+          base: r.baseCurrency,
+          quote: r.quoteCurrency,
+          rate: r.rateScaled,
+        })),
+        stopValid,
+      });
+      return c.json(result, 201);
     })
     .get("/groups/:id/expenses/:eid", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await getExpense(db, me, c.req.param("eid")), 200);
+      return c.json(
+        await expenseLedgerOperation(c.env, me.groupId, { action: "get", id: c.req.param("eid") }),
+        200,
+      );
     })
     .patch("/groups/:id/expenses/:eid", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const expected = requireIfMatch(c);
       const input = await parseBody(c, expenseInputSchema);
-      const updated = await updateExpense(db, me, c.req.param("eid"), input, expected, deps.now());
+      const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
+      const stopValid =
+        input.stopId == null ||
+        (
+          await db
+            .select()
+            .from(stops)
+            .where(and(eq(stops.groupId, me.groupId), eq(stops.id, input.stopId)))
+        ).length > 0;
+      const updated = await expenseLedgerOperation(c.env, me.groupId, {
+        action: "update",
+        id: c.req.param("eid"),
+        memberId: me.id,
+        input,
+        expected,
+        now: deps.now(),
+        rates: rates.map((r) => ({
+          base: r.baseCurrency,
+          quote: r.quoteCurrency,
+          rate: r.rateScaled,
+        })),
+        stopValid,
+      });
       return c.json(updated, 200);
     })
     .delete("/groups/:id/expenses/:eid", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      await deleteExpense(db, me, c.req.param("eid"));
+      await expenseLedgerOperation(c.env, me.groupId, { action: "delete", id: c.req.param("eid") });
       return c.body(null, 204);
     })
     .get("/groups/:id/balances", signedIn, async (c) => {

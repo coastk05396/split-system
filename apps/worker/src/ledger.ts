@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 import type { Bindings } from "./env.js";
 import { ApiError } from "./errors.js";
+import { expenseOperation, type ExpenseOperation } from "./ledger-expenses.js";
 import { settlementOperation } from "./ledger-settlements.js";
 
 const initialiseGroupSchema = z.object({
@@ -135,6 +136,12 @@ export class GroupLedger extends DurableObject<Bindings> {
       );
       sql.exec("UPDATE ledger_meta SET schema_version = 5");
     }
+    if (meta.schema_version < 6) {
+      sql.exec(
+        "CREATE TABLE IF NOT EXISTS ledger_expenses (id TEXT PRIMARY KEY, creator_member_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, data TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, UNIQUE(creator_member_id,idempotency_key))",
+      );
+      sql.exec("UPDATE ledger_meta SET schema_version = 6");
+    }
   }
 
   private drain(): Promise<void> {
@@ -161,6 +168,9 @@ export class GroupLedger extends DurableObject<Bindings> {
       return {
         rev: dirty.rev,
         group: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one(),
+        locked:
+          sql.exec<{ n: number }>("SELECT count(*) n FROM ledger_expenses WHERE deleted=0").one()
+            .n > 0,
         members: sql
           .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at, rowid")
           .toArray(),
@@ -173,7 +183,7 @@ export class GroupLedger extends DurableObject<Bindings> {
       };
     });
     if (snapshot === null) return;
-    const { group: g, members, settlements, rev } = snapshot;
+    const { group: g, members, settlements, rev, locked } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -327,7 +337,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             g.deleted ? null : g.trip_start_date,
             g.deleted ? null : g.trip_end_date,
             g.deleted ? null : g.trip_notes,
-            g.deleted ? null : 0,
+            g.deleted ? null : Number(locked),
             g.deleted ? null : active.length,
             g.deleted
               ? null
@@ -413,6 +423,44 @@ export class GroupLedger extends DurableObject<Bindings> {
       } catch (error) {
         if (error instanceof ApiError)
           return Response.json(error.toBody(), { status: error.status });
+        throw error;
+      }
+    }
+    if (new URL(request.url).pathname === "/expense-op" && request.method === "POST") {
+      const op = (await request.json()) as ExpenseOperation;
+      try {
+        const result = this.ctx.storage.transactionSync(() => {
+          const result = expenseOperation(this.ctx.storage.sql, op);
+          if (result.changed) {
+            this.ctx.storage.sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            this.ctx.storage.sql.exec(
+              "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+            );
+          }
+          return result;
+        });
+        if (result.changed) {
+          const rev = this.ctx.storage.sql
+            .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+            .one().rev;
+          const signal: SyncNeeded = {
+            version: 1,
+            type: "sync needed",
+            rev,
+            timestamp: Date.now(),
+          };
+          for (const socket of this.ctx.getWebSockets()) socket.send(JSON.stringify(signal));
+          if ((await this.ctx.storage.getAlarm()) === null)
+            await this.ctx.storage.setAlarm(Date.now() + 2000);
+          await this.drain();
+        }
+        return Response.json({ value: result.value });
+      } catch (error) {
+        if (error instanceof ApiError)
+          return Response.json(
+            { error: error.code, details: error.details },
+            { status: error.status },
+          );
         throw error;
       }
     }

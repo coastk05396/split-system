@@ -16,7 +16,7 @@ type GroupRow = typeof groups.$inferSelect;
 
 // Correlated subqueries name the outer `groups` table in full: Drizzle leaves column
 // references unqualified in a one-table select, which would bind to the inner table.
-const lockedSql = sql<number>`EXISTS (SELECT 1 FROM expenses e WHERE e.group_id = "groups"."id")`;
+const lockedSql = sql<number>`COALESCE((SELECT settlement_currency_locked FROM group_directory d WHERE d.group_id = "groups"."id"), 0)`;
 const seatedSql = sql<number>`(SELECT count(*) FROM members s WHERE s.group_id = "groups"."id" AND s.status IN ('active', 'placeholder'))`;
 
 const PREVIEW_SIZE = 4;
@@ -101,7 +101,7 @@ export async function listGroups(db: Db, userId: string): Promise<Group[]> {
   }>(sql`SELECT d.group_id AS id, d.name, d.settlement_currency AS settlementCurrency,
     d.is_trip AS isTrip, d.trip_destination AS tripDestination, d.trip_start_date AS tripStartDate,
     d.trip_end_date AS tripEndDate, d.trip_notes AS tripNotes, d.created_at AS createdAt,
-    d.updated_at AS updatedAt, EXISTS (SELECT 1 FROM expenses e WHERE e.group_id=d.group_id) AS locked,
+    d.updated_at AS updatedAt, d.settlement_currency_locked AS locked,
     d.member_count AS memberCount, d.member_preview AS preview,
     m.member_id AS memberId, m.role, m.net_balance AS balance
     FROM group_directory d JOIN group_member_summary m ON m.group_id=d.group_id
