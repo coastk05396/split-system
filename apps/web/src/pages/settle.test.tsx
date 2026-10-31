@@ -307,6 +307,41 @@ describe("Recording and confirming Settlements", () => {
     ]);
   });
 
+  it("draws the top from the same numbers as the plan, so the two always agree", async () => {
+    await openSettle(
+      {
+        name: "室友",
+        myBalance: -100,
+        others: [
+          { name: "宜庭", balance: 60 },
+          { name: "阿哲", balance: 40 },
+        ],
+      },
+      (groups, gid) => {
+        groups.addSettlement(gid, { payer: 0, receiver: 1, amount: 50 }, 0);
+      },
+    );
+
+    // What I still owe, the bars and the plan below are all the same 50 (40 + 10); the 50 that
+    // waits for confirmation is named once, so nothing is counted twice or goes missing.
+    expect(await screen.findByRole("heading", { name: "你要付" })).toBeVisible();
+    expect(screen.getAllByText("NT$ 50").length).toBeGreaterThan(0);
+    expect(screen.getByText("另有 NT$ 50 等對方確認")).toBeVisible();
+    const chart = within(await screen.findByRole("list", { name: "大家的結餘" }));
+    expect(
+      chart
+        .getAllByRole("listitem")
+        .map((li) => [
+          within(li).getByRole("button").getAttribute("aria-label"),
+          li.textContent.match(/[+-]NT\$ \d+/)?.[0],
+        ]),
+    ).toEqual([
+      ["阿哲", "+NT$ 40"],
+      ["宜庭", "+NT$ 10"],
+      ["小宇（你）", "-NT$ 50"],
+    ]);
+  });
+
   it("does not call the Group settled while a payment waits for confirmation", async () => {
     await openSettle(
       { name: "室友", myBalance: -200, others: [{ name: "宜庭", balance: 200 }] },

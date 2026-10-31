@@ -56,9 +56,9 @@ export function SettlePanel({ group }: { group: Group }) {
   const waiting = (settlements.data?.pages.flatMap((p) => p.settlements) ?? []).filter(
     (s) => s.status === "pending",
   );
-  const plan = usePaymentPlan(
-    balances.data === undefined ? undefined : balancesAfterPending(balances.data.balances, waiting),
-  );
+  const adjusted =
+    balances.data === undefined ? undefined : balancesAfterPending(balances.data.balances, waiting);
+  const plan = usePaymentPlan(adjusted);
   const action = useSettlementAction(group.id);
   // Whether I was last owed or owing: a debt that shrinks to 0 is good news, a credit that does not.
   const owedSign = useRef(0);
@@ -78,7 +78,17 @@ export function SettlePanel({ group }: { group: Group }) {
   const currency = balances.data.settlementCurrency;
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
-  const mine = rows.get(group.me.memberId)?.balance ?? 0;
+  // The top of the screen shows what is still to be paid, the same numbers the plan below is
+  // drawn from, so the two always agree. Waiting payments are named once, under 待確認.
+  // `rows` keeps the confirmed Balances, which a confirmation is checked against.
+  const stillOwed = new Map((adjusted ?? []).map((b) => [b.memberId, b.amountMinor]));
+  const shown = balances.data.balances.map((b) => ({
+    ...b,
+    balance: stillOwed.get(b.memberId) ?? b.balance,
+  }));
+  const confirmedMine = rows.get(group.me.memberId)?.balance ?? 0;
+  const mine = stillOwed.get(group.me.memberId) ?? confirmedMine;
+  const waitingMine = Math.abs(confirmedMine - mine);
   if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const pending = all.filter(
@@ -123,10 +133,15 @@ export function SettlePanel({ group }: { group: Group }) {
               goodWhen={owedSign.current >= 0 ? "up" : "down"}
             />
           </p>
+          {waitingMine > 0 && (
+            <p className="text-sm text-ink-muted">
+              {t("settle.waitingNote", { amount: formatAmount(waitingMine, currency) })}
+            </p>
+          )}
         </section>
 
         <BalanceChart
-          rows={balances.data.balances}
+          rows={shown}
           myMemberId={group.me.memberId}
           currency={currency}
           pictureOf={memberPictures(members.data)}

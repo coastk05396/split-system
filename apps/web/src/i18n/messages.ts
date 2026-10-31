@@ -386,6 +386,7 @@ const zhTW = {
   "settle.pendingTitle": "待確認",
   "settle.historyTitle": "結算紀錄",
   "settle.status.pending": "待確認",
+  "settle.waitingNote": "另有 {amount} 等對方確認",
   "settle.status.confirmed": "已確認",
   "settle.status.undone": "已撤銷",
   "settle.status.cancelled": "已取消",

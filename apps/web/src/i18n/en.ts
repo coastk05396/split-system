@@ -391,6 +391,7 @@ export const en: Record<MessageId, string> = {
   "settle.pendingTitle": "Waiting for confirmation",
   "settle.historyTitle": "Settlement history",
   "settle.status.pending": "Waiting",
+  "settle.waitingNote": "{amount} more is waiting for the other person to confirm",
   "settle.status.confirmed": "Confirmed",
   "settle.status.undone": "Undone",
   "settle.status.cancelled": "Cancelled",
