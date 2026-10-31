@@ -13,6 +13,7 @@ type Member = { id: string; status: string };
 type Group = { id: string; settlement_currency: Expense["originalCurrency"] };
 type Row = { data: string; deleted: number };
 export type ExpenseOperation =
+  | { action: "balances" }
   | { action: "list"; cursor?: string }
   | { action: "get"; id: string }
   | { action: "delete"; id: string }
@@ -59,6 +60,15 @@ export function expenseOperation(
     if (!row) throw new ApiError("NOT_FOUND");
     return read(row);
   };
+  if (op.action === "balances")
+    return {
+      value: sql
+        .exec<{ id: string; net_balance: number }>(
+          "SELECT id,net_balance FROM ledger_members ORDER BY created_at,rowid",
+        )
+        .toArray(),
+      changed: false,
+    };
   if (op.action === "list") {
     const rows = sql
       .exec<Row>(

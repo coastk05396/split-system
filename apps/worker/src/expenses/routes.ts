@@ -1,4 +1,5 @@
 import { expenseInputSchema } from "@split/shared";
+import { z } from "zod";
 import { and, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
@@ -179,6 +180,20 @@ export function expenseRoutes(deps: AppDeps) {
     .get("/groups/:id/balances", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await groupBalances(db, me), 200);
+      const result = await groupBalances(db, me);
+      const balances = z
+        .array(z.object({ id: z.string(), net_balance: z.number() }))
+        .parse(await expenseLedgerOperation(c.env, me.groupId, { action: "balances" }));
+      const byId = new Map(balances.map((m) => [m.id, m.net_balance]));
+      return c.json(
+        {
+          ...result,
+          balances: result.balances.map((m) => ({
+            ...m,
+            balance: byId.get(m.memberId) ?? m.balance,
+          })),
+        },
+        200,
+      );
     });
 }

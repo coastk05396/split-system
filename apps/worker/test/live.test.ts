@@ -55,3 +55,40 @@ it("connects members using a bearer token or web subprotocol and refuses outside
   });
   expect(forged.status).toBe(401);
 });
+
+it("signals both connected Members after an Expense commits", async () => {
+  const { groupWith, listMembers } = await import("./groups-harness.js");
+  const { postExpense, twdExpense } = await import("./expenses-harness.js");
+  const { admin, group, others } = await groupWith("socket-writer", "socket-reader");
+  const other = others[0];
+  const [a, b] = (await listMembers(admin, group.id)).map((member) => member.id);
+  if (!other || !a || !b) throw new Error("missing member");
+  const sockets = await Promise.all(
+    [admin, other].map(async (person) => {
+      const response = await call(`/groups/${group.id}/live`, {
+        headers: { Upgrade: "websocket", Authorization: `Bearer ${person.accessToken}` },
+      });
+      if (!response.webSocket) throw new Error("missing socket");
+      response.webSocket.accept();
+      return response.webSocket;
+    }),
+  );
+  const received = sockets.map(
+    (socket) =>
+      new Promise<unknown>((resolve) =>
+        socket.addEventListener("message", (event) => resolve(JSON.parse(String(event.data))), {
+          once: true,
+        }),
+      ),
+  );
+  expect((await postExpense(admin, group.id, twdExpense(a, [a, b], 600))).status).toBe(201);
+  const messages = await Promise.all(received);
+  for (const message of messages)
+    expect(message).toMatchObject({
+      version: 1,
+      type: "sync needed",
+      rev: expect.any(Number),
+      timestamp: expect.any(Number),
+    });
+  for (const socket of sockets) socket.close();
+});
