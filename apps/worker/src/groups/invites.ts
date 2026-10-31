@@ -1,3 +1,4 @@
+import { reserveGroup } from "../auth/reservations.js";
 import {
   INVITE_TTL_MS,
   type Invite,
@@ -151,12 +152,10 @@ export async function joinGroup(
   env: Bindings,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now);
+  await reserveGroup(env.DB, userId, group.id, now);
   const mine = await ownRow(db, group.id, userId);
   if (mine?.status === "active") return { groupId: group.id, memberId: mine.id };
   await assertUnderGroupCap(db, userId);
-  await db.run(sql`INSERT INTO group_reservations (user_id, group_id, status, created_at)
-    VALUES (${userId}, ${group.id}, 'pending', ${now})
-    ON CONFLICT (user_id, group_id) DO NOTHING`);
   const result = await memberOperation(env, group.id, {
     action: "join",
     userId,
@@ -177,9 +176,7 @@ export async function claimPlaceholder(
   const { group } = await openInvite(db, token, now);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
-  await db.run(sql`INSERT INTO group_reservations (user_id, group_id, status, created_at)
-    VALUES (${userId}, ${group.id}, 'pending', ${now})
-    ON CONFLICT (user_id, group_id) DO NOTHING`);
+  await reserveGroup(env.DB, userId, group.id, now);
   const result = await memberOperation(env, group.id, {
     action: "claim",
     userId,

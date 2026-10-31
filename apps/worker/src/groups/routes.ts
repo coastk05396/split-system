@@ -1,3 +1,4 @@
+import { reserveGroup } from "../auth/reservations.js";
 import {
   claimInputSchema,
   groupInputSchema,
@@ -107,11 +108,7 @@ export function groupRoutes(deps: AppDeps) {
       const id = crypto.randomUUID();
       const memberId = crypto.randomUUID();
       const now = deps.now();
-      await c.env.DB.prepare(
-        "INSERT INTO group_reservations (user_id, group_id, status, created_at) VALUES (?, ?, 'pending', ?)",
-      )
-        .bind(c.var.userId, id, now)
-        .run();
+      await reserveGroup(c.env.DB, c.var.userId, id, now);
       const ledgerId = c.env.GROUP_LEDGER.idFromName(id);
       const response = await c.env.GROUP_LEDGER.get(ledgerId).fetch(
         "https://ledger.internal/create",

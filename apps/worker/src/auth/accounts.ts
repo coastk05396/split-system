@@ -1,15 +1,10 @@
-import {
-  DELETED_USER_NAME,
-  type MePatch,
-  type Me,
-  type Provider,
-  REFRESH_TOKEN_TTL_SECONDS,
-} from "@split/shared";
-import { and, asc, eq, inArray, lt, ne, sql } from "drizzle-orm";
+import { type MePatch, type Me, type Provider, REFRESH_TOKEN_TTL_SECONDS } from "@split/shared";
+import { and, asc, eq, lt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
-import { groups, identities, members, sessions, users } from "../db/schema.js";
+import { identities, sessions, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
+import type { Bindings } from "../env.js";
 import type { VerifiedIdentity } from "./identity-verifier.js";
 import { newRefreshToken, readRefreshToken, type RefreshToken } from "./tokens.js";
 
@@ -214,54 +209,62 @@ export async function unlinkIdentity(db: Db, userId: string, provider: Provider)
   throw new ApiError(kept === undefined ? "NOT_FOUND" : "LAST_IDENTITY");
 }
 
-/**
- * Deletes an account (decisions 15 and 26). Refused while any Balance is not zero, or while
- * the User is the last admin of a Group that still has other active Members. Groups where
- * the User is the only active Member are deleted with everything under them. Every other
- * Member row stays as a Former Member named "已刪除的使用者"; identities, sessions, the
- * name and the picture go with the User row.
- */
-export async function deleteAccount(db: Db, userId: string): Promise<void> {
-  const memberships = await db
-    .select({ groupId: members.groupId, role: members.role, netBalance: members.netBalance })
-    .from(members)
-    .where(and(eq(members.userId, userId), eq(members.status, "active")));
-
-  const owing = memberships.filter((m) => m.netBalance !== 0).map((m) => m.groupId);
-  if (owing.length > 0) throw new ApiError("BALANCE_NOT_ZERO", { groupIds: owing });
-
-  const groupIds = memberships.map((m) => m.groupId);
-  const others =
-    groupIds.length === 0
-      ? []
-      : await db
-          .select({ groupId: members.groupId, role: members.role })
-          .from(members)
-          .where(
-            and(
-              inArray(members.groupId, groupIds),
-              eq(members.status, "active"),
-              ne(members.userId, userId),
-            ),
-          );
-
-  const soloGroups: string[] = [];
-  const lastAdminOf: string[] = [];
-  for (const membership of memberships) {
-    const rest = others.filter((o) => o.groupId === membership.groupId);
-    if (rest.length === 0) soloGroups.push(membership.groupId);
-    else if (membership.role === "admin" && !rest.some((o) => o.role === "admin")) {
-      lastAdminOf.push(membership.groupId);
+/** Freeze every reserved ledger before checking authoritative balances and admin roles. */
+export async function deleteAccount(env: Bindings, userId: string, now: number): Promise<void> {
+  const expires = now + 10 * 60 * 1000;
+  const mark = await env.DB.prepare(
+    `INSERT INTO account_deletions(user_id,expires_at) VALUES (?,?)
+    ON CONFLICT(user_id) DO UPDATE SET expires_at=excluded.expires_at WHERE account_deletions.expires_at <= ?`,
+  )
+    .bind(userId, expires, now)
+    .run();
+  if (mark.meta.changes !== 1) throw new ApiError("FORBIDDEN");
+  const frozen: string[] = [];
+  const operation = async (groupId: string, action: "freeze" | "unfreeze" | "finalize") => {
+    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId));
+    const response = await stub.fetch("https://ledger.internal/account-deletion", {
+      method: "POST",
+      body: JSON.stringify({ action, userId, now }),
+    });
+    if (!response.ok) throw new ApiError("INTERNAL");
+    return response;
+  };
+  try {
+    const reservations = await env.DB.prepare(
+      "SELECT group_id FROM group_reservations WHERE user_id=?",
+    )
+      .bind(userId)
+      .all<{ group_id: string }>();
+    const owing: string[] = [];
+    const lastAdmin: string[] = [];
+    for (const row of reservations.results) {
+      // Include an attempted freeze in cleanup even if its response was lost.
+      frozen.push(row.group_id);
+      const response = await operation(row.group_id, "freeze");
+      const check = await response.json<{ balance: number; lastAdmin: boolean }>();
+      if (check.balance !== 0) owing.push(row.group_id);
+      if (check.lastAdmin) lastAdmin.push(row.group_id);
     }
+    if (owing.length > 0) throw new ApiError("BALANCE_NOT_ZERO", { groupIds: owing });
+    if (lastAdmin.length > 0) throw new ApiError("LAST_ADMIN", { groupIds: lastAdmin });
+    for (const groupId of frozen) await operation(groupId, "finalize");
+    const spending = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='personal_spending'",
+    ).first();
+    await env.DB.batch([
+      ...(spending === null
+        ? []
+        : [env.DB.prepare("DELETE FROM personal_spending WHERE user_id=?").bind(userId)]),
+      env.DB.prepare("DELETE FROM group_reservations WHERE user_id=?").bind(userId),
+      env.DB.prepare("DELETE FROM group_member_summary WHERE user_id=?").bind(userId),
+      env.DB.prepare("DELETE FROM account_deletions WHERE user_id=?").bind(userId),
+      env.DB.prepare("DELETE FROM users WHERE id=?").bind(userId),
+    ]);
+  } catch (error) {
+    await Promise.allSettled(frozen.map((id) => operation(id, "unfreeze")));
+    await env.DB.prepare("DELETE FROM account_deletions WHERE user_id=? AND expires_at=?")
+      .bind(userId, expires)
+      .run();
+    throw error;
   }
-  if (lastAdminOf.length > 0) throw new ApiError("LAST_ADMIN", { groupIds: lastAdminOf });
-
-  await db.batch([
-    db.delete(groups).where(inArray(groups.id, soloGroups.length === 0 ? [""] : soloGroups)),
-    db
-      .update(members)
-      .set({ status: "former", nickname: DELETED_USER_NAME })
-      .where(eq(members.userId, userId)),
-    db.delete(users).where(eq(users.id, userId)),
-  ]);
 }
