@@ -88,6 +88,28 @@ export function useIsUpdating(queryKey: QueryKey): boolean {
   );
 }
 
+function hasOptimisticItem(data: unknown): boolean {
+  if (data === null || typeof data !== "object") return false;
+  if (Array.isArray(data)) {
+    return data.some(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { id?: unknown }).id === "string" &&
+        (item as { id: string }).id.startsWith("tmp-"),
+    );
+  }
+  if ("pages" in data && Array.isArray((data as { pages: unknown[] }).pages)) {
+    return (data as { pages: unknown[] }).pages.some((page) => hasOptimisticItem(page));
+  }
+  for (const value of Object.values(data as Record<string, unknown>)) {
+    if (Array.isArray(value) && hasOptimisticItem(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function saveCache(
   client: QueryClient,
   userId: string,
@@ -99,18 +121,8 @@ export function saveCache(
     .getAll()
     .filter((q) => {
       if (q.state.data === undefined) return false;
-      if (Array.isArray(q.state.data)) {
-        if (
-          q.state.data.some(
-            (item) =>
-              typeof item === "object" &&
-              item !== null &&
-              typeof (item as { id?: unknown }).id === "string" &&
-              (item as { id: string }).id.startsWith("tmp-"),
-          )
-        ) {
-          return false;
-        }
+      if (hasOptimisticItem(q.state.data)) {
+        return false;
       }
       return true;
     })
@@ -126,7 +138,11 @@ export function saveCache(
     queries,
     savedAt: Date.now(),
   };
-  storage.setItem(getCacheKey(userId, version), JSON.stringify(payload));
+  try {
+    storage.setItem(getCacheKey(userId, version), JSON.stringify(payload));
+  } catch {
+    /* ignore storage quota exceeded or disabled */
+  }
 }
 
 export function restoreCache(

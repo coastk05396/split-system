@@ -124,4 +124,31 @@ describe("Web query cache persistence (Ticket 10)", () => {
       expect(fakeStore.getItem(getCacheKey(user.id))).not.toBeNull();
     });
   });
+
+  it("filters out optimistic items with tmp- IDs from infinite query structures", () => {
+    client.setQueryData(["groups", "g-1", "expenses"], {
+      pages: [
+        {
+          expenses: [{ id: "tmp-12345", description: "午餐", amount: 200 }],
+          nextCursor: null,
+        },
+      ],
+      pageParams: [undefined],
+    });
+    client.setQueryData(["groups", "g-1", "members"], [
+      { id: "m-1", name: "小宇" },
+    ]);
+
+    saveCache(client, "user-1", storage);
+
+    const user1Client = new QueryClient();
+    restoreCache(user1Client, "user-1", storage);
+
+    // The query containing tmp- ID is omitted from cache
+    expect(user1Client.getQueryData(["groups", "g-1", "expenses"])).toBeUndefined();
+    // The clean query is preserved
+    expect(user1Client.getQueryData(["groups", "g-1", "members"])).toEqual([
+      { id: "m-1", name: "小宇" },
+    ]);
+  });
 });

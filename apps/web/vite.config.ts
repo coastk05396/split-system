@@ -8,7 +8,12 @@ export default defineConfig({
   server: {
     // `cloudflared tunnel --url` hands out a random *.trycloudflare.com name (see AGENTS.md).
     allowedHosts: [".trycloudflare.com"],
-    proxy: { "/api": "http://localhost:8787" },
+    proxy: {
+      "/api": {
+        target: "http://localhost:8787",
+        ws: true,
+      },
+    },
   },
   build: {
     manifest: true,
