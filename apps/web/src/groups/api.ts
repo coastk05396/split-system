@@ -1,12 +1,11 @@
-import {
-  memberSchema,
-  type Group,
-  type GroupInput,
-  type Invite,
-  type InvitePreview,
-  type JoinResult,
-  type Member,
-  type MemberPatch,
+import type {
+  Group,
+  GroupInput,
+  Invite,
+  InvitePreview,
+  JoinResult,
+  Member,
+  MemberPatch,
 } from "@split/shared";
 import {
   useMutation,
@@ -128,6 +127,19 @@ type MembersEditContext = { undo?: MembersEdit["undo"]; tempId?: string | undefi
  * wins. Only for changes the browser can compute exactly; never use it for anything that moves a
  * Balance (docs/adr/0004).
  */
+function isMember(data: unknown): data is Member {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "id" in data &&
+    typeof (data as { id: unknown }).id === "string" &&
+    "groupId" in data &&
+    typeof (data as { groupId: unknown }).groupId === "string" &&
+    "role" in data &&
+    "status" in data
+  );
+}
+
 function useOptimisticMembers<TVariables>(
   id: string,
   edit: (members: Member[], variables: TVariables) => MembersEdit,
@@ -146,14 +158,10 @@ function useOptimisticMembers<TVariables>(
       return { undo, tempId };
     },
     onSuccess: (data: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
-      if (context?.tempId !== undefined) {
-        const parsed = memberSchema.safeParse(data);
-        if (parsed.success) {
-          const member = parsed.data;
-          client.setQueryData<Member[]>(key, (members) =>
-            members?.map((m) => (m.id === context.tempId ? member : m)),
-          );
-        }
+      if (context?.tempId !== undefined && isMember(data)) {
+        client.setQueryData<Member[]>(key, (members) =>
+          members?.map((m) => (m.id === context.tempId ? data : m)),
+        );
       }
     },
     onError: (_error: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
