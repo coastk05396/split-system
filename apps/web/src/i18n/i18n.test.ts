@@ -17,7 +17,7 @@ describe("catalogs", () => {
     expect(errorMessage("FORBIDDEN")).toBe("你沒有權限進行這個操作。");
     setLocale("en");
     expect(t("nav.settings")).toBe("Settings");
-    expect(t("home.greeting", { name: "Yu" })).toBe("Yu, what shall we split today?");
+    expect(t("home.greeting", { name: "Yu" })).toBe("Hi, Yu!");
     expect(errorMessage("FORBIDDEN")).toBe("You do not have permission to do this.");
   });
 });

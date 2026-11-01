@@ -25,9 +25,9 @@ export function HomePage() {
   const intro = useIntro();
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5 md:gap-8">
       <header>
-        <h1 className="text-balance text-2xl leading-tight font-bold md:text-4xl">
+        <h1 className="text-balance text-xl font-bold leading-snug md:text-3xl">
           {t("home.greeting", { name })}
         </h1>
       </header>

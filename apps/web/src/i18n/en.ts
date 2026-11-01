@@ -46,7 +46,7 @@ export const en: Record<MessageId, string> = {
   "signIn.test.provider": "Identity source",
   "signIn.test.submit": "Test sign-in",
 
-  "home.greeting": "{name}, what shall we split today?",
+  "home.greeting": "Hi, {name}!",
   "home.balance": "Net balance",
   "home.noPending": "Nothing waiting to be settled",
   "home.rateNote": "Converted at the reference rate of {date}, for reference only",

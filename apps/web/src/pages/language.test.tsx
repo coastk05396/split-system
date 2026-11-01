@@ -41,7 +41,7 @@ describe("language", () => {
   it("opens in the language saved on the account", async () => {
     renderApp({ cookieUser: { ...me, language: "en" } });
 
-    expect(await screen.findByText("小宇, what shall we split today?")).toBeVisible();
+    expect(await screen.findByText("Hi, 小宇!")).toBeVisible();
     expect(await screen.findByRole("heading", { name: "Quick start" })).toBeVisible();
   });
 

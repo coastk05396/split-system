@@ -49,7 +49,7 @@ const zhTW = {
   "signIn.test.provider": "身分來源",
   "signIn.test.submit": "測試登入",
 
-  "home.greeting": "{name}，今天想怎麼分？",
+  "home.greeting": "嗨，{name}！",
   "home.balance": "目前淨收付",
   "home.noPending": "目前沒有待結算的款項",
   "home.rateNote": "依 {date} 的參考匯率換算，僅供參考",
