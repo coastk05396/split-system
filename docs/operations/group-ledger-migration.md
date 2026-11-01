@@ -32,55 +32,101 @@ The gate and the snapshot endpoint exist only in the new Worker. Setting `MAINTE
 
 ### 3. Verify Target Group & Snapshot
 
-- Confirm the unique identity of the retained group 「明天去哪玩」:
-  - Query group candidate IDs.
-  - Operator calls `GET /api/v1/maintenance/migration/snapshot/:id` with `X-Maintenance-Bypass: <secret>`.
-  - The endpoint rejects any ID unless it uniquely identifies the single group named `明天去哪玩`.
-  - Record the returned SHA-256 fingerprint.
-- The gate stays active throughout the snapshot, import and wipe.
+Set helper shell variables for operator convenience:
+```bash
+export BASE_URL="https://split.rickchen.si"
+export MAINTENANCE_SECRET="<your-secret-entered-in-step-2>"
+```
 
-### 5. Idempotent Import & Retained-Group Verification
+1. Look up the candidate ID for the retained group 「明天去哪玩」 in D1:
+   ```bash
+   pnpm --filter @split/worker exec wrangler d1 execute split-prod --remote \
+     --command "SELECT id, name, currency FROM groups WHERE name = '明天去哪玩';"
+   ```
+   Save the returned ID:
+   ```bash
+   export RETAINED_ID="<id-from-query-above>"
+   ```
 
-- Execute import with bypass:
-  ```bash
-  curl -X POST https://split.rickchen.si/api/v1/maintenance/migration/import/<retained-id> \
-    -H "X-Maintenance-Bypass: <secret>"
-  ```
-- The import populates the target Group's ledger DO, verifies the zero-sum invariant across members, sets up user reservations and active invites in D1, and drains read-model tables (`group_directory`, `group_member_summary`, `personal_spending`). The import is idempotent and safely retryable.
-- Verify the retained Group:
-  - Check group details: `GET /api/v1/groups/<retained-id>`
-  - Check member list and roles: `GET /api/v1/groups/<retained-id>/members`
-  - Check zero-sum balance: `GET /api/v1/groups/<retained-id>/balances`
-  - Check expenses, settlements, and stops
-  - Verify unexpired sessions and both Google and LINE authentication
+2. Capture and verify the consistent pre-migration snapshot:
+   ```bash
+   curl -s "${BASE_URL}/api/v1/maintenance/migration/snapshot/${RETAINED_ID}" \
+     -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+   ```
+   - The endpoint verifies that `${RETAINED_ID}` matches the unique group named `明天去哪玩`.
+   - Record the returned SHA-256 fingerprint from the JSON response.
+   - The maintenance gate remains active throughout snapshot, import, and wipe.
 
-### 6. Controlled Wipe of Excluded Groups
+### 4. Idempotent Import & Retained-Group Verification
 
-- Only after successful verification of the retained group and with owner approval, execute controlled wipe:
-  ```bash
-  curl -X POST https://split.rickchen.si/api/v1/maintenance/migration/wipe-excluded/<retained-id> \
-    -H "X-Maintenance-Bypass: <secret>"
-  ```
-- The endpoint:
-  1. Uniquely re-verifies the retained group `明天去哪玩` and checks that its ledger DO is operational.
-  2. Records excluded ledger IDs and wipes excluded groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows (`group_directory`, `group_member_summary`, `group_reservations`, `personal_spending`) in a D1 transaction, then deletes each ledger and retains failed IDs for retry.
-     The excluded group IDs are first written to `migration_wipe_pending` in the same D1 batch (the table is created on first use by the endpoint, not by a migration). After the D1 rows are gone this table is the only retry list: a rerun reads it, deletes the remaining ledgers and clears each row. If the endpoint returns `failedLedgers`, run it again until it succeeds.
-  3. Preserves all users, identities, sessions, settings, and the retained group.
-- Re-verify that excluded groups return 404, while the retained group remains accessible and authentication continues to function.
+1. Execute the migration import into the target group's Durable Object:
+   ```bash
+   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/import/${RETAINED_ID}" \
+     -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+   ```
+   - This populates the target Group's ledger DO, verifies the zero-sum balance invariant across members, registers D1 capacity reservations and active invites, and drains the D1 read-model projections (`group_directory`, `group_member_summary`, `personal_spending`).
+   - The operation is idempotent and safe to retry if interrupted.
 
-### 7. Post-Cutover Verification & Gate Removal
+2. Verify the imported group details and zero-sum invariant:
+   - Check group details:
+     ```bash
+     curl -s "${BASE_URL}/api/v1/groups/${RETAINED_ID}" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+     ```
+   - Check members:
+     ```bash
+     curl -s "${BASE_URL}/api/v1/groups/${RETAINED_ID}/members" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+     ```
+   - Check zero-sum balance:
+     ```bash
+     curl -s "${BASE_URL}/api/v1/groups/${RETAINED_ID}/balances" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+     ```
+   - Verify expenses, settlements, and stops return 200.
 
-- Verify health: `GET /api/v1/health`
-- Verify WebSocket live connection (`split.v1` protocol and ping/pong).
-- Verify test sign-in route returns 404 (`TEST_SIGN_IN` absent in production).
-- Remove maintenance gate:
-  ```bash
-  pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env production
-  ```
-- Monitor production error logs and observability dashboard.
+### 5. Controlled Wipe of Excluded Groups
+
+Only after verifying the retained group and with explicit owner approval:
+1. Execute controlled wipe:
+   ```bash
+   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/wipe-excluded/${RETAINED_ID}" \
+     -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+   ```
+2. The endpoint:
+   - Uniquely re-verifies the retained group `明天去哪玩` and checks that its ledger DO is operational and zero-sum balanced.
+   - Wipes excluded groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows in a single D1 transaction.
+   - Persists excluded group IDs in `migration_wipe_pending` to guarantee safe retries if any DO ledger deletion fails. If the endpoint returns `failedLedgers`, re-run the curl command until it succeeds.
+   - Preserves all users, identities, sessions, settings, and the retained group.
+3. Confirm that excluded groups return 404, while the retained group remains accessible.
+
+### 6. Post-Cutover Verification & Gate Removal
+
+1. Verify system health:
+   ```bash
+   curl -s "${BASE_URL}/api/v1/health"
+   ```
+2. Verify live WebSocket connection (`split.v1` protocol and ping/pong).
+3. Verify test sign-in route returns 404:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" "${BASE_URL}/api/v1/auth/test-sign-in"
+   # Expected: 404
+   ```
+4. Remove the maintenance gate to restore normal user writes:
+   ```bash
+   pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env production
+   ```
+5. Monitor production error logs and observability dashboard.
 
 ## Rollback & Disaster Recovery
 
 1. **Before wipe:** Keep the maintenance gate enabled and roll back the Worker if required. Import may have changed legacy projections; restore the verified pre-cutover backup if the legacy state needs to be recovered exactly.
 2. **After wipe, before gate removal:** Keep the gate enabled. Restore the pre-cutover D1 backup before rolling back the Worker, because excluded groups have been deleted. If continuing the cutover instead, retry `wipe-excluded` with the same retained ID; the persisted pending list includes interrupted deletions, and an error reports `failedLedgers`.
 3. **After gate removal:** Rollback requires restoring the pre-cutover D1 backup and rolling back the Worker. Writes created since cutover will be lost; the ledger is authoritative and there is no reverse mirror.
+
+## Release 2 Follow-up & Known Edge Cases
+
+The following items are deferred to Release 2 as documented non-blocking backlog:
+1. **D1 Legacy Table Drop**: Once the group ledger Durable Object has run stably in production, apply migration `0008` to drop legacy tables (`expenses`, `expense_payers`, `expense_splits`, `settlements`, `stops`, `members`, `groups`, `migration_wipe_pending`).
+2. **Reservation Concurrency Hardening**: In `auth/reservations.ts`, harden `withReservation` to distinguish transient network failures from confirmed commits so concurrent joins cannot prematurely remove a valid reservation.
+3. **Signal & Projection Drainage Sequencing**: Ensure live WebSocket signals for `member-op` are dispatched only after D1 read-model projection batches have fully completed.
+4. **Multi-DO Account Deletion Compensation**: In `auth/accounts.ts`, implement two-phase rollback/unfreeze if multi-ledger finalization fails midway.
+5. **Initial In-Flight Query Cancellation**: Enhance `sync.ts` to abort in-flight fetch requests on first socket connect when no cached data exists.
+6. **Placeholder Ghost Member Cleanup**: Purge legacy placeholder members from D1 once referenced legacy expenses are removed.
