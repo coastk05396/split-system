@@ -38,64 +38,62 @@ export BASE_URL="https://split.rickchen.si"
 export MAINTENANCE_SECRET="<your-secret-entered-in-step-2>"
 ```
 
-1. Look up the candidate ID for the retained group 「明天去哪玩」 in D1:
+1. Look up the candidate IDs for the retained groups (「明天去哪玩」, 「YoYoYo」, 「Test」) in D1:
    ```bash
    pnpm --filter @split/worker exec wrangler d1 execute split-prod --remote \
-     --command "SELECT id, name, currency FROM groups WHERE name = '明天去哪玩';"
-   ```
-   Save the returned ID:
-   ```bash
-   export RETAINED_ID="<id-from-query-above>"
+     --command "SELECT id, name, currency FROM groups WHERE name IN ('明天去哪玩', 'YoYoYo', 'Test');"
    ```
 
-2. Capture and verify the consistent pre-migration snapshot:
+2. Capture and verify consistent pre-migration snapshots for each retained group:
    ```bash
-   curl -s "${BASE_URL}/api/v1/maintenance/migration/snapshot/${RETAINED_ID}" \
+   # For each retained group ID:
+   curl -s "${BASE_URL}/api/v1/maintenance/migration/snapshot/<group-id>" \
      -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
    ```
-   - The endpoint verifies that `${RETAINED_ID}` matches the unique group named `明天去哪玩`.
-   - Record the returned SHA-256 fingerprint from the JSON response.
+   - The endpoint verifies that the ID matches a uniquely named retained group in the whitelist.
+   - Record the returned SHA-256 fingerprint from each response.
    - The maintenance gate remains active throughout snapshot, import, and wipe.
 
 ### 4. Idempotent Import & Retained-Group Verification
 
-1. Execute the migration import into the target group's Durable Object:
+1. Execute the migration import into each target group's Durable Object:
    ```bash
-   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/import/${RETAINED_ID}" \
+   # Run for each retained group ID:
+   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/import/<group-id>" \
      -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
    ```
-   - This populates the target Group's ledger DO, verifies the zero-sum balance invariant across members, registers D1 capacity reservations and active invites, and drains the D1 read-model projections (`group_directory`, `group_member_summary`, `personal_spending`).
+   - This populates each target Group's ledger DO, verifies the zero-sum balance invariant across members, registers D1 capacity reservations and active invites, and drains the D1 read-model projections (`group_directory`, `group_member_summary`, `personal_spending`).
    - The operation is idempotent and safe to retry if interrupted.
 
 2. Verify the imported group details and zero-sum invariant:
    - Check group details:
      ```bash
-     curl -s "${BASE_URL}/api/v1/groups/${RETAINED_ID}" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+     curl -s "${BASE_URL}/api/v1/groups/<group-id>" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
      ```
    - Check members:
      ```bash
-     curl -s "${BASE_URL}/api/v1/groups/${RETAINED_ID}/members" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+     curl -s "${BASE_URL}/api/v1/groups/<group-id>/members" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
      ```
    - Check zero-sum balance:
      ```bash
-     curl -s "${BASE_URL}/api/v1/groups/${RETAINED_ID}/balances" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
+     curl -s "${BASE_URL}/api/v1/groups/<group-id>/balances" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
      ```
    - Verify expenses, settlements, and stops return 200.
 
 ### 5. Controlled Wipe of Excluded Groups
 
-Only after verifying the retained group and with explicit owner approval:
-1. Execute controlled wipe:
+Only after verifying all retained groups and with explicit owner approval:
+1. Execute controlled wipe using any verified retained group ID:
    ```bash
-   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/wipe-excluded/${RETAINED_ID}" \
+   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/wipe-excluded/<any-retained-group-id>" \
      -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
    ```
 2. The endpoint:
-   - Uniquely re-verifies the retained group `明天去哪玩` and checks that its ledger DO is operational and zero-sum balanced.
-   - Wipes excluded groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows in a single D1 transaction.
-   - Persists excluded group IDs in `migration_wipe_pending` to guarantee safe retries if any DO ledger deletion fails. If the endpoint returns `failedLedgers`, re-run the curl command until it succeeds.
-   - Preserves all users, identities, sessions, settings, and the retained group.
-3. Confirm that excluded groups return 404, while the retained group remains accessible.
+   - Uniquely re-verifies that every retained group (`明天去哪玩`, `YoYoYo`, `Test`) currently in D1 has been imported into its ledger DO and is zero-sum balanced.
+   - Wipes any non-retained groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows in a single D1 transaction.
+   - Persists excluded group IDs in `migration_wipe_pending` to guarantee safe retries if any DO ledger deletion fails.
+   - Preserves all users, identities, sessions, settings, and all retained groups.
+3. Confirm that excluded groups return 404, while all retained groups remain accessible.
 
 ### 6. Post-Cutover Verification & Gate Removal
 
