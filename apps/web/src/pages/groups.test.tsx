@@ -37,28 +37,6 @@ describe("group list", () => {
     expect(screen.getByRole("link", { name: /建立新群組/ })).toHaveAttribute("href", "/groups/new");
   });
 
-  it("filters by name as you type", async () => {
-    const user = userEvent.setup();
-    renderApp({
-      path: "/groups",
-      cookieUser: me,
-      seed: (groups) => {
-        groups.add(me, { name: "週末台南小旅行" });
-        groups.add(me, { name: "小屋生活費" });
-      },
-    });
-
-    await user.type(await screen.findByRole("searchbox", { name: "搜尋群組" }), "台南");
-
-    const list = screen.getByRole("list", { name: "我的群組" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
-    expect(within(list).getByText("週末台南小旅行")).toBeVisible();
-
-    await user.clear(screen.getByRole("searchbox", { name: "搜尋群組" }));
-    await user.type(screen.getByRole("searchbox", { name: "搜尋群組" }), "東京");
-    expect(screen.getByText("沒有符合「東京」的群組")).toBeVisible();
-  });
-
   it("shows the empty state with a create call to action when there are no Groups", async () => {
     renderApp({ path: "/groups", cookieUser: me });
 

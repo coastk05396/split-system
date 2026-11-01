@@ -27,7 +27,7 @@ export function HomePage() {
   return (
     <div className="flex flex-col gap-5 md:gap-8">
       <header>
-        <h1 className="text-balance text-xl font-bold leading-snug md:text-3xl">
+        <h1 className="text-balance text-2xl font-bold leading-snug md:text-3xl">
           {t("home.greeting", { name })}
         </h1>
       </header>

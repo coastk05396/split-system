@@ -1,6 +1,5 @@
 import { type Group } from "@split/shared";
-import { ArrowRight, ChevronRight, Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
@@ -14,7 +13,6 @@ import { TRIP_ENABLED } from "../trip/enabled.js";
 /** Screen 12 (group list) and screen 19 (no Groups yet). */
 export function GroupsPage() {
   const groups = useGroups();
-  const [query, setQuery] = useState("");
 
   if (groups.isPending) return <Loading />;
   if (groups.isError) {
@@ -22,31 +20,13 @@ export function GroupsPage() {
   }
   if (groups.data.length === 0) return <NoGroups />;
 
-  const needle = query.trim();
-  const shown = groups.data.filter((g) => g.name.includes(needle));
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <header>
-        <h1 className="text-xl font-bold md:text-3xl">{t("groups.heading")}</h1>
+        <h1 className="text-2xl font-bold md:text-3xl">{t("groups.heading")}</h1>
       </header>
-      <label className="flex items-center gap-2.5 rounded-2xl border border-sprout-200 bg-white px-3.5 py-2.5">
-        <Search aria-hidden="true" className="size-4.5 text-ink-muted" />
-        <input
-          type="search"
-          aria-label={t("groups.search")}
-          placeholder={t("groups.search")}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-          }}
-          className="w-full bg-transparent text-sm outline-none"
-        />
-      </label>
-      {shown.length === 0 && (
-        <p className="text-sm text-ink-muted">{t("groups.noMatch", { query: needle })}</p>
-      )}
       <ul aria-label={t("groups.heading")} className="grid gap-2.5 md:grid-cols-2 md:gap-4">
-        {shown.map((g) => (
+        {groups.data.map((g) => (
           <li key={g.id}>
             <GroupRow group={g} />
           </li>
