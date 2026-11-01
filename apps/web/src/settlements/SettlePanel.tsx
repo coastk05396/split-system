@@ -6,7 +6,7 @@ import {
   type Settlement,
 } from "@split/shared";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Copy, MessageCircle, Send } from "lucide-react";
+import { ArrowRight, ChevronDown, MessageCircle, Send } from "lucide-react";
 import { useDeps } from "../app/AppProviders.js";
 import {
   AvatarTip,
@@ -202,20 +202,9 @@ function SettleNotifyActions({
 }) {
   const { line } = useDeps();
   const invite = useEnsureInvite(group.id);
-  const [chatAvailable, setChatAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let current = true;
-    void line.canSendToChat().then((available) => {
-      if (current) setChatAvailable(available);
-    });
-    return () => {
-      current = false;
-    };
-  }, [line]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -247,7 +236,15 @@ function SettleNotifyActions({
     setBusy(true);
     try {
       const card = await prepareCard();
-      await line.sendToChat([settleFlexMessage(card)]);
+      try {
+        await line.sendToChat([settleFlexMessage(card)]);
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.log("[DEV] sendToChat simulated:", settleFlexMessage(card));
+        } else {
+          throw err;
+        }
+      }
       onNotice(t("settleShare.sentToChat"));
     } catch (error) {
       onNotice(failureMessage(error), true);
@@ -275,34 +272,6 @@ function SettleNotifyActions({
     }
   }
 
-  async function copyText() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const card = await prepareCard();
-      await navigator.clipboard.writeText(settleText(card));
-      onNotice(t("settleShare.copied"));
-    } catch (error) {
-      onNotice(failureMessage(error), true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!chatAvailable) {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void shareLine()}
-        className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
-      >
-        <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-700" />
-        {t("settleShare.shareLine")}
-      </button>
-    );
-  }
-
   return (
     <div className="relative inline-block text-left" ref={menuRef}>
       <button
@@ -327,7 +296,7 @@ function SettleNotifyActions({
       {menuOpen && (
         <div
           role="menu"
-          className="glass-dialog surface-card absolute right-0 z-20 mt-1.5 flex w-48 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg backdrop-blur-md"
+          className="glass-dialog surface-card absolute right-0 z-20 mt-1.5 flex w-40 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg backdrop-blur-md"
         >
           <button
             type="button"
@@ -352,18 +321,6 @@ function SettleNotifyActions({
           >
             <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-600" />
             {t("settleShare.shareLine")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false);
-              void copyText();
-            }}
-            className="press-pill flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink hover:bg-sprout-100"
-          >
-            <Copy aria-hidden="true" className="size-3.5 text-sprout-600" />
-            {t("settleShare.copyMessage")}
           </button>
         </div>
       )}

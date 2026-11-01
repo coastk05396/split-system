@@ -342,6 +342,7 @@ describe("Notifying the Group of the Payment plan", () => {
     await openSettle({ name: "室友", others: [{ name: "宜庭" }] });
 
     expect(await screen.findByText("大家都結清了！")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "LINE 通知" })).toBeNull();
     expect(screen.queryByRole("button", { name: "通知款項" })).toBeNull();
     expect(screen.queryByRole("button", { name: "傳到對話框" })).toBeNull();
   });
@@ -351,7 +352,8 @@ describe("Notifying the Group of the Payment plan", () => {
       insideLine: { idToken: null },
     });
 
-    await user.click(await screen.findByRole("button", { name: "通知款項" }));
+    await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
+    await user.click(await screen.findByRole("menuitem", { name: "通知好友" }));
 
     expect(await screen.findByText("已分享到 LINE ✓")).toBeVisible();
     expect(lineShareMessages).toHaveLength(1);
@@ -372,7 +374,7 @@ describe("Notifying the Group of the Payment plan", () => {
     });
 
     await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
-    await user.click(await screen.findByRole("menuitem", { name: "傳到對話框" }));
+    await user.click(await screen.findByRole("menuitem", { name: "當前對話框" }));
 
     expect(await screen.findByText("已發送到對話框 ✓")).toBeVisible();
     expect(lineChatMessages).toHaveLength(1);
