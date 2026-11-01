@@ -701,6 +701,7 @@ function PaymentLine({
         <CountUp
           value={amount}
           format={(n) => formatAmount(n, currency)}
+          goodWhen={tone === "pay" ? "down" : "up"}
           updating={updating}
           className={`shrink-0 text-lg font-bold tabular-nums ${
             struck

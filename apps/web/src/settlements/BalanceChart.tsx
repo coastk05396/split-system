@@ -18,7 +18,7 @@ export function BalanceChart({
   currency,
   pictureOf,
   updating = false,
-  defaultOpen = false,
+  defaultOpen = true,
 }: {
   rows: readonly BalanceRow[];
   myMemberId: string;
@@ -28,6 +28,7 @@ export function BalanceChart({
   defaultOpen?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [animKey, setAnimKey] = useState(0);
   const seated = rows.filter((r) => r.status !== "former");
   const open = seated.filter((r) => r.balance !== 0).sort((a, b) => b.balance - a.balance);
   if (open.length === 0) return null;
@@ -41,19 +42,20 @@ export function BalanceChart({
         id="balance-chart"
         aria-expanded={isOpen}
         onClick={() => {
-          setIsOpen((prev) => !prev);
+          setIsOpen((prev) => {
+            const next = !prev;
+            if (next) {
+              setAnimKey((k) => k + 1);
+            }
+            return next;
+          });
         }}
         className="press-pill flex w-full items-center justify-between text-left select-none rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
       >
         <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-ink">
-              {t("settle.chartTitle")}
-            </h2>
-            <span className="rounded-full bg-sprout-100 px-2.5 py-0.5 text-xs font-bold text-sprout-700 shadow-2xs">
-              {t("groups.people", { count: open.length })}
-            </span>
-          </div>
+          <h2 className="text-lg font-bold text-ink">
+            {t("settle.chartTitle")}
+          </h2>
           <p className="text-xs text-ink-muted">{t("settle.chartLegend")}</p>
         </div>
         <span className="press-icon flex size-8 shrink-0 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-100">
@@ -71,7 +73,7 @@ export function BalanceChart({
         data-closing={!isOpen ? "true" : undefined}
       >
         <div className="collapse-grid-inner pt-3">
-          <ul aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
+          <ul key={animKey} aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
             {open.map((r, index) => {
               const owed = r.balance > 0;
               const name = localName(r.displayName);
@@ -96,15 +98,13 @@ export function BalanceChart({
                       />
                       <span className="min-w-0 truncate text-sm font-bold text-ink">{name}</span>
                     </div>
-                    <span
+                    <CountUp
+                      value={r.balance}
+                      format={(n) => `${n > 0 ? "+" : ""}${formatAmount(n, currency)}`}
+                      goodWhen="up"
+                      updating={updating}
                       className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-red-700"}`}
-                    >
-                      <CountUp
-                        value={r.balance}
-                        format={(n) => `${n > 0 ? "+" : ""}${formatAmount(n, currency)}`}
-                        updating={updating}
-                      />
-                    </span>
+                    />
                   </div>
                   <div aria-hidden="true" className="grid grid-cols-2">
                     <div className="flex justify-end border-r-2 border-ink/30">
