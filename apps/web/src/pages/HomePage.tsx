@@ -1,5 +1,5 @@
 import { type CurrencyCode, formatAmount, type Group } from "@split/shared";
-import { ArrowRight, Check, ChevronRight, Plane, ReceiptText, Users } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Plane, ReceiptText } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -7,7 +7,7 @@ import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
 import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js";
-import { LoadError, MaintenanceTag } from "../groups/ui.js";
+import { GroupAvatar, LoadError, MaintenanceTag } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
@@ -241,9 +241,7 @@ function HomeGroupRow({ group }: { group: Group }) {
       to={`/groups/${group.id}?tab=settle`}
       className="group flex items-center gap-3 px-4 py-3.5 text-ink transition-colors hover:bg-sprout-50 active:bg-sprout-100 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-sprout-100 text-sprout-600">
-        <Users aria-hidden="true" className="size-5" />
-      </span>
+      <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base" />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
           <span className="truncate text-base font-bold">{group.name}</span>

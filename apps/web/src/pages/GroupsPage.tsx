@@ -1,11 +1,11 @@
 import { type Group } from "@split/shared";
-import { ArrowRight, ChevronRight, House, Plane, Plus, Search } from "lucide-react";
+import { ArrowRight, ChevronRight, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
 import { balanceLine } from "../groups/totals.js";
-import { card, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
+import { card, GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
@@ -65,20 +65,13 @@ export function GroupsPage() {
 }
 
 function GroupRow({ group }: { group: Group }) {
-  const Icon = group.isTrip ? Plane : House;
   const balance = group.me.balance;
   return (
     <PressableLink
       to={`/groups/${group.id}`}
       className={`${card} group flex items-center gap-4 p-5 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
-      <span
-        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${
-          group.isTrip ? "bg-sprout-100" : "bg-peach"
-        }`}
-      >
-        <Icon aria-hidden="true" className="size-7 text-sprout-500" />
-      </span>
+      <GroupAvatar name={group.name} groupId={group.id} className="size-14 text-2xl" />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
           <span className="truncate text-lg font-bold">{group.name}</span>

@@ -144,6 +144,95 @@ export function Avatar({
   );
 }
 
+export const GROUP_PALETTES = [
+  {
+    bg: "bg-[#FDE8E1]",
+    text: "text-[#D95338]",
+    border: "border-[#F7C6B7]",
+    shadow: "shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_2px_4px_rgba(217,83,56,0.06)]",
+  }, // 蜜桃杏粉 (Peach Coral)
+  {
+    bg: "bg-[#EAF5E9]",
+    text: "text-[#2D6A4F]",
+    border: "border-[#C8E6C9]",
+    shadow: "shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_2px_4px_rgba(45,106,79,0.06)]",
+  }, // 嫩芽抹茶 (Sprout Matcha)
+  {
+    bg: "bg-[#E3F2FD]",
+    text: "text-[#1976D2]",
+    border: "border-[#BBDEFB]",
+    shadow: "shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_2px_4px_rgba(25,118,210,0.06)]",
+  }, // 薄霧天藍 (Mist Sky)
+  {
+    bg: "bg-[#FEF3D6]",
+    text: "text-[#D97706]",
+    border: "border-[#FDE68A]",
+    shadow: "shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_2px_4px_rgba(217,119,6,0.06)]",
+  }, // 金橙蜜香 (Honey Citrus)
+  {
+    bg: "bg-[#F3E8FF]",
+    text: "text-[#7E22CE]",
+    border: "border-[#E9D5FF]",
+    shadow: "shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_2px_4px_rgba(126,34,206,0.06)]",
+  }, // 薰衣紫藤 (Lavender Lilac)
+  {
+    bg: "bg-[#E0F2F1]",
+    text: "text-[#00796B]",
+    border: "border-[#B2DFDB]",
+    shadow: "shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),0_2px_4px_rgba(0,121,107,0.06)]",
+  }, // 薄荷晨露 (Sea Salt Mint)
+] as const;
+
+export function groupPalette(key: string) {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return GROUP_PALETTES[hash % GROUP_PALETTES.length] ?? GROUP_PALETTES[0];
+}
+
+export function groupGlyph(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "群";
+  const first = new Intl.Segmenter().segment(trimmed)[Symbol.iterator]().next();
+  return first.done === true ? "群" : first.value.segment.toUpperCase();
+}
+
+/**
+ * A cute, textured Group avatar with the first character/emoji,
+ * deterministic pastel theme, and spring touch micro-interactions.
+ */
+export function GroupAvatar({
+  name,
+  groupId,
+  className = "size-11 text-base",
+  interactive = true,
+}: {
+  name: string;
+  groupId: string;
+  className?: string;
+  interactive?: boolean;
+}) {
+  const palette = groupPalette(groupId || name);
+  const glyph = groupGlyph(name);
+  const isEmoji = /\p{Extended_Pictographic}/u.test(glyph);
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-2xl border font-bold ${palette.bg} ${palette.text} ${palette.border} ${palette.shadow} ${
+        interactive
+          ? "transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-95 group-active:-rotate-1 motion-reduce:transition-none"
+          : ""
+      } ${className}`}
+    >
+      <span className={isEmoji ? "text-[1.15em] leading-none" : "leading-none"}>
+        {glyph}
+      </span>
+    </span>
+  );
+}
+
 /**
  * An Avatar standing in for a name: tap it and the name floats above for a moment. The name stays
  * on the button's label, and "you" wears a green ring and a small 你 badge.

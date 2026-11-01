@@ -12,6 +12,10 @@ _Avoid_: 一起分, Bot (when meaning the mascot)
 A set of people who share expenses; the one concept behind both a running tab and a trip.
 _Avoid_: Room, team, party
 
+**Group avatar**:
+The visual glyph representing a Group, displaying its first character or emoji on a deterministic pastel palette with spring motion feedback.
+_Avoid_: Group icon, group logo
+
 **Running Tab**:
 A Group with no itinerary, used for ongoing everyday splitting.
 _Avoid_: Casual group, daily group
