@@ -1,7 +1,7 @@
 import { ArrowRight, HandCoins, type LucideIcon, Plane, ReceiptText } from "lucide-react";
 import { Link } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
-import { SproutMark } from "../shell/SproutMark.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 
 const FEATURES: readonly { icon: LucideIcon; title: MessageId; body: MessageId }[] = [
   { icon: ReceiptText, title: "landing.feature1.title", body: "landing.feature1.body" },
@@ -16,7 +16,7 @@ export function LandingPage() {
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5 md:px-10">
         <span className="flex items-center gap-2.5 text-lg font-bold">
-          <SproutMark className="size-9" />
+          <SproutMascot className="size-8" mood="happy" interactive={false} />
           {t("app.name")}
         </span>
         <Link

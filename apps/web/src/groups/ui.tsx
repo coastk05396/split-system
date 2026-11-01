@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import { errorMessage, t } from "../i18n/messages.js";
-import { SproutMark } from "../shell/SproutMark.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 
 /** The zh-TW message for a failed call; anything that is not an API answer reads as INTERNAL. */
 export function failureMessage(error: unknown): string {
@@ -86,12 +86,12 @@ export function LoadError({ error, onRetry }: { error: unknown; onRetry: () => v
   );
 }
 
-/** The sprout sways while something loads; the words stay for screen readers. */
+/** The sprout mascot gently bobs and sways while something loads; the words stay for screen readers. */
 export function Loading() {
   return (
     <div role="status" className="flex justify-center py-8">
       <span aria-hidden="true" className="sprout-sway inline-flex">
-        <SproutMark className="size-12" />
+        <SproutMascot className="size-16" mood="happy" interactive={false} />
       </span>
       <span className="sr-only">{t("app.loading")}</span>
     </div>

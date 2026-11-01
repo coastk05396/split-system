@@ -10,7 +10,7 @@ import {
   type NavIconProps,
 } from "./NavIcons.js";
 import { SelectionPill } from "./SelectionPill.js";
-import { SproutMark } from "./SproutMark.js";
+import { SproutMascot } from "./SproutMascot.js";
 
 interface Tab {
   to: string;
@@ -88,7 +88,7 @@ function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col bg-sprout-900 px-4 py-7 text-white md:flex">
       <Link to="/" className="mb-8 flex items-center gap-3 px-2">
-        <SproutMark className="size-9" />
+        <SproutMascot className="size-8" mood="happy" interactive={false} />
         <span className="text-xl font-bold">{t("app.name")}</span>
       </Link>
       <nav aria-label={t("nav.side")}>

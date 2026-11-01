@@ -1,13 +1,13 @@
 import { t } from "../i18n/messages.js";
-import { SproutMark } from "./SproutMark.js";
+import { SproutMascot } from "./SproutMascot.js";
 
 export function Splash() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-3" role="status">
       <span className="sprout-sway inline-flex">
-        <SproutMark className="size-14" />
+        <SproutMascot className="size-20" mood="happy" interactive={false} />
       </span>
-      <p className="text-sm text-ink-muted">{t("app.loading")}</p>
+      <p className="text-sm font-bold text-ink-muted">{t("app.loading")}</p>
     </div>
   );
 }

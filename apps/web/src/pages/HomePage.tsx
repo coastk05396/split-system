@@ -12,7 +12,6 @@ import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
 import { PressableLink } from "../shell/PressableLink.js";
-import { SproutMark } from "../shell/SproutMark.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 import { CuteQuickReceiptIcon, CuteTripPlaneIcon } from "./HomeIcons.js";
@@ -33,7 +32,6 @@ export function HomePage() {
         <h1 className="text-balance text-2xl font-bold leading-snug md:text-3xl">
           {t("home.greeting", { name })}
         </h1>
-        <SproutMark className="size-11" />
       </header>
 
       {groupsQuery.isError ? (
