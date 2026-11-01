@@ -25,25 +25,33 @@ afterEach(() => {
 describe("CountUp", () => {
   const money = (n: number) => `NT$ ${String(n)}`;
 
-  it("counts up from 0 to the value and ends exactly on it", () => {
+  it("never displays any intermediate value when amount changes", () => {
     allowMotion();
-    render(<CountUp value={3000} format={money} />);
+    const { rerender } = render(<CountUp value={1000} format={money} />);
+    expect(screen.getByText("NT$ 1000")).toBeVisible();
 
-    // Mid-flight it is somewhere between, never past the target.
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-    const middle = Number(/\d+/.exec(screen.getByText(/NT\$/).textContent)?.[0]);
-    expect(middle).toBeGreaterThan(0);
-    expect(middle).toBeLessThan(3000);
+    rerender(<CountUp value={500} format={money} />);
 
+    // Mid-flight fade-out: still the old value
     act(() => {
-      vi.advanceTimersByTime(1200);
+      vi.advanceTimersByTime(60);
     });
-    expect(screen.getByText("NT$ 3000")).toBeVisible();
+    expect(screen.getByText("NT$ 1000")).toBeVisible();
+
+    // Mid-flight slide-in: new value, never intermediate
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.getByText("NT$ 500")).toBeVisible();
+
+    // After animation finishes
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(screen.getByText("NT$ 500")).toBeVisible();
   });
 
-  it("still runs under StrictMode, which tries every effect twice in development", () => {
+  it("still runs under StrictMode without flashing intermediate numbers", () => {
     allowMotion();
     render(
       <StrictMode>
@@ -51,39 +59,24 @@ describe("CountUp", () => {
       </StrictMode>,
     );
 
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-    const middle = Number(/\d+/.exec(screen.getByText(/NT\$/).textContent)?.[0]);
-    expect(middle).toBeGreaterThan(0);
-    expect(middle).toBeLessThan(3000);
-
-    act(() => {
-      vi.advanceTimersByTime(1200);
-    });
     expect(screen.getByText("NT$ 3000")).toBeVisible();
   });
 
-  it("starts from what it showed when the value changes", () => {
-    allowMotion();
+  it("swaps at once when amount changes for a user who asked for reduced motion", () => {
     const { rerender } = render(<CountUp value={1000} format={money} />);
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    rerender(<CountUp value={500} format={money} />);
+    expect(screen.getByText("NT$ 1000")).toBeVisible();
 
-    act(() => {
-      vi.advanceTimersByTime(60);
-    });
-    const now = Number(/\d+/.exec(screen.getByText(/NT\$/).textContent)?.[0]);
-    expect(now).toBeLessThan(1000);
-    expect(now).toBeGreaterThanOrEqual(500);
+    rerender(<CountUp value={500} format={money} />);
+    expect(screen.getByText("NT$ 500")).toBeVisible();
   });
 
-  it("shows the value at once for a user who asked for reduced motion", () => {
-    render(<CountUp value={3000} format={money} />);
+  it("shows the updating state and becomes solid only after confirmation", () => {
+    const { rerender } = render(<CountUp value={500} format={money} updating={true} />);
+    const el = screen.getByText("NT$ 500");
+    expect(el.dataset.updating).toBe("true");
 
-    expect(screen.getByText("NT$ 3000")).toBeVisible();
+    rerender(<CountUp value={500} format={money} updating={false} />);
+    expect(el.dataset.updating).toBeUndefined();
   });
 });
 
@@ -119,25 +112,27 @@ describe("CountUp tint", () => {
   const money = (n: number) => `NT$ ${String(n)}`;
   const tint = () => screen.getByText(/NT\$/).dataset.count;
 
-  it("is green while it counts to good news and gone when it stops", () => {
+  it("is green while it transitions to good news and gone when it stops", () => {
     allowMotion();
-    render(<CountUp value={3000} format={money} />);
+    const { rerender } = render(<CountUp value={1000} format={money} />);
+    rerender(<CountUp value={3000} format={money} />);
     act(() => {
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(50);
     });
     expect(tint()).toBe("good");
 
     act(() => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(300);
     });
     expect(tint()).toBeUndefined();
   });
 
   it("is red when more is bad news, as a growing debt is", () => {
     allowMotion();
-    render(<CountUp value={3000} format={money} goodWhen="down" />);
+    const { rerender } = render(<CountUp value={1000} format={money} goodWhen="down" />);
+    rerender(<CountUp value={3000} format={money} goodWhen="down" />);
     act(() => {
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(50);
     });
     expect(tint()).toBe("bad");
   });

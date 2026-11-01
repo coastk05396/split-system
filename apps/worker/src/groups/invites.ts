@@ -1,3 +1,4 @@
+import { withReservation } from "../auth/reservations.js";
 import {
   INVITE_TTL_MS,
   type Invite,
@@ -5,14 +6,15 @@ import {
   type JoinResult,
   MAX_MEMBERS_PER_GROUP,
 } from "@split/shared";
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { isConstraintError } from "../db/errors.js";
+import type { Bindings } from "../env.js";
+import { memberOperation } from "./ledger-client.js";
 import { groups, invites, members } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
 import { listMembers } from "./members.js";
-import { hasFreeSeat, type MemberRow, requireAdmin } from "./membership.js";
+import { type MemberRow, requireAdmin } from "./membership.js";
 
 /** 256 random bits, base64url: unguessable, and the whole secret of the link. */
 function newToken(): string {
@@ -22,50 +24,81 @@ function newToken(): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Makes the Group's one live link, killing any earlier one in the same batch (Admin only). */
-export async function regenerateInvite(db: Db, me: MemberRow, now: number): Promise<Invite> {
+async function ledgerInvite(
+  env: Bindings,
+  groupId: string,
+  action: "get" | "ensure" | "regenerate" | "validate",
+  now: number,
+  token?: string,
+  actorMemberId?: string,
+  setRev?: (rev: string) => void,
+): Promise<Invite> {
+  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
+    "https://ledger.internal/invite",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        now,
+        actorMemberId,
+        token: token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined),
+        expiresAt: now + INVITE_TTL_MS,
+      }),
+    },
+  );
+  const data = await response.json<Invite | { error: string }>();
+  if ("error" in data)
+    throw new ApiError(
+      data.error === "INVITE_EXPIRED"
+        ? "INVITE_EXPIRED"
+        : data.error === "FORBIDDEN"
+          ? "FORBIDDEN"
+          : "NOT_FOUND",
+    );
+  const rev = response.headers.get("X-Group-Rev");
+  if (rev !== null) setRev?.(rev);
+  return data;
+}
+
+export async function regenerateInvite(
+  _db: Db,
+  me: MemberRow,
+  now: number,
+  env: Bindings,
+  setRev?: (rev: string) => void,
+): Promise<Invite> {
   requireAdmin(me);
-  const invite = { token: newToken(), expiresAt: now + INVITE_TTL_MS };
-  await db.batch([
-    db.delete(invites).where(eq(invites.groupId, me.groupId)),
-    db
-      .insert(invites)
-      .values({ id: crypto.randomUUID(), groupId: me.groupId, ...invite, createdAt: now }),
-  ]);
-  return invite;
+  return ledgerInvite(env, me.groupId, "regenerate", now, undefined, me.id, setRev);
 }
 
-/** The live link any Member can share, or 404 when none is live. */
-export async function currentInvite(db: Db, me: MemberRow, now: number): Promise<Invite> {
-  const [row] = await db
-    .select({ token: invites.token, expiresAt: invites.expiresAt })
-    .from(invites)
-    .where(and(eq(invites.groupId, me.groupId), gt(invites.expiresAt, now)))
-    .orderBy(desc(invites.createdAt));
-  if (row === undefined || row.expiresAt <= now) throw new ApiError("NOT_FOUND");
-  return row;
+export async function currentInvite(
+  _db: Db,
+  me: MemberRow,
+  now: number,
+  env: Bindings,
+): Promise<Invite> {
+  return ledgerInvite(env, me.groupId, "get", now, undefined, me.id);
 }
 
-/** Get or create a live invite without revoking one another member just shared. */
-export async function ensureInvite(db: Db, me: MemberRow, now: number): Promise<Invite> {
-  const id = crypto.randomUUID();
-  const token = newToken();
-  const expiresAt = now + INVITE_TTL_MS;
-  await db.run(sql`INSERT INTO invites (id, group_id, token, expires_at, created_at)
-    SELECT ${id}, ${me.groupId}, ${token}, ${expiresAt}, ${now}
-    WHERE NOT EXISTS (SELECT 1 FROM invites WHERE group_id = ${me.groupId} AND expires_at > ${now})`);
-  return currentInvite(db, me, now);
+export async function ensureInvite(
+  _db: Db,
+  me: MemberRow,
+  now: number,
+  env: Bindings,
+  setRev?: (rev: string) => void,
+): Promise<Invite> {
+  return ledgerInvite(env, me.groupId, "ensure", now, undefined, me.id, setRev);
 }
 
 /** A live Invite's Group; a regenerated (deleted) link is 404, a lapsed one INVITE_EXPIRED. */
-async function openInvite(db: Db, token: string, now: number) {
+async function openInvite(db: Db, token: string, now: number, env: Bindings) {
   const [row] = await db
     .select({ group: groups, expiresAt: invites.expiresAt })
     .from(invites)
     .innerJoin(groups, eq(groups.id, invites.groupId))
     .where(eq(invites.token, token));
   if (row === undefined) throw new ApiError("NOT_FOUND");
-  if (row.expiresAt <= now) throw new ApiError("INVITE_EXPIRED");
+  await ledgerInvite(env, row.group.id, "validate", now, token);
   return row;
 }
 
@@ -77,20 +110,6 @@ async function ownRow(db: Db, groupId: string, userId: string): Promise<MemberRo
   return row;
 }
 
-/** Distinct Expenses each Member pays or shares in, for the claim confirmation. */
-async function expenseCounts(db: Db, groupId: string): Promise<Map<string, number>> {
-  const rows = await db.all<{ memberId: string; n: number }>(sql`
-    SELECT x.member_id AS memberId, count(DISTINCT x.expense_id) AS n
-    FROM (
-      SELECT p.member_id, p.expense_id FROM expense_payers p
-      UNION SELECT s.member_id, s.expense_id FROM expense_splits s
-    ) x
-    JOIN members m ON m.id = x.member_id
-    WHERE m.group_id = ${groupId} AND m.status = 'placeholder'
-    GROUP BY x.member_id`);
-  return new Map(rows.map((r) => [r.memberId, r.n]));
-}
-
 /**
  * What the join screen shows: the Group, its seat count and its unclaimed Placeholder
  * Members by name, with who typed each name and what claiming it takes on.
@@ -100,8 +119,9 @@ export async function previewInvite(
   token: string,
   userId: string,
   now: number,
+  env: Bindings,
 ): Promise<InvitePreview> {
-  const { group, expiresAt } = await openInvite(db, token, now);
+  const { group, expiresAt } = await openInvite(db, token, now, env);
   const mine = await ownRow(db, group.id, userId);
   const isMember = mine?.status === "active";
   const everyone = await listMembers(db, group.id, mine?.id ?? null);
@@ -114,7 +134,11 @@ export async function previewInvite(
     .where(and(eq(members.groupId, group.id), eq(members.status, "placeholder")));
   const creatorOf = new Map(rows.map((r) => [r.id, r.createdBy]));
   const nameOf = new Map(everyone.map((m) => [m.id, m.displayName]));
-  const counts = await expenseCounts(db, group.id);
+  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id)).fetch(
+    "https://ledger.internal/placeholder-counts",
+  );
+  if (!response.ok) throw new ApiError("INTERNAL");
+  const counts = new Map(Object.entries(await response.json<Record<string, number>>()));
 
   return {
     groupId: group.id,
@@ -147,76 +171,46 @@ export async function joinGroup(
   token: string,
   userId: string,
   now: number,
+  env: Bindings,
+  setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
-  const { group } = await openInvite(db, token, now);
-  const mine = await ownRow(db, group.id, userId);
-  if (mine?.status === "active") return { groupId: group.id, memberId: mine.id };
-  await assertUnderGroupCap(db, userId);
-
-  if (mine !== undefined) {
-    const back = await db
-      .update(members)
-      .set({ status: "active", role: "member" })
-      .where(and(eq(members.id, mine.id), eq(members.status, "former"), hasFreeSeat(group.id)))
-      .returning({ id: members.id });
-    if (back.length === 0) throw new ApiError("GROUP_FULL");
-    return { groupId: group.id, memberId: mine.id };
-  }
-
-  const memberId = crypto.randomUUID();
-  try {
-    const inserted = await db.run(sql`
-      INSERT INTO members (id, group_id, user_id, role, status, net_balance, created_at)
-      SELECT ${memberId}, ${group.id}, ${userId}, 'member', 'active', 0, ${now}
-      WHERE ${hasFreeSeat(group.id)}`);
-    if (inserted.meta.changes === 0) throw new ApiError("GROUP_FULL");
-  } catch (error) {
-    // A second tap raced the first one in; that row is the person's.
-    if (!isConstraintError(error, "UNIQUE")) throw error;
-    const winner = await ownRow(db, group.id, userId);
-    if (winner === undefined) throw error;
-    return { groupId: group.id, memberId: winner.id };
-  }
-  return { groupId: group.id, memberId };
+  const { group } = await openInvite(db, token, now, env);
+  const result = await withReservation(env.DB, userId, group.id, now, async () => {
+    const mine = await ownRow(db, group.id, userId);
+    if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
+    return memberOperation(env, group.id, {
+      action: "join",
+      inviteToken: token,
+      userId,
+      targetMemberId: mine?.id ?? crypto.randomUUID(),
+      now,
+    });
+  });
+  setRev?.(String(result.rev));
+  return { groupId: group.id, memberId: result.memberId };
 }
 
-/**
- * Joins by taking over a Placeholder Member: the row becomes the User's and keeps every
- * Expense, split, Settlement and its Balance. There is no undo; the typed name is dropped.
- */
 export async function claimPlaceholder(
   db: Db,
   token: string,
   userId: string,
   placeholderId: string,
   now: number,
+  env: Bindings,
+  setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
-  const { group } = await openInvite(db, token, now);
+  const { group } = await openInvite(db, token, now, env);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
-
-  let claimed: { id: string }[];
-  try {
-    claimed = await db
-      .update(members)
-      .set({ userId, status: "active", placeholderName: null })
-      .where(
-        and(
-          eq(members.id, placeholderId),
-          eq(members.groupId, group.id),
-          eq(members.status, "placeholder"),
-        ),
-      )
-      .returning({ id: members.id });
-  } catch (error) {
-    if (isConstraintError(error, "UNIQUE")) throw new ApiError("ALREADY_MEMBER");
-    throw error;
-  }
-  if (claimed.length > 0) return { groupId: group.id, memberId: placeholderId };
-
-  const [row] = await db
-    .select({ id: members.id })
-    .from(members)
-    .where(and(eq(members.id, placeholderId), eq(members.groupId, group.id)));
-  throw new ApiError(row === undefined ? "NOT_FOUND" : "PLACEHOLDER_CLAIMED");
+  const result = await withReservation(env.DB, userId, group.id, now, () =>
+    memberOperation(env, group.id, {
+      action: "claim",
+      inviteToken: token,
+      userId,
+      targetMemberId: placeholderId,
+      now,
+    }),
+  );
+  setRev?.(String(result.rev));
+  return { groupId: group.id, memberId: result.memberId };
 }

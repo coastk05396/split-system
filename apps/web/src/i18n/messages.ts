@@ -398,6 +398,7 @@ const zhTW = {
   "settle.confirm.amount": "結算金額（{currency}）",
   "settle.confirm.max": "最多 {amount}，未付清的部分會繼續欠著",
   "settle.confirm.submit": "確認已結清",
+  "settle.confirm.submitting": "確認中…",
   "settle.confirm.wait": "再等等",
   "settleShare.sendToChat": "傳到對話框",
   "settleShare.shareLine": "通知款項",
@@ -544,6 +545,7 @@ const zhErrors: Record<ErrorCode, string> = {
   SETTLEMENT_EXCEEDS_DEBT: "金額超過對方尚欠的款項。",
   RATE_LIMITED: "操作太頻繁了，請稍後再試。",
   INTERNAL: "小芽出了點狀況，請稍後再試。",
+  MAINTENANCE: "小芽正在維護中，暫時無法儲存變更，請稍後再試。",
   RATE_UNAVAILABLE: "暫時查不到匯率，請自行輸入匯率。",
 };
 

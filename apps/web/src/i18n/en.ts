@@ -405,6 +405,7 @@ export const en: Record<MessageId, string> = {
   "settle.confirm.amount": "Settlement amount ({currency})",
   "settle.confirm.max": "Up to {amount}; what is not paid yet stays owed",
   "settle.confirm.submit": "Confirm settled",
+  "settle.confirm.submitting": "Confirming…",
   "settle.confirm.wait": "Wait a bit",
   "settleShare.sendToChat": "Send to chat",
   "settleShare.shareLine": "Notify via LINE",
@@ -520,5 +521,7 @@ export const enErrors: Record<ErrorCode, string> = {
   SETTLEMENT_EXCEEDS_DEBT: "The amount is more than they still owe.",
   RATE_LIMITED: "Too many requests. Please try again in a moment.",
   INTERNAL: "Something went wrong on our side. Please try again later.",
+  MAINTENANCE:
+    "Split is undergoing maintenance. Changes cannot be saved right now; please try again later.",
   RATE_UNAVAILABLE: "The rate cannot be found right now. Please enter one yourself.",
 };

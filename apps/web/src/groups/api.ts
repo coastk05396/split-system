@@ -7,11 +7,17 @@ import type {
   Member,
   MemberPatch,
 } from "@split/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryFunctionContext,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
+import { readWithRev, useGroupLiveSync } from "./sync.js";
 
 /** TanStack Query hooks over the Worker's Group, Member and Invite routes (SPEC §5.1). */
 
@@ -28,12 +34,9 @@ export function useApi() {
   return useMemo(() => createApiClient(session.fetch), [session]);
 }
 
-/** Reads a JSON answer, throwing ApiFailure for anything but 2xx. */
-export async function read<T>(call: Promise<Response>): Promise<T> {
-  // Widened: the typed client only describes the success status.
-  const res: Response = await call;
-  if (!res.ok) throw await toApiFailure(res);
-  return (await res.json()) as T;
+/** Reads a JSON answer, throwing ApiFailure for anything but 2xx. Records and checks X-Group-Rev. */
+export async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
+  return readWithRev<T>(call, context);
 }
 
 export async function send(call: Promise<Response>): Promise<void> {
@@ -48,9 +51,10 @@ export function useGroups() {
 
 export function useGroup(id: string) {
   const api = useApi();
+  useGroupLiveSync(id);
   return useQuery({
     queryKey: groupKeys.group(id),
-    queryFn: () => read<Group>(api.groups[":id"].$get({ param: { id } })),
+    queryFn: (ctx) => read<Group>(api.groups[":id"].$get({ param: { id } }), ctx),
   });
 }
 
@@ -58,7 +62,7 @@ export function useMembers(id: string) {
   const api = useApi();
   return useQuery({
     queryKey: groupKeys.members(id),
-    queryFn: () => read<Member[]>(api.groups[":id"].members.$get({ param: { id } })),
+    queryFn: (ctx) => read<Member[]>(api.groups[":id"].members.$get({ param: { id } }), ctx),
   });
 }
 
@@ -117,6 +121,18 @@ type MembersEdit = {
 };
 type MembersEditContext = { undo?: MembersEdit["undo"]; tempId?: string | undefined };
 
+function isMember(data: unknown): data is Member {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "id" in data &&
+    typeof data.id === "string" &&
+    "role" in data &&
+    "status" in data &&
+    "displayName" in data
+  );
+}
+
 /**
  * Shows a Member change in the cached list at once, takes back just that change if the server
  * refuses it, and re-reads the Group once the last pending edit is done so the server's answer
@@ -140,6 +156,13 @@ function useOptimisticMembers<TVariables>(
       client.setQueryData(key, members);
       return { undo, tempId };
     },
+    onSuccess: (data: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
+      if (context?.tempId !== undefined && isMember(data)) {
+        client.setQueryData<Member[]>(key, (members) =>
+          members?.map((m) => (m.id === context.tempId ? data : m)),
+        );
+      }
+    },
     onError: (_error: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
       const undo = context?.undo;
       if (undo !== undefined)
@@ -149,6 +172,7 @@ function useOptimisticMembers<TVariables>(
       // The edit being settled still counts as pending here; an early re-read could drop a later
       // edit's row, so only the last one to finish asks.
       if (client.isMutating({ mutationKey }) > 1) return;
+      void client.invalidateQueries({ queryKey: key });
       void client.invalidateQueries({ queryKey: groupKeys.group(id) });
     },
   };

@@ -20,6 +20,7 @@ import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
 import { useEnsureInvite, useMembers } from "../groups/api.js";
+import { useIsUpdating } from "../groups/cache-persistence.js";
 import { LineShareUnavailableError } from "../platform/line.js";
 import { CountUp } from "../shell/CountUp.js";
 import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
@@ -45,6 +46,7 @@ const HISTORY_STEP = 5;
 export function SettlePanel({ group }: { group: Group }) {
   const balances = useBalances(group.id);
   const settlements = useSettlements(group.id);
+  const isUpdating = useIsUpdating(["groups", group.id, "balances"]);
   const plan = usePaymentPlan(
     balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
   );
@@ -105,6 +107,7 @@ export function SettlePanel({ group }: { group: Group }) {
               value={Math.abs(mine)}
               format={(n) => formatAmount(n, currency)}
               goodWhen={owedSign.current >= 0 ? "up" : "down"}
+              updating={isUpdating}
             />
           </p>
         </section>
@@ -114,6 +117,7 @@ export function SettlePanel({ group }: { group: Group }) {
           myMemberId={group.me.memberId}
           currency={currency}
           pictureOf={memberPictures(members.data)}
+          updating={isUpdating}
         />
 
         {action.isError && (

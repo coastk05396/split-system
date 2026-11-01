@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -316,6 +316,28 @@ describe("Recording and confirming Settlements", () => {
     expect(otherRow.queryByRole("button", { name: "確認收款" })).toBeNull();
     const behalfBtn = otherRow.getByRole("button", { name: "代為確認" });
     expect(behalfBtn).toHaveClass("border-dashed", "self-end");
+  });
+
+  it("shows pending state on the confirm button while recording a settlement (Ticket 11)", async () => {
+    const user = userEvent.setup();
+    await openSettle({
+      name: "台南之旅",
+      role: "admin",
+      myBalance: 500,
+      others: [{ name: "阿哲", balance: -500 }],
+    });
+
+    const myRow = await row("要付給誰", "阿哲付給你");
+    await user.click(myRow.getByRole("button", { name: "確認收款" }));
+
+    const submitBtn = await screen.findByRole("button", { name: "確認已結清" });
+    expect(submitBtn).toBeEnabled();
+
+    // Clicking it triggers the submission and closes upon confirmation
+    await user.click(submitBtn);
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "這筆款項已付清嗎？" })).toBeNull();
+    });
   });
 });
 

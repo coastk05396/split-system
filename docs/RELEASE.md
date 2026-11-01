@@ -36,3 +36,23 @@ Create or select a Messaging API channel for the bot. Set the webhook URL to `ht
 ## Release gate
 
 Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, actionlint, and secret scanning. Confirm `TEST_SIGN_IN` is absent from deployed Worker vars and secrets; the production-config E2E test requires the route to answer 404. Apply migrations before deploying the Worker. The pull request's CI runs the full gate, including E2E, actionlint and secret scanning; merging to `main` then runs the production workflow, which repeats typecheck, lint and tests, applies D1 migrations and deploys. Check risky changes on staging before merging; the production workflow can still be run by hand.
+
+### Group ledger live connection: real-device check
+
+- On iOS and Android inside LIFF, verify a live connection using the access token in WebSocket subprotocols. If LIFF rejects it, use the short-lived single-use ticket fallback described in the Group ledger spec.
+- Send the literal `ping` frame and confirm the runtime answers `pong`.
+
+## Maintenance gate
+
+After the gate is deployed, set `MAINTENANCE` with `pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env staging` (or `--env production`). Enter the secret interactively. API writes return 503 while the secret is set; reads and health remain available. For verification, send the secret in the `X-Maintenance-Bypass` header over HTTPS, keeping it out of logs and shell history. Remove the gate after verification with `pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env staging` (or `--env production`). Do not set or remove the production secret until the owner decides.
+
+## Release 1: Group ledger cutover checklist
+
+For the detailed step-by-step procedure and disaster recovery steps, see `docs/operations/group-ledger-migration.md`. Summary checklist:
+1. **Pre-cutover backup**: Export and verify full D1 backup outside the repository.
+2. **Deploy gate and snapshot first**: Apply additive D1 migrations, then upload the new Worker (`GROUP_LEDGER` DO binding, SQLite migration `tag: v1`), attach the `MAINTENANCE` secret to that version and deploy it. The old Worker has no gate or snapshot route, so the secret must not be set against it. Validate 503 on writes, 200 on reads.
+3. **Identity verification**: Query candidate ID for 「明天去哪玩」, verify fingerprint via `GET /api/v1/maintenance/migration/snapshot/:id` with bypass.
+4. **Hold the gate**: Keep it on through import and wipe.
+5. **Import & verify**: Run `POST /api/v1/maintenance/migration/import/:id` with bypass. Verify all members, zero-sum balances, expenses, settlements, stops, sessions, and auth.
+6. **Controlled wipe**: Run `POST /api/v1/maintenance/migration/wipe-excluded/:id` with bypass to remove non-retained groups while preserving all users, identities, and sessions. Re-verify retained group and auth.
+7. **Production sign-off & gate removal**: Verify health, live WebSocket, 404 on test sign-in, remove maintenance gate, monitor observability. Cutover is a one-way door once the maintenance gate is removed: before wipe, rollback is a Worker rollback with legacy D1 tables intact; after wipe or after gate removal, rollback requires restoring the pre-cutover D1 backup and losing writes made since (see `docs/operations/group-ledger-migration.md`).

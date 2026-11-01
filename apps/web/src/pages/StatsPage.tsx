@@ -10,6 +10,7 @@ import { categoryLabel } from "../expenses/categories.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { SproutMark } from "../shell/SproutMark.js";
 import { CountUp } from "../shell/CountUp.js";
+import { useIsUpdating } from "../groups/cache-persistence.js";
 import { convertSpending, type SpendingRow } from "./spending-conversion.js";
 
 type Detail = {
@@ -110,14 +111,15 @@ export function StatsPage() {
   const [selectedMonth, setSelectedMonth] = useState(() => months[5] ?? "");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [interacted, setInteracted] = useState(false);
+  const spendingKey = [
+    "stats",
+    "spending",
+    state.status === "signedIn" ? state.user.id : null,
+    months[0],
+    months[5],
+  ];
   const query = useQuery({
-    queryKey: [
-      "stats",
-      "spending",
-      state.status === "signedIn" ? state.user.id : null,
-      months[0],
-      months[5],
-    ],
+    queryKey: spendingKey,
     staleTime: 0,
     queryFn: () =>
       read<SpendingRow[]>(
@@ -126,6 +128,7 @@ export function StatsPage() {
         ),
       ),
   });
+  const isUpdating = useIsUpdating(spendingKey);
   const rows = (query.data ?? []).filter((row) => months.includes(row.month) && row.amount > 0);
   const bases = [...new Set(rows.map((row) => row.currency).filter((c) => c !== preferred))];
   const reference = usePreferredRates(preferred, bases);
@@ -191,7 +194,11 @@ export function StatsPage() {
                 {interacted ? (
                   formatAmount(total, preferred)
                 ) : (
-                  <CountUp value={total} format={(n) => formatAmount(n, preferred)} />
+                  <CountUp
+                    value={total}
+                    format={(n) => formatAmount(n, preferred)}
+                    updating={isUpdating}
+                  />
                 )}
               </span>
             </p>
@@ -319,7 +326,11 @@ export function StatsPage() {
                           preferred,
                         )
                       ) : (
-                        <CountUp value={total} format={(n) => formatAmount(n, preferred)} />
+                        <CountUp
+                          value={total}
+                          format={(n) => formatAmount(n, preferred)}
+                          updating={isUpdating}
+                        />
                       )}
                     </span>
                   </div>

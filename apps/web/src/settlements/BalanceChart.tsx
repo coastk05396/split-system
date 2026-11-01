@@ -14,11 +14,13 @@ export function BalanceChart({
   myMemberId,
   currency,
   pictureOf,
+  updating = false,
 }: {
   rows: readonly BalanceRow[];
   myMemberId: string;
   currency: CurrencyCode;
   pictureOf: (id: string) => string | null;
+  updating?: boolean | undefined;
 }) {
   const seated = rows.filter((r) => r.status !== "former");
   const open = seated.filter((r) => r.balance !== 0).sort((a, b) => b.balance - a.balance);
@@ -65,6 +67,7 @@ export function BalanceChart({
                   <CountUp
                     value={r.balance}
                     format={(n) => `${n > 0 ? "+" : ""}${formatAmount(n, currency)}`}
+                    updating={updating}
                   />
                 </span>
               </div>

@@ -145,7 +145,7 @@ function ConfirmForm({
         </p>
       )}
       <button type="submit" disabled={!valid || busy} className={`${primaryButton} py-3`}>
-        {t("settle.confirm.submit")}
+        {busy ? t("settle.confirm.submitting") : t("settle.confirm.submit")}
       </button>
       <Dialog.Close type="button" className={`${secondaryButton} py-3`}>
         {t("settle.confirm.wait")}

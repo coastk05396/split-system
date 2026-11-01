@@ -1,6 +1,13 @@
 import type { Me, Provider, TestSignInRequest } from "@split/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, use, useEffect, useMemo, useState } from "react";
 import { ApiFailure, type ErrorCode } from "../api/errors.js";
+import {
+  type CacheStorage,
+  clearCache,
+  restoreCache,
+  saveCache,
+} from "../groups/cache-persistence.js";
 import type { LineSignIn } from "../platform/line.js";
 import { createSession, type Session } from "./session.js";
 
@@ -33,22 +40,26 @@ function failureCode(error: unknown): ErrorCode {
 export function AuthProvider({
   fetch,
   line,
+  storage,
   children,
 }: {
   fetch: typeof globalThis.fetch;
   line: LineSignIn;
+  storage?: CacheStorage | undefined;
   children: ReactNode;
 }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const session = useMemo(
     () =>
       createSession({
         fetch,
         onSignedOut: () => {
+          queryClient.clear();
           setState({ status: "signedOut", error: "UNAUTHORIZED" });
         },
       }),
-    [fetch],
+    [fetch, queryClient],
   );
 
   useEffect(() => {
@@ -81,6 +92,23 @@ export function AuthProvider({
     };
   }, [session, line]);
 
+  // Persist and restore cache for the signed-in user
+  useEffect(() => {
+    if (state.status !== "signedIn") return;
+    const userId = state.user.id;
+    restoreCache(queryClient, userId, storage);
+
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "success") {
+        saveCache(queryClient, userId, storage);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [state.status, state.status === "signedIn" ? state.user.id : null, queryClient, storage]);
+
   const auth = useMemo<Auth>(() => {
     async function enter(attempt: Promise<Me>) {
       try {
@@ -95,6 +123,10 @@ export function AuthProvider({
       signIn: (provider, idToken) => enter(session.signIn(provider, idToken)),
       testSignIn: (request) => enter(session.testSignIn(request)),
       async signOut() {
+        if (state.status === "signedIn") {
+          clearCache(state.user.id, storage);
+        }
+        queryClient.clear();
         await session.signOut();
         setState({ status: "signedOut", error: null, byChoice: true });
       },
@@ -102,7 +134,7 @@ export function AuthProvider({
         setState({ status: "signedIn", user });
       },
     };
-  }, [state, session]);
+  }, [state, session, queryClient, storage]);
 
   return <AuthContext value={auth}>{children}</AuthContext>;
 }

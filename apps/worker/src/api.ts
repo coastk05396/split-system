@@ -15,7 +15,7 @@ export interface AppEnv {
  * JSON 404. Logs carry the route pattern, never the real path, headers or body.
  */
 export function newApi() {
-  return new Hono<AppEnv>()
+  return new Hono<AppEnv>({ strict: false })
     .onError((error, c) => {
       const apiError = error instanceof ApiError ? error : new ApiError("INTERNAL");
       if (!(error instanceof ApiError)) {
@@ -47,6 +47,19 @@ export function newApi() {
           errorCode: c.get("errorCode"),
         }),
       );
+    })
+    .use(async (c, next) => {
+      const secret = c.env.MAINTENANCE;
+      if (
+        secret &&
+        (c.req.path === "/api/v1" || c.req.path.startsWith("/api/v1/")) &&
+        c.req.path !== "/api/v1/health" &&
+        c.req.method !== "GET" &&
+        c.req.method !== "HEAD" &&
+        c.req.header("X-Maintenance-Bypass") !== secret
+      )
+        throw new ApiError("MAINTENANCE");
+      await next();
     })
     .basePath("/api/v1");
 }

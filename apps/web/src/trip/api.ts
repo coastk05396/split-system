@@ -35,7 +35,7 @@ export function useStops(id: string) {
   const api = useApi();
   return useQuery({
     queryKey: tripKeys.stops(id),
-    queryFn: () => read<Stop[]>(api.groups[":id"].stops.$get({ param: { id } })),
+    queryFn: (ctx) => read<Stop[]>(api.groups[":id"].stops.$get({ param: { id } }), ctx),
   });
 }
 
@@ -44,7 +44,7 @@ export function useStopExpenses(id: string) {
   const api = useApi();
   return useQuery({
     queryKey: tripKeys.stopExpenses(id),
-    queryFn: async () => {
+    queryFn: async (ctx) => {
       const linked: Expense[] = [];
       let cursor: string | null = null;
       do {
@@ -54,7 +54,7 @@ export function useStopExpenses(id: string) {
           param: { id },
           query: cursor === null ? {} : { cursor },
         };
-        const page: ExpensePage = await read<ExpensePage>(api.groups[":id"].expenses.$get(args));
+        const page: ExpensePage = await read<ExpensePage>(api.groups[":id"].expenses.$get(args), ctx);
         linked.push(...page.expenses.filter((e) => e.stopId !== null));
         cursor = page.nextCursor;
       } while (cursor !== null);

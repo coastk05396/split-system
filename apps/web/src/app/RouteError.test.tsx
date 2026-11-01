@@ -23,7 +23,9 @@ describe("RouteError", () => {
     renderFailingRoute(new TypeError("Failed to fetch dynamically imported module: x.js"));
 
     expect(await screen.findByRole("status")).toBeVisible();
-    expect(reload).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
+    });
   });
 
   it("explains the new version, with a button, when a reload just happened", async () => {
