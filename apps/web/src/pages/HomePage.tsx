@@ -1,5 +1,5 @@
 import { type CurrencyCode, formatAmount, type Group } from "@split/shared";
-import { ArrowRight, Check, ChevronRight, Plane, ReceiptText } from "lucide-react";
+import { ArrowRight, Check, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
@@ -12,7 +12,10 @@ import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
 import { PressableLink } from "../shell/PressableLink.js";
+import { SproutMark } from "../shell/SproutMark.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
+import { CuteQuickReceiptIcon, CuteTripPlaneIcon } from "./HomeIcons.js";
 
 /** Screen 2: the person's pending Balances per currency, the Groups owing something, and the two ways to start a Group. */
 export function HomePage() {
@@ -26,10 +29,11 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-5 md:gap-8">
-      <header>
+      <header className="flex items-center justify-between gap-3">
         <h1 className="text-balance text-2xl font-bold leading-snug md:text-3xl">
           {t("home.greeting", { name })}
         </h1>
+        <SproutMark className="size-11" />
       </header>
 
       {groupsQuery.isError ? (
@@ -176,7 +180,7 @@ function QuickStartSection({ hasGroups }: { hasGroups: boolean }) {
         <StartCard
           // With Groups already, 快速分帳 means 記在哪個群組, with 建立新群組 on that list.
           to={hasGroups ? "/new?pick=1" : "/groups/new?usage=tab"}
-          icon={<ReceiptText aria-hidden="true" className="size-7 text-sprout-500" />}
+          icon={<CuteQuickReceiptIcon aria-hidden="true" className="size-8.5" />}
           iconClass="bg-peach"
           title={t("home.tab.title")}
           body={t("home.tab.body")}
@@ -184,7 +188,7 @@ function QuickStartSection({ hasGroups }: { hasGroups: boolean }) {
         />
         <StartCard
           to="/groups/new?usage=trip"
-          icon={<Plane aria-hidden="true" className="size-7 text-sprout-500" />}
+          icon={<CuteTripPlaneIcon aria-hidden="true" className="size-8.5" />}
           iconClass="bg-sprout-100"
           title={t("home.trip.title")}
           body={t("home.trip.body")}
@@ -208,9 +212,17 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
       </h2>
 
       {pending.length === 0 ? (
-        <p className="rounded-3xl bg-sprout-150 px-5 py-4 font-bold text-sprout-600">
-          {t("home.allSettled")}
-        </p>
+        <div className="surface-card flex items-center gap-4 rounded-3xl border border-sprout-200 bg-sprout-150/75 p-5 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)]">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-peach shadow-[inset_0_1px_0_0_rgb(255_255_255/0.85),0_3px_8px_-4px_rgba(20,63,42,0.12)]">
+            <SproutMascot className="size-10" mood="cheer" />
+          </span>
+          <div className="flex flex-col gap-0.5">
+            <p className="font-bold text-sprout-800">
+              {t("home.allSettled")}
+            </p>
+            <span className="text-xs text-sprout-600">所有帳目已全部結清，輕鬆無負擔 ✨</span>
+          </div>
+        </div>
       ) : (
         <ul className="surface-card overflow-hidden rounded-2xl border border-sprout-200 bg-white">
           {pending.map((g) => (
@@ -287,7 +299,7 @@ function StartCard(props: {
   const content = (
     <>
       <span
-        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${props.iconClass}`}
+        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${props.iconClass} shadow-[inset_0_1.5px_0_0_rgb(255_255_255/0.85),0_4px_12px_-4px_rgba(20,63,42,0.14)] transition-transform duration-200 ease-(--ease-spring) group-hover:scale-108 group-hover:-rotate-2 group-active:scale-95`}
       >
         {props.icon}
       </span>
@@ -316,7 +328,7 @@ function StartCard(props: {
   return (
     <PressableLink
       to={props.to}
-      className="surface-card group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 hover:border-sprout-400 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_12px_24px_-12px_rgba(20,63,42,0.15)] active:translate-y-0 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
     >
       {content}
       <ChevronRight

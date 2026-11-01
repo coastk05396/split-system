@@ -1,23 +1,30 @@
-import { ChartColumn, House, type LucideIcon, Plus, Settings, Users } from "lucide-react";
-import type { ReactNode } from "react";
+import { Plus } from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
+import {
+  CuteGroupsIcon,
+  CuteHomeIcon,
+  CuteSettingsIcon,
+  CuteStatsIcon,
+  type NavIconProps,
+} from "./NavIcons.js";
 import { SelectionPill } from "./SelectionPill.js";
 import { SproutMark } from "./SproutMark.js";
 
 interface Tab {
   to: string;
   label: MessageId;
-  icon: LucideIcon;
+  icon: ComponentType<NavIconProps>;
 }
 
 /** SPEC §6: the same five destinations on every screen size. */
 const TABS: readonly Tab[] = [
-  { to: "/", label: "nav.home", icon: House },
-  { to: "/groups", label: "nav.groups", icon: Users },
+  { to: "/", label: "nav.home", icon: CuteHomeIcon },
+  { to: "/groups", label: "nav.groups", icon: CuteGroupsIcon },
   { to: "/new", label: "nav.new", icon: Plus },
-  { to: "/stats", label: "nav.stats", icon: ChartColumn },
-  { to: "/settings", label: "nav.settings", icon: Settings },
+  { to: "/stats", label: "nav.stats", icon: CuteStatsIcon },
+  { to: "/settings", label: "nav.settings", icon: CuteSettingsIcon },
 ];
 
 const SIDEBAR_TABS = TABS.filter((tab) => tab.to !== "/new");
@@ -57,8 +64,13 @@ function BottomBar() {
                   ) : (
                     <Icon
                       aria-hidden="true"
-                      strokeWidth={isActive ? 2.5 : 2}
-                      className={`relative size-5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${isActive ? "-translate-y-0.5 scale-[1.08] motion-reduce:translate-y-0 motion-reduce:scale-100" : ""}`}
+                      active={isActive}
+                      strokeWidth={isActive ? 2.4 : 1.9}
+                      className={`relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
+                        isActive
+                          ? "-translate-y-0.5 scale-[1.1] nav-icon-pop motion-reduce:translate-y-0 motion-reduce:scale-100"
+                          : ""
+                      }`}
                     />
                   )}
                   <span className="relative">{t(label)}</span>
@@ -100,7 +112,7 @@ function Sidebar() {
                         className="inset-0 rounded-xl bg-sprout-600"
                       />
                     )}
-                    <Icon aria-hidden="true" className="relative size-5" />
+                    <Icon aria-hidden="true" active={isActive} className="relative size-5" />
                     <span className="relative">{t(label)}</span>
                   </>
                 )}
