@@ -203,6 +203,26 @@
   animation: collapse-enter 220ms var(--ease-out-expo);
 }
 
+.collapse-grid {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 220ms var(--ease-out-expo),
+    opacity 220ms var(--ease-out-expo);
+  @starting-style {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+.collapse-grid[data-closing="true"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.collapse-grid-inner {
+  overflow: hidden;
+}
+
 /* Semantic balance card auras on the Settlement tab. */
 .settle-aura-get {
   background-color: var(--color-sprout-100);
@@ -897,7 +917,78 @@ body::before {
   transform: translateY(12px);
 }
 
+/* Category selection micro-bloom stamp */
+@keyframes category-bloom {
+  0% {
+    transform: scale(0.88);
+  }
+  60% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.category-bloom {
+  animation: category-bloom 160ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Copy icon micro-rotation and scale entrance on success */
+@keyframes copy-icon-pop {
+  0% {
+    transform: rotate(-10deg) scale(0.9);
+    opacity: 0.7;
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+.copy-icon-pop {
+  animation: copy-icon-pop 140ms ease-out both;
+}
+
+/* Dialog emblem micro-entrance */
+@keyframes dialog-icon-enter {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.85) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.dialog-icon-enter {
+  animation: dialog-icon-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Delete expense card slide-out and fade */
+@keyframes expense-delete-slide {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+.expense-delete-slide {
+  animation: expense-delete-slide 180ms ease-in forwards;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .collapse-grid {
+    transition: opacity 120ms ease-out;
+  }
+  .category-bloom,
+  .copy-icon-pop,
+  .dialog-icon-enter,
+  .expense-delete-slide {
+    animation: none;
+  }
   .row-leave {
     animation-name: none;
   }

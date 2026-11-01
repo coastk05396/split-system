@@ -1,6 +1,6 @@
 import { type CurrencyCode, formatAmount, type SplitMethod } from "@split/shared";
 import { Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { ShareBar, ShareRing } from "./ShareRing.js";
@@ -78,6 +78,25 @@ export function SplitEditor({
   // Equal splits keep the people behind a dropdown; exact and Shares need every row in sight.
   const equal = value.method === "equal";
   const [open, setOpen] = useState(false);
+  const isExpanded = !equal || open;
+  const [rendered, setRendered] = useState(isExpanded);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    if (isExpanded) {
+      setRendered(true);
+      setClosing(false);
+    } else if (rendered) {
+      setClosing(true);
+      const timer = setTimeout(() => {
+        setRendered(false);
+        setClosing(false);
+      }, 220);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [isExpanded, rendered]);
   // One pill for both directions, so it never needs a second button: 清空 while everyone is in.
   const everyoneIn = included.size === members.length;
   const toggleAll = (
@@ -158,65 +177,69 @@ export function SplitEditor({
         </div>
       )}
       <ShareBar shares={shares} />
-      {(!equal || open) && (
-        <ul className="collapse-enter flex flex-col gap-2">
-          {members.map((m) => {
-            const takesPart = included.has(m.id);
-            const amount = amounts.get(m.id);
-            return (
-              <li
-                key={m.id}
-                aria-label={m.displayName}
-                className={`${card} flex items-center gap-3 px-4 py-3`}
-              >
-                <Avatar
-                  name={m.displayName}
-                  pictureUrl={m.pictureUrl ?? null}
-                  placeholder={m.placeholder ?? false}
-                  className="size-9"
-                />
-                <span className="min-w-0 flex-1 truncate font-bold">{m.displayName}</span>
-                {takesPart && value.method === "exact" && (
-                  <input
-                    aria-label={t("split.amountOf", { name: m.displayName })}
-                    inputMode="decimal"
-                    className={fieldClass}
-                    value={value.exact[m.id] ?? ""}
-                    onChange={(e) => {
-                      onChange({ ...value, exact: { ...value.exact, [m.id]: e.target.value } });
-                    }}
-                  />
-                )}
-                {takesPart && value.method === "shares" && (
-                  <input
-                    aria-label={t("split.sharesOf", { name: m.displayName })}
-                    inputMode="numeric"
-                    className={fieldClass}
-                    value={value.shares[m.id] ?? "1"}
-                    onChange={(e) => {
-                      onChange({ ...value, shares: { ...value.shares, [m.id]: e.target.value } });
-                    }}
-                  />
-                )}
-                {takesPart && value.method !== "exact" && amount !== undefined && (
-                  <span className="text-sm font-bold text-sprout-600">
-                    {formatAmount(amount, currency)}
-                  </span>
-                )}
-                {!takesPart && <span className="text-sm text-ink-muted">{t("split.notIn")}</span>}
-                <input
-                  type="checkbox"
-                  aria-label={t("split.takesPart", { name: m.displayName })}
-                  className="size-5 accent-sprout-500"
-                  checked={takesPart}
-                  onChange={() => {
-                    toggle(m.id);
-                  }}
-                />
-              </li>
-            );
-          })}
-        </ul>
+      {rendered && (
+        <div className="collapse-grid" data-closing={closing ? "true" : undefined}>
+          <div className="collapse-grid-inner">
+            <ul className="flex flex-col gap-2 pt-1 pb-0.5">
+              {members.map((m) => {
+                const takesPart = included.has(m.id);
+                const amount = amounts.get(m.id);
+                return (
+                  <li
+                    key={m.id}
+                    aria-label={m.displayName}
+                    className={`${card} flex items-center gap-3 px-4 py-3`}
+                  >
+                    <Avatar
+                      name={m.displayName}
+                      pictureUrl={m.pictureUrl ?? null}
+                      placeholder={m.placeholder ?? false}
+                      className="size-9"
+                    />
+                    <span className="min-w-0 flex-1 truncate font-bold">{m.displayName}</span>
+                    {takesPart && value.method === "exact" && (
+                      <input
+                        aria-label={t("split.amountOf", { name: m.displayName })}
+                        inputMode="decimal"
+                        className={fieldClass}
+                        value={value.exact[m.id] ?? ""}
+                        onChange={(e) => {
+                          onChange({ ...value, exact: { ...value.exact, [m.id]: e.target.value } });
+                        }}
+                      />
+                    )}
+                    {takesPart && value.method === "shares" && (
+                      <input
+                        aria-label={t("split.sharesOf", { name: m.displayName })}
+                        inputMode="numeric"
+                        className={fieldClass}
+                        value={value.shares[m.id] ?? "1"}
+                        onChange={(e) => {
+                          onChange({ ...value, shares: { ...value.shares, [m.id]: e.target.value } });
+                        }}
+                      />
+                    )}
+                    {takesPart && value.method !== "exact" && amount !== undefined && (
+                      <span className="text-sm font-bold text-sprout-600">
+                        {formatAmount(amount, currency)}
+                      </span>
+                    )}
+                    {!takesPart && <span className="text-sm text-ink-muted">{t("split.notIn")}</span>}
+                    <input
+                      type="checkbox"
+                      aria-label={t("split.takesPart", { name: m.displayName })}
+                      className="size-5 accent-sprout-500"
+                      checked={takesPart}
+                      onChange={() => {
+                        toggle(m.id);
+                      }}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       )}
       <p
         role="status"

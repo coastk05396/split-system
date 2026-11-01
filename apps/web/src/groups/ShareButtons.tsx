@@ -85,7 +85,7 @@ export function ShareButtons({
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sprout-150">
         {justCopied ? (
-          <Check aria-hidden="true" className="size-5" />
+          <Check aria-hidden="true" className="size-5 text-emerald-600 copy-icon-pop" />
         ) : (
           <Copy aria-hidden="true" className="size-5" />
         )}

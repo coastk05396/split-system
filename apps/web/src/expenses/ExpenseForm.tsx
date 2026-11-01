@@ -231,7 +231,9 @@ export function ExpenseForm({
                     }}
                   />
                   <span
-                    className={`flex size-5 items-center justify-center rounded-full ${categoryTone(category).badge}`}
+                    className={`flex size-5 items-center justify-center rounded-full ${
+                      draft.category === category ? "category-bloom" : ""
+                    } ${categoryTone(category).badge}`}
                   >
                     <CategoryIcon category={category} className="size-3.5" />
                   </span>
