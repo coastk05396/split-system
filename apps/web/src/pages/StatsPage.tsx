@@ -232,7 +232,10 @@ export function StatsPage() {
                     <span className="flex h-28 w-full items-end justify-center rounded-xl bg-sprout-50">
                       <span
                         className={`${interacted ? "" : "stats-bar-enter"} w-5 max-w-full rounded-t-lg ${selected ? "bg-sprout-500" : "bg-sprout-200"}`}
-                        style={{ height: `${String(max === 0 ? 0 : (amount / max) * 100)}%` }}
+                        style={{
+                          height: `${String(max === 0 ? 0 : (amount / max) * 100)}%`,
+                          animationDelay: `${String(i * 50)}ms`,
+                        }}
                       />
                     </span>
                     <span
