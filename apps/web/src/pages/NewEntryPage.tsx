@@ -1,8 +1,7 @@
-import { ChevronRight, House, Plane, Plus } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { Link, Navigate, useSearchParams } from "react-router";
 import { useGroups } from "../groups/api.js";
-import { card, LoadError, Loading, primaryButton, ScreenHeader } from "../groups/ui.js";
-import { SproutMark } from "../shell/SproutMark.js";
+import { GroupAvatar, LoadError, Loading, primaryButton, ScreenHeader } from "../groups/ui.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { t } from "../i18n/messages.js";
 
@@ -25,7 +24,6 @@ export function NewEntryPage() {
       <ScreenHeader
         title={t("expense.chooseGroup")}
         subtitle={t("expense.chooseHint")}
-        action={<SproutMark className="size-14" />}
       />
       {groups.data.length === 0 ? (
         <>
@@ -36,43 +34,41 @@ export function NewEntryPage() {
         </>
       ) : (
         <ul className="flex flex-col gap-3">
-          {groups.data.map((g) => {
-            const Icon = g.isTrip ? Plane : House;
-            return (
-              <li key={g.id}>
-                <PressableLink
-                  to={`/groups/${g.id}/expenses/new`}
-                  className={`${card} group flex items-center gap-4 p-4 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
-                >
-                  <span
-                    className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${
-                      g.isTrip ? "bg-sprout-100" : "bg-peach"
-                    }`}
-                  >
-                    <Icon aria-hidden="true" className="size-6 text-sprout-500" />
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-lg font-bold">{g.name}</span>
-                    <span className="text-sm text-ink-muted">
-                      {t("groups.people", { count: g.memberCount })}
-                      {" · "}
+          {groups.data.map((g) => (
+            <li key={g.id}>
+              <PressableLink
+                to={`/groups/${g.id}/expenses/new`}
+                className="surface-card group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-4 hover:border-sprout-400 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_12px_24px_-12px_rgba(20,63,42,0.15)] active:translate-y-0 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+              >
+                <GroupAvatar
+                  name={g.name}
+                  groupId={g.id}
+                  className="size-12 text-base font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]"
+                  interactive={true}
+                />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-lg font-bold">{g.name}</span>
+                  <span className="text-xs text-ink-muted">
+                    {t("groups.people", { count: g.memberCount })}
+                    <span className="mx-1.5 opacity-60">·</span>
+                    <span className="font-semibold text-sprout-700">
                       {t(g.isTrip ? "usage.trip" : "usage.tab")}
                     </span>
                   </span>
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="size-5 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
-                  />
-                </PressableLink>
-              </li>
-            );
-          })}
+                </span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 group-hover:text-sprout-700 motion-reduce:group-hover:translate-x-0"
+                />
+              </PressableLink>
+            </li>
+          ))}
         </ul>
       )}
       {groups.data.length > 0 && (
         <Link
           to="/groups/new?usage=tab"
-          className="press-card flex items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-sprout-500 bg-peach/40 px-6 py-4 font-bold text-sprout-700 hover:bg-peach/70"
+          className="press-pill flex items-center justify-center gap-2 rounded-2xl bg-sprout-600 px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_8px_18px_-8px_#143f2a] hover:bg-sprout-700 active:bg-sprout-800 active:scale-[0.98] transition-all duration-180 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
         >
           <Plus aria-hidden="true" className="size-5" />
           {t("groups.create")}
