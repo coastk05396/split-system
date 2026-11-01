@@ -97,7 +97,7 @@ export function SettlePanel({ group }: { group: Group }) {
           </p>
         )}
 
-        <section className="flex flex-col gap-3">
+        <section className="settle-stagger-2 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="mr-auto text-lg font-bold">{t("settle.planTitle")}</h2>
             {/* Only an approximate plan says so; the fewest-payments one needs no label. */}

@@ -266,7 +266,7 @@ function HomeGroupRow({ group }: { group: Group }) {
           <span
             className={
               balance < 0
-                ? "font-bold text-red-600"
+                ? "font-bold text-red-700"
                 : balance > 0
                   ? "font-bold text-emerald-600"
                   : ""

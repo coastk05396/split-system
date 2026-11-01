@@ -1,7 +1,7 @@
 import { ChevronRight, Plus } from "lucide-react";
 import { Link, Navigate, useSearchParams } from "react-router";
 import { useGroups } from "../groups/api.js";
-import { GroupAvatar, LoadError, Loading, primaryButton, ScreenHeader } from "../groups/ui.js";
+import { GroupAvatar, LoadError, Loading, primaryButton } from "../groups/ui.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { t } from "../i18n/messages.js";
 
@@ -20,11 +20,10 @@ export function NewEntryPage() {
     return <Navigate to={`/groups/${only.id}/expenses/new`} replace />;
   }
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <ScreenHeader
-        title={t("expense.chooseGroup")}
-        subtitle={t("expense.chooseHint")}
-      />
+    <div className="flex flex-col gap-4 md:gap-6">
+      <header>
+        <h1 className="text-2xl font-bold md:text-3xl">{t("expense.chooseGroup")}</h1>
+      </header>
       {groups.data.length === 0 ? (
         <>
           <p className="text-ink-muted">{t("expense.noGroups")}</p>

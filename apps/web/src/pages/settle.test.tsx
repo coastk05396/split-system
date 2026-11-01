@@ -71,7 +71,7 @@ describe("Balances and the Payment plan", () => {
       ["阿哲", "阿哲", "-NT$ 200"],
     ]);
     expect(screen.getByText("其他 1 人已結清")).toBeVisible();
-    expect(screen.getByText("紅色是要付，綠色是可收")).toBeVisible();
+    expect(screen.queryByText("紅色是要付，綠色是可收")).toBeNull();
   });
 
   it("leaves the chart out when everyone is settled", async () => {

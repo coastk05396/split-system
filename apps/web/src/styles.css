@@ -442,11 +442,9 @@
 .count-up[data-count="bad"] {
   color: #dc2626;
 }
-.count-up.count-dark[data-count="good"] {
-  color: #bbf7d0; /* luminous mint light green on forest green card */
-}
+.count-up.count-dark[data-count="good"],
 .count-up.count-dark[data-count="bad"] {
-  color: #fca5a5;
+  color: #bbf7d0; /* luminous mint light green on forest green card */
 }
 
 /* 180ms micro-pop when count-up lands on the final number */
@@ -1032,10 +1030,43 @@ body::before {
   animation: transfer-arrow-nudge 1.6s ease-in-out infinite;
 }
 
+/* Staggered cascade entrance for settlement screen (0ms and +90ms) */
+@keyframes settle-cascade-in-1 {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes settle-cascade-in-2 {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settle-stagger-1 {
+  animation: settle-cascade-in-1 220ms var(--ease-spring) both;
+}
+
+.settle-stagger-2 {
+  animation: settle-cascade-in-2 240ms var(--ease-spring) 90ms both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
     transition: opacity 120ms ease-out;
   }
+  .settle-stagger-1,
+  .settle-stagger-2,
   .category-bloom,
   .copy-icon-pop,
   .dialog-icon-enter,
