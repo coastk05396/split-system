@@ -89,7 +89,7 @@ export function SettlePanel({ group }: { group: Group }) {
         <section
           className={`flex flex-col gap-0.5 rounded-2xl px-5 py-3.5 transition-colors ${
             mine > 0 ? "settle-aura-get" : mine < 0 ? "settle-aura-pay" : "settle-aura-even"
-          }`}
+          } ${isUpdating ? "halo-pulse" : ""}`}
         >
           <h2
             className={`text-sm font-bold ${
@@ -304,7 +304,17 @@ function SettleNotifyActions({
 
 function SettledMessage({ celebrate }: { celebrate: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-[1.75rem] bg-sprout-150 px-4 py-6 font-bold text-sprout-700">
+    <div className="relative overflow-hidden flex flex-col items-center justify-center gap-2 rounded-[1.75rem] bg-sprout-150 px-4 py-6 font-bold text-sprout-700">
+      {celebrate && (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <span className="leaf-particle p1" />
+          <span className="leaf-particle p2" />
+          <span className="leaf-particle p3" />
+          <span className="leaf-particle p4" />
+          <span className="leaf-particle p5" />
+          <span className="leaf-particle p6" />
+        </div>
+      )}
       <span aria-hidden="true" className="relative inline-flex">
         {celebrate && (
           <span className="settle-ring absolute inset-2 rounded-full border-2 border-sprout-500" />

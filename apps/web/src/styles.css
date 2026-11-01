@@ -21,7 +21,7 @@
 
   /* Fluid ease-out and spring release curves for tactile micro-interactions. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: linear(0, 0.42 12%, 0.78 26%, 0.98 40%, 1.045 54%, 1.018 70%, 0.998 86%, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @layer base {
@@ -36,7 +36,7 @@
 }
 
 /* Three-tier asymmetric tactile press feedback:
-   press down settles briskly (80ms ease-out); release rebounds gently with a subtle spring. */
+   press down settles briskly (80ms ease-out); release rebounds gently with a natural squishy spring. */
 .press-card,
 .press-pill,
 .press-icon {
@@ -53,7 +53,7 @@
   transition-timing-function: ease-out;
 }
 .press-card:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 .press-pill:active:not(:disabled) {
   transform: scale(0.96);
@@ -403,13 +403,42 @@
 
 /* Core balance and spending amounts stay solid, crisp, and high-contrast at all times. */
 .count-up {
+  display: inline-block;
   opacity: 1;
+  transition: color 250ms ease-out;
 }
 .count-up[data-updating="true"] {
   opacity: 1;
 }
 .count-up.count-dark {
   color: #ffffff;
+}
+
+/* Rolling numbers dynamically tint while moving, then transition back to native high-contrast text color */
+.count-up[data-count="good"] {
+  color: #059669; /* vibrant emerald green on light/stats cards */
+}
+.count-up[data-count="bad"] {
+  color: #dc2626;
+}
+.count-up.count-dark[data-count="good"] {
+  color: #bbf7d0; /* luminous mint light green on forest green card */
+}
+.count-up.count-dark[data-count="bad"] {
+  color: #fca5a5;
+}
+
+/* 180ms micro-pop when count-up lands on the final number */
+@keyframes count-settle-pop {
+  0% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.count-settle-pop {
+  animation: count-settle-pop 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* A single ring that opens out of the tick when everything is settled. */
@@ -427,20 +456,46 @@
   animation: settle-ring 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* A new row drops in under its day and glows once, so the eye finds where it was logged. */
+/* Sprout halo pulse: gentle tender green glow on live sync or item update */
+@keyframes halo-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(46, 157, 113, 0);
+  }
+  35% {
+    box-shadow: 0 0 0 3px rgba(46, 157, 113, 0.45), 0 0 18px -2px rgba(46, 157, 113, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 4px rgba(46, 157, 113, 0.18), 0 0 12px -3px rgba(46, 157, 113, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 157, 113, 0);
+  }
+}
+.halo-pulse {
+  animation: halo-pulse 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* A new row drops in under its day and glows with a soft sprout halo, so the eye finds where it was logged. */
 @keyframes row-arrive {
-  from {
+  0% {
     opacity: 0;
     transform: translateY(-14px);
     background-color: var(--color-sprout-100);
+    box-shadow: 0 0 0 2px rgba(46, 157, 113, 0.4), 0 0 16px -2px rgba(46, 157, 113, 0.35);
   }
-  60% {
+  40% {
+    box-shadow: 0 0 0 3px rgba(46, 157, 113, 0.5), 0 0 20px -2px rgba(46, 157, 113, 0.4);
     background-color: var(--color-sprout-100);
   }
-  to {
+  70% {
+    box-shadow: 0 0 0 1px rgba(46, 157, 113, 0.2), 0 0 10px -4px rgba(46, 157, 113, 0.2);
+    background-color: var(--color-sprout-100);
+  }
+  100% {
     opacity: 1;
     transform: none;
     background-color: transparent;
+    box-shadow: none;
   }
 }
 .row-arrive {
@@ -549,6 +604,8 @@
   .bar-grow-left,
   .settle-pop,
   .settle-ring,
+  .halo-pulse,
+  .count-settle-pop,
   .row-arrive,
   .rise,
   .digit-roll,
@@ -560,7 +617,9 @@
   .menu-content[data-state="closed"],
   .collapse-enter,
   .empty-bloom,
-  .sprout-greet {
+  .sprout-greet,
+  .mascot-poke,
+  .leaf-particle {
     animation: none;
   }
   .count-up {
@@ -652,6 +711,161 @@ body::before {
   animation: twinkle 1.8s ease-in-out infinite;
 }
 
+/* Squishy spring wiggle for poking the mascot */
+@keyframes mascot-poke {
+  0% {
+    transform: scale(1) translateY(0);
+  }
+  20% {
+    transform: scale(1.14, 0.86) translateY(3px);
+  }
+  45% {
+    transform: scale(0.92, 1.12) translateY(-6px) rotate(-4deg);
+  }
+  70% {
+    transform: scale(1.05, 0.96) translateY(2px) rotate(2deg);
+  }
+  85% {
+    transform: scale(0.98, 1.01) translateY(-1px) rotate(-1deg);
+  }
+  100% {
+    transform: scale(1) translateY(0) rotate(0deg);
+  }
+}
+.mascot-poke {
+  animation: mascot-poke 750ms cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
+}
+
+/* All-settled celebration: lightweight floating sprout leaves & confetti */
+@keyframes leaf-float-1 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-42px, -52px) scale(1) rotate(-50deg);
+  }
+}
+@keyframes leaf-float-2 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(46px, -48px) scale(1) rotate(55deg);
+  }
+}
+@keyframes leaf-float-3 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50px, -18px) scale(0.9) rotate(-35deg);
+  }
+}
+@keyframes leaf-float-4 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(52px, -15px) scale(0.9) rotate(40deg);
+  }
+}
+@keyframes leaf-float-5 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-22px, -65px) scale(1.1) rotate(65deg);
+  }
+}
+@keyframes leaf-float-6 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(28px, -68px) scale(1.1) rotate(-60deg);
+  }
+}
+.leaf-particle {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 0 70% 0 70%;
+  pointer-events: none;
+  animation-duration: 1.2s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
+}
+.leaf-particle.p1 {
+  background: #2e9d71;
+  animation-name: leaf-float-1;
+}
+.leaf-particle.p2 {
+  background: #5fcf9f;
+  animation-name: leaf-float-2;
+  animation-delay: 50ms;
+}
+.leaf-particle.p3 {
+  background: #ffb98f;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  animation-name: leaf-float-3;
+  animation-delay: 90ms;
+}
+.leaf-particle.p4 {
+  background: #ffd580;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation-name: leaf-float-4;
+  animation-delay: 70ms;
+}
+.leaf-particle.p5 {
+  background: #a8e6cf;
+  animation-name: leaf-float-5;
+  animation-delay: 110ms;
+}
+.leaf-particle.p6 {
+  background: #ff8f7a;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation-name: leaf-float-6;
+  animation-delay: 130ms;
+}
+
 /* A member row shrinks away. */
 @keyframes row-leave {
   from {
@@ -698,7 +912,9 @@ body::before {
   .mascot-bob,
   .mascot-eye,
   .mascot-leaves,
-  .sparkle {
+  .mascot-poke,
+  .sparkle,
+  .leaf-particle {
     animation: none;
   }
   .sparkle {

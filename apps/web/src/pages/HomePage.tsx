@@ -109,7 +109,7 @@ function BalanceCard(props: {
   return (
     <section
       aria-labelledby="home-balance"
-      className="hero-balance-card rounded-3xl p-6 text-white"
+      className={`hero-balance-card rounded-3xl p-6 text-white ${isUpdating ? "halo-pulse" : ""}`}
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="home-balance" className="text-sm text-white/85">

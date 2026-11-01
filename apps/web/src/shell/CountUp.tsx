@@ -45,6 +45,7 @@ export function CountUp({
     }
 
     let frame = 0;
+    let popTimer: ReturnType<typeof setTimeout> | undefined;
     let current = from;
     // Green for good news, red for bad, only while the number is on the move.
     el.dataset.count = value > from === (goodWhen === "up") ? "good" : "bad";
@@ -58,16 +59,22 @@ export function CountUp({
       else {
         shown.current = value;
         delete el.dataset.count;
+        el.classList.add("count-settle-pop");
+        popTimer = setTimeout(() => {
+          el.classList.remove("count-settle-pop");
+        }, 220);
       }
     };
     frame = requestAnimationFrame(step);
     return () => {
       cancelAnimationFrame(frame);
+      clearTimeout(popTimer);
       // Stopped early (a new value, or StrictMode's trial run in development): the next count
       // starts from the number that was on screen, never from the target it never reached.
       shown.current = current;
       el.textContent = fmt(current);
       delete el.dataset.count;
+      el.classList.remove("count-settle-pop");
     };
   }, [value, goodWhen]);
 

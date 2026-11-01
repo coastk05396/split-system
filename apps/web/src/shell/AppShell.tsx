@@ -35,7 +35,7 @@ function BottomBar() {
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
+                `press-pill relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
                   isActive ? "font-bold text-sprout-700" : "text-ink-muted"
                 }`
               }
@@ -87,7 +87,7 @@ function Sidebar() {
                 to={to}
                 end={to === "/"}
                 className={({ isActive }) =>
-                  `relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                  `press-pill relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
                     isActive ? "font-bold" : "text-white/85 hover:bg-white/10"
                   }`
                 }

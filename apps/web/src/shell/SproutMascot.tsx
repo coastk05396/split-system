@@ -1,21 +1,41 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 /**
  * 小芽 the mascot: a round clay-soft sprout with a blinking face. `cheer` squeezes the eyes into
  * happy arcs and opens the mouth, for good news such as an all-settled group. Drawn in SVG so it
  * costs no image request.
+ * Interactive poke: clicking/tapping triggers a squishy spring wiggle, cheerful squint, and sparkles!
  */
 export function SproutMascot({
   className = "size-28",
   mood = "happy",
+  interactive = true,
+  onClick,
 }: {
   className?: string;
   mood?: "happy" | "cheer";
+  interactive?: boolean;
+  onClick?: () => void;
 }) {
   const id = useId();
-  const cheer = mood === "cheer";
-  return (
-    <svg aria-hidden="true" viewBox="0 0 120 120" className={`mascot-bob shrink-0 ${className}`}>
+  const [poked, setPoked] = useState(false);
+  const cheer = mood === "cheer" || poked;
+
+  const handlePoke = () => {
+    if (!interactive) return;
+    setPoked(true);
+    onClick?.();
+    setTimeout(() => {
+      setPoked(false);
+    }, 750);
+  };
+
+  const svg = (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 120 120"
+      className={`${poked ? "mascot-poke" : "mascot-bob"} shrink-0 select-none ${className}`}
+    >
       <defs>
         <radialGradient id={`${id}-body`} cx="38%" cy="30%" r="80%">
           <stop offset="0%" stopColor="#ffffff" />
@@ -82,6 +102,34 @@ export function SproutMascot({
         />
       )}
     </svg>
+  );
+
+  if (!interactive) return svg;
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="戳一下小芽"
+      onClick={handlePoke}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handlePoke();
+        }
+      }}
+      className="group relative inline-flex cursor-pointer select-none transition-transform duration-300 ease-(--ease-spring) hover:scale-105 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100"
+    >
+      {poked && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <span className="sparkle -top-2 -left-2" style={{ animationDelay: "0ms" }} />
+          <span className="sparkle -top-1 -right-2" style={{ animationDelay: "150ms" }} />
+          <span className="sparkle -bottom-2 -left-1" style={{ animationDelay: "300ms" }} />
+          <span className="sparkle -bottom-1 -right-1" style={{ animationDelay: "200ms" }} />
+        </span>
+      )}
+      {svg}
+    </span>
   );
 }
 
