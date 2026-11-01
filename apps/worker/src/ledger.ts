@@ -1298,7 +1298,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             }
             list.push({
               memberId: String(p.member_id),
-              amountMinor: Number(p.amount_minor),
+              amountMinor: Number(p.amount_minor ?? p.amount),
               settlementAmount: Number(p.settlement_amount),
             });
           }
@@ -1311,16 +1311,22 @@ export class GroupLedger extends DurableObject<Bindings> {
               list = [];
               splitsByExpense.set(eid, list);
             }
+            const rawShares = s.shares !== null && s.shares !== undefined ? s.shares : s.share_units;
             list.push({
               memberId: String(s.member_id),
-              shares: s.shares !== null && s.shares !== undefined ? Number(s.shares) : null,
-              amountMinor: Number(s.amount_minor),
+              shares: rawShares !== null && rawShares !== undefined ? Number(rawShares) : null,
+              amountMinor: Number(s.amount_minor ?? s.amount),
               settlementAmount: Number(s.settlement_amount),
             });
           }
 
           for (const e of snapshot.expenses) {
             const eid = String(e.id);
+            const splitMethod = (e.split_method ?? e.split_type ?? "equal") as "equal" | "exact" | "shares";
+            const splits = (splitsByExpense.get(eid) ?? []).map((split) => ({
+              ...split,
+              shares: splitMethod === "shares" ? (split.shares ?? 1) : null,
+            }));
             const expenseItem = {
               id: eid,
               groupId: String(e.group_id),
@@ -1333,15 +1339,16 @@ export class GroupLedger extends DurableObject<Bindings> {
               fxDate: String(e.fx_date),
               isCustomRate: Boolean(e.is_custom_rate),
               settlementAmount: Number(e.settlement_amount),
-              splitMethod: e.split_method,
+              splitMethod,
               payers: payersByExpense.get(eid) ?? [],
-              splits: splitsByExpense.get(eid) ?? [],
+              splits,
               expenseDate: String(e.expense_date),
               expenseTime: toNullableStr(e.expense_time),
               stopId: toNullableStr(e.stop_id),
               createdAt: Number(e.created_at ?? now),
               updatedAt: Number(e.updated_at ?? now),
             };
+            expenseSchema.parse(expenseItem);
             sql.exec(
               "INSERT INTO ledger_expenses (id, creator_member_id, idempotency_key, data, deleted) VALUES (?, ?, ?, ?, 0)",
               eid,
@@ -1401,11 +1408,39 @@ export class GroupLedger extends DurableObject<Bindings> {
             );
           }
 
+          // Recalculate and populate ledger_members.net_balance from imported expenses and confirmed settlements
+          const netBalances = new Map<string, number>();
+          for (const e of snapshot.expenses) {
+            const eid = String(e.id);
+            const payers = payersByExpense.get(eid) ?? [];
+            const splits = splitsByExpense.get(eid) ?? [];
+            for (const p of payers) {
+              netBalances.set(p.memberId, (netBalances.get(p.memberId) ?? 0) + p.settlementAmount);
+            }
+            for (const s of splits) {
+              netBalances.set(s.memberId, (netBalances.get(s.memberId) ?? 0) - s.settlementAmount);
+            }
+          }
+          for (const s of snapshot.settlements) {
+            if (s.status === "confirmed") {
+              const amount = Number(s.amount);
+              const payerId = String(s.payer_member_id);
+              const receiverId = String(s.receiver_member_id);
+              netBalances.set(payerId, (netBalances.get(payerId) ?? 0) + amount);
+              netBalances.set(receiverId, (netBalances.get(receiverId) ?? 0) - amount);
+            }
+          }
+          for (const [memberId, balance] of netBalances.entries()) {
+            sql.exec("UPDATE ledger_members SET net_balance = ? WHERE id = ?", balance, memberId);
+          }
+
           sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES ('group', 1)");
           sql.exec("UPDATE ledger_meta SET rev = 1");
         });
+        let attempts = 0;
         while (
-          this.ctx.storage.sql.exec("SELECT kind FROM ledger_dirty LIMIT 1").toArray().length > 0
+          this.ctx.storage.sql.exec("SELECT kind FROM ledger_dirty LIMIT 1").toArray().length > 0 &&
+          attempts++ < 10
         ) {
           await this.push();
         }

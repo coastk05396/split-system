@@ -1,4 +1,7 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { createDb } from "../src/db/client.js";
+import { groups, members } from "../src/db/schema.js";
 import { call } from "./auth-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 import { createGroup, listMembers, person, send } from "./groups-harness.js";
@@ -217,5 +220,189 @@ describe("retained Group migration import", () => {
     // User accounts, identities, and sessions are preserved
     expect((await send(admin, "GET", "/me")).status).toBe(200);
     expect((await send(otherPerson, "GET", "/me")).status).toBe(200);
+  });
+
+  it("imports legacy D1 expenses with amount, share_units, and split_type into a fresh ledger DO", async () => {
+    const admin = await person("Legacy Import Admin");
+    const groupId = crypto.randomUUID();
+    const adminMemberId = crypto.randomUUID();
+    const placeholderId = crypto.randomUUID();
+    const now = Date.now();
+
+    const db = createDb(env.DB);
+    await db.insert(groups).values({
+      id: groupId,
+      name: "明天去哪玩",
+      settlementCurrency: "TWD",
+      defaultExpenseCurrency: "TWD",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(members).values([
+      {
+        id: adminMemberId,
+        groupId,
+        userId: admin.userId,
+        role: "admin",
+        status: "active",
+        createdAt: now,
+      },
+      {
+        id: placeholderId,
+        groupId,
+        userId: null,
+        placeholderName: "室友",
+        role: "member",
+        status: "placeholder",
+        createdAt: now,
+      },
+    ]);
+
+    // Directly invoke DO /import on a fresh uninitialized ledger DO
+    const legacySnapshot = {
+      group: {
+        id: groupId,
+        name: "明天去哪玩",
+        settlement_currency: "TWD",
+        default_expense_currency: "TWD",
+        created_at: now,
+        updated_at: now,
+      },
+      members: [
+        {
+          id: adminMemberId,
+          group_id: groupId,
+          user_id: admin.userId,
+          role: "admin",
+          status: "active",
+          created_at: now,
+        },
+        {
+          id: placeholderId,
+          group_id: groupId,
+          user_id: null,
+          placeholder_name: "室友",
+          role: "member",
+          status: "placeholder",
+          created_at: now,
+        },
+      ],
+      invites: [],
+      expenses: [
+        {
+          id: "exp-legacy-1",
+          group_id: groupId,
+          creator_member_id: adminMemberId,
+          description: "舊版晚餐",
+          category: "food",
+          original_amount: 500,
+          original_currency: "TWD",
+          fx_rate_scaled: 10000,
+          fx_date: "2026-07-01",
+          is_custom_rate: false,
+          settlement_amount: 500,
+          split_type: "equal",
+          expense_date: "2026-07-01",
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          id: "exp-legacy-2",
+          group_id: groupId,
+          creator_member_id: adminMemberId,
+          description: "舊版租車",
+          category: "transport",
+          original_amount: 600,
+          original_currency: "TWD",
+          fx_rate_scaled: 10000,
+          fx_date: "2026-07-01",
+          is_custom_rate: false,
+          settlement_amount: 600,
+          split_type: "shares",
+          expense_date: "2026-07-01",
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      payers: [
+        {
+          id: "p-1",
+          expense_id: "exp-legacy-1",
+          member_id: adminMemberId,
+          amount: 500,
+          settlement_amount: 500,
+        },
+        {
+          id: "p-2",
+          expense_id: "exp-legacy-2",
+          member_id: adminMemberId,
+          amount: 600,
+          settlement_amount: 600,
+        },
+      ],
+      splits: [
+        {
+          id: "s-1",
+          expense_id: "exp-legacy-1",
+          member_id: adminMemberId,
+          amount: 250,
+          settlement_amount: 250,
+          share_units: 1,
+        },
+        {
+          id: "s-2",
+          expense_id: "exp-legacy-1",
+          member_id: placeholderId,
+          amount: 250,
+          settlement_amount: 250,
+          share_units: 1,
+        },
+        {
+          id: "s-3",
+          expense_id: "exp-legacy-2",
+          member_id: adminMemberId,
+          amount: 400,
+          settlement_amount: 400,
+          share_units: 2,
+        },
+        {
+          id: "s-4",
+          expense_id: "exp-legacy-2",
+          member_id: placeholderId,
+          amount: 200,
+          settlement_amount: 200,
+          share_units: 1,
+        },
+      ],
+      settlements: [],
+      stops: [],
+    };
+
+    const res = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
+      "https://ledger.internal/import",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshot: legacySnapshot, now }),
+      },
+    );
+    expect(res.status).toBe(200);
+
+    // Verify reading expenses from imported group
+    const listRes = await send(admin, "GET", `/groups/${groupId}/expenses`);
+    expect(listRes.status).toBe(200);
+    const page = await listRes.json<{ expenses: Array<{ id: string; description: string; splitMethod: string }> }>();
+    expect(page.expenses).toHaveLength(2);
+    expect(page.expenses.find((e) => e.id === "exp-legacy-1")?.splitMethod).toBe("equal");
+    expect(page.expenses.find((e) => e.id === "exp-legacy-2")?.splitMethod).toBe("shares");
+
+    // Verify balances calculated from legacy expenses
+    const balRes = await send(admin, "GET", `/groups/${groupId}/balances`);
+    expect(balRes.status).toBe(200);
+    const balances = await balRes.json<{ balances: Array<{ memberId: string; balance: number }> }>();
+    const adminBal = balances.balances.find((b) => b.memberId === adminMemberId);
+    const placeBal = balances.balances.find((b) => b.memberId === placeholderId);
+    expect(adminBal?.balance).toBe(450);
+    expect(placeBal?.balance).toBe(-450);
   });
 });

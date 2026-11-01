@@ -55,4 +55,3 @@ For the detailed step-by-step procedure and disaster recovery steps, see `docs/o
 5. **Import & verify**: Run `POST /api/v1/maintenance/migration/import/:id` with bypass. Verify all members, zero-sum balances, expenses, settlements, stops, sessions, and auth.
 6. **Controlled wipe**: Run `POST /api/v1/maintenance/migration/wipe-excluded/:id` with bypass to remove non-retained groups while preserving all users, identities, and sessions. Re-verify retained group and auth.
 7. **Production sign-off & gate removal**: Verify health, live WebSocket, 404 on test sign-in, remove maintenance gate, monitor observability.
-
