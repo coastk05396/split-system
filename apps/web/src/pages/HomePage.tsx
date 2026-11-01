@@ -12,7 +12,6 @@ import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
 import { PressableLink } from "../shell/PressableLink.js";
-import { SproutMark } from "../shell/SproutMark.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 
 /** Screen 2: the person's pending Balances per currency, the Groups owing something, and the two ways to start a Group. */
@@ -27,11 +26,10 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex items-start justify-between gap-3">
+      <header>
         <h1 className="text-balance text-2xl leading-tight font-bold md:text-4xl">
           {t("home.greeting", { name })}
         </h1>
-        <SproutMark className="size-12 md:size-14" />
       </header>
 
       {groupsQuery.isError ? (
