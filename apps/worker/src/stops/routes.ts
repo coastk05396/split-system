@@ -46,7 +46,11 @@ export function stopRoutes(deps: AppDeps) {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const query = stopListQuerySchema.safeParse(c.req.query());
       if (!query.success) throw new ApiError("VALIDATION_FAILED");
-      const result = await stopRequest(c.env, me.groupId, { action: "list", day: query.data.day });
+      const result = await stopRequest(c.env, me.groupId, {
+        action: "list",
+        actorId: me.id,
+        day: query.data.day,
+      });
       c.header("X-Group-Rev", result.rev);
       return c.json(result.value, 200);
     })
@@ -55,6 +59,7 @@ export function stopRoutes(deps: AppDeps) {
       const input = await parseBody(c, stopInputSchema);
       const result = await stopRequest(c.env, me.groupId, {
         action: "create",
+        actorId: me.id,
         input,
         now: deps.now(),
       });
@@ -67,6 +72,7 @@ export function stopRoutes(deps: AppDeps) {
       const input = await parseBody(c, stopPatchSchema);
       const result = await stopRequest(c.env, me.groupId, {
         action: "patch",
+        actorId: me.id,
         id: c.req.param("sid"),
         input,
         expected,
@@ -79,6 +85,7 @@ export function stopRoutes(deps: AppDeps) {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const result = await stopRequest(c.env, me.groupId, {
         action: "delete",
+        actorId: me.id,
         id: c.req.param("sid"),
       });
       c.header("X-Group-Rev", result.rev);

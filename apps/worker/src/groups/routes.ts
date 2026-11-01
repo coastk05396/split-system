@@ -326,12 +326,22 @@ export function groupRoutes(deps: AppDeps) {
     .post("/groups/:id/invite", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await regenerateInvite(db, me, deps.now(), c.env), 201);
+      return c.json(
+        await regenerateInvite(db, me, deps.now(), c.env, (rev) => {
+          c.header("X-Group-Rev", rev);
+        }),
+        201,
+      );
     })
     .post("/groups/:id/invite/ensure", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await ensureInvite(db, me, deps.now(), c.env), 200);
+      return c.json(
+        await ensureInvite(db, me, deps.now(), c.env, (rev) => {
+          c.header("X-Group-Rev", rev);
+        }),
+        200,
+      );
     })
     .get("/invites/:token", signedIn, async (c) => {
       const db = createDb(c.env.DB);
@@ -343,7 +353,9 @@ export function groupRoutes(deps: AppDeps) {
     .post("/invites/:token/join", signedIn, rateLimit("invite_join", deps.now), async (c) => {
       const db = createDb(c.env.DB);
       return c.json(
-        await joinGroup(db, c.req.param("token"), c.var.userId, deps.now(), c.env),
+        await joinGroup(db, c.req.param("token"), c.var.userId, deps.now(), c.env, (rev) => {
+          c.header("X-Group-Rev", rev);
+        }),
         200,
       );
     })
@@ -357,6 +369,9 @@ export function groupRoutes(deps: AppDeps) {
         memberId,
         deps.now(),
         c.env,
+        (rev) => {
+          c.header("X-Group-Rev", rev);
+        },
       );
       return c.json(result, 200);
     });

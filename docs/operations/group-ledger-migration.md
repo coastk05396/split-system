@@ -5,6 +5,7 @@ This procedure is documented for Release 1. Do not run a production migration or
 ## Release 1 Cutover Checklist
 
 ### 1. Pre-cutover Backup
+
 - Export a complete D1 backup outside the repository:
   ```bash
   pnpm --filter @split/worker exec wrangler d1 export split-prod --remote --output=/tmp/backup-split-prod-$(date +%s).sql
@@ -12,6 +13,7 @@ This procedure is documented for Release 1. Do not run a production migration or
 - Verify backup integrity by testing restore in an isolated local or staging database. Keep the exported backup file outside the repository and protected.
 
 ### 2. Enable Maintenance Gate
+
 - Enable the maintenance gate on the live Worker before taking snapshots or modifying data:
   ```bash
   pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env production
@@ -20,6 +22,7 @@ This procedure is documented for Release 1. Do not run a production migration or
 - Provide the generated secret to authorized operators via the `X-Maintenance-Bypass` header over HTTPS.
 
 ### 3. Verify Target Group & Snapshot
+
 - Confirm the unique identity of the retained group 「明天去哪玩」:
   - Query group candidate IDs.
   - Operator calls `GET /api/v1/maintenance/migration/snapshot/:id` with `X-Maintenance-Bypass: <secret>`.
@@ -27,6 +30,7 @@ This procedure is documented for Release 1. Do not run a production migration or
   - Record the returned SHA-256 fingerprint.
 
 ### 4. Deploy Additive Schema and New Worker
+
 - Apply additive D1 migrations:
   ```bash
   pnpm --filter @split/worker exec wrangler d1 migrations apply DB --env production
@@ -38,6 +42,7 @@ This procedure is documented for Release 1. Do not run a production migration or
 - The maintenance gate remains active throughout deployment and import.
 
 ### 5. Idempotent Import & Retained-Group Verification
+
 - Execute import with bypass:
   ```bash
   curl -X POST https://split.rickchen.si/api/v1/maintenance/migration/import/<retained-id> \
@@ -52,6 +57,7 @@ This procedure is documented for Release 1. Do not run a production migration or
   - Verify unexpired sessions and both Google and LINE authentication
 
 ### 6. Controlled Wipe of Excluded Groups
+
 - Only after successful verification of the retained group and with owner approval, execute controlled wipe:
   ```bash
   curl -X POST https://split.rickchen.si/api/v1/maintenance/migration/wipe-excluded/<retained-id> \
@@ -59,12 +65,12 @@ This procedure is documented for Release 1. Do not run a production migration or
   ```
 - The endpoint:
   1. Uniquely re-verifies the retained group `明天去哪玩` and checks that its ledger DO is operational.
-  2. Marks any active ledger DOs for excluded groups as deleted.
-  3. Atomically wipes excluded groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows (`group_directory`, `group_member_summary`, `group_reservations`, `personal_spending`) in D1.
-  4. Preserves all users, identities, sessions, settings, and the retained group.
+  2. Records excluded ledger IDs and wipes excluded groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows (`group_directory`, `group_member_summary`, `group_reservations`, `personal_spending`) in a D1 transaction, then deletes each ledger and retains failed IDs for retry.
+  3. Preserves all users, identities, sessions, settings, and the retained group.
 - Re-verify that excluded groups return 404, while the retained group remains accessible and authentication continues to function.
 
 ### 7. Post-Cutover Verification & Gate Removal
+
 - Verify health: `GET /api/v1/health`
 - Verify WebSocket live connection (`split.v1` protocol and ping/pong).
 - Verify test sign-in route returns 404 (`TEST_SIGN_IN` absent in production).
@@ -76,20 +82,6 @@ This procedure is documented for Release 1. Do not run a production migration or
 
 ## Rollback & Disaster Recovery
 
-Cutover is a one-way door after the maintenance gate is removed:
-
-1. **Before Maintenance Gate Removal**:
-   - Keep maintenance gate enabled.
-   - Roll back Worker deployment to previous version:
-     ```bash
-     pnpm --filter @split/worker exec wrangler rollback --env production
-     ```
-   - Legacy D1 tables are untouched and intact. Revert maintenance gate once verified.
-2. **After Maintenance Gate Removal (Live in Production)**:
-   - The GroupLedger Durable Object is the single source of truth. A reverse mirror to legacy D1 tables was explicitly rejected to avoid dual sources of truth and split-brain states.
-   - Any rollback after gate removal requires restoring the pre-cutover D1 backup:
-     ```bash
-     pnpm --filter @split/worker exec wrangler d1 execute DB --env production --file=/tmp/backup-split-prod.sql
-     ```
-   - Roll back Worker deployment to previous version.
-   - Writes created since cutover will be lost. Rolling back the Worker alone without restoring the D1 backup is not supported.
+1. **Before wipe:** Keep the maintenance gate enabled and roll back the Worker if required. Import may have changed legacy projections; restore the verified pre-cutover backup if the legacy state needs to be recovered exactly.
+2. **After wipe, before gate removal:** Keep the gate enabled. Restore the pre-cutover D1 backup before rolling back the Worker, because excluded groups have been deleted. If continuing the cutover instead, retry `wipe-excluded` with the same retained ID; the persisted pending list includes interrupted deletions, and an error reports `failedLedgers`.
+3. **After gate removal:** Rollback requires restoring the pre-cutover D1 backup and rolling back the Worker. Writes created since cutover will be lost; the ledger is authoritative and there is no reverse mirror.

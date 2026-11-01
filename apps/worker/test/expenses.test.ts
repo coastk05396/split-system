@@ -1,13 +1,52 @@
 import type { Expense, ExpensePage } from "@split/shared";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createDb } from "../src/db/client.js";
-import { fxRates } from "../src/db/schema.js";
+import { fxRates, members } from "../src/db/schema.js";
 import { clock } from "./auth-harness.js";
 import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { balances, createExpense, newKey, postExpense, twdExpense } from "./expenses-harness.js";
 
 describe("Expenses and Balances", () => {
+  it("rejects expense operations by a removed ledger member despite stale D1", async () => {
+    const { admin, group, others } = await groupWith("admin", "member");
+    const member = others[0];
+    if (!member) throw new Error("missing member");
+    const roster = await listMembers(admin, group.id);
+    const memberRow = roster.find((m) => m.userId === member.userId);
+    if (!memberRow) throw new Error("missing member row");
+    const input = twdExpense(group.me.memberId, [group.me.memberId], 100);
+    const expense = await createExpense(admin, group.id, input);
+    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
+    const removed = await stub.fetch("https://ledger.internal/member-op", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "remove",
+        actorMemberId: group.me.memberId,
+        targetMemberId: memberRow.id,
+        now: Date.now(),
+      }),
+    });
+    expect(removed.status).toBe(200);
+    await createDb(env.DB)
+      .update(members)
+      .set({ status: "active" })
+      .where(eq(members.id, memberRow.id));
+    expect((await send(member, "GET", `/groups/${group.id}/expenses`)).status).toBe(403);
+    expect((await send(member, "GET", `/groups/${group.id}/expenses/${expense.id}`)).status).toBe(
+      403,
+    );
+    expect((await postExpense(member, group.id, input, newKey())).status).toBe(403);
+    expect(
+      (
+        await send(member, "PATCH", `/groups/${group.id}/expenses/${expense.id}`, input, {
+          "If-Match": String(expense.updatedAt),
+        })
+      ).status,
+    ).toBe(403);
+  });
+
   it("an equal NT$100 Expense moves Balances by 34/33/33 with the payer taking the leftover", async () => {
     const { admin, group } = await groupWith("小宇", "阿明", "小美");
     const [a, b, c] = (await listMembers(admin, group.id)).map((m) => m.id);

@@ -85,17 +85,10 @@ describe("retained Group migration import", () => {
     expect(snapshot.fingerprint).toMatch(/^[a-f0-9]{64}$/);
 
     // Error checks on import
+    expect((await call(`/maintenance/migration/import/${group.id}`)).status).toBe(404);
     expect(
-      (await call(`/maintenance/migration/import/${group.id}`)).status,
-    ).toBe(404);
-    expect(
-      (
-        await call(
-          `/maintenance/migration/import/wrong-id`,
-          { method: "POST", headers },
-          bindings,
-        )
-      ).status,
+      (await call(`/maintenance/migration/import/wrong-id`, { method: "POST", headers }, bindings))
+        .status,
     ).toBe(409);
 
     // Execute import
@@ -127,14 +120,20 @@ describe("retained Group migration import", () => {
     // Verify all reads from imported Group
     const getGroup = await send(admin, "GET", `/groups/${group.id}`);
     expect(getGroup.status).toBe(200);
-    const groupData = await getGroup.json<{ name: string; isTrip: boolean; tripDestination: string }>();
+    const groupData = await getGroup.json<{
+      name: string;
+      isTrip: boolean;
+      tripDestination: string;
+    }>();
     expect(groupData.name).toBe("明天去哪玩");
     expect(groupData.isTrip).toBe(true);
     expect(groupData.tripDestination).toBe("花蓮");
 
     const getMembers = await listMembers(admin, group.id);
     expect(getMembers.length).toBe(3);
-    expect(getMembers.some((m) => m.displayName === "小草" && m.status === "placeholder")).toBe(true);
+    expect(getMembers.some((m) => m.displayName === "小草" && m.status === "placeholder")).toBe(
+      true,
+    );
     expect(getMembers.some((m) => m.userId === member.userId)).toBe(true);
 
     const getBalances = await send(admin, "GET", `/groups/${group.id}/balances`);
@@ -145,7 +144,9 @@ describe("retained Group migration import", () => {
 
     const getExpenses = await send(admin, "GET", `/groups/${group.id}/expenses`);
     expect(getExpenses.status).toBe(200);
-    const resBody = await getExpenses.json<{ expenses?: Array<{ description: string }> } | Array<{ description: string }>>();
+    const resBody = await getExpenses.json<
+      { expenses?: Array<{ description: string }> } | Array<{ description: string }>
+    >();
     const expensesList = Array.isArray(resBody) ? resBody : (resBody.expenses ?? []);
     expect(expensesList.some((e) => e.description === "高鐵票")).toBe(true);
 
@@ -184,6 +185,50 @@ describe("retained Group migration import", () => {
         )
       ).status,
     ).toBe(409);
+
+    // A failed ledger deletion must remain discoverable after the D1 wipe.
+    const failingNamespace = new Proxy(env.GROUP_LEDGER, {
+      get(target, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, target, args)
+            : value;
+        }
+        return (id: Parameters<typeof target.get>[0]) => {
+          const stub = target.get(id);
+          return new Proxy(stub, {
+            get(inner, property) {
+              if (property !== "fetch") {
+                const value: unknown = Reflect.get(inner, property, inner);
+                return typeof value === "function"
+                  ? (...args: unknown[]): unknown => Reflect.apply(value, inner, args)
+                  : value;
+              }
+              return (input: RequestInfo | URL, init?: RequestInit) => {
+                const url =
+                  typeof input === "string"
+                    ? input
+                    : input instanceof URL
+                      ? input.toString()
+                      : input.url;
+                if (url.endsWith("/delete"))
+                  return Promise.resolve(new Response(null, { status: 503 }));
+                return inner.fetch(input, init);
+              };
+            },
+          });
+        };
+      },
+    });
+    const failedWipe = await call(
+      `/maintenance/migration/wipe-excluded/${group.id}`,
+      { method: "POST", headers },
+      { ...bindings, GROUP_LEDGER: failingNamespace },
+    );
+    expect(failedWipe.status).toBe(500);
+    const failure = await failedWipe.json<{ error: { details: { failedLedgers: string[] } } }>();
+    expect(failure.error.details.failedLedgers).toContain(otherGroup.id);
 
     // Execute wipe-excluded with verified retained group id
     const wipeRes = await call(
@@ -291,6 +336,7 @@ describe("retained Group migration import", () => {
       expenses: [
         {
           id: "exp-legacy-1",
+          idempotency_key: `${adminMemberId}:legacy-key`,
           group_id: groupId,
           creator_member_id: adminMemberId,
           description: "舊版晚餐",
@@ -409,15 +455,29 @@ describe("retained Group migration import", () => {
     // Verify reading expenses from imported group
     const listRes = await send(admin, "GET", `/groups/${groupId}/expenses`);
     expect(listRes.status).toBe(200);
-    const page = await listRes.json<{ expenses: Array<{ id: string; description: string; splitMethod: string }> }>();
+    const page = await listRes.json<{
+      expenses: Array<{ id: string; description: string; splitMethod: string }>;
+    }>();
     expect(page.expenses).toHaveLength(2);
     expect(page.expenses.find((e) => e.id === "exp-legacy-1")?.splitMethod).toBe("equal");
     expect(page.expenses.find((e) => e.id === "exp-legacy-2")?.splitMethod).toBe("shares");
 
+    const retry = await send(
+      admin,
+      "POST",
+      `/groups/${groupId}/expenses`,
+      twdExpense(adminMemberId, [adminMemberId], 500),
+      { "Idempotency-Key": "legacy-key" },
+    );
+    expect(retry.status).toBe(201);
+    expect((await retry.json<{ id: string }>()).id).toBe("exp-legacy-1");
+
     // Verify balances calculated from legacy expenses and confirmed settlements
     const balRes = await send(admin, "GET", `/groups/${groupId}/balances`);
     expect(balRes.status).toBe(200);
-    const balances = await balRes.json<{ balances: Array<{ memberId: string; balance: number }> }>();
+    const balances = await balRes.json<{
+      balances: Array<{ memberId: string; balance: number }>;
+    }>();
     const adminBal = balances.balances.find((b) => b.memberId === adminMemberId);
     const placeBal = balances.balances.find((b) => b.memberId === placeholderId);
     expect(adminBal?.balance).toBe(300);

@@ -99,6 +99,7 @@ export function expenseRoutes(deps: AppDeps) {
       return c.json(
         await expenseLedgerOperation(c.env, me.groupId, {
           action: "list",
+          actorMemberId: me.id,
           cursor: c.req.query("cursor"),
         }),
         200,
@@ -115,6 +116,7 @@ export function expenseRoutes(deps: AppDeps) {
         me.groupId,
         {
           action: "create",
+          actorMemberId: me.id,
           memberId: me.id,
           input,
           key,
@@ -135,7 +137,11 @@ export function expenseRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(
-        await expenseLedgerOperation(c.env, me.groupId, { action: "get", id: c.req.param("eid") }),
+        await expenseLedgerOperation(c.env, me.groupId, {
+          action: "get",
+          id: c.req.param("eid"),
+          actorMemberId: me.id,
+        }),
         200,
       );
     })
@@ -150,6 +156,7 @@ export function expenseRoutes(deps: AppDeps) {
         me.groupId,
         {
           action: "update",
+          actorMemberId: me.id,
           id: c.req.param("eid"),
           memberId: me.id,
           input,
@@ -175,6 +182,7 @@ export function expenseRoutes(deps: AppDeps) {
         me.groupId,
         {
           action: "delete",
+          actorMemberId: me.id,
           id: c.req.param("eid"),
           now: deps.now(),
         },
@@ -190,7 +198,12 @@ export function expenseRoutes(deps: AppDeps) {
       const result = await groupBalances(db, me);
       const balances = z
         .array(z.object({ id: z.string(), net_balance: z.number() }))
-        .parse(await expenseLedgerOperation(c.env, me.groupId, { action: "balances" }));
+        .parse(
+          await expenseLedgerOperation(c.env, me.groupId, {
+            action: "balances",
+            actorMemberId: me.id,
+          }),
+        );
       const byId = new Map(balances.map((m) => [m.id, m.net_balance]));
       return c.json(
         {

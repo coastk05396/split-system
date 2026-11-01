@@ -12,16 +12,22 @@ import { ApiError, invalid } from "./errors.js";
 import { assertIfMatch } from "./request-guards.js";
 
 const operationSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("list"), day: z.string().optional() }),
-  z.object({ action: z.literal("create"), input: stopInputSchema, now: z.number().int() }),
+  z.object({ action: z.literal("list"), actorId: z.string().min(1), day: z.string().optional() }),
+  z.object({
+    action: z.literal("create"),
+    actorId: z.string().min(1),
+    input: stopInputSchema,
+    now: z.number().int(),
+  }),
   z.object({
     action: z.literal("patch"),
+    actorId: z.string().min(1),
     id: z.string(),
     input: stopPatchSchema,
     expected: z.number().int(),
     now: z.number().int(),
   }),
-  z.object({ action: z.literal("delete"), id: z.string() }),
+  z.object({ action: z.literal("delete"), actorId: z.string().min(1), id: z.string() }),
 ]);
 
 type StopRow = { data: string };
@@ -34,6 +40,10 @@ export function stopOperation(
   const parsed = operationSchema.safeParse(raw);
   if (!parsed.success) throw new ApiError("VALIDATION_FAILED");
   const op = parsed.data;
+  const actor = sql
+    .exec<{ status: string }>("SELECT status FROM ledger_members WHERE id=?", op.actorId)
+    .toArray()[0];
+  if (actor?.status !== "active") throw new ApiError("FORBIDDEN");
   const get = (id: string): Stop => {
     const row = sql.exec<StopRow>("SELECT data FROM ledger_stops WHERE id=?", id).toArray()[0];
     if (row === undefined) throw new ApiError("NOT_FOUND");

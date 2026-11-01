@@ -24,26 +24,70 @@ function newToken(): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function ledgerInvite(env: Bindings, groupId: string, action: "get" | "ensure" | "regenerate" | "validate", now: number, token?: string, actorMemberId?: string): Promise<Invite> {
-  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch("https://ledger.internal/invite", {
-    method: "POST", body: JSON.stringify({ action, now, actorMemberId, token: token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined), expiresAt: now + INVITE_TTL_MS }),
-  });
+async function ledgerInvite(
+  env: Bindings,
+  groupId: string,
+  action: "get" | "ensure" | "regenerate" | "validate",
+  now: number,
+  token?: string,
+  actorMemberId?: string,
+  setRev?: (rev: string) => void,
+): Promise<Invite> {
+  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
+    "https://ledger.internal/invite",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        now,
+        actorMemberId,
+        token: token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined),
+        expiresAt: now + INVITE_TTL_MS,
+      }),
+    },
+  );
   const data = await response.json<Invite | { error: string }>();
-  if ("error" in data) throw new ApiError(data.error === "INVITE_EXPIRED" ? "INVITE_EXPIRED" : data.error === "FORBIDDEN" ? "FORBIDDEN" : "NOT_FOUND");
+  if ("error" in data)
+    throw new ApiError(
+      data.error === "INVITE_EXPIRED"
+        ? "INVITE_EXPIRED"
+        : data.error === "FORBIDDEN"
+          ? "FORBIDDEN"
+          : "NOT_FOUND",
+    );
+  const rev = response.headers.get("X-Group-Rev");
+  if (rev !== null) setRev?.(rev);
   return data;
 }
 
-export async function regenerateInvite(_db: Db, me: MemberRow, now: number, env: Bindings): Promise<Invite> {
+export async function regenerateInvite(
+  _db: Db,
+  me: MemberRow,
+  now: number,
+  env: Bindings,
+  setRev?: (rev: string) => void,
+): Promise<Invite> {
   requireAdmin(me);
-  return ledgerInvite(env, me.groupId, "regenerate", now, undefined, me.id);
+  return ledgerInvite(env, me.groupId, "regenerate", now, undefined, me.id, setRev);
 }
 
-export async function currentInvite(_db: Db, me: MemberRow, now: number, env: Bindings): Promise<Invite> {
+export async function currentInvite(
+  _db: Db,
+  me: MemberRow,
+  now: number,
+  env: Bindings,
+): Promise<Invite> {
   return ledgerInvite(env, me.groupId, "get", now, undefined, me.id);
 }
 
-export async function ensureInvite(_db: Db, me: MemberRow, now: number, env: Bindings): Promise<Invite> {
-  return ledgerInvite(env, me.groupId, "ensure", now, undefined, me.id);
+export async function ensureInvite(
+  _db: Db,
+  me: MemberRow,
+  now: number,
+  env: Bindings,
+  setRev?: (rev: string) => void,
+): Promise<Invite> {
+  return ledgerInvite(env, me.groupId, "ensure", now, undefined, me.id, setRev);
 }
 
 /** A live Invite's Group; a regenerated (deleted) link is 404, a lapsed one INVITE_EXPIRED. */
@@ -128,12 +172,12 @@ export async function joinGroup(
   userId: string,
   now: number,
   env: Bindings,
+  setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
   await reserveGroup(env.DB, userId, group.id, now);
   const mine = await ownRow(db, group.id, userId);
-  if (mine?.status === "active") return { groupId: group.id, memberId: mine.id };
-  await assertUnderGroupCap(db, userId);
+  if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
   const result = await memberOperation(env, group.id, {
     action: "join",
     inviteToken: token,
@@ -141,6 +185,7 @@ export async function joinGroup(
     targetMemberId: mine?.id ?? crypto.randomUUID(),
     now,
   });
+  setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
 }
 
@@ -151,6 +196,7 @@ export async function claimPlaceholder(
   placeholderId: string,
   now: number,
   env: Bindings,
+  setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
@@ -163,5 +209,6 @@ export async function claimPlaceholder(
     targetMemberId: placeholderId,
     now,
   });
+  setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
 }

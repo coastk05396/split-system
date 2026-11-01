@@ -418,6 +418,28 @@ describe("DELETE /groups/:id", () => {
   });
 });
 
+describe("ledger actor validation", () => {
+  it("rejects missing actors for patch and delete", async () => {
+    const admin = await person("actor validation");
+    const group = await createGroup(admin);
+    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
+    const patch = await stub.fetch("https://ledger.internal/patch", {
+      method: "POST",
+      body: JSON.stringify({
+        patch: { name: "No actor" },
+        expected: group.updatedAt,
+        now: Date.now(),
+      }),
+    });
+    const remove = await stub.fetch("https://ledger.internal/delete", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(patch.status).toBe(400);
+    expect(remove.status).toBe(400);
+  });
+});
+
 describe("ledger authority for admin actions (stale D1 projection)", () => {
   it("refuses PATCH and DELETE when D1 projection is stale and actor was demoted or removed in ledger", async () => {
     const { admin, group } = await groupWith("小宇", "阿明");

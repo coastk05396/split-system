@@ -666,16 +666,17 @@ export class GroupLedger extends DurableObject<Bindings> {
               "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
             );
           }
-          return result;
+          return {
+            ...result,
+            rev: this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one()
+              .rev,
+          };
         });
         if (result.changed) {
-          const rev = this.ctx.storage.sql
-            .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
-            .one().rev;
           const signal: SyncNeeded = {
             version: 1,
             type: "sync needed",
-            rev,
+            rev: result.rev,
             timestamp: Date.now(),
           };
           for (const socket of this.ctx.getWebSockets()) {
@@ -689,12 +690,9 @@ export class GroupLedger extends DurableObject<Bindings> {
             await this.ctx.storage.setAlarm(Date.now() + 2000);
           await this.drain();
         }
-        const currentRev = this.ctx.storage.sql
-          .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
-          .one().rev;
         return Response.json(
           { value: result.value },
-          { headers: { "X-Group-Rev": String(currentRev) } },
+          { headers: { "X-Group-Rev": String(result.rev) } },
         );
       } catch (error) {
         if (error instanceof ApiError)
@@ -1040,12 +1038,12 @@ export class GroupLedger extends DurableObject<Bindings> {
         return { token: op.token, expiresAt: op.expiresAt, changed: true };
       });
       if ("error" in result) return Response.json(result, { status: 404 });
+      const rev = this.ctx.storage.sql
+        .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+        .one().rev;
       if ("changed" in result) {
         if ((await this.ctx.storage.getAlarm()) === null)
           await this.ctx.storage.setAlarm(Date.now() + 2000);
-        const rev = this.ctx.storage.sql
-          .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
-          .one().rev;
         const signal: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
         for (const socket of this.ctx.getWebSockets()) {
           try {
@@ -1060,7 +1058,10 @@ export class GroupLedger extends DurableObject<Bindings> {
           { headers: { "X-Group-Rev": String(rev) } },
         );
       }
-      return Response.json({ token: result.token, expiresAt: result.expiresAt });
+      return Response.json(
+        { token: result.token, expiresAt: result.expiresAt },
+        { headers: { "X-Group-Rev": String(rev) } },
+      );
     }
     if (new URL(request.url).pathname === "/state" && request.method === "GET") {
       const group = this.ctx.storage.sql
@@ -1084,16 +1085,16 @@ export class GroupLedger extends DurableObject<Bindings> {
         patch: groupPatchSchema,
         expected: z.number().int(),
         now: z.number().int(),
-        actorMemberId: z.string().optional(),
+        actorMemberId: z.string().min(1),
       });
-      const parsed = schema.safeParse(await request.json());
+      const parsed = schema.safeParse(await request.json().catch(() => null));
       if (!parsed.success) return new Response(null, { status: 400 });
       const { patch, expected, now, actorMemberId } = parsed.data;
       if ((await this.ctx.storage.getAlarm()) === null)
         await this.ctx.storage.setAlarm(Date.now() + 2000);
       const result = this.ctx.storage.transactionSync(() => {
         const sql = this.ctx.storage.sql;
-        if (actorMemberId !== undefined) {
+        {
           const actor = sql
             .exec<{ role: string; status: string }>(
               "SELECT role, status FROM ledger_members WHERE id=?",
@@ -1154,22 +1155,29 @@ export class GroupLedger extends DurableObject<Bindings> {
       return Response.json({ rev });
     }
     if (new URL(request.url).pathname === "/delete" && request.method === "POST") {
-      const deleteSchema = z.object({
-        actorMemberId: z.string().optional(),
-      });
-      const body = request.body ? await request.json().catch(() => ({})) : {};
+      const deleteSchema = z.union([
+        z.object({ actorMemberId: z.string().min(1) }),
+        z.object({ systemBypass: z.literal(true) }),
+      ]);
+      const body: unknown = request.body ? await request.json().catch(() => null) : null;
       const parsed = deleteSchema.safeParse(body);
-      const actorMemberId = parsed.success ? parsed.data.actorMemberId : undefined;
+      if (!parsed.success) return new Response(null, { status: 400 });
+      if (
+        this.ctx.storage.sql
+          .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_group'")
+          .toArray().length === 0
+      )
+        return new Response(null, { status: 404 });
 
       if ((await this.ctx.storage.getAlarm()) === null)
         await this.ctx.storage.setAlarm(Date.now() + 2000);
       const result = this.ctx.storage.transactionSync(() => {
         const sql = this.ctx.storage.sql;
-        if (actorMemberId !== undefined) {
+        if ("actorMemberId" in parsed.data) {
           const actor = sql
             .exec<{ role: string; status: string }>(
               "SELECT role, status FROM ledger_members WHERE id=?",
-              actorMemberId,
+              parsed.data.actorMemberId,
             )
             .toArray()[0];
           if (!actor || actor.status !== "active" || actor.role !== "admin") return "FORBIDDEN";
@@ -1278,7 +1286,9 @@ export class GroupLedger extends DurableObject<Bindings> {
             "INSERT INTO ledger_meta (schema_version, rev) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
           );
           this.upgradeSchema();
-          const existing = sql.exec<{ id: string }>("SELECT id FROM ledger_group LIMIT 1").toArray();
+          const existing = sql
+            .exec<{ id: string }>("SELECT id FROM ledger_group LIMIT 1")
+            .toArray();
           if (existing.length > 0) return;
 
           const g = snapshot.group;
@@ -1327,7 +1337,10 @@ export class GroupLedger extends DurableObject<Bindings> {
             }
           }
 
-          const payersByExpense = new Map<string, Array<{ memberId: string; amountMinor: number; settlementAmount: number }>>();
+          const payersByExpense = new Map<
+            string,
+            Array<{ memberId: string; amountMinor: number; settlementAmount: number }>
+          >();
           for (const p of snapshot.payers) {
             const eid = String(p.expense_id);
             let list = payersByExpense.get(eid);
@@ -1342,7 +1355,15 @@ export class GroupLedger extends DurableObject<Bindings> {
             });
           }
 
-          const splitsByExpense = new Map<string, Array<{ memberId: string; shares: number | null; amountMinor: number; settlementAmount: number }>>();
+          const splitsByExpense = new Map<
+            string,
+            Array<{
+              memberId: string;
+              shares: number | null;
+              amountMinor: number;
+              settlementAmount: number;
+            }>
+          >();
           for (const s of snapshot.splits) {
             const eid = String(s.expense_id);
             let list = splitsByExpense.get(eid);
@@ -1350,7 +1371,8 @@ export class GroupLedger extends DurableObject<Bindings> {
               list = [];
               splitsByExpense.set(eid, list);
             }
-            const rawShares = s.shares !== null && s.shares !== undefined ? s.shares : s.share_units;
+            const rawShares =
+              s.shares !== null && s.shares !== undefined ? s.shares : s.share_units;
             list.push({
               memberId: String(s.member_id),
               shares: rawShares !== null && rawShares !== undefined ? Number(rawShares) : null,
@@ -1361,7 +1383,8 @@ export class GroupLedger extends DurableObject<Bindings> {
 
           for (const e of snapshot.expenses) {
             const eid = String(e.id);
-            const splitMethod = (e.split_method ?? e.split_type ?? "equal") as "equal" | "exact" | "shares";
+            const splitMethod = (e.split_method ?? e.split_type ?? "equal") as
+              "equal" | "exact" | "shares";
             const splits = (splitsByExpense.get(eid) ?? []).map((split) => ({
               ...split,
               shares: splitMethod === "shares" ? (split.shares ?? 1) : null,
@@ -1392,10 +1415,17 @@ export class GroupLedger extends DurableObject<Bindings> {
               "INSERT INTO ledger_expenses (id, creator_member_id, idempotency_key, data, deleted) VALUES (?, ?, ?, ?, 0)",
               eid,
               expenseItem.creatorMemberId,
-              toNullableStr(e.idempotency_key) ?? eid,
+              (() => {
+                const key = toNullableStr(e.idempotency_key);
+                const prefix = `${expenseItem.creatorMemberId}:`;
+                return key?.startsWith(prefix) ? key.slice(prefix.length) : (key ?? eid);
+              })(),
               JSON.stringify(expenseItem),
             );
-            sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES (?, 1)", `expense:${eid}`);
+            sql.exec(
+              "INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES (?, 1)",
+              `expense:${eid}`,
+            );
           }
 
           for (const s of snapshot.settlements) {
@@ -1424,7 +1454,10 @@ export class GroupLedger extends DurableObject<Bindings> {
               JSON.stringify(settlementItem),
               toNullableStr(s.idempotency_key) ?? sid,
             );
-            sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES (?, 1)", `settlement:${sid}`);
+            sql.exec(
+              "INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES (?, 1)",
+              `settlement:${sid}`,
+            );
           }
 
           for (const st of snapshot.stops) {
@@ -1463,7 +1496,9 @@ export class GroupLedger extends DurableObject<Bindings> {
                 throw new Error(`Payer member ${p.memberId} not found in group members`);
               }
               if (!Number.isInteger(p.settlementAmount)) {
-                throw new Error(`Payer settlementAmount must be an integer minor unit: ${p.settlementAmount}`);
+                throw new Error(
+                  `Payer settlementAmount must be an integer minor unit: ${p.settlementAmount}`,
+                );
               }
               netBalances.set(p.memberId, (netBalances.get(p.memberId) ?? 0) + p.settlementAmount);
             }
@@ -1472,7 +1507,9 @@ export class GroupLedger extends DurableObject<Bindings> {
                 throw new Error(`Split member ${s.memberId} not found in group members`);
               }
               if (!Number.isInteger(s.settlementAmount)) {
-                throw new Error(`Split settlementAmount must be an integer minor unit: ${s.settlementAmount}`);
+                throw new Error(
+                  `Split settlementAmount must be an integer minor unit: ${s.settlementAmount}`,
+                );
               }
               netBalances.set(s.memberId, (netBalances.get(s.memberId) ?? 0) - s.settlementAmount);
             }
@@ -1495,7 +1532,9 @@ export class GroupLedger extends DurableObject<Bindings> {
           // Invariant: sum of all member net balances must be zero
           const totalNetBalance = Array.from(netBalances.values()).reduce((sum, b) => sum + b, 0);
           if (totalNetBalance !== 0) {
-            throw new Error(`Net balance invariant violated: total sum is ${totalNetBalance}, expected 0`);
+            throw new Error(
+              `Net balance invariant violated: total sum is ${totalNetBalance}, expected 0`,
+            );
           }
           for (const [memberId, balance] of netBalances.entries()) {
             sql.exec("UPDATE ledger_members SET net_balance = ? WHERE id = ?", balance, memberId);
@@ -1526,7 +1565,9 @@ export class GroupLedger extends DurableObject<Bindings> {
           .exec<{ count: number }>("SELECT COUNT(*) AS count FROM ledger_dirty")
           .one().count;
         if (remainingDirty > 0) {
-          throw new Error(`Import failed to drain all read-model records: ${remainingDirty} remaining`);
+          throw new Error(
+            `Import failed to drain all read-model records: ${remainingDirty} remaining`,
+          );
         }
       });
       return new Response(null, { status: 200 });
