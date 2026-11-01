@@ -85,9 +85,9 @@ function GroupRow({ group }: { group: Group }) {
           <span
             className={
               balance < 0
-                ? "font-semibold text-red-700"
+                ? "font-bold text-red-600"
                 : balance > 0
-                  ? "font-semibold text-sprout-700"
+                  ? "font-bold text-emerald-600"
                   : ""
             }
           >
