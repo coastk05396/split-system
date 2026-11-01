@@ -1018,6 +1018,20 @@ body::before {
   animation: nav-icon-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
+/* Connected transfer arrow subtle nudge in direction of payment */
+@keyframes transfer-arrow-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2.5px);
+  }
+}
+.transfer-arrow-pulse {
+  animation: transfer-arrow-nudge 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
     transition: opacity 120ms ease-out;
@@ -1026,7 +1040,8 @@ body::before {
   .copy-icon-pop,
   .dialog-icon-enter,
   .expense-delete-slide,
-  .nav-icon-pop {
+  .nav-icon-pop,
+  .transfer-arrow-pulse {
     animation: none;
   }
   .row-leave {

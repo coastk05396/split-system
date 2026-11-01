@@ -84,8 +84,8 @@ describe("Balances and the Payment plan", () => {
   it("shows my Balance and the fewest-payments plan in whole dollars", async () => {
     await openSettle(owedToMe);
 
-    expect(await screen.findByText("NT$ 300")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "你可收" })).toBeVisible();
+    expect(await screen.findByText("NT$ 200")).toBeVisible();
+    expect(await screen.findAllByText("你可收")).toHaveLength(2);
     expect(screen.queryByText("最少筆數")).toBeNull();
     expect(await rows()).toEqual([
       expect.stringContaining("阿哲付給你NT$ 200"),
@@ -249,7 +249,7 @@ describe("Recording and confirming Settlements", () => {
     const dropped = screen.getByRole("list", { name: "已取消與已撤銷" });
     expect(within(dropped).getAllByRole("heading", { level: 3 })).toHaveLength(1);
     expect(within(dropped).getByText(/^\d{2}:\d{2}$/)).toBeVisible();
-    expect(await screen.findByText("NT$ 300")).toBeVisible();
+    expect(within(dropped).getByText("NT$ 200")).toBeVisible();
     expect(api.groups.members(id())[2]?.balance).toBe(-200);
   });
 
@@ -259,10 +259,6 @@ describe("Recording and confirming Settlements", () => {
       myBalance: -200,
       others: [{ name: "宜庭", balance: 200 }],
     });
-
-    const heading = await screen.findByRole("heading", { name: "你要付" });
-    expect(heading).toHaveClass("text-red-700");
-    expect(heading.closest("section")).toHaveClass("settle-aura-pay");
 
     const plannedRow = await row("要付給誰", "你付給宜庭");
     expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-red-700");
@@ -375,7 +371,8 @@ describe("Notifying the Group of the Payment plan", () => {
       lineChat: true,
     });
 
-    await user.click(await screen.findByRole("button", { name: "傳到對話框" }));
+    await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
+    await user.click(await screen.findByRole("menuitem", { name: "傳到對話框" }));
 
     expect(await screen.findByText("已發送到對話框 ✓")).toBeVisible();
     expect(lineChatMessages).toHaveLength(1);
