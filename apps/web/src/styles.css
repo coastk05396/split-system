@@ -401,24 +401,15 @@
   animation: settle-pop 320ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* A number on the move is tinted by what the move means, then settles back to its own colour. */
+/* Core balance and spending amounts stay solid, crisp, and high-contrast at all times. */
 .count-up {
-  transition: color 300ms ease-out, opacity 200ms ease-out;
+  opacity: 1;
 }
 .count-up[data-updating="true"] {
-  opacity: 0.55;
+  opacity: 1;
 }
-.count-up[data-count="good"] {
-  color: var(--color-sprout-500);
-}
-.count-up[data-count="bad"] {
-  color: #b91c1c;
-}
-.count-up.count-dark[data-count="good"] {
-  color: #c6f6d5;
-}
-.count-up.count-dark[data-count="bad"] {
-  color: #ffd2b8;
+.count-up.count-dark {
+  color: #ffffff;
 }
 
 /* A single ring that opens out of the tick when everything is settled. */
