@@ -240,7 +240,7 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
       sync.disconnect();
     });
 
-    it("refetches the Group once after any successful reconnect", async () => {
+    it("refetches the Group once after every successful open, the first included", async () => {
       const sync = new GroupLiveSync({
         groupId: "g-1",
         queryClient: client,
@@ -255,8 +255,9 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
       const socket1 = getSocket(0);
       socket1.open();
 
-      // First open does not trigger reconnect refetch
-      expect(refetchSpy).not.toHaveBeenCalled();
+      // First open catches up on changes made before the socket was listening
+      expect(refetchSpy).toHaveBeenCalledTimes(1);
+      expect(refetchSpy).toHaveBeenLastCalledWith(expect.anything(), { cancelRefetch: true });
 
       // Drops and reconnects
       socket1.close(1006);
@@ -266,7 +267,7 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
       socket2.open();
 
       // Successful reconnect triggers Group refetch
-      expect(refetchSpy).toHaveBeenCalledTimes(1);
+      expect(refetchSpy).toHaveBeenCalledTimes(2);
       sync.disconnect();
     });
   });

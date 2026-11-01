@@ -100,7 +100,8 @@ export async function handleGroupSignal(
   for (const query of activeQueries) {
     const recordedRev = getQueryRev(client, query.queryKey);
     if (recordedRev === undefined || recordedRev < rev) {
-      toFetch.push(query.fetch());
+      // cancelRefetch: a request already in flight began before this signal and may hold older data.
+      toFetch.push(query.fetch(undefined, { cancelRefetch: true }));
     }
   }
   await Promise.all(toFetch);
@@ -175,7 +176,6 @@ export class GroupLiveSync {
   private attempt = 0;
   private awaitingPong = false;
   private missedPongs = 0;
-  private hasConnectedBefore = false;
   private isDisposed = false;
 
   constructor(private readonly options: GroupLiveSyncOptions) {}
@@ -224,16 +224,18 @@ export class GroupLiveSync {
     this.awaitingPong = false;
     this.missedPongs = 0;
 
-    if (this.hasConnectedBefore) {
-      // "refetches the Group once after any successful reconnect"
-      void this.options.queryClient.refetchQueries({
+    // Catch up once on every open, the first too: changes made between the initial read and the
+    // socket being accepted raised no signal this client could hear. Cancelling an in-flight read
+    // matters because it may have been answered before the socket was listening.
+    void this.options.queryClient.refetchQueries(
+      {
         predicate: (query) => {
           const key = query.queryKey;
           return key[0] === "groups" && key[1] === this.options.groupId && query.isActive();
         },
-      });
-    }
-    this.hasConnectedBefore = true;
+      },
+      { cancelRefetch: true },
+    );
 
     this.startPing();
   };

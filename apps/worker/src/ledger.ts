@@ -301,7 +301,13 @@ export class GroupLedger extends DurableObject<Bindings> {
           statements.push(
             db
               .prepare(
-                `DELETE FROM members WHERE group_id = ? AND id NOT IN (${ids.map(() => "?").join(",")}) AND ${fence}`,
+                // Legacy Expense and Settlement rows may still reference a removed Member; those
+                // rows are kept, since deleting them would violate the legacy foreign keys.
+                `DELETE FROM members WHERE group_id = ? AND id NOT IN (${ids.map(() => "?").join(",")}) AND ${fence}
+                 AND NOT EXISTS (SELECT 1 FROM expense_payers WHERE member_id = members.id)
+                 AND NOT EXISTS (SELECT 1 FROM expense_splits WHERE member_id = members.id)
+                 AND NOT EXISTS (SELECT 1 FROM expenses WHERE creator_member_id = members.id)
+                 AND NOT EXISTS (SELECT 1 FROM settlements WHERE payer_member_id = members.id OR receiver_member_id = members.id)`,
               )
               .bind(g.id, ...ids, g.id, rev),
           );
@@ -1326,15 +1332,17 @@ export class GroupLedger extends DurableObject<Bindings> {
           }
 
           if (snapshot.invites.length > 0) {
-            const inv = snapshot.invites[0];
-            if (inv) {
-              sql.exec(
-                "INSERT INTO ledger_invite (token, expires_at, created_at) VALUES (?, ?, ?)",
-                inv.token,
-                inv.expires_at,
-                inv.created_at ?? now,
-              );
-            }
+            // The ledger holds one invite: keep the one that lives longest, so an expired
+            // legacy invite never replaces a live one.
+            const inv = snapshot.invites.reduce((best, next) =>
+              Number(next.expires_at) > Number(best.expires_at) ? next : best,
+            );
+            sql.exec(
+              "INSERT INTO ledger_invite (token, expires_at, created_at) VALUES (?, ?, ?)",
+              inv.token,
+              inv.expires_at,
+              inv.created_at ?? now,
+            );
           }
 
           const payersByExpense = new Map<

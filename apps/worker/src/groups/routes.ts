@@ -286,6 +286,12 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id/members", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      // Members come from the D1 projection, so the answer carries the projection's own revision:
+      // the ledger's revision may already be newer than the rows served here.
+      const projected = await c.env.DB.prepare("SELECT rev FROM group_directory WHERE group_id = ?")
+        .bind(me.groupId)
+        .first<{ rev: number }>();
+      c.header("X-Group-Rev", String(projected?.rev ?? 0));
       return c.json(await listMembers(db, me.groupId, me.id), 200);
     })
     .post("/groups/:id/members", signedIn, async (c) => {

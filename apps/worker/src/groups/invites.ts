@@ -1,4 +1,4 @@
-import { reserveGroup } from "../auth/reservations.js";
+import { withReservation } from "../auth/reservations.js";
 import {
   INVITE_TTL_MS,
   type Invite,
@@ -175,15 +175,16 @@ export async function joinGroup(
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
-  await reserveGroup(env.DB, userId, group.id, now);
-  const mine = await ownRow(db, group.id, userId);
-  if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
-  const result = await memberOperation(env, group.id, {
-    action: "join",
-    inviteToken: token,
-    userId,
-    targetMemberId: mine?.id ?? crypto.randomUUID(),
-    now,
+  const result = await withReservation(env.DB, userId, group.id, now, async () => {
+    const mine = await ownRow(db, group.id, userId);
+    if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
+    return memberOperation(env, group.id, {
+      action: "join",
+      inviteToken: token,
+      userId,
+      targetMemberId: mine?.id ?? crypto.randomUUID(),
+      now,
+    });
   });
   setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
@@ -201,14 +202,15 @@ export async function claimPlaceholder(
   const { group } = await openInvite(db, token, now, env);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
-  await reserveGroup(env.DB, userId, group.id, now);
-  const result = await memberOperation(env, group.id, {
-    action: "claim",
-    inviteToken: token,
-    userId,
-    targetMemberId: placeholderId,
-    now,
-  });
+  const result = await withReservation(env.DB, userId, group.id, now, () =>
+    memberOperation(env, group.id, {
+      action: "claim",
+      inviteToken: token,
+      userId,
+      targetMemberId: placeholderId,
+      now,
+    }),
+  );
   setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
 }

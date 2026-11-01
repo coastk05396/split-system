@@ -430,6 +430,9 @@ describe("retained Group migration import", () => {
           currency: "TWD",
           status: "confirmed",
           note: "部分還款",
+          // Legacy stored `${creator}:${key}`, which is the ledger's own settlement key format, so
+          // the import must keep it verbatim for a retried request to find the original.
+          idempotency_key: `${adminMemberId}:legacy-settle-key`,
           created_by_member_id: null,
           confirmed_by_member_id: adminMemberId,
           confirmed_at: now,
@@ -471,6 +474,16 @@ describe("retained Group migration import", () => {
     );
     expect(retry.status).toBe(201);
     expect((await retry.json<{ id: string }>()).id).toBe("exp-legacy-1");
+
+    const settleRetry = await send(
+      admin,
+      "POST",
+      `/groups/${groupId}/settlements`,
+      { payerMemberId: placeholderId, receiverMemberId: adminMemberId, amount: 150 },
+      { "Idempotency-Key": "legacy-settle-key" },
+    );
+    expect(settleRetry.status).toBe(201);
+    expect((await settleRetry.json<{ id: string }>()).id).toBe("stl-legacy-1");
 
     // Verify balances calculated from legacy expenses and confirmed settlements
     const balRes = await send(admin, "GET", `/groups/${groupId}/balances`);

@@ -118,8 +118,9 @@ describe("POST /groups and GET /groups/:id", () => {
       },
     });
 
+    // Balances are read from the ledger, so their revision comes from the pre-fetch.
     const read = await call(
-      `/groups/${group.id}/members`,
+      `/groups/${group.id}/balances`,
       { headers: bearer(yu.accessToken) },
       { GROUP_LEDGER: proxyNamespace },
     );
@@ -134,6 +135,24 @@ describe("POST /groups and GET /groups/:id", () => {
       .fetch("https://ledger.internal/state");
     const currentState = await current.json<{ rev: number }>();
     expect(currentState.rev).toBe(1);
+  });
+  it("labels a Members read with the projection's own revision, never the ledger's newer one", async () => {
+    const yu = await person("小宇");
+    const group = await createGroup(yu, { name: "投影版本" });
+    expect((await send(yu, "POST", `/groups/${group.id}/members`, { name: "小明" })).status).toBe(
+      201,
+    );
+    // Simulate a projection that has not caught up with the ledger yet.
+    await env.DB.prepare("UPDATE group_directory SET rev = 0 WHERE group_id = ?")
+      .bind(group.id)
+      .run();
+    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
+    const state = await (await stub.fetch("https://ledger.internal/state")).json<{ rev: number }>();
+    expect(state.rev).toBeGreaterThan(0);
+
+    const read = await send(yu, "GET", `/groups/${group.id}/members`);
+    expect(read.status).toBe(200);
+    expect(read.headers.get("X-Group-Rev")).toBe("0");
   });
   it("creates a Running Tab with the creator as its only Member and Admin", async () => {
     const yu = await person("小宇");

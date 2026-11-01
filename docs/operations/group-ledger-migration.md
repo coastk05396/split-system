@@ -12,12 +12,21 @@ This procedure is documented for Release 1. Do not run a production migration or
   ```
 - Verify backup integrity by testing restore in an isolated local or staging database. Keep the exported backup file outside the repository and protected.
 
-### 2. Enable Maintenance Gate
+### 2. Deploy the Worker with the Gate and Snapshot, Then Enable the Gate
 
-- Enable the maintenance gate on the live Worker before taking snapshots or modifying data:
+The gate and the snapshot endpoint exist only in the new Worker. Setting `MAINTENANCE` on the old Worker blocks nothing, and the snapshot route answers 404 there. So the new Worker goes out first, with the gate secret attached to the same version so it is never served ungated:
+
+- Apply additive D1 migrations (no table is dropped; the drop belongs to Release 2):
   ```bash
-  pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env production
+  pnpm --filter @split/worker exec wrangler d1 migrations apply DB --env production
   ```
+- Upload the new Worker as a version (it carries the `GROUP_LEDGER` Durable Object binding and SQLite class migration `tag: v1`), attach the secret to that version, then deploy it:
+  ```bash
+  pnpm --filter @split/worker exec wrangler versions upload --env production
+  pnpm --filter @split/worker exec wrangler versions secret put MAINTENANCE --env production
+  pnpm --filter @split/worker exec wrangler versions deploy --env production
+  ```
+  Rehearse these three commands on staging first. If your Wrangler version lacks them, deploy and then run `wrangler secret put MAINTENANCE --env production` straight away, accepting a short window in which the new Worker is live and ungated.
 - Confirm that data-modifying requests receive HTTP 503 (`SERVICE_UNAVAILABLE`), while read requests continue to serve normally.
 - Provide the generated secret to authorized operators via the `X-Maintenance-Bypass` header over HTTPS.
 
@@ -28,18 +37,7 @@ This procedure is documented for Release 1. Do not run a production migration or
   - Operator calls `GET /api/v1/maintenance/migration/snapshot/:id` with `X-Maintenance-Bypass: <secret>`.
   - The endpoint rejects any ID unless it uniquely identifies the single group named `明天去哪玩`.
   - Record the returned SHA-256 fingerprint.
-
-### 4. Deploy Additive Schema and New Worker
-
-- Apply additive D1 migrations:
-  ```bash
-  pnpm --filter @split/worker exec wrangler d1 migrations apply DB --env production
-  ```
-- Deploy the new Worker with `GROUP_LEDGER` Durable Object bindings and SQLite class migrations (`tag: v1`):
-  ```bash
-  pnpm --filter @split/worker exec wrangler deploy --env production
-  ```
-- The maintenance gate remains active throughout deployment and import.
+- The gate stays active throughout the snapshot, import and wipe.
 
 ### 5. Idempotent Import & Retained-Group Verification
 
@@ -66,6 +64,7 @@ This procedure is documented for Release 1. Do not run a production migration or
 - The endpoint:
   1. Uniquely re-verifies the retained group `明天去哪玩` and checks that its ledger DO is operational.
   2. Records excluded ledger IDs and wipes excluded groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows (`group_directory`, `group_member_summary`, `group_reservations`, `personal_spending`) in a D1 transaction, then deletes each ledger and retains failed IDs for retry.
+     The excluded group IDs are first written to `migration_wipe_pending` in the same D1 batch (the table is created on first use by the endpoint, not by a migration). After the D1 rows are gone this table is the only retry list: a rerun reads it, deletes the remaining ledgers and clears each row. If the endpoint returns `failedLedgers`, run it again until it succeeds.
   3. Preserves all users, identities, sessions, settings, and the retained group.
 - Re-verify that excluded groups return 404, while the retained group remains accessible and authentication continues to function.
 

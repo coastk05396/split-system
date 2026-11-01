@@ -50,9 +50,9 @@ After the gate is deployed, set `MAINTENANCE` with `pnpm --filter @split/worker 
 
 For the detailed step-by-step procedure and disaster recovery steps, see `docs/operations/group-ledger-migration.md`. Summary checklist:
 1. **Pre-cutover backup**: Export and verify full D1 backup outside the repository.
-2. **Maintenance gate**: Activate gate via `MAINTENANCE` secret. Validate 503 on writes, 200 on reads.
+2. **Deploy gate and snapshot first**: Apply additive D1 migrations, then upload the new Worker (`GROUP_LEDGER` DO binding, SQLite migration `tag: v1`), attach the `MAINTENANCE` secret to that version and deploy it. The old Worker has no gate or snapshot route, so the secret must not be set against it. Validate 503 on writes, 200 on reads.
 3. **Identity verification**: Query candidate ID for 「明天去哪玩」, verify fingerprint via `GET /api/v1/maintenance/migration/snapshot/:id` with bypass.
-4. **Deploy**: Apply additive D1 migrations, deploy new Worker with `GROUP_LEDGER` DO binding and SQLite migration `tag: v1`.
+4. **Hold the gate**: Keep it on through import and wipe.
 5. **Import & verify**: Run `POST /api/v1/maintenance/migration/import/:id` with bypass. Verify all members, zero-sum balances, expenses, settlements, stops, sessions, and auth.
 6. **Controlled wipe**: Run `POST /api/v1/maintenance/migration/wipe-excluded/:id` with bypass to remove non-retained groups while preserving all users, identities, and sessions. Re-verify retained group and auth.
 7. **Production sign-off & gate removal**: Verify health, live WebSocket, 404 on test sign-in, remove maintenance gate, monitor observability. Cutover is a one-way door once the maintenance gate is removed: before removal, rollback is a Worker rollback with legacy D1 tables intact; after gate removal, rollback requires restoring the pre-cutover D1 backup and losing writes made since (see `docs/operations/group-ledger-migration.md`).
