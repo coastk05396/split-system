@@ -14,7 +14,7 @@ type Group = { id: string; settlement_currency: Expense["originalCurrency"] };
 type Row = { data: string; deleted: number };
 export type ExpenseOperation =
   | { action: "balances" }
-  | { action: "list"; cursor?: string }
+  | { action: "list"; cursor?: string | undefined }
   | { action: "get"; id: string }
   | { action: "delete"; id: string; now: number }
   | {

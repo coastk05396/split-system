@@ -1,5 +1,11 @@
 import type { Balances, Settlement, SettlementInput, SettlementPage } from "@split/shared";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryFunctionContext,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { ClientRequestOptions } from "hono/client";
 import { createApiClient } from "../api/client.js";
@@ -19,8 +25,8 @@ function useSession() {
   return useMemo(() => ({ api: createApiClient(session.fetch), fetch: session.fetch }), [session]);
 }
 
-async function read<T>(call: Promise<Response>, context?: { client: unknown; queryKey: unknown }): Promise<T> {
-  return readWithRev<T>(call, context as never);
+async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
+  return readWithRev<T>(call, context);
 }
 
 function jsonWith(body: unknown, headers: Record<string, string> = {}): ClientRequestOptions {

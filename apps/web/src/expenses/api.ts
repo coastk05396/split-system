@@ -1,6 +1,7 @@
 import type { CurrencyCode, Expense, ExpenseInput, ExpensePage, Rate, Stop } from "@split/shared";
 import {
   type InfiniteData,
+  type QueryFunctionContext,
   useInfiniteQuery,
   useMutation,
   useQueries,
@@ -30,8 +31,8 @@ function useSession() {
   return useMemo(() => ({ api: createApiClient(session.fetch), fetch: session.fetch }), [session]);
 }
 
-async function read<T>(call: Promise<Response>, context?: { client: unknown; queryKey: unknown }): Promise<T> {
-  return readWithRev<T>(call, context as never);
+async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
+  return readWithRev<T>(call, context);
 }
 
 /** A JSON body plus headers; the Worker reads bodies itself, so the typed client has no input. */

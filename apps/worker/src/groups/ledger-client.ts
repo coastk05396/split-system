@@ -1,5 +1,7 @@
+import type { MemberPatch, PlaceholderInput } from "@split/shared";
 import type { Bindings } from "../env.js";
 import { ApiError, ERROR_STATUS, type ErrorCode } from "../errors.js";
+import type { ExpenseOperation } from "../ledger-expenses.js";
 
 export interface MemberOperation {
   action: "add" | "patch" | "remove" | "leave" | "join" | "claim";
@@ -7,7 +9,7 @@ export interface MemberOperation {
   targetMemberId?: string;
   userId?: string;
   inviteToken?: string;
-  input?: object;
+  input?: PlaceholderInput | MemberPatch | Record<string, unknown>;
   now: number;
   names?: Record<string, string>;
   targetBalance?: number;
@@ -54,11 +56,11 @@ export async function memberOperation(
   return { memberId: result.memberId, rev: result.rev };
 }
 
-export async function expenseLedgerOperation(
+export async function expenseLedgerOperation<T = unknown>(
   env: Bindings,
   groupId: string,
-  operation: object,
-): Promise<unknown> {
+  operation: ExpenseOperation,
+): Promise<T> {
   const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
     "https://ledger.internal/expense-op",
     {
@@ -81,5 +83,5 @@ export async function expenseLedgerOperation(
       );
     throw new ApiError("INTERNAL");
   }
-  return "value" in result ? result.value : undefined;
+  return ("value" in result ? result.value : undefined) as T;
 }
