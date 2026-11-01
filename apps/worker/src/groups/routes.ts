@@ -242,10 +242,13 @@ export function groupRoutes(deps: AppDeps) {
           patch,
           expected,
           now: deps.now(),
+          actorMemberId: me.id,
         }),
       });
       if (!response.ok) {
         const result = await response.json<{ error: string }>();
+        if (result.error === "FORBIDDEN" || response.status === 403)
+          throw new ApiError("FORBIDDEN");
         if (result.error === "EDIT_CONFLICT")
           throw new ApiError("EDIT_CONFLICT", {
             current: (await readLedgerGroup(c.env, me)).group,
@@ -268,8 +271,14 @@ export function groupRoutes(deps: AppDeps) {
       requireAdmin(me);
       const response = await ledger(c.env, me.groupId).fetch("https://ledger.internal/delete", {
         method: "POST",
+        body: JSON.stringify({
+          actorMemberId: me.id,
+        }),
       });
-      if (!response.ok) throw new ApiError("INTERNAL");
+      if (!response.ok) {
+        if (response.status === 403) throw new ApiError("FORBIDDEN");
+        throw new ApiError("INTERNAL");
+      }
       const { rev } = await response.json<{ rev: number }>();
       c.header("X-Group-Rev", String(rev));
       return c.body(null, 204);
@@ -283,23 +292,30 @@ export function groupRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const input = await parseBody(c, placeholderInputSchema);
-      return c.json(await addPlaceholder(db, me, input, deps.now(), c.env), 201);
+      const result = await addPlaceholder(db, me, input, deps.now(), c.env);
+      c.header("X-Group-Rev", String(result.rev));
+      return c.json(result.member, 201);
     })
     .patch("/groups/:id/members/:mid", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const patch = await parseBody(c, memberPatchSchema);
-      return c.json(await patchMember(db, me, c.req.param("mid"), patch, c.env), 200);
+      const result = await patchMember(db, me, c.req.param("mid"), patch, c.env);
+      c.header("X-Group-Rev", String(result.rev));
+      return c.json(result.member, 200);
     })
     .delete("/groups/:id/members/:mid", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      await removeMember(db, me, c.req.param("mid"), c.env);
+      const result = await removeMember(db, me, c.req.param("mid"), c.env);
+      c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
     })
     .post("/groups/:id/leave", signedIn, async (c) => {
       const db = createDb(c.env.DB);
-      await leaveGroup(db, await requireMember(db, c.req.param("id"), c.var.userId), c.env);
+      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const result = await leaveGroup(db, me, c.env);
+      c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
     })
     .get("/groups/:id/invite", signedIn, async (c) => {

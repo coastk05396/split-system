@@ -110,18 +110,25 @@ export function expenseRoutes(deps: AppDeps) {
       const key = requireIdempotencyKey(c);
       const input = await parseBody(c, expenseInputSchema);
       const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
-      const result = await expenseLedgerOperation(c.env, me.groupId, {
-        action: "create",
-        memberId: me.id,
-        input,
-        key,
-        now: deps.now(),
-        rates: rates.map((r) => ({
-          base: r.baseCurrency,
-          quote: r.quoteCurrency,
-          rate: r.rateScaled,
-        })),
-      });
+      const result = await expenseLedgerOperation(
+        c.env,
+        me.groupId,
+        {
+          action: "create",
+          memberId: me.id,
+          input,
+          key,
+          now: deps.now(),
+          rates: rates.map((r) => ({
+            base: r.baseCurrency,
+            quote: r.quoteCurrency,
+            rate: r.rateScaled,
+          })),
+        },
+        (rev) => {
+          c.header("X-Group-Rev", rev);
+        },
+      );
       return c.json(result, 201);
     })
     .get("/groups/:id/expenses/:eid", signedIn, async (c) => {
@@ -138,29 +145,43 @@ export function expenseRoutes(deps: AppDeps) {
       const expected = requireIfMatch(c);
       const input = await parseBody(c, expenseInputSchema);
       const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
-      const updated = await expenseLedgerOperation(c.env, me.groupId, {
-        action: "update",
-        id: c.req.param("eid"),
-        memberId: me.id,
-        input,
-        expected,
-        now: deps.now(),
-        rates: rates.map((r) => ({
-          base: r.baseCurrency,
-          quote: r.quoteCurrency,
-          rate: r.rateScaled,
-        })),
-      });
+      const updated = await expenseLedgerOperation(
+        c.env,
+        me.groupId,
+        {
+          action: "update",
+          id: c.req.param("eid"),
+          memberId: me.id,
+          input,
+          expected,
+          now: deps.now(),
+          rates: rates.map((r) => ({
+            base: r.baseCurrency,
+            quote: r.quoteCurrency,
+            rate: r.rateScaled,
+          })),
+        },
+        (rev) => {
+          c.header("X-Group-Rev", rev);
+        },
+      );
       return c.json(updated, 200);
     })
     .delete("/groups/:id/expenses/:eid", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      await expenseLedgerOperation(c.env, me.groupId, {
-        action: "delete",
-        id: c.req.param("eid"),
-        now: deps.now(),
-      });
+      await expenseLedgerOperation(
+        c.env,
+        me.groupId,
+        {
+          action: "delete",
+          id: c.req.param("eid"),
+          now: deps.now(),
+        },
+        (rev) => {
+          c.header("X-Group-Rev", rev);
+        },
+      );
       return c.body(null, 204);
     })
     .get("/groups/:id/balances", signedIn, async (c) => {

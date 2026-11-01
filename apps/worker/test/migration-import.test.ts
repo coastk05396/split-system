@@ -374,7 +374,25 @@ describe("retained Group migration import", () => {
           share_units: 1,
         },
       ],
-      settlements: [],
+      settlements: [
+        {
+          id: "stl-legacy-1",
+          group_id: groupId,
+          payer_member_id: placeholderId,
+          receiver_member_id: adminMemberId,
+          amount: 150,
+          currency: "TWD",
+          status: "confirmed",
+          note: "部分還款",
+          created_by_member_id: null,
+          confirmed_by_member_id: adminMemberId,
+          confirmed_at: now,
+          undone_by_member_id: null,
+          undone_at: null,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
       stops: [],
     };
 
@@ -396,13 +414,13 @@ describe("retained Group migration import", () => {
     expect(page.expenses.find((e) => e.id === "exp-legacy-1")?.splitMethod).toBe("equal");
     expect(page.expenses.find((e) => e.id === "exp-legacy-2")?.splitMethod).toBe("shares");
 
-    // Verify balances calculated from legacy expenses
+    // Verify balances calculated from legacy expenses and confirmed settlements
     const balRes = await send(admin, "GET", `/groups/${groupId}/balances`);
     expect(balRes.status).toBe(200);
     const balances = await balRes.json<{ balances: Array<{ memberId: string; balance: number }> }>();
     const adminBal = balances.balances.find((b) => b.memberId === adminMemberId);
     const placeBal = balances.balances.find((b) => b.memberId === placeholderId);
-    expect(adminBal?.balance).toBe(450);
-    expect(placeBal?.balance).toBe(-450);
+    expect(adminBal?.balance).toBe(300);
+    expect(placeBal?.balance).toBe(-300);
   });
 });

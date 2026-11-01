@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createDb } from "../src/db/client.js";
-import { expenses, groups } from "../src/db/schema.js";
+import { expenses, groups, members } from "../src/db/schema.js";
 import { bearer, call, clock, signIn, uniqueSub, type Session } from "./auth-harness.js";
 import { failDirectoryWrites } from "./d1-faults.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
@@ -59,6 +59,81 @@ describe("POST /groups and GET /groups/:id", () => {
     expect(removed.headers.get("X-Group-Rev")).toBe("2");
     const list = await (await send(yu, "GET", "/groups")).json<GroupBody[]>();
     expect(list.some((item) => item.id === group.id)).toBe(false);
+  });
+
+  it("never returns a revision newer than data when a concurrent write occurs during read", async () => {
+    const yu = await person("小宇");
+    const created = await send(yu, "POST", "/groups", { name: "並行測試" });
+    expect(created.status).toBe(201);
+    const group = await created.json<GroupBody>();
+    expect(created.headers.get("X-Group-Rev")).toBe("0");
+
+    const realNamespace = env.GROUP_LEDGER;
+    const proxyNamespace = new Proxy(realNamespace, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: Parameters<typeof targetNamespace.get>[0]) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop !== "fetch") {
+                const value: unknown = Reflect.get(targetStub, prop, targetStub);
+                return typeof value === "function"
+                  ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                  : value;
+              }
+              return async (input: RequestInfo | URL, init?: RequestInit) => {
+                const url =
+                  typeof input === "string"
+                    ? input
+                    : input instanceof URL
+                      ? input.toString()
+                      : input.url;
+                if (url.includes("/state")) {
+                  const res = await targetStub.fetch(input, init);
+                  // Trigger concurrent write to DO right after revision pre-fetch
+                  await targetStub.fetch("https://ledger.internal/member-op", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "add",
+                      actorMemberId: group.me.memberId,
+                      targetMemberId: crypto.randomUUID(),
+                      input: { name: "並行寫入" },
+                      now: Date.now(),
+                    }),
+                  });
+                  return res;
+                }
+                return targetStub.fetch(input, init);
+              };
+            },
+          });
+        };
+      },
+    });
+
+    const read = await call(
+      `/groups/${group.id}/members`,
+      { headers: bearer(yu.accessToken) },
+      { GROUP_LEDGER: proxyNamespace },
+    );
+    expect(read.status).toBe(200);
+    // Revision returned on the read response must be 0 (established before handler),
+    // even though concurrent write advanced DO revision to 1.
+    expect(read.headers.get("X-Group-Rev")).toBe("0");
+
+    // Verify DO is at rev 1
+    const current = await realNamespace
+      .get(realNamespace.idFromName(group.id))
+      .fetch("https://ledger.internal/state");
+    const currentState = await current.json<{ rev: number }>();
+    expect(currentState.rev).toBe(1);
   });
   it("creates a Running Tab with the creator as its only Member and Admin", async () => {
     const yu = await person("小宇");
@@ -340,5 +415,90 @@ describe("DELETE /groups/:id", () => {
     expect((await send(at(others, 0), "DELETE", `/groups/${group.id}`)).status).toBe(403);
     const stranger = await person("路人");
     expect((await send(stranger, "DELETE", `/groups/${group.id}`)).status).toBe(404);
+  });
+});
+
+describe("ledger authority for admin actions (stale D1 projection)", () => {
+  it("refuses PATCH and DELETE when D1 projection is stale and actor was demoted or removed in ledger", async () => {
+    const { admin, group } = await groupWith("小宇", "阿明");
+
+    const membersList = await (
+      await send(admin, "GET", `/groups/${group.id}/members`)
+    ).json<Array<{ id: string; displayName: string }>>();
+    const mingMember = membersList.find((m) => m.displayName === "阿明");
+    if (!mingMember) throw new Error("ming member not found");
+
+    const promoteRes = await send(admin, "PATCH", `/groups/${group.id}/members/${mingMember.id}`, {
+      role: "admin",
+    });
+    expect(promoteRes.status).toBe(200);
+
+    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
+
+    // Case 1: Actor is demoted in DO ledger, but D1 projection is stale (still says admin)
+    const demoteRes = await stub.fetch("https://ledger.internal/member-op", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "patch",
+        actorMemberId: mingMember.id,
+        targetMemberId: group.me.memberId,
+        input: { role: "member" },
+        now: Date.now(),
+      }),
+    });
+    expect(demoteRes.status).toBe(200);
+
+    // Force D1 to be stale: set yu's role back to admin in D1 members table
+    await db
+      .update(members)
+      .set({ role: "admin", status: "active" })
+      .where(eq(members.id, group.me.memberId));
+
+    // yu attempts PATCH: D1 filter passes, but DO ledger rejects with 403
+    const patchRes = await send(
+      admin,
+      "PATCH",
+      `/groups/${group.id}`,
+      { name: "降級後偷改" },
+      { "If-Match": String(group.updatedAt) },
+    );
+    expect(patchRes.status).toBe(403);
+
+    // yu attempts DELETE: D1 filter passes, but DO ledger rejects with 403
+    const deleteRes = await send(admin, "DELETE", `/groups/${group.id}`);
+    expect(deleteRes.status).toBe(403);
+
+    // Case 2: Actor is removed in DO ledger, but D1 projection is stale (still says active admin)
+    const removeRes = await stub.fetch("https://ledger.internal/member-op", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "remove",
+        actorMemberId: mingMember.id,
+        targetMemberId: group.me.memberId,
+        targetBalance: 0,
+        now: Date.now(),
+      }),
+    });
+    expect(removeRes.status).toBe(200);
+
+    // Force D1 to be stale again: set yu's status back to active admin in D1
+    await db
+      .update(members)
+      .set({ role: "admin", status: "active" })
+      .where(eq(members.id, group.me.memberId));
+
+    const patchRes2 = await send(
+      admin,
+      "PATCH",
+      `/groups/${group.id}`,
+      { name: "退出後偷改" },
+      { "If-Match": String(group.updatedAt) },
+    );
+    expect(patchRes2.status).toBe(403);
+
+    const deleteRes2 = await send(admin, "DELETE", `/groups/${group.id}`);
+    expect(deleteRes2.status).toBe(403);
   });
 });

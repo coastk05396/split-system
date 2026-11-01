@@ -76,18 +76,20 @@ This procedure is documented for Release 1. Do not run a production migration or
 
 ## Rollback & Disaster Recovery
 
-1. **Failure during Snapshot or Import (before Wipe)**:
+Cutover is a one-way door after the maintenance gate is removed:
+
+1. **Before Maintenance Gate Removal**:
    - Keep maintenance gate enabled.
    - Roll back Worker deployment to previous version:
      ```bash
      pnpm --filter @split/worker exec wrangler rollback --env production
      ```
-   - Legacy D1 tables are untouched. Revert maintenance gate once verified.
-2. **Failure after Wipe**:
-   - Keep maintenance gate enabled.
-   - Restore database from the pre-cutover backup:
+   - Legacy D1 tables are untouched and intact. Revert maintenance gate once verified.
+2. **After Maintenance Gate Removal (Live in Production)**:
+   - The GroupLedger Durable Object is the single source of truth. A reverse mirror to legacy D1 tables was explicitly rejected to avoid dual sources of truth and split-brain states.
+   - Any rollback after gate removal requires restoring the pre-cutover D1 backup:
      ```bash
      pnpm --filter @split/worker exec wrangler d1 execute DB --env production --file=/tmp/backup-split-prod.sql
      ```
-   - Roll back Worker deployment if needed.
-   - Verify restored state, then remove maintenance gate.
+   - Roll back Worker deployment to previous version.
+   - Writes created since cutover will be lost. Rolling back the Worker alone without restoring the D1 backup is not supported.

@@ -176,8 +176,12 @@ export function migrationSnapshotRoutes() {
     if (!ledgerCheck.ok) {
       throw new ApiError("EDIT_CONFLICT");
     }
-    const body = (await ledgerCheck.json()) as { value?: unknown };
-    if (!Array.isArray(body?.value) || body.value.length === 0) {
+    const body = await ledgerCheck.json<{ value?: Array<{ id: string; net_balance: number }> }>();
+    if (!Array.isArray(body.value) || body.value.length === 0) {
+      throw new ApiError("EDIT_CONFLICT");
+    }
+    const balanceSum = body.value.reduce((acc, curr) => acc + curr.net_balance, 0);
+    if (balanceSum !== 0) {
       throw new ApiError("EDIT_CONFLICT");
     }
 
@@ -211,15 +215,28 @@ export function migrationSnapshotRoutes() {
     ];
     await db.batch(queries);
 
+    const failedDeletes: string[] = [];
     for (const row of excluded.results) {
       try {
-        await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(row.id)).fetch(
+        const res = await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(row.id)).fetch(
           "https://ledger.internal/delete",
           { method: "POST" },
         );
-      } catch {
-        // ledger DO may not have been created for legacy-only groups
+        if (!res.ok) {
+          const text = await res.text();
+          if (!text.includes("no such table")) {
+            failedDeletes.push(row.id);
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes("no such table")) {
+          failedDeletes.push(row.id);
+        }
       }
+    }
+    if (failedDeletes.length > 0) {
+      throw new ApiError("INTERNAL", { failedLedgers: failedDeletes });
     }
 
     // 4. Verify retained group is still present

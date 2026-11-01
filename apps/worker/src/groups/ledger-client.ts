@@ -60,6 +60,7 @@ export async function expenseLedgerOperation<T = unknown>(
   env: Bindings,
   groupId: string,
   operation: ExpenseOperation,
+  setRev?: (rev: string) => void,
 ): Promise<T> {
   const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
     "https://ledger.internal/expense-op",
@@ -69,6 +70,8 @@ export async function expenseLedgerOperation<T = unknown>(
       body: JSON.stringify(operation),
     },
   );
+  const rev = response.headers.get("X-Group-Rev");
+  if (rev && setRev) setRev(rev);
   const result: unknown = await response.json();
   if (typeof result !== "object" || result === null) throw new ApiError("INTERNAL");
   if (!response.ok) {

@@ -121,25 +121,24 @@ type MembersEdit = {
 };
 type MembersEditContext = { undo?: MembersEdit["undo"]; tempId?: string | undefined };
 
+function isMember(data: unknown): data is Member {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "id" in data &&
+    typeof data.id === "string" &&
+    "role" in data &&
+    "status" in data &&
+    "displayName" in data
+  );
+}
+
 /**
  * Shows a Member change in the cached list at once, takes back just that change if the server
  * refuses it, and re-reads the Group once the last pending edit is done so the server's answer
  * wins. Only for changes the browser can compute exactly; never use it for anything that moves a
  * Balance (docs/adr/0004).
  */
-function isMember(data: unknown): data is Member {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "id" in data &&
-    typeof (data as { id: unknown }).id === "string" &&
-    "groupId" in data &&
-    typeof (data as { groupId: unknown }).groupId === "string" &&
-    "role" in data &&
-    "status" in data
-  );
-}
-
 function useOptimisticMembers<TVariables>(
   id: string,
   edit: (members: Member[], variables: TVariables) => MembersEdit,

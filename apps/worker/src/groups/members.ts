@@ -74,8 +74,8 @@ export async function patchMember(
   memberId: string,
   patch: MemberPatch,
   env: Bindings,
-): Promise<Member> {
-  await memberOperation(env, me.groupId, {
+): Promise<{ member: Member; rev: number }> {
+  const result = await memberOperation(env, me.groupId, {
     action: "patch",
     actorMemberId: me.id,
     targetMemberId: memberId,
@@ -83,15 +83,19 @@ export async function patchMember(
     now: Date.now(),
     names: await namesByUser(db, me.groupId),
   });
-  return oneMember(db, me, memberId);
+  return { member: await oneMember(db, me, memberId), rev: result.rev };
 }
 
-export async function leaveGroup(db: Db, me: MemberRow, env: Bindings): Promise<void> {
+export async function leaveGroup(
+  db: Db,
+  me: MemberRow,
+  env: Bindings,
+): Promise<{ rev: number }> {
   const [group] = await db
     .select({ currency: groups.settlementCurrency })
     .from(groups)
     .where(eq(groups.id, me.groupId));
-  await memberOperation(env, me.groupId, {
+  const result = await memberOperation(env, me.groupId, {
     action: "leave",
     actorMemberId: me.id,
     targetMemberId: me.id,
@@ -99,6 +103,7 @@ export async function leaveGroup(db: Db, me: MemberRow, env: Bindings): Promise<
     currency: group?.currency ?? null,
     now: Date.now(),
   });
+  return { rev: result.rev };
 }
 
 export async function removeMember(
@@ -106,7 +111,7 @@ export async function removeMember(
   me: MemberRow,
   memberId: string,
   env: Bindings,
-): Promise<void> {
+): Promise<{ rev: number }> {
   if (memberId === me.id) return leaveGroup(db, me, env);
   requireAdmin(me);
   const target = await findMember(db, me.groupId, memberId);
@@ -117,7 +122,7 @@ export async function removeMember(
   const history = await db.all<{ found: number }>(
     sql`SELECT 1 AS found FROM expense_payers WHERE member_id = ${memberId} UNION SELECT 1 AS found FROM expense_splits WHERE member_id = ${memberId} LIMIT 1`,
   );
-  await memberOperation(env, me.groupId, {
+  const result = await memberOperation(env, me.groupId, {
     action: "remove",
     actorMemberId: me.id,
     targetMemberId: memberId,
@@ -126,6 +131,7 @@ export async function removeMember(
     hasHistory: history.length > 0,
     now: Date.now(),
   });
+  return { rev: result.rev };
 }
 
 export async function addPlaceholder(
@@ -134,7 +140,7 @@ export async function addPlaceholder(
   input: PlaceholderInput,
   now: number,
   env: Bindings,
-): Promise<Member> {
+): Promise<{ member: Member; rev: number }> {
   const result = await memberOperation(env, me.groupId, {
     action: "add",
     actorMemberId: me.id,
@@ -143,5 +149,5 @@ export async function addPlaceholder(
     now,
     names: await namesByUser(db, me.groupId),
   });
-  return oneMember(db, me, result.memberId);
+  return { member: await oneMember(db, me, result.memberId), rev: result.rev };
 }
