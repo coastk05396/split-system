@@ -1,11 +1,12 @@
-import type {
-  Group,
-  GroupInput,
-  Invite,
-  InvitePreview,
-  JoinResult,
-  Member,
-  MemberPatch,
+import {
+  memberSchema,
+  type Group,
+  type GroupInput,
+  type Invite,
+  type InvitePreview,
+  type JoinResult,
+  type Member,
+  type MemberPatch,
 } from "@split/shared";
 import {
   useMutation,
@@ -145,15 +146,14 @@ function useOptimisticMembers<TVariables>(
       return { undo, tempId };
     },
     onSuccess: (data: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {
-      if (
-        context?.tempId !== undefined &&
-        typeof data === "object" &&
-        data !== null &&
-        "id" in data
-      ) {
-        client.setQueryData<Member[]>(key, (members) =>
-          members?.map((m) => (m.id === context.tempId ? (data as Member) : m)),
-        );
+      if (context?.tempId !== undefined) {
+        const parsed = memberSchema.safeParse(data);
+        if (parsed.success) {
+          const member = parsed.data;
+          client.setQueryData<Member[]>(key, (members) =>
+            members?.map((m) => (m.id === context.tempId ? member : m)),
+          );
+        }
       }
     },
     onError: (_error: unknown, _variables: TVariables, context: MembersEditContext | undefined) => {

@@ -381,7 +381,7 @@ export function useGroupLiveSync(groupId: string | undefined): void {
         groupId,
         queryClient: client,
         getAccessToken: () => session.getAccessToken(),
-        WebSocket: (deps as unknown as { webSocket?: typeof WebSocket }).webSocket,
+        WebSocket: deps.webSocket,
       });
       entry = { sync, count: 0 };
       activeGroupSyncs.set(groupId, entry);

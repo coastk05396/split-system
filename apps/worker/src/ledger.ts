@@ -1378,6 +1378,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               createdAt: Number(s.created_at ?? now),
               updatedAt: Number(s.updated_at ?? now),
             };
+            settlementSchema.parse(settlementItem);
             sql.exec(
               "INSERT INTO ledger_settlements (id, data, idempotency_key) VALUES (?, ?, ?)",
               sid,
@@ -1410,25 +1411,42 @@ export class GroupLedger extends DurableObject<Bindings> {
 
           // Recalculate and populate ledger_members.net_balance from imported expenses and confirmed settlements
           const netBalances = new Map<string, number>();
+          for (const m of snapshot.members) {
+            netBalances.set(String(m.id), 0);
+          }
           for (const e of snapshot.expenses) {
             const eid = String(e.id);
             const payers = payersByExpense.get(eid) ?? [];
             const splits = splitsByExpense.get(eid) ?? [];
             for (const p of payers) {
+              if (!Number.isInteger(p.settlementAmount)) {
+                throw new Error(`Payer settlementAmount must be an integer minor unit: ${p.settlementAmount}`);
+              }
               netBalances.set(p.memberId, (netBalances.get(p.memberId) ?? 0) + p.settlementAmount);
             }
             for (const s of splits) {
+              if (!Number.isInteger(s.settlementAmount)) {
+                throw new Error(`Split settlementAmount must be an integer minor unit: ${s.settlementAmount}`);
+              }
               netBalances.set(s.memberId, (netBalances.get(s.memberId) ?? 0) - s.settlementAmount);
             }
           }
           for (const s of snapshot.settlements) {
             if (s.status === "confirmed") {
               const amount = Number(s.amount);
+              if (!Number.isInteger(amount)) {
+                throw new Error(`Settlement amount must be an integer minor unit: ${amount}`);
+              }
               const payerId = String(s.payer_member_id);
               const receiverId = String(s.receiver_member_id);
               netBalances.set(payerId, (netBalances.get(payerId) ?? 0) + amount);
               netBalances.set(receiverId, (netBalances.get(receiverId) ?? 0) - amount);
             }
+          }
+          // Invariant: sum of all member net balances must be zero
+          const totalNetBalance = Array.from(netBalances.values()).reduce((sum, b) => sum + b, 0);
+          if (totalNetBalance !== 0) {
+            throw new Error(`Net balance invariant violated: total sum is ${totalNetBalance}, expected 0`);
           }
           for (const [memberId, balance] of netBalances.entries()) {
             sql.exec("UPDATE ledger_members SET net_balance = ? WHERE id = ?", balance, memberId);
@@ -1437,12 +1455,29 @@ export class GroupLedger extends DurableObject<Bindings> {
           sql.exec("INSERT OR REPLACE INTO ledger_dirty (kind, rev) VALUES ('group', 1)");
           sql.exec("UPDATE ledger_meta SET rev = 1");
         });
+        let previousDirtyCount = Infinity;
         let attempts = 0;
-        while (
-          this.ctx.storage.sql.exec("SELECT kind FROM ledger_dirty LIMIT 1").toArray().length > 0 &&
-          attempts++ < 10
-        ) {
+        const maxAttempts = 100;
+        while (attempts++ < maxAttempts) {
+          const dirtyCount = this.ctx.storage.sql
+            .exec<{ count: number }>("SELECT COUNT(*) AS count FROM ledger_dirty")
+            .one().count;
+          if (dirtyCount === 0) break;
           await this.push();
+          const remaining = this.ctx.storage.sql
+            .exec<{ count: number }>("SELECT COUNT(*) AS count FROM ledger_dirty")
+            .one().count;
+          if (remaining === 0) break;
+          if (remaining >= previousDirtyCount) {
+            throw new Error(`Import drain stalled at ${remaining} dirty records`);
+          }
+          previousDirtyCount = remaining;
+        }
+        const remainingDirty = this.ctx.storage.sql
+          .exec<{ count: number }>("SELECT COUNT(*) AS count FROM ledger_dirty")
+          .one().count;
+        if (remainingDirty > 0) {
+          throw new Error(`Import failed to drain all read-model records: ${remainingDirty} remaining`);
         }
       });
       return new Response(null, { status: 200 });

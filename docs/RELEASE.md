@@ -41,6 +41,7 @@ Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, ac
 
 - On iOS and Android inside LIFF, verify a live connection using the access token in WebSocket subprotocols. If LIFF rejects it, use the short-lived single-use ticket fallback described in the Group ledger spec.
 - Send the literal `ping` frame and confirm the runtime answers `pong`.
+
 ## Maintenance gate
 
 After the gate is deployed, set `MAINTENANCE` with `pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env staging` (or `--env production`). Enter the secret interactively. API writes return 503 while the secret is set; reads and health remain available. For verification, send the secret in the `X-Maintenance-Bypass` header over HTTPS, keeping it out of logs and shell history. Remove the gate after verification with `pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env staging` (or `--env production`). Do not set or remove the production secret until the owner decides.

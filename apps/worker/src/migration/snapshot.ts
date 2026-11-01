@@ -176,23 +176,16 @@ export function migrationSnapshotRoutes() {
     if (!ledgerCheck.ok) {
       throw new ApiError("EDIT_CONFLICT");
     }
+    const body = (await ledgerCheck.json()) as { value?: unknown };
+    if (!Array.isArray(body?.value) || body.value.length === 0) {
+      throw new ApiError("EDIT_CONFLICT");
+    }
 
     // 3. Atomically wipe all excluded groups in D1 and any ledger DOs, preserving users, identities, sessions, and the retained group
     const excluded = await db
       .prepare("SELECT id FROM groups WHERE id != ?")
       .bind(id)
       .all<{ id: string }>();
-
-    for (const row of excluded.results) {
-      try {
-        await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(row.id)).fetch(
-          "https://ledger.internal/delete",
-          { method: "POST" },
-        );
-      } catch {
-        // ledger DO may not have been created for legacy-only groups
-      }
-    }
 
     const queries = [
       db
@@ -217,6 +210,17 @@ export function migrationSnapshotRoutes() {
       db.prepare("DELETE FROM personal_spending WHERE group_id != ?").bind(id),
     ];
     await db.batch(queries);
+
+    for (const row of excluded.results) {
+      try {
+        await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(row.id)).fetch(
+          "https://ledger.internal/delete",
+          { method: "POST" },
+        );
+      } catch {
+        // ledger DO may not have been created for legacy-only groups
+      }
+    }
 
     // 4. Verify retained group is still present
     const remaining = await db.prepare("SELECT id FROM groups").all();
