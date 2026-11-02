@@ -35,7 +35,9 @@ describe("usePaymentPlan", () => {
       initialProps: { balances: large },
     });
     expect(result.current.status).toBe("computing");
-    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await waitFor(() => {
+      expect(result.current.status).toBe("ready");
+    });
     rerender({ balances: pair(10) });
     expect(result.current).toMatchObject({
       status: "ready",
@@ -43,6 +45,8 @@ describe("usePaymentPlan", () => {
     });
     rerender({ balances: large.map((b) => ({ ...b, amountMinor: b.amountMinor * 2 })) });
     expect(result.current.status).toBe("computing");
-    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await waitFor(() => {
+      expect(result.current.status).toBe("ready");
+    });
   });
 });
