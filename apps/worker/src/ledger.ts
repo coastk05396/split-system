@@ -229,16 +229,7 @@ export class GroupLedger extends DurableObject<Bindings> {
       };
     });
     if (snapshot === null) return;
-    const {
-      group: g,
-      invite,
-      members,
-      settlements,
-      rev,
-      locked,
-      expenses,
-      expenseIds,
-    } = snapshot;
+    const { group: g, invite, members, settlements, rev, locked, expenses, expenseIds } = snapshot;
     const db = this.env.DB;
     const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
     try {
@@ -425,6 +416,23 @@ export class GroupLedger extends DurableObject<Bindings> {
       await this.ctx.storage.setAlarm(
         Date.now() + Math.min(300_000, delay * (0.8 + Math.random() * 0.4)),
       );
+    }
+  }
+
+  /**
+   * Drains until no dirty read-model record is left, so everything a write marked has reached D1.
+   * One drain projects a bounded batch, so a write that dirties many records needs several. Gives
+   * up, leaving the retry to the alarm, when a pass makes no progress.
+   */
+  private async drainAll(): Promise<void> {
+    const dirtyCount = (): number =>
+      this.ctx.storage.sql.exec<{ n: number }>("SELECT count(*) AS n FROM ledger_dirty").one().n;
+    let remaining = dirtyCount();
+    while (remaining > 0) {
+      await this.drain();
+      const next = dirtyCount();
+      if (next >= remaining) return;
+      remaining = next;
     }
   }
 
@@ -818,7 +826,11 @@ export class GroupLedger extends DurableObject<Bindings> {
             const leaving = op.action === "leave" ? actor : target;
             if (leaving === undefined) return { error: "NOT_FOUND" };
             if (actor === undefined) return { error: "FORBIDDEN" };
-            if (leaving.id !== actor.id && actor.role !== "admin" && leaving.status !== "placeholder")
+            if (
+              leaving.id !== actor.id &&
+              actor.role !== "admin" &&
+              leaving.status !== "placeholder"
+            )
               return { error: "FORBIDDEN" };
             if (leaving.status === "former") return { error: "MEMBER_NOT_ACTIVE" };
             const balance = leaving.net_balance;
@@ -897,6 +909,9 @@ export class GroupLedger extends DurableObject<Bindings> {
             }
           }
         }
+        // Members refetch on the signal and read the D1 projection, so it goes out only once the
+        // projection batches this write dirtied have all completed.
+        await this.drainAll();
         const signal: SyncNeeded = {
           version: 1,
           type: "sync needed",
@@ -911,7 +926,6 @@ export class GroupLedger extends DurableObject<Bindings> {
           }
         }
       }
-      await this.drain();
       return Response.json(result);
     }
     if (new URL(request.url).pathname === "/invite" && request.method === "POST") {
@@ -999,7 +1013,9 @@ export class GroupLedger extends DurableObject<Bindings> {
       const members = this.ctx.storage.sql
         .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
         .toArray();
-      const { rev } = this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one();
+      const { rev } = this.ctx.storage.sql
+        .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+        .one();
       return Response.json({ members, rev });
     }
     if (new URL(request.url).pathname === "/settlement-check" && request.method === "GET") {
