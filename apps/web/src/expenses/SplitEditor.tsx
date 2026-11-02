@@ -179,9 +179,7 @@ export function SplitEditor({
           </div>
         </button>
       ) : (
-        <div
-          className={`${card} flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3`}
-        >
+        <div className={`${card} flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3`}>
           <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
             {members
               .filter((m) => included.has(m.id))
@@ -214,7 +212,7 @@ export function SplitEditor({
                     key={m.id}
                     aria-label={m.displayName}
                     style={{ animationDelay: `${index * 25}ms` }}
-                    className={`${card} list-stagger-item flex items-center gap-3 px-4 py-3 transition-[opacity,filter] duration-200 ease-(--ease-out-expo) ${
+                    className={`${card} list-stagger-item flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
                       !takesPart ? "opacity-40 grayscale" : ""
                     }`}
                   >
@@ -243,10 +241,7 @@ export function SplitEditor({
                         className={fieldClass}
                         value={value.shares[m.id] ?? "1"}
                         onChange={(e) => {
-                          onChange({
-                            ...value,
-                            shares: { ...value.shares, [m.id]: e.target.value },
-                          });
+                          onChange({ ...value, shares: { ...value.shares, [m.id]: e.target.value } });
                         }}
                       />
                     )}
@@ -255,9 +250,7 @@ export function SplitEditor({
                         {formatAmount(amount, currency)}
                       </span>
                     )}
-                    {!takesPart && (
-                      <span className="text-sm text-ink-muted">{t("split.notIn")}</span>
-                    )}
+                    {!takesPart && <span className="text-sm text-ink-muted">{t("split.notIn")}</span>}
                     <input
                       type="checkbox"
                       aria-label={t("split.takesPart", { name: m.displayName })}

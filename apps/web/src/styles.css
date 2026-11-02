@@ -129,13 +129,15 @@
 @keyframes tab-enter {
   from {
     opacity: 0;
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
+    transform: none;
   }
 }
 .tab-panel[data-state="active"] {
-  animation: tab-enter 120ms ease-out;
+  animation: tab-enter 180ms var(--ease-out-expo);
 }
 
 /* Spatial dropdown menu entrance anchored to its trigger's transform-origin. */
@@ -354,10 +356,10 @@
   }
 }
 .bar-grow-right {
-  animation: bar-grow-right 400ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: bar-grow-right 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .bar-grow-left {
-  animation: bar-grow-left 400ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: bar-grow-left 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 /* The statistics chart draws itself once when its page opens. */
@@ -371,7 +373,7 @@
 }
 .stats-bar-enter {
   transform-origin: bottom;
-  animation: stats-bar-enter 350ms var(--ease-out-expo) both;
+  animation: stats-bar-enter 650ms var(--ease-out-expo) both;
 }
 @keyframes stats-ring-enter {
   from {
@@ -382,7 +384,7 @@
   }
 }
 .stats-ring-enter {
-  animation: stats-ring-enter 400ms var(--ease-out-expo) both;
+  animation: stats-ring-enter 650ms var(--ease-out-expo) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .stats-bar-enter,
@@ -465,14 +467,10 @@
     box-shadow: 0 0 0 0 rgba(46, 157, 113, 0);
   }
   35% {
-    box-shadow:
-      0 0 0 3px rgba(46, 157, 113, 0.45),
-      0 0 18px -2px rgba(46, 157, 113, 0.35);
+    box-shadow: 0 0 0 3px rgba(46, 157, 113, 0.45), 0 0 18px -2px rgba(46, 157, 113, 0.35);
   }
   70% {
-    box-shadow:
-      0 0 0 4px rgba(46, 157, 113, 0.18),
-      0 0 12px -3px rgba(46, 157, 113, 0.2);
+    box-shadow: 0 0 0 4px rgba(46, 157, 113, 0.18), 0 0 12px -3px rgba(46, 157, 113, 0.2);
   }
   100% {
     box-shadow: 0 0 0 0 rgba(46, 157, 113, 0);
@@ -912,17 +910,17 @@
 /* Category selection micro-bloom stamp */
 @keyframes category-bloom {
   0% {
-    transform: scale(0.9);
+    transform: scale(0.88);
   }
   60% {
-    transform: scale(1.1);
+    transform: scale(1.14);
   }
   100% {
     transform: scale(1);
   }
 }
 .category-bloom {
-  animation: category-bloom 180ms var(--ease-out-expo) both;
+  animation: category-bloom 160ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* Copy icon micro-rotation and scale entrance on success */
@@ -953,6 +951,25 @@
 }
 .dialog-icon-enter {
   animation: dialog-icon-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Navigation tab active bouncy pop */
+@keyframes nav-icon-pop {
+  0% {
+    transform: scale(0.92);
+  }
+  40% {
+    transform: scale(1.18) rotate(-3deg);
+  }
+  75% {
+    transform: scale(0.96) rotate(1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+.nav-icon-pop {
+  animation: nav-icon-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* Staggered cascade entrance for settlement screen (0ms and +90ms) */
@@ -1019,7 +1036,7 @@
 }
 
 .bubble-spring {
-  animation: bubble-spring 260ms var(--ease-out-expo) both;
+  animation: bubble-spring 260ms var(--ease-spring) both;
 }
 
 /* Hide scrollbar for seamless touch rails */
@@ -1041,7 +1058,8 @@
   .bubble-spring,
   .category-bloom,
   .copy-icon-pop,
-  .dialog-icon-enter {
+  .dialog-icon-enter,
+  .nav-icon-pop {
     animation: none;
   }
   .row-leave,

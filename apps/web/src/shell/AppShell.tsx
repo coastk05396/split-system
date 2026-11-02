@@ -59,7 +59,7 @@ function BottomBar() {
                   )}
                   {to === "/new" ? (
                     <span
-                      className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-[transform,background-color,box-shadow] duration-200 ease-(--ease-spring) active:scale-[0.92] active:-rotate-2 active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] group-active:scale-[0.92] group-active:-rotate-2 group-active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] motion-reduce:transition-none motion-reduce:transform-none ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
+                      className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-all duration-300 ease-(--ease-spring) active:scale-[0.85] active:-rotate-3 active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] group-active:scale-[0.85] group-active:-rotate-3 group-active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] motion-reduce:transition-none motion-reduce:transform-none ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
                     >
                       <Icon aria-hidden="true" className="size-6" />
                     </span>
@@ -70,7 +70,7 @@ function BottomBar() {
                       strokeWidth={isActive ? 2.4 : 1.9}
                       className={`relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
                         isActive
-                          ? "-translate-y-0.5 scale-[1.1] motion-reduce:translate-y-0 motion-reduce:scale-100"
+                          ? "-translate-y-0.5 scale-[1.1] nav-icon-pop motion-reduce:translate-y-0 motion-reduce:scale-100"
                           : ""
                       }`}
                     />

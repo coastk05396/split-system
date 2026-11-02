@@ -35,10 +35,10 @@ describe("AppShell BottomBar", () => {
     // Verify jelly spring and mint halo classes on the button element
     const floatingButton = newLink.querySelector("span");
     expect(floatingButton).toHaveClass(
-      "active:scale-[0.92]",
-      "active:-rotate-2",
+      "active:scale-[0.85]",
+      "active:-rotate-3",
       "active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)]",
-      "duration-200",
+      "duration-300",
       "ease-(--ease-spring)",
     );
   });

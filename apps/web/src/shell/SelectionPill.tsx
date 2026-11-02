@@ -32,7 +32,7 @@ export function SelectionPill({ layoutId, className }: { layoutId: string; class
             },
             { transformOrigin: "0 0", transform: "none" },
           ],
-          { duration: 200, easing: EASE_OUT },
+          { duration: 280, easing: EASE_OUT },
         );
       }
     }

@@ -266,13 +266,13 @@ export function StatsPage() {
                         </span>
                       )}
                       <span
-                        className={`w-6 max-w-full rounded-t-xl transition-[height,background-color,box-shadow] duration-200 ease-(--ease-out-expo) ${
+                        className={`w-6 max-w-full rounded-t-xl transition-all duration-300 ease-(--ease-spring) ${
                           interacted ? "" : "stats-bar-enter"
                         } ${selected ? "bg-sprout-500 shadow-2xs" : "bg-sprout-200 group-hover:bg-sprout-300"}`}
                         style={{
                           height: `${String(max === 0 ? 0 : (amount / max) * 100)}%`,
                           minHeight: amount > 0 ? "8px" : "0px",
-                          animationDelay: `${String(Math.min(i, 6) * 30)}ms`,
+                          animationDelay: `${String(i * 50)}ms`,
                         }}
                       />
                     </span>
@@ -365,7 +365,7 @@ export function StatsPage() {
                     onClick={() => {
                       if (selectedCategory !== null) setSelectedCategory(null);
                     }}
-                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-sprout-600 ${
+                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-all duration-300 focus-visible:outline-2 focus-visible:outline-sprout-600 ${
                       selectedCategory !== null ? "cursor-pointer hover:bg-sprout-50/50" : ""
                     }`}
                   >
