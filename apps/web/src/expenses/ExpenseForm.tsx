@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Clock,
   type LucideIcon,
+  MessageCircle,
   Users,
 } from "lucide-react";
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
@@ -92,7 +93,7 @@ export function ExpenseForm({
   );
   // Only a new Expense opened from a LINE chat can be posted back into that chat.
   const [chatAvailable, setChatAvailable] = useState(false);
-  const [sendToChat, setSendToChat] = useState(false);
+  const [sendToChat, setSendToChat] = useState(true);
   // Saved, but the caller is still finishing (posting to the chat): no second submit meanwhile.
   const [finishing, setFinishing] = useState(false);
   useEffect(() => {
@@ -129,9 +130,11 @@ export function ExpenseForm({
       {
         onSuccess: (saved) => {
           setFinishing(true);
-          void Promise.resolve(onSaved(saved, { sendToChat })).finally(() => {
-            setFinishing(false);
-          });
+          void Promise.resolve(onSaved(saved, { sendToChat: chatAvailable && sendToChat })).finally(
+            () => {
+              setFinishing(false);
+            },
+          );
         },
       },
     );
@@ -318,7 +321,7 @@ export function ExpenseForm({
                 }}
                 className="size-5 accent-sprout-500"
               />
-              <span aria-hidden="true">💬</span>
+              <MessageCircle aria-hidden="true" className="size-5 text-sprout-600" />
               {t("expenseShare.sendToChat")}
             </label>
           )}
@@ -355,7 +358,7 @@ function AmountSection({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <div className="surface-card row-span-2 flex min-w-0 flex-col justify-between gap-3 rounded-[1.75rem] border border-sprout-200/80 bg-white p-4 focus-within:border-sprout-500 focus-within:ring-3 focus-within:ring-sprout-500/15">
+        <div className="surface-card row-span-2 flex min-w-0 flex-col justify-between gap-1 rounded-3xl border border-sprout-200/80 bg-white px-4 py-3 focus-within:border-sprout-500 focus-within:ring-3 focus-within:ring-sprout-500/15">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="expense-amount" className="text-xs font-bold text-ink-muted">
               {t("expense.amount")}
@@ -367,41 +370,43 @@ function AmountSection({
               }}
             />
           </div>
-          <input
-            id="expense-amount"
-            inputMode="decimal"
-            autoComplete="off"
-            className={`w-full min-w-0 bg-transparent text-left font-bold tabular-nums text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
-            placeholder={t("expense.amountPlaceholder")}
-            value={draft.amountText}
-            onChange={(e) => {
-              update({ amountText: e.target.value });
-            }}
-          />
-          <div className="flex gap-2">
-            {[100, 500].map((increment) => {
-              const next =
-                (amount.kind === "ok" ? amount.amountMinor : 0) +
-                increment * 10 ** CURRENCIES[draft.currency].decimals;
-              return (
-                <button
-                  key={increment}
-                  type="button"
-                  aria-label={t("expense.addAmount", { amount: increment })}
-                  disabled={
-                    (draft.amountText.trim() !== "" && amount.kind !== "ok") ||
-                    next > MAX_AMOUNT_MINOR
-                  }
-                  onClick={() => {
-                    hapticTick(10);
-                    update({ amountText: minorToText(next, draft.currency) });
-                  }}
-                  className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-4 py-2 text-xs font-bold text-sprout-700 tabular-nums disabled:opacity-40"
-                >
-                  +{increment}
-                </button>
-              );
-            })}
+          <div className="flex items-center justify-between gap-2">
+            <input
+              id="expense-amount"
+              inputMode="decimal"
+              autoComplete="off"
+              className={`w-full min-w-0 bg-transparent text-left font-bold tabular-nums text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
+              placeholder={t("expense.amountPlaceholder")}
+              value={draft.amountText}
+              onChange={(e) => {
+                update({ amountText: e.target.value });
+              }}
+            />
+            <div className="flex gap-2">
+              {[100, 500].map((increment) => {
+                const next =
+                  (amount.kind === "ok" ? amount.amountMinor : 0) +
+                  increment * 10 ** CURRENCIES[draft.currency].decimals;
+                return (
+                  <button
+                    key={increment}
+                    type="button"
+                    aria-label={t("expense.addAmount", { amount: increment })}
+                    disabled={
+                      (draft.amountText.trim() !== "" && amount.kind !== "ok") ||
+                      next > MAX_AMOUNT_MINOR
+                    }
+                    onClick={() => {
+                      hapticTick(10);
+                      update({ amountText: minorToText(next, draft.currency) });
+                    }}
+                    className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-3 py-1 text-xs font-bold text-sprout-700 tabular-nums disabled:opacity-40"
+                  >
+                    +{increment}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -435,9 +440,9 @@ function AmountSection({
 /** A longer amount steps down a size, so it keeps fitting its half of the row. */
 function amountSize(text: string): string {
   const length = text.trim().length;
-  if (length <= 4) return "text-4xl";
-  if (length <= 7) return "text-3xl";
-  return "text-2xl";
+  if (length <= 4) return "text-3xl";
+  if (length <= 7) return "text-2xl";
+  return "text-xl";
 }
 
 // The native picker's own button stretches over the whole pill, so a tap anywhere opens it.
@@ -678,9 +683,7 @@ function PayersSection({
   }, [open, rendered]);
 
   const currentPayer =
-    payers.mode === "single"
-      ? (members.find((m) => m.id === payers.memberId) ?? members[0])
-      : null;
+    payers.mode === "single" ? (members.find((m) => m.id === payers.memberId) ?? members[0]) : null;
 
   const handleSelectPayer = (memberId: string) => {
     setSelectedId(memberId);
@@ -732,9 +735,7 @@ function PayersSection({
                 placeholder={currentPayer?.placeholder ?? false}
                 className="size-8 text-sm"
               />
-              <span className="truncate font-bold text-ink">
-                {currentPayer?.displayName}
-              </span>
+              <span className="truncate font-bold text-ink">{currentPayer?.displayName}</span>
             </div>
             <ChevronDown
               aria-hidden="true"
@@ -784,7 +785,10 @@ function PayersSection({
                           </div>
                           <span className="min-w-0 flex-1 truncate text-ink">{m.displayName}</span>
                           {isSelected && (
-                            <Check aria-hidden="true" className="settle-pop size-5 text-sprout-600" />
+                            <Check
+                              aria-hidden="true"
+                              className="settle-pop size-5 text-sprout-600"
+                            />
                           )}
                         </button>
                       </li>

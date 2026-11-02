@@ -94,7 +94,9 @@ export function LandingPage() {
                   key={example.title}
                   type="button"
                   aria-pressed={selected === example}
-                  onClick={() => setSelected(example)}
+                  onClick={() => {
+                    setSelected(example);
+                  }}
                   className={`press-pill rounded-full border px-4 py-2 text-xs transition-colors ${selected === example ? "border-sprout-900/20 bg-white text-sprout-900" : "border-transparent text-ink-muted hover:bg-white/50"}`}
                 >
                   {example.title}
