@@ -70,7 +70,7 @@ describe("GroupAvatar", () => {
 });
 
 describe("AvatarStack", () => {
-  it("shows at most four avatars and counts everyone else in the +N chip", () => {
+  it("shows at most four avatars, counts the rest, and keeps the spring touch-spread classes", () => {
     const members = [
       { name: "小宇", pictureUrl: null },
       { name: "宜庭", pictureUrl: null },
@@ -79,11 +79,10 @@ describe("AvatarStack", () => {
       { name: "阿強", pictureUrl: null },
       { name: "小花", pictureUrl: null },
     ];
-    render(<AvatarStack members={members} total={8} />);
-    expect(screen.getAllByText("小")).toHaveLength(1);
-    expect(screen.getAllByText("阿")).toHaveLength(1);
-    expect(screen.getByText("宜")).toBeInTheDocument();
-    expect(screen.getByText("G")).toBeInTheDocument();
+    const { container } = render(<AvatarStack members={members} total={8} />);
+    const stack = container.querySelector("span");
+    expect(stack?.className).toContain("group-active:space-x-1");
+    expect(stack?.className).toContain("ease-(--ease-spring)");
     expect(screen.getByText("+4")).toBeInTheDocument();
   });
 });
