@@ -377,6 +377,7 @@ export const en: Record<MessageId, string> = {
   "settle.chartMe": " (you)",
   "settle.chartSettled": "{count} others are settled",
   "settle.planTitle": "Who pays whom",
+  "settle.smartPlan": "✨ Smart settlement · {count} remaining",
   "settle.label.greedy": "At most {count} payments",
   "settle.planFailed": "The payment plan could not be worked out. Please refresh.",
   "settle.allSettled": "Everyone is settled!",

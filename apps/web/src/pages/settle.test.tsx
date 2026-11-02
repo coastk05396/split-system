@@ -148,6 +148,8 @@ describe("Recording and confirming Settlements", () => {
       others: [{ name: "宜庭", balance: 200 }],
     });
 
+    expect(screen.getByText("✨ 智慧平帳 · 剩 1 筆")).toBeVisible();
+
     const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
       name: "確認付款",
     });
@@ -362,6 +364,8 @@ describe("Recording and confirming Settlements", () => {
         lineChat: true,
       },
     );
+
+    expect(screen.getByText("✨ 智慧平帳 · 剩 1 筆")).toBeVisible();
 
     const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
       name: "確認付款",

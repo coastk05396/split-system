@@ -372,6 +372,7 @@ const zhTW = {
   "settle.chartMe": "（你）",
   "settle.chartSettled": "其他 {count} 人已結清",
   "settle.planTitle": "要付給誰",
+  "settle.smartPlan": "✨ 智慧平帳 · 剩 {count} 筆",
   "settle.label.greedy": "至多 {count} 筆",
   "settle.planFailed": "還款計畫算不出來，請重新整理。",
   "settle.allSettled": "大家都結清了！",

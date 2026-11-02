@@ -1072,6 +1072,26 @@ body::before {
   animation: list-stagger-in 180ms var(--ease-spring) both;
 }
 
+/* Floating speech bubble spring pop-in for stats monthly bar */
+@keyframes bubble-spring {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bubble-spring {
+  animation: bubble-spring 260ms var(--ease-spring) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
     transition: opacity 120ms ease-out;
@@ -1079,6 +1099,7 @@ body::before {
   .settle-stagger-1,
   .settle-stagger-2,
   .list-stagger-item,
+  .bubble-spring,
   .category-bloom,
   .copy-icon-pop,
   .dialog-icon-enter,

@@ -113,7 +113,14 @@ export function SettlePanel({ group }: { group: Group }) {
 
         <section className="settle-stagger-2 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mr-auto text-lg font-bold">{t("settle.planTitle")}</h2>
+            <div className="mr-auto flex items-baseline gap-2">
+              <h2 className="text-lg font-bold">{t("settle.planTitle")}</h2>
+              {plan.status === "ready" && orderedPlan.length > 0 && (
+                <span className="text-xs font-normal text-ink-muted">
+                  {t("settle.smartPlan", { count: orderedPlan.length })}
+                </span>
+              )}
+            </div>
             {/* Only an approximate plan says so; the fewest-payments one needs no label. */}
             {plan.status === "ready" &&
               plan.plan.payments.length > 0 &&
