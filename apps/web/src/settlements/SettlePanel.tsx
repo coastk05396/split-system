@@ -249,15 +249,7 @@ function SettleNotifyActions({
     setBusy(true);
     try {
       const card = await prepareCard();
-      try {
-        await line.sendToChat([settleFlexMessage(card)]);
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          console.log("[DEV] sendToChat simulated:", settleFlexMessage(card));
-        } else {
-          throw err;
-        }
-      }
+      await line.sendToChat([settleFlexMessage(card)]);
       onNotice(t("settleShare.sentToChat"));
     } catch (error) {
       onNotice(failureMessage(error), true);

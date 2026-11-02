@@ -148,7 +148,7 @@ export function SplitEditor({
           onClick={() => {
             setOpen(!open);
           }}
-          className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500`}
+          className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
         >
           <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
             {members

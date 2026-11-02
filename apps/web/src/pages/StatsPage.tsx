@@ -1,4 +1,4 @@
-import { type CurrencyCode, formatAmount } from "@split/shared";
+import { CURRENCIES, type CurrencyCode, formatAmount } from "@split/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Link } from "react-router";
@@ -23,22 +23,25 @@ type Detail = {
 };
 const COLOURS = ["#2e9d71", "#f4a261", "#5b8def", "#d57491", "#8ab17d", "#a68bd4", "#e2ad42"];
 
-function formatBubbleAmount(amount: number, currency: CurrencyCode): string {
-  if (amount === 0) return formatAmount(0, currency);
+function formatBubbleAmount(minor: number, currency: CurrencyCode): string {
+  if (minor === 0) return formatAmount(0, currency);
+  const { decimals, symbol } = CURRENCIES[currency];
+  const major = minor / 10 ** decimals;
+
   if (currency === "TWD" || currency === "JPY") {
-    if (amount >= 10000) {
-      const w = amount / 10000;
+    if (major >= 10000) {
+      const w = major / 10000;
       return `${w >= 100 ? Math.round(w) : Number(w.toFixed(1))}萬`;
     }
-    return formatAmount(amount, currency);
+    return formatAmount(minor, currency);
   }
-  if (amount >= 1000000) {
-    return `${Number((amount / 1000000).toFixed(1))}M`;
+  if (major >= 1000000) {
+    return `${symbol} ${Number((major / 1000000).toFixed(1))}M`;
   }
-  if (amount >= 1000) {
-    return `${Number((amount / 1000).toFixed(1))}k`;
+  if (major >= 1000) {
+    return `${symbol} ${Number((major / 1000).toFixed(1))}k`;
   }
-  return formatAmount(amount, currency);
+  return formatAmount(minor, currency);
 }
 
 function formatPercent(amount: number, total: number): string {
@@ -355,11 +358,14 @@ export function StatsPage() {
                       ))}
                     </g>
                   </svg>
-                  <div
+                  <button
+                    type="button"
+                    disabled={selectedCategory === null}
+                    aria-label={selectedCategory !== null ? t("stats.total") : undefined}
                     onClick={() => {
                       if (selectedCategory !== null) setSelectedCategory(null);
                     }}
-                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-all duration-300 ${
+                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-all duration-300 focus-visible:outline-2 focus-visible:outline-sprout-600 ${
                       selectedCategory !== null ? "cursor-pointer hover:bg-sprout-50/50" : ""
                     }`}
                   >
@@ -391,7 +397,7 @@ export function StatsPage() {
                         />
                       )}
                     </span>
-                  </div>
+                  </button>
                 </div>
                 <ul className="w-full flex-1 space-y-1">
                   {categories.map(([name, amount], i) => (

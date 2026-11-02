@@ -110,4 +110,17 @@ describe("personal spending stats", () => {
     expect(within(categories).getAllByText("🍽️")).toHaveLength(1); // Only in list
     expect(within(categories).getByText("我的分攤")).toBeVisible();
   });
+
+  it("formats floating bubble amounts using major units for USD", async () => {
+    const { api } = renderApp({
+      path: "/stats",
+      cookieUser: { ...makeUser("小宇"), preferredCurrency: "USD" },
+    });
+    api.spendingStats.push({ month: month(0), category: "餐飲", currency: "USD", amount: 1000 }); // $10.00
+    const bars = await screen.findByRole("group", { name: "最近六個月" });
+    const currentMonthBar = within(bars).getAllByRole("button")[5];
+    if (currentMonthBar === undefined) throw new Error("Missing current month");
+    // $10 should display as US$ 10.00, not 1k
+    expect(within(currentMonthBar).getByText("US$ 10.00")).toBeVisible();
+  });
 });
