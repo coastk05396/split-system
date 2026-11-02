@@ -212,15 +212,14 @@ export function SplitEditor({
                     key={m.id}
                     aria-label={m.displayName}
                     style={{ animationDelay: `${index * 25}ms` }}
-                    className={`${card} list-stagger-item flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
-                      !takesPart ? "opacity-40 grayscale" : ""
-                    }`}
+                    className={`${card} splitter-row list-stagger-item flex items-center gap-3 px-4 py-3`}
+                    data-included={takesPart}
                   >
                     <Avatar
                       name={m.displayName}
                       pictureUrl={m.pictureUrl ?? null}
                       placeholder={m.placeholder ?? false}
-                      className="size-9"
+                      className={`splitter-avatar size-9 ${takesPart ? "ring-2 ring-sprout-200" : "opacity-40"}`}
                     />
                     <span className="min-w-0 flex-1 truncate font-bold">{m.displayName}</span>
                     {takesPart && value.method === "exact" && (
@@ -241,7 +240,10 @@ export function SplitEditor({
                         className={fieldClass}
                         value={value.shares[m.id] ?? "1"}
                         onChange={(e) => {
-                          onChange({ ...value, shares: { ...value.shares, [m.id]: e.target.value } });
+                          onChange({
+                            ...value,
+                            shares: { ...value.shares, [m.id]: e.target.value },
+                          });
                         }}
                       />
                     )}
@@ -250,7 +252,9 @@ export function SplitEditor({
                         {formatAmount(amount, currency)}
                       </span>
                     )}
-                    {!takesPart && <span className="text-sm text-ink-muted">{t("split.notIn")}</span>}
+                    {!takesPart && (
+                      <span className="text-sm text-ink-muted">{t("split.notIn")}</span>
+                    )}
                     <input
                       type="checkbox"
                       aria-label={t("split.takesPart", { name: m.displayName })}

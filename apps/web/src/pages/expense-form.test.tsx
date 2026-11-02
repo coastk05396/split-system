@@ -34,6 +34,36 @@ function openForm(seed: Partial<SeedGroup> = {}) {
 const submit = () => screen.getByRole("button", { name: "新增支出" });
 
 describe("add Expense form", () => {
+  it("keeps metadata folded and lets amount shortcuts add to an expression", async () => {
+    const user = userEvent.setup();
+    openForm();
+    const amount = await screen.findByLabelText("金額");
+    expect(screen.getByText("日期與行程").closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByRole("button", { name: "金額加 100" }));
+    expect(amount).toHaveValue("100");
+    await user.click(screen.getByRole("button", { name: "金額加 500" }));
+    expect(amount).toHaveValue("600");
+    await user.clear(amount);
+    await user.type(amount, "120+80");
+    await user.click(screen.getByRole("button", { name: "金額加 100" }));
+    expect(amount).toHaveValue("300");
+    await user.click(screen.getByText("日期與行程"));
+    expect(screen.getByLabelText("日期")).toBeVisible();
+    expect(screen.getByLabelText("時間（選填）")).toBeVisible();
+  });
+
+  it("adds shortcuts in whole currency units without losing cents", async () => {
+    const user = userEvent.setup();
+    openForm({ settlementCurrency: "USD" });
+    const amount = await screen.findByLabelText("金額");
+    await user.type(amount, "0.10");
+    await user.click(screen.getByRole("button", { name: "金額加 100" }));
+    expect(amount).toHaveValue("100.10");
+    await user.clear(amount);
+    await user.type(amount, "120+");
+    expect(screen.getByRole("button", { name: "金額加 100" })).toBeDisabled();
+  });
+
   it("starts in the currency of the Group's latest Expense", async () => {
     let id = "";
     renderApp({
@@ -258,6 +288,7 @@ describe("add Expense form", () => {
 
     await user.type(await screen.findByLabelText("名稱"), "門票");
     await user.type(screen.getByLabelText("金額"), "150");
+    await user.click(screen.getByText("日期與行程"));
     await user.selectOptions(
       screen.getByLabelText("行程站點（選填）"),
       await screen.findByRole("option", { name: "10:00 赤崁樓" }),

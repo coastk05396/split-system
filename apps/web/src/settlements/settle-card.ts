@@ -131,7 +131,7 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
                       {
                         type: "text" as const,
                         text: line.label,
-                        size: "sm" as const,
+                        size: "xs" as const,
                         color: COLOR.ink,
                         flex: 1,
                         wrap: true,
@@ -289,9 +289,9 @@ export function settledFlexMessage(card: SettledCard): LineMessage {
           {
             type: "text",
             text: card.groupName,
-            size: "sm",
             weight: "bold",
-            color: COLOR.muted,
+            size: "xl",
+            color: COLOR.ink,
             wrap: true,
             maxLines: 2,
           },
@@ -359,7 +359,7 @@ export function settledFlexMessage(card: SettledCard): LineMessage {
                 contents: [
                   {
                     type: "text",
-                    text: `✨ ${t("groups.settled")}`,
+                    text: t("groups.settled"),
                     size: "xxs",
                     weight: "bold",
                     color: COLOR.sprout,

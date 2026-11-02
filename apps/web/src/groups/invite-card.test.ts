@@ -35,7 +35,7 @@ describe("inviteFlexMessage", () => {
     expect(json).toContain('"text":"台南小旅行"');
 
     // Lifestyle description
-    expect(json).toContain('"text":"聚餐出遊好幫手，輕鬆算清每一筆 ✨"');
+    expect(json).toContain('"text":"這趟的花費大家一起記，回家前就能算清"');
 
     // Join button with arrow
     expect(json).toContain('"text":"加入群組 ↗"');

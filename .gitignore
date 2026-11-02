@@ -1,5 +1,6 @@
 .claude/
 .scratch/
+.impeccable/
 node_modules/
 .env
 .env.local

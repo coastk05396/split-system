@@ -232,7 +232,7 @@ describe("home", () => {
     expect(iconContainer).not.toBeNull();
   });
 
-  it("renders pending groups with delicate micro-capsules ('你付/你收') and right avatar stack", async () => {
+  it("renders pending groups with warm balance badges and right avatar stack", async () => {
     const friend = makeUser("阿明");
     renderApp({
       cookieUser: me,
@@ -254,7 +254,7 @@ describe("home", () => {
 
     const pendingSection = await screen.findByRole("region", { name: "待結算的群組" });
 
-    // 1. Left side micro-capsule: bg-sprout-50 for receivable, bg-rose-50 for payable
+    // 1. Left side micro-capsule: bg-sprout-50 for receivable, warm clay for payable
     const tainanRow = within(pendingSection).getByRole("link", { name: /台南小旅行/ });
     const tainanAmount = within(tainanRow).getByText("你收 NT$ 393");
     expect(tainanAmount).toHaveClass(
@@ -270,9 +270,9 @@ describe("home", () => {
     const hezuRow = within(pendingSection).getByRole("link", { name: /日常合租/ });
     const hezuAmount = within(hezuRow).getByText("你付 NT$ 250");
     expect(hezuAmount).toHaveClass(
-      "bg-rose-50",
-      "text-rose-700",
-      "border-rose-200/60",
+      "bg-terracotta-soft",
+      "text-terracotta-ink",
+      "border-terracotta/20",
       "rounded-full",
       "text-xs",
       "font-semibold",

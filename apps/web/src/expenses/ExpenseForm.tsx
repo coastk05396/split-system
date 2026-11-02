@@ -3,6 +3,8 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { Link } from "react-router";
 import {
   CURRENCY_CODES,
+  CURRENCIES,
+  MAX_AMOUNT_MINOR,
   type CurrencyCode,
   type Expense,
   formatAmount,
@@ -17,6 +19,7 @@ import {
   ChevronDown,
   Clock,
   type LucideIcon,
+  MessageCircle,
   Users,
 } from "lucide-react";
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
@@ -40,6 +43,7 @@ import {
   expenseDraftFrom,
   newExpenseDraft,
 } from "./expense-draft.js";
+import { minorToText } from "./money.js";
 import { SplitEditor, type SplitMember } from "./SplitEditor.js";
 
 const label = "text-sm font-bold";
@@ -89,7 +93,7 @@ export function ExpenseForm({
   );
   // Only a new Expense opened from a LINE chat can be posted back into that chat.
   const [chatAvailable, setChatAvailable] = useState(false);
-  const [sendToChat, setSendToChat] = useState(false);
+  const [sendToChat, setSendToChat] = useState(true);
   // Saved, but the caller is still finishing (posting to the chat): no second submit meanwhile.
   const [finishing, setFinishing] = useState(false);
   useEffect(() => {
@@ -126,9 +130,11 @@ export function ExpenseForm({
       {
         onSuccess: (saved) => {
           setFinishing(true);
-          void Promise.resolve(onSaved(saved, { sendToChat })).finally(() => {
-            setFinishing(false);
-          });
+          void Promise.resolve(onSaved(saved, { sendToChat: chatAvailable && sendToChat })).finally(
+            () => {
+              setFinishing(false);
+            },
+          );
         },
       },
     );
@@ -188,31 +194,6 @@ export function ExpenseForm({
               stale: rate.data?.stale === true,
             }}
             update={update}
-            aside={
-              <>
-                <PickerPill text={t("expense.date")} icon={CalendarDays}>
-                  <input
-                    type="date"
-                    required
-                    className={pillInput}
-                    value={draft.date}
-                    onChange={(e) => {
-                      update({ date: e.target.value, stopId: null });
-                    }}
-                  />
-                </PickerPill>
-                <PickerPill text={t("expense.time")} icon={Clock}>
-                  <input
-                    type="time"
-                    className={pillInput}
-                    value={draft.time}
-                    onChange={(e) => {
-                      update({ time: e.target.value });
-                    }}
-                  />
-                </PickerPill>
-              </>
-            }
           />
           <fieldset className="flex flex-col gap-1.5">
             <legend className={`${label} mb-1`}>{t("expense.category")}</legend>
@@ -257,16 +238,7 @@ export function ExpenseForm({
               }}
             />
           </label>
-          {group.isTrip && TRIP_ENABLED && (
-            <StopPicker
-              groupId={group.id}
-              day={draft.date}
-              value={draft.stopId}
-              onChange={(stopId) => {
-                update({ stopId });
-              }}
-            />
-          )}
+
           <PayersSection
             members={selectable}
             myMemberId={group.me.memberId}
@@ -288,6 +260,50 @@ export function ExpenseForm({
               update({ split });
             }}
           />
+          <details className="metadata-ticket rounded-2xl border border-sprout-200 bg-white/70">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-sprout-700">
+              <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
+              <span className="flex-1 font-bold">{t("expense.metadata")}</span>
+              <span className="text-xs tabular-nums">{draft.date}</span>
+              <ChevronDown aria-hidden="true" className="metadata-chevron size-4" />
+            </summary>
+            <div className="border-t border-dashed border-sprout-200 px-4 pt-3 pb-4">
+              <p className="mb-3 text-xs text-ink-muted">{t("expense.metadataHint")}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <PickerPill text={t("expense.date")} icon={CalendarDays}>
+                  <input
+                    type="date"
+                    required
+                    className={pillInput}
+                    value={draft.date}
+                    onChange={(e) => {
+                      update({ date: e.target.value, stopId: null });
+                    }}
+                  />
+                </PickerPill>
+                <PickerPill text={t("expense.time")} icon={Clock}>
+                  <input
+                    type="time"
+                    className={pillInput}
+                    value={draft.time}
+                    onChange={(e) => {
+                      update({ time: e.target.value });
+                    }}
+                  />
+                </PickerPill>
+              </div>
+              {group.isTrip && TRIP_ENABLED && (
+                <StopPicker
+                  groupId={group.id}
+                  day={draft.date}
+                  value={draft.stopId}
+                  onChange={(stopId) => {
+                    update({ stopId });
+                  }}
+                />
+              )}
+            </div>
+          </details>
           {save.isError && (
             <p role="alert" className="rounded-2xl bg-peach p-4 font-bold">
               {save.error instanceof ApiFailure
@@ -305,7 +321,7 @@ export function ExpenseForm({
                 }}
                 className="size-5 accent-sprout-500"
               />
-              <span aria-hidden="true">💬</span>
+              <MessageCircle aria-hidden="true" className="size-5 text-sprout-600" />
               {t("expenseShare.sendToChat")}
             </label>
           )}
@@ -331,23 +347,18 @@ function AmountSection({
   settlementCurrency,
   rate,
   update,
-  aside,
 }: {
   draft: ExpenseDraft;
   evaluation: DraftEvaluation;
   settlementCurrency: CurrencyCode;
   rate: { loading: boolean; unavailable: boolean; date: string | undefined; stale?: boolean };
   update: (patch: Partial<ExpenseDraft>) => void;
-  /** The date and time, stacked beside the amount. */
-  aside: ReactNode;
 }) {
   const { amount, conversion } = evaluation;
   return (
     <section className="flex flex-col gap-3">
-      {/* The amount takes the larger part and the date and time share the rest, so the three
-          line up as one block; the working-out and the conversion stay full width below. */}
-      <div className="grid grid-cols-[1.3fr_1fr] gap-3 min-[480px]:grid-cols-2">
-        <div className="surface-card row-span-2 flex min-w-0 flex-col justify-between gap-3 rounded-[1.75rem] border border-sprout-200/80 bg-white p-4 focus-within:border-sprout-500 focus-within:ring-3 focus-within:ring-sprout-500/15">
+      <div>
+        <div className="surface-card row-span-2 flex min-w-0 flex-col justify-between gap-1 rounded-3xl border border-sprout-200/80 bg-white px-4 py-3 focus-within:border-sprout-500 focus-within:ring-3 focus-within:ring-sprout-500/15">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="expense-amount" className="text-xs font-bold text-ink-muted">
               {t("expense.amount")}
@@ -359,19 +370,45 @@ function AmountSection({
               }}
             />
           </div>
-          <input
-            id="expense-amount"
-            inputMode="decimal"
-            autoComplete="off"
-            className={`w-full min-w-0 bg-transparent text-left font-bold text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
-            placeholder={t("expense.amountPlaceholder")}
-            value={draft.amountText}
-            onChange={(e) => {
-              update({ amountText: e.target.value });
-            }}
-          />
+          <div className="flex items-center justify-between gap-2">
+            <input
+              id="expense-amount"
+              inputMode="decimal"
+              autoComplete="off"
+              className={`w-full min-w-0 bg-transparent text-left font-bold tabular-nums text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
+              placeholder={t("expense.amountPlaceholder")}
+              value={draft.amountText}
+              onChange={(e) => {
+                update({ amountText: e.target.value });
+              }}
+            />
+            <div className="flex gap-2">
+              {[100, 500].map((increment) => {
+                const next =
+                  (amount.kind === "ok" ? amount.amountMinor : 0) +
+                  increment * 10 ** CURRENCIES[draft.currency].decimals;
+                return (
+                  <button
+                    key={increment}
+                    type="button"
+                    aria-label={t("expense.addAmount", { amount: increment })}
+                    disabled={
+                      (draft.amountText.trim() !== "" && amount.kind !== "ok") ||
+                      next > MAX_AMOUNT_MINOR
+                    }
+                    onClick={() => {
+                      hapticTick(10);
+                      update({ amountText: minorToText(next, draft.currency) });
+                    }}
+                    className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-3 py-1 text-xs font-bold text-sprout-700 tabular-nums disabled:opacity-40"
+                  >
+                    +{increment}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        {aside}
       </div>
       {amount.kind === "ok" && amount.isExpression && (
         <p className="font-bold text-sprout-600">
@@ -403,9 +440,9 @@ function AmountSection({
 /** A longer amount steps down a size, so it keeps fitting its half of the row. */
 function amountSize(text: string): string {
   const length = text.trim().length;
-  if (length <= 4) return "text-4xl";
-  if (length <= 7) return "text-3xl";
-  return "text-2xl";
+  if (length <= 4) return "text-3xl";
+  if (length <= 7) return "text-2xl";
+  return "text-xl";
 }
 
 // The native picker's own button stretches over the whole pill, so a tap anywhere opens it.
@@ -646,9 +683,7 @@ function PayersSection({
   }, [open, rendered]);
 
   const currentPayer =
-    payers.mode === "single"
-      ? (members.find((m) => m.id === payers.memberId) ?? members[0])
-      : null;
+    payers.mode === "single" ? (members.find((m) => m.id === payers.memberId) ?? members[0]) : null;
 
   const handleSelectPayer = (memberId: string) => {
     setSelectedId(memberId);
@@ -700,9 +735,7 @@ function PayersSection({
                 placeholder={currentPayer?.placeholder ?? false}
                 className="size-8 text-sm"
               />
-              <span className="truncate font-bold text-ink">
-                {currentPayer?.displayName}
-              </span>
+              <span className="truncate font-bold text-ink">{currentPayer?.displayName}</span>
             </div>
             <ChevronDown
               aria-hidden="true"
@@ -752,7 +785,10 @@ function PayersSection({
                           </div>
                           <span className="min-w-0 flex-1 truncate text-ink">{m.displayName}</span>
                           {isSelected && (
-                            <Check aria-hidden="true" className="settle-pop size-5 text-sprout-600" />
+                            <Check
+                              aria-hidden="true"
+                              className="settle-pop size-5 text-sprout-600"
+                            />
                           )}
                         </button>
                       </li>

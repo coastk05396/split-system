@@ -83,7 +83,7 @@ describe("Expense list", () => {
     });
 
     const row = await screen.findByRole("link", { name: /感冒藥/ });
-    expect(row.querySelector("svg.lucide-pill")).not.toBeNull();
+    expect(row.querySelector('svg[data-category-icon="medical"]')).not.toBeNull();
   });
 
   it("names each payer with the amount they paid when several people paid", async () => {

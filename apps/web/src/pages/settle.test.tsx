@@ -148,7 +148,7 @@ describe("Recording and confirming Settlements", () => {
       others: [{ name: "宜庭", balance: 200 }],
     });
 
-    expect(screen.getByText("✨ 智慧平帳 · 剩 1 筆")).toBeVisible();
+    expect(screen.getByText("剩 1 筆")).toBeVisible();
 
     const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
       name: "確認付款",
@@ -267,7 +267,7 @@ describe("Recording and confirming Settlements", () => {
     expect(api.groups.members(id())[2]?.balance).toBe(-200);
   });
 
-  it("colors negative balance and outgoing payment rows in red when I owe money", async () => {
+  it("uses warm clay tones for negative balances and outgoing payments", async () => {
     await openSettle({
       name: "室友",
       myBalance: -200,
@@ -275,8 +275,11 @@ describe("Recording and confirming Settlements", () => {
     });
 
     const plannedRow = await row("要付給誰", "你付給宜庭");
-    expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-red-700");
-    expect(plannedRow.getByText("你要付")).toHaveClass("bg-red-700");
+    expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-terracotta-ink");
+    expect(plannedRow.getByText("你要付")).toHaveClass(
+      "bg-terracotta-soft",
+      "text-terracotta-ink",
+    );
     expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass("bg-sprout-600");
   });
 
@@ -365,7 +368,7 @@ describe("Recording and confirming Settlements", () => {
       },
     );
 
-    expect(screen.getByText("✨ 智慧平帳 · 剩 1 筆")).toBeVisible();
+    expect(screen.getByText("剩 1 筆")).toBeVisible();
 
     const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
       name: "確認付款",

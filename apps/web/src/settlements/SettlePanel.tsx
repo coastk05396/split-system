@@ -38,6 +38,8 @@ import {
 } from "./settle-card.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
+import { SettledStamp } from "./SettledStamp.js";
+
 /** Each Member's picture by id, for the avatars deep inside the payment cards. */
 const PictureContext = createContext<(id: string) => string | null>(() => null);
 
@@ -335,6 +337,7 @@ function SettledMessage({ celebrate }: { celebrate: boolean }) {
           </Sparkles>
         </span>
       </span>
+      <SettledStamp />
       <p>{t("settle.allSettled")}</p>
     </div>
   );
@@ -567,7 +570,7 @@ function Person({ id, name, isMe }: { id: string; name: string; isMe: boolean })
 function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
   const badge =
     tone === "pay"
-      ? "border-red-300 bg-red-50 text-red-700"
+      ? "border-terracotta/25 bg-terracotta-soft text-terracotta-ink"
       : tone === "get"
         ? "border-sprout-200 bg-sprout-100 text-sprout-600"
         : "border-sprout-200 bg-sprout-50 text-ink-muted";
@@ -582,12 +585,12 @@ function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
   );
 }
 
-/** Says why a card matters to me, in words: 你要付 or 你可收. */
+/** Says why a card matters to me: my share or an incoming payment. */
 function RoleTag({ paying }: { paying: boolean }) {
   return (
     <span
-      className={`rounded-full px-3 py-0.5 text-xs font-bold text-white ${
-        paying ? "bg-red-700" : "bg-sprout-600"
+      className={`rounded-full px-3 py-0.5 text-xs font-bold ${
+        paying ? "bg-terracotta-soft text-terracotta-ink" : "bg-sprout-600 text-white"
       }`}
     >
       {t(paying ? "settle.rolePay" : "settle.roleGet")}
@@ -648,7 +651,7 @@ function PaymentLine({
             struck
               ? "text-ink-muted line-through"
               : tone === "pay"
-                ? "text-red-700"
+                ? "text-terracotta-ink"
                 : "text-sprout-600"
           }`}
         />

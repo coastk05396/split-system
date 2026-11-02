@@ -113,14 +113,14 @@ export function BalanceChart({
                       format={(n) => `${n > 0 ? "+" : ""}${formatAmount(n, currency)}`}
                       goodWhen="up"
                       updating={updating}
-                      className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-red-700"}`}
+                      className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-terracotta-ink"}`}
                     />
                   </div>
                   <div aria-hidden="true" className="mx-auto grid w-full max-w-[92%] grid-cols-2 px-1">
                     <div className="flex justify-end border-r-2 border-ink/30 pr-0.5">
                       {!owed && (
                         <div
-                          className="bar-grow-left h-3 rounded-l-full bg-red-700"
+                          className="bar-grow-left h-3 rounded-l-full bg-terracotta"
                           style={{ width, animationDelay: delay }}
                         />
                       )}

@@ -66,7 +66,7 @@ describe("settle share card", () => {
     expect(json).not.toContain('"text":"🌱 週末台南小旅行"');
 
     // Subtitle with count
-    expect(json).toContain("✨ 智慧平帳 · 共 3 筆待結算");
+    expect(json).toContain("還有 3 筆沒結清");
 
     // Flow arrows without 欠了
     expect(json).toContain("小宇 ➔ Gulu");
@@ -93,7 +93,7 @@ describe("settle share card", () => {
     expect(settleText(card)).toBe(
       [
         "週末台南小旅行",
-        "✨ 智慧平帳 · 共 3 筆待結算",
+        "還有 3 筆沒結清",
         "小宇 ➔ Gulu  NT$ 430",
         "Yizhen ➔ ty  NT$ 194",
         "Gulu ➔ ty  NT$ 99",
@@ -160,7 +160,7 @@ describe("settled flex card", () => {
     // Large amount and mint settled stamp chip
     expect(json).toContain('"text":"NT$ 449,325"');
     expect(json).toContain('"size":"xxl"');
-    expect(json).toContain('"text":"✨ 已結清"');
+    expect(json).toContain('"text":"已結清"');
     expect(json).toContain('"backgroundColor":"#E8F5EB"');
 
     // Bottom sprout green button
