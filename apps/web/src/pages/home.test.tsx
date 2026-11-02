@@ -157,6 +157,8 @@ describe("home", () => {
 
     const mascot = heading.querySelector("svg");
     expect(mascot).toBeInTheDocument();
+    expect(heading).toHaveClass("justify-center");
+    expect(heading.closest("header")).toHaveClass("justify-center");
 
     const card = screen.getByRole("region", { name: "目前淨收付" });
     expect(card).toHaveClass("p-5");
