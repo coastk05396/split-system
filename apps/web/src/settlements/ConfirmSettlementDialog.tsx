@@ -31,7 +31,7 @@ export function ConfirmSettlementDialog({
   target: ConfirmTarget;
   currency: CurrencyCode;
   /** Sends the confirmed amount; resolves once saved, rejects with the API failure. */
-  submit: (amount: number) => Promise<unknown>;
+  submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
@@ -41,7 +41,7 @@ export function ConfirmSettlementDialog({
       : `press-pill w-full rounded-full px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 ${
           tone === "pay"
             ? "bg-red-700 hover:bg-red-800 focus-visible:outline-red-700"
-            : "bg-sprout-500 hover:bg-sprout-600 focus-visible:outline-sprout-600"
+            : "bg-sprout-600 hover:bg-sprout-700 focus-visible:outline-sprout-600"
         }`;
   return (
     <Dialog.Root
@@ -78,10 +78,11 @@ function ConfirmForm({
 }: {
   target: ConfirmTarget;
   currency: CurrencyCode;
-  submit: (amount: number) => Promise<unknown>;
+  submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
   onDone: () => void;
 }) {
   const [text, setText] = useState(minorToText(target.suggested, currency));
+  const [notifyChat, setNotifyChat] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const parsed = parseAmount(text.trim(), currency);
@@ -94,7 +95,7 @@ function ConfirmForm({
     setBusy(true);
     setFailure(null);
     onDone();
-    submit(amount).catch((error: unknown) => {
+    submit(amount, { notifyChat }).catch((error: unknown) => {
       setFailure(error);
       setBusy(false);
     });
@@ -147,6 +148,17 @@ function ConfirmForm({
           {t("settle.confirm.max", { amount: formatAmount(target.max, currency) })}
         </span>
       </div>
+      <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl bg-sprout-100/70 px-3.5 py-2.5 text-xs font-bold text-sprout-800">
+        <input
+          type="checkbox"
+          checked={notifyChat}
+          onChange={(e) => {
+            setNotifyChat(e.target.checked);
+          }}
+          className="size-4 rounded accent-sprout-600"
+        />
+        <span>{t("settle.confirm.notifyChat")}</span>
+      </label>
       {failure !== null && (
         <p role="alert" className="text-red-700">
           {failureMessage(failure)}

@@ -29,7 +29,13 @@ import { useBalances, useRecordSettlement, useSettlementAction, useSettlements }
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
 import { type BalanceRow, canConfirm, canUndo, maxPayable } from "./model.js";
-import { buildSettleCard, settleFlexMessage, settleText } from "./settle-card.js";
+import {
+  buildSettleCard,
+  buildSettledCard,
+  settleFlexMessage,
+  settledFlexMessage,
+  settleText,
+} from "./settle-card.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
 /** Each Member's picture by id, for the avatars deep inside the payment cards. */
@@ -272,11 +278,10 @@ function SettleNotifyActions({
     <Menu.Root>
       <Menu.Trigger
         disabled={busy}
-        className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
+        className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 disabled:opacity-60 cursor-pointer"
       >
         <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-700" />
         <span>{t("settleShare.menuTrigger")}</span>
-        <ChevronDown aria-hidden="true" className="size-3 text-sprout-700" />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
@@ -677,6 +682,8 @@ function PlannedRow({
   updating?: boolean | undefined;
   onToast?: (text: string, isError?: boolean) => void;
 }) {
+  const { line } = useDeps();
+  const invite = useEnsureInvite(group.id);
   const record = useRecordSettlement(group.id);
   // One key per suggested payment, reused if a lost answer makes the person tap again.
   const key = useRef(crypto.randomUUID());
@@ -700,6 +707,56 @@ function PlannedRow({
       ? "settle.markReceived"
       : "settle.markBehalf";
 
+  async function notifyPeer() {
+    try {
+      const link = await invite.mutateAsync().catch(() => null);
+      const card = buildSettleCard(
+        [payment],
+        group,
+        currency,
+        (id) => rows.get(id)?.displayName ?? "?",
+        link?.token ?? null,
+      );
+      try {
+        const sent = await line.shareMessages([settleFlexMessage(card)], { stayOpen: true });
+        if (sent) onToast?.(t("settleShare.sharedLine"));
+      } catch (error) {
+        if (error instanceof LineShareUnavailableError) {
+          window.location.assign(lineShareLink(settleText(card)));
+          return;
+        }
+        throw error;
+      }
+    } catch (err: unknown) {
+      onToast?.(failureMessage(err), true);
+    }
+  }
+
+  async function sendSettledNotice(payerName: string, receiverName: string, amount: number) {
+    try {
+      const link = await invite.mutateAsync().catch(() => null);
+      const card = buildSettledCard(
+        {
+          payer: payerName,
+          receiver: receiverName,
+          amount,
+        },
+        group,
+        currency,
+        link?.token ?? null,
+      );
+      try {
+        await line.sendToChat([settledFlexMessage(card)]);
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.log("[DEV] sendToChat simulated:", settledFlexMessage(card));
+        }
+      }
+    } catch {
+      // Non-blocking notification
+    }
+  }
+
   return (
     <>
       <PaymentLine
@@ -714,26 +771,72 @@ function PlannedRow({
         updating={updating}
       />
       {canConfirm(group.me, payer, receiver) && (
-        <ConfirmSettlementDialog
-          trigger={t(triggerLabel)}
-          tone={tone}
-          currency={currency}
-          target={{
-            payerName: localName(payer.displayName),
-            receiverName: localName(receiver.displayName),
-            suggested: payment.amountMinor,
-            max: maxPayable(payer, receiver),
-          }}
-          submit={(amount) =>
-            record
-              .mutateAsync({ input: input(amount), idempotencyKey: key.current })
-              .then(saved)
-              .catch((err: unknown) => {
+        tone === "behalf" ? (
+          <ConfirmSettlementDialog
+            trigger={t(triggerLabel)}
+            tone={tone}
+            currency={currency}
+            target={{
+              payerName: localName(payer.displayName),
+              receiverName: localName(receiver.displayName),
+              suggested: payment.amountMinor,
+              max: maxPayable(payer, receiver),
+            }}
+            submit={async (amount, options) => {
+              try {
+                await record.mutateAsync({ input: input(amount), idempotencyKey: key.current });
+                saved();
+                if (options?.notifyChat) {
+                  void sendSettledNotice(
+                    localName(payer.displayName),
+                    localName(receiver.displayName),
+                    amount,
+                  );
+                }
+              } catch (err: unknown) {
                 onToast?.(failureMessage(err), true);
                 throw err;
-              })
-          }
-        />
+              }
+            }}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5">
+            <ConfirmSettlementDialog
+              trigger={t(triggerLabel)}
+              tone={tone}
+              currency={currency}
+              target={{
+                payerName: localName(payer.displayName),
+                receiverName: localName(receiver.displayName),
+                suggested: payment.amountMinor,
+                max: maxPayable(payer, receiver),
+              }}
+              submit={async (amount, options) => {
+                try {
+                  await record.mutateAsync({ input: input(amount), idempotencyKey: key.current });
+                  saved();
+                  if (options?.notifyChat) {
+                    void sendSettledNotice(
+                      localName(payer.displayName),
+                      localName(receiver.displayName),
+                      amount,
+                    );
+                  }
+                } catch (err: unknown) {
+                  onToast?.(failureMessage(err), true);
+                  throw err;
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void notifyPeer()}
+              className="press-pill flex cursor-pointer items-center justify-center gap-1.5 rounded-full border border-sprout-200 bg-white px-3 py-2 text-sm font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 hover:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+            >
+              {t("settle.notifyPeer")}
+            </button>
+          </div>
+        )
       )}
     </>
   );

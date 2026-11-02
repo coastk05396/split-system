@@ -179,3 +179,130 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
     },
   };
 }
+
+export interface SettledCard {
+  groupName: string;
+  payer: string;
+  receiver: string;
+  amount: string;
+  url: string;
+  lineUrl: string;
+  heroUrl: string;
+}
+
+export function buildSettledCard(
+  settlement: { payer: string; receiver: string; amount: number },
+  group: Group,
+  currency: CurrencyCode,
+  inviteToken: string | null = null,
+): SettledCard {
+  const path = `/groups/${group.id}?tab=settle`;
+  const url =
+    inviteToken === null
+      ? `${window.location.origin}${path}`
+      : `${window.location.origin}/join/${inviteToken}?next=${encodeURIComponent(path)}`;
+  return {
+    groupName: group.name,
+    payer: settlement.payer,
+    receiver: settlement.receiver,
+    amount: formatAmount(settlement.amount, currency),
+    url,
+    lineUrl: liffLink(url),
+    heroUrl: `${window.location.origin}/settle-hero.png`,
+  };
+}
+
+export function settledFlexMessage(card: SettledCard): LineMessage {
+  return {
+    type: "flex",
+    altText: t("settleShare.settledAlt", {
+      name: card.groupName,
+      payer: card.payer,
+      receiver: card.receiver,
+      amount: card.amount,
+    }),
+    contents: {
+      type: "bubble",
+      size: "mega",
+      styles: {
+        hero: { backgroundColor: SETTLE_BG },
+        body: { backgroundColor: SETTLE_BG },
+      },
+      hero: {
+        type: "image",
+        url: card.heroUrl,
+        size: "full",
+        aspectRatio: "13:5",
+        aspectMode: "cover",
+        action: { type: "uri", label: t("settleShare.viewLedger"), uri: card.lineUrl },
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "20px",
+        spacing: "md",
+        contents: [
+          {
+            type: "text",
+            text: `🌱 ${card.groupName}`,
+            weight: "bold",
+            size: "xl",
+            color: COLOR.ink,
+            wrap: true,
+            maxLines: 2,
+          },
+          {
+            type: "text",
+            text: `🎉 ${t("settleShare.settledTitle")}`,
+            size: "md",
+            weight: "bold",
+            color: COLOR.sprout,
+          },
+          {
+            type: "box",
+            layout: "horizontal",
+            alignItems: "center",
+            spacing: "sm",
+            contents: [
+              {
+                type: "text",
+                text: `${card.payer} ➔ ${card.receiver}`,
+                size: "sm",
+                color: COLOR.muted,
+                flex: 1,
+                wrap: true,
+              },
+              {
+                type: "text",
+                text: card.amount,
+                size: "lg",
+                weight: "bold",
+                color: SETTLE_AMOUNT,
+                align: "end",
+                flex: 0,
+              },
+            ],
+          },
+          {
+            type: "box",
+            layout: "horizontal",
+            margin: "lg",
+            cornerRadius: "18px",
+            backgroundColor: COLOR.sprout,
+            paddingAll: "14px",
+            action: { type: "uri", label: t("settleShare.viewLedger"), uri: card.lineUrl },
+            contents: [
+              {
+                type: "text",
+                text: `✨ ${t("settleShare.viewLedger")}`,
+                color: COLOR.white,
+                weight: "bold",
+                align: "center",
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}

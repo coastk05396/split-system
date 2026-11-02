@@ -316,7 +316,7 @@ describe("Recording and confirming Settlements", () => {
 
     const myRow = await row("要付給誰", "成員C付給你");
     const myBtn = myRow.getByRole("button", { name: "確認收款" });
-    expect(myBtn).toHaveClass("bg-sprout-500", "w-full");
+    expect(myBtn).toHaveClass("bg-sprout-600", "w-full");
 
     const otherRow = await row("要付給誰", "成員D付給成員A");
     expect(otherRow.queryByRole("button", { name: "確認收款" })).toBeNull();
@@ -350,7 +350,7 @@ describe("Recording and confirming Settlements", () => {
 describe("Notifying the Group of the Payment plan", () => {
   it("supports keyboard navigation and restores focus when dismissed", async () => {
     const { user } = await openSettle(owedToMe);
-    const trigger = await screen.findByRole("button", { name: "LINE 通知" });
+    const trigger = await screen.findByRole("button", { name: "通知款項 ▾" });
     trigger.focus();
     await user.keyboard("{Enter}");
     const first = await screen.findByRole("menuitem", { name: "當前對話框" });
@@ -364,6 +364,7 @@ describe("Notifying the Group of the Payment plan", () => {
     await openSettle({ name: "室友", others: [{ name: "宜庭" }] });
 
     expect(await screen.findByText("大家都結清了！")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "通知款項 ▾" })).toBeNull();
     expect(screen.queryByRole("button", { name: "LINE 通知" })).toBeNull();
     expect(screen.queryByRole("button", { name: "通知款項" })).toBeNull();
     expect(screen.queryByRole("button", { name: "傳到對話框" })).toBeNull();
@@ -374,7 +375,7 @@ describe("Notifying the Group of the Payment plan", () => {
       insideLine: { idToken: null },
     });
 
-    await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
+    await user.click(await screen.findByRole("button", { name: "通知款項 ▾" }));
     await user.click(await screen.findByRole("menuitem", { name: "通知好友" }));
 
     expect(await screen.findByText("已分享到 LINE ✓")).toBeVisible();
@@ -395,7 +396,7 @@ describe("Notifying the Group of the Payment plan", () => {
       lineChat: true,
     });
 
-    await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
+    await user.click(await screen.findByRole("button", { name: "通知款項 ▾" }));
     await user.click(await screen.findByRole("menuitem", { name: "當前對話框" }));
 
     expect(await screen.findByText("已發送到對話框 ✓")).toBeVisible();

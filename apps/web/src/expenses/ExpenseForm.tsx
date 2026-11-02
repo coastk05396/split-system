@@ -655,54 +655,56 @@ function PayersSection({
   };
 
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="sr-only">{t("expense.payers")}</legend>
+    <fieldset className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <legend className="text-sm font-bold text-ink">{t("expense.payers")}</legend>
+        <button
+          type="button"
+          aria-pressed={payers.mode === "several"}
+          className="press-pill flex cursor-pointer items-center gap-1.5 rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold text-sprout-600 hover:bg-sprout-200"
+          onClick={() => {
+            setOpen(false);
+            update({
+              payers:
+                payers.mode === "single"
+                  ? { mode: "several", amounts: {} }
+                  : { mode: "single", memberId: myMemberId },
+            });
+          }}
+        >
+          <Users aria-hidden="true" className="size-3.5" />
+          {t(payers.mode === "single" ? "expense.severalPayers" : "expense.onePayer")}
+        </button>
+      </div>
       {payers.mode === "single" ? (
         <>
-          <div className={`${card} flex min-h-[44px] items-center justify-between gap-2 py-1.5 pl-4 pr-3`}>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-ink">{t("expense.payers")}</span>
-              <button
-                type="button"
-                aria-pressed={false}
-                className="press-pill flex items-center gap-1.5 rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold text-sprout-600 hover:bg-sprout-200 cursor-pointer"
-                onClick={() => {
-                  setOpen(false);
-                  update({
-                    payers: { mode: "several", amounts: {} },
-                  });
-                }}
-              >
-                <Users aria-hidden="true" className="size-3.5" />
-                {t("expense.severalPayers")}
-              </button>
-            </div>
-            <button
-              type="button"
-              aria-expanded={open}
-              aria-label={`${t("expense.payers")} ${currentPayer?.displayName ?? ""}`}
-              onClick={() => {
-                setOpen((prev) => !prev);
-              }}
-              className="flex cursor-pointer items-center gap-2 py-1 text-sm text-sprout-600 outline-none"
-            >
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={`${t("expense.payers")} ${currentPayer?.displayName ?? ""}`}
+            onClick={() => {
+              setOpen((prev) => !prev);
+            }}
+            className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500`}
+          >
+            <div className="flex min-w-0 items-center gap-3">
               <Avatar
                 name={currentPayer?.displayName ?? "?"}
                 pictureUrl={currentPayer?.pictureUrl ?? null}
                 placeholder={currentPayer?.placeholder ?? false}
-                className="size-7 text-xs"
+                className="size-8 text-sm"
               />
-              <span className="max-w-[120px] truncate font-bold text-sprout-900">
+              <span className="truncate font-bold text-ink">
                 {currentPayer?.displayName}
               </span>
-              <ChevronDown
-                aria-hidden="true"
-                className={`size-4 text-sprout-600 transition-transform motion-reduce:transition-none ${
-                  open ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-          </div>
+            </div>
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-5 text-sprout-600 transition-transform motion-reduce:transition-none ${
+                open ? "rotate-180" : ""
+              }`}
+            />
+          </button>
           {rendered && (
             <div className="collapse-grid" data-closing={closing ? "true" : undefined}>
               <div className="collapse-grid-inner">
@@ -762,27 +764,6 @@ function PayersSection({
         </>
       ) : (
         <>
-          <div className={`${card} flex min-h-[44px] items-center justify-between gap-2 py-1.5 pl-4 pr-3`}>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-ink">{t("expense.payers")}</span>
-              <button
-                type="button"
-                aria-pressed={true}
-                className="press-pill flex items-center gap-1.5 rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold text-sprout-600 hover:bg-sprout-200 cursor-pointer"
-                onClick={() => {
-                  update({
-                    payers: { mode: "single", memberId: myMemberId },
-                  });
-                }}
-              >
-                <Users aria-hidden="true" className="size-3.5" />
-                {t("expense.onePayer")}
-              </button>
-            </div>
-            <span className="text-sm font-bold text-sprout-600">
-              {t("expense.severalPayers")}
-            </span>
-          </div>
           <ul className="flex flex-col gap-2">
             {members.map((m) => (
               <li key={m.id} className={`${card} flex items-center gap-3 px-4 py-2`}>
