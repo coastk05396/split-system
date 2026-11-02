@@ -467,7 +467,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               ? null
               : JSON.stringify(
                   active
-                    .slice(0, 4)
+                    .slice(0, 6)
                     .map((m) => ({ userId: m.user_id, placeholderName: m.placeholder_name })),
                 ),
             g.deleted ? null : g.created_at,
@@ -893,7 +893,9 @@ export class GroupLedger extends DurableObject<Bindings> {
           } else {
             const leaving = op.action === "leave" ? actor : target;
             if (leaving === undefined) return { error: "NOT_FOUND" };
-            if (leaving.id !== actor?.id && actor?.role !== "admin") return { error: "FORBIDDEN" };
+            if (actor === undefined) return { error: "FORBIDDEN" };
+            if (leaving.id !== actor.id && actor.role !== "admin" && leaving.status !== "placeholder")
+              return { error: "FORBIDDEN" };
             if (leaving.status === "former") return { error: "MEMBER_NOT_ACTIVE" };
             const balance = leaving.net_balance;
             if (balance !== 0)

@@ -36,7 +36,12 @@ export function BalanceChart({
   const largest = Math.max(...open.map((r) => Math.abs(r.balance)));
 
   return (
-    <section aria-labelledby="balance-chart" className="surface-card settle-stagger-1 flex flex-col rounded-3xl border border-sprout-200 bg-white p-5">
+    <section
+      aria-labelledby="balance-chart"
+      className={`surface-card settle-stagger-1 flex flex-col rounded-3xl border border-sprout-200 bg-white transition-[padding] duration-200 ${
+        isOpen ? "p-5" : "py-2.5 px-4"
+      }`}
+    >
       <button
         type="button"
         id="balance-chart"
@@ -55,14 +60,21 @@ export function BalanceChart({
         <h2 className="text-lg font-bold text-ink">
           {t("settle.chartTitle")}
         </h2>
-        <span className="press-icon flex size-8 shrink-0 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-100">
-          <ChevronDown
-            aria-hidden="true"
-            className={`size-5 transition-transform duration-220 ease-(--ease-spring) ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </span>
+        <div className="flex items-center gap-2">
+          {settled > 0 && (
+            <span className="text-xs text-ink-muted">
+              {t("settle.chartSettled", { count: settled })}
+            </span>
+          )}
+          <span className="press-icon flex size-8 shrink-0 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-100">
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-5 transition-transform duration-220 ease-(--ease-spring) ${
+                isOpen ? "rotate-180" : ""
+              }`}
+            />
+          </span>
+        </div>
       </button>
 
       <div
@@ -126,9 +138,6 @@ export function BalanceChart({
               );
             })}
           </ul>
-          {settled > 0 && (
-            <p className="mt-3 text-sm text-ink-muted">{t("settle.chartSettled", { count: settled })}</p>
-          )}
         </div>
       </div>
     </section>

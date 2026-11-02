@@ -3,7 +3,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
-import { ShareBar, ShareRing } from "./ShareRing.js";
+import { ShareBar } from "./ShareRing.js";
 import { evaluateSplit, type SplitDraft, type SplitStatus } from "./split-draft.js";
 
 export interface SplitMember {
@@ -136,43 +136,66 @@ export function SplitEditor({
           </label>
         ))}
       </div>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-ink">{t("split.participants")}</span>
+        {toggleAll}
+      </div>
       {equal ? (
-        // The pill hugs the title on the left, so the count changing width never moves it.
-        <div className={`${card} flex items-center gap-2 py-1.5 pl-4`}>
-          <span className="font-bold">{t("split.participants")}</span>
-          {toggleAll}
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label={t("split.participants")}
-            onClick={() => {
-              setOpen(!open);
-            }}
-            className="flex flex-1 items-center justify-end gap-2 py-1.5 pr-4 text-sm text-sprout-600"
-          >
-            <ShareRing shares={shares} />
-            <span key={included.size} className="swap-in">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={t("split.participants")}
+          onClick={() => {
+            setOpen(!open);
+          }}
+          className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
+        >
+          <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
+            {members
+              .filter((m) => included.has(m.id))
+              .slice(0, 5)
+              .map((m) => (
+                <Avatar
+                  key={m.id}
+                  name={m.displayName}
+                  pictureUrl={m.pictureUrl ?? null}
+                  placeholder={m.placeholder ?? false}
+                  className="size-8 shrink-0 text-xs ring-2 ring-white"
+                />
+              ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span key={included.size} className="swap-in text-sm font-bold text-sprout-600">
               {everyoneIn
                 ? t("split.allPeople", { count: members.length })
                 : t("split.checked", { count: included.size, total: members.length })}
             </span>
             <ChevronDown
               aria-hidden="true"
-              className={`size-4 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+              className={`size-5 text-sprout-600 transition-transform motion-reduce:transition-none ${
+                open ? "rotate-180" : ""
+              }`}
             />
-          </button>
-        </div>
+          </div>
+        </button>
       ) : (
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <span className="font-bold">{t("split.participants")}</span>
-            {toggleAll}
-          </span>
-          <span className="flex items-center gap-3 text-sm">
-            <ShareRing shares={shares} />
-            <span className="text-sprout-600">
-              {t("split.checked", { count: included.size, total: members.length })}
-            </span>
+        <div className={`${card} flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3`}>
+          <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
+            {members
+              .filter((m) => included.has(m.id))
+              .slice(0, 5)
+              .map((m) => (
+                <Avatar
+                  key={m.id}
+                  name={m.displayName}
+                  pictureUrl={m.pictureUrl ?? null}
+                  placeholder={m.placeholder ?? false}
+                  className="size-8 shrink-0 text-xs ring-2 ring-white"
+                />
+              ))}
+          </div>
+          <span className="text-sm font-bold text-sprout-600">
+            {t("split.checked", { count: included.size, total: members.length })}
           </span>
         </div>
       )}
@@ -181,14 +204,17 @@ export function SplitEditor({
         <div className="collapse-grid" data-closing={closing ? "true" : undefined}>
           <div className="collapse-grid-inner">
             <ul className="flex flex-col gap-2 pt-1 pb-0.5">
-              {members.map((m) => {
+              {members.map((m, index) => {
                 const takesPart = included.has(m.id);
                 const amount = amounts.get(m.id);
                 return (
                   <li
                     key={m.id}
                     aria-label={m.displayName}
-                    className={`${card} flex items-center gap-3 px-4 py-3`}
+                    style={{ animationDelay: `${index * 25}ms` }}
+                    className={`${card} list-stagger-item flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
+                      !takesPart ? "opacity-40 grayscale" : ""
+                    }`}
                   >
                     <Avatar
                       name={m.displayName}

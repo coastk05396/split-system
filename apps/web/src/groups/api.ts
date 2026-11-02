@@ -244,10 +244,27 @@ export function usePatchMember(id: string) {
 export function useRemoveMember(id: string) {
   const api = useApi();
   const refresh = useRefreshGroup(id);
+  const optimistic = useOptimisticMembers(id, (members, memberId: string): MembersEdit => {
+    const beforeIndex = members.findIndex((m) => m.id === memberId);
+    const before = members[beforeIndex];
+    return {
+      members: members.filter((m) => m.id !== memberId),
+      undo: (current) => {
+        if (!before) return current;
+        const copy = [...current];
+        copy.splice(Math.min(beforeIndex, copy.length), 0, before);
+        return copy;
+      },
+    };
+  });
   return useMutation({
     mutationFn: (memberId: string) =>
       send(api.groups[":id"].members[":mid"].$delete({ param: { id, mid: memberId } })),
-    onSuccess: refresh,
+    ...optimistic,
+    onSuccess: (data, variables, context) => {
+      optimistic.onSuccess(data, variables, context);
+      void refresh();
+    },
   });
 }
 

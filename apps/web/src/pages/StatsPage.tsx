@@ -1,4 +1,4 @@
-import { type CurrencyCode, formatAmount } from "@split/shared";
+import { CURRENCIES, type CurrencyCode, formatAmount } from "@split/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Link } from "react-router";
@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthProvider.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
 import { read } from "../groups/api.js";
 import { card, LoadError, Loading } from "../groups/ui.js";
-import { categoryLabel } from "../expenses/categories.js";
+import { categoryInfo, categoryLabel } from "../expenses/categories.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
@@ -22,6 +22,34 @@ type Detail = {
   amount: number;
 };
 const COLOURS = ["#2e9d71", "#f4a261", "#5b8def", "#d57491", "#8ab17d", "#a68bd4", "#e2ad42"];
+
+function formatBubbleAmount(minor: number, currency: CurrencyCode): string {
+  if (minor === 0) return formatAmount(0, currency);
+  const { decimals, symbol } = CURRENCIES[currency];
+  const major = minor / 10 ** decimals;
+
+  if (currency === "TWD" || currency === "JPY") {
+    if (major >= 10000) {
+      const w = major / 10000;
+      return `${w >= 100 ? Math.round(w) : Number(w.toFixed(1))}萬`;
+    }
+    return formatAmount(minor, currency);
+  }
+  if (major >= 1000000) {
+    return `${symbol} ${Number((major / 1000000).toFixed(1))}M`;
+  }
+  if (major >= 1000) {
+    return `${symbol} ${Number((major / 1000).toFixed(1))}k`;
+  }
+  return formatAmount(minor, currency);
+}
+
+function formatPercent(amount: number, total: number): string {
+  if (total === 0) return "—";
+  const pct = (amount / total) * 100;
+  if (pct > 0 && pct < 1) return "<1%";
+  return `${String(Math.round(pct))}%`;
+}
 
 function recentMonths(now: Date): string[] {
   return Array.from({ length: 6 }, (_, i) => {
@@ -160,7 +188,6 @@ export function StatsPage() {
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">{t("stats.title")}</h1>
-          <p className="mt-1 text-sm text-ink-muted">{t("stats.subtitle")}</p>
         </div>
       </header>
       {query.isError ? (
@@ -182,7 +209,7 @@ export function StatsPage() {
         </section>
       ) : (
         <>
-          <section className="surface-card rounded-3xl border border-orange-100 bg-peach p-6 text-ink">
+          <section className="surface-card rounded-3xl border border-sprout-200/80 bg-gradient-to-br from-sprout-100 to-sprout-50 p-6 text-ink shadow-2xs">
             <p className="text-sm text-ink-muted">
               {monthLabel(selectedMonth)} · {t("stats.total")}
             </p>
@@ -200,7 +227,6 @@ export function StatsPage() {
                 )}
               </span>
             </p>
-            <p className="mt-3 text-xs text-ink-muted">{t("stats.scope")}</p>
           </section>
           <section className={`${card} p-5`} aria-labelledby="stats-months">
             <h2 id="stats-months" className="text-lg font-bold">
@@ -227,11 +253,25 @@ export function StatsPage() {
                     }}
                     className="press-pill group flex min-w-0 flex-col items-center gap-2 rounded-xl px-0.5 py-2 focus-visible:outline-2 focus-visible:outline-sprout-600"
                   >
-                    <span className="flex h-28 w-full items-end justify-center rounded-xl bg-sprout-50">
+                    <span className="relative flex h-32 w-full items-end justify-center rounded-2xl bg-sprout-50/80 pb-1">
+                      {selected && (
+                        <span
+                          className="bubble-spring pointer-events-none absolute z-10 flex items-center justify-center rounded-full bg-sprout-700 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-xs whitespace-nowrap"
+                          style={{
+                            bottom: `${String(max === 0 ? 8 : Math.min(82, Math.max(14, (amount / max) * 100)))}%`,
+                          }}
+                        >
+                          {formatBubbleAmount(amount, preferred)}
+                          <span className="absolute -bottom-0.5 left-1/2 size-1.5 -translate-x-1/2 rotate-45 bg-sprout-700" />
+                        </span>
+                      )}
                       <span
-                        className={`${interacted ? "" : "stats-bar-enter"} w-5 max-w-full rounded-t-lg ${selected ? "bg-sprout-500" : "bg-sprout-200"}`}
+                        className={`w-6 max-w-full rounded-t-xl transition-all duration-300 ease-(--ease-spring) ${
+                          interacted ? "" : "stats-bar-enter"
+                        } ${selected ? "bg-sprout-500 shadow-2xs" : "bg-sprout-200 group-hover:bg-sprout-300"}`}
                         style={{
                           height: `${String(max === 0 ? 0 : (amount / max) * 100)}%`,
+                          minHeight: amount > 0 ? "8px" : "0px",
                           animationDelay: `${String(i * 50)}ms`,
                         }}
                       />
@@ -308,17 +348,40 @@ export function StatsPage() {
                           strokeWidth="16"
                           strokeDasharray={`${String(segment.length)} ${String(100 - segment.length)}`}
                           strokeDashoffset={-segment.start}
+                          className="transition-opacity duration-200"
+                          opacity={
+                            selectedCategory === null || selectedCategory === categories[i]?.[0]
+                              ? 1
+                              : 0.35
+                          }
                         />
                       ))}
                     </g>
                   </svg>
-                  <div className="relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center">
-                    <span className="text-xs text-ink-muted">
+                  <button
+                    type="button"
+                    disabled={selectedCategory === null}
+                    aria-label={selectedCategory !== null ? t("stats.total") : undefined}
+                    onClick={() => {
+                      if (selectedCategory !== null) setSelectedCategory(null);
+                    }}
+                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-all duration-300 focus-visible:outline-2 focus-visible:outline-sprout-600 ${
+                      selectedCategory !== null ? "cursor-pointer hover:bg-sprout-50/50" : ""
+                    }`}
+                  >
+                    {selectedCategory !== null && (
+                      <span aria-hidden="true" className="swap-in text-2xl leading-none">
+                        {categoryInfo(selectedCategory).emoji}
+                      </span>
+                    )}
+                    <span
+                      className={`text-xs text-ink-muted ${selectedCategory !== null ? "mt-0.5" : ""}`}
+                    >
                       {selectedCategory === null
                         ? t("stats.total")
                         : categoryLabel(selectedCategory)}
                     </span>
-                    <span className="max-w-24 break-all text-sm font-bold">
+                    <span className="max-w-24 break-all text-sm font-bold tabular-nums">
                       {interacted ? (
                         formatAmount(
                           selectedCategory === null
@@ -334,7 +397,7 @@ export function StatsPage() {
                         />
                       )}
                     </span>
-                  </div>
+                  </button>
                 </div>
                 <ul className="w-full flex-1 space-y-1">
                   {categories.map(([name, amount], i) => (
@@ -346,20 +409,27 @@ export function StatsPage() {
                           setSelectedCategory(selectedCategory === name ? null : name);
                           setInteracted(true);
                         }}
-                        className={`press-pill flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-2 focus-visible:outline-sprout-600 ${selectedCategory === name ? "bg-sprout-50" : ""}`}
+                        className={`press-pill group flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-sprout-600 ${
+                          selectedCategory === name ? "bg-sprout-100/70" : "hover:bg-sprout-50"
+                        }`}
                       >
                         <span
                           aria-hidden="true"
-                          className="size-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: COLOURS[i % COLOURS.length] }}
-                        />
+                          className="flex size-7 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform duration-200 group-hover:scale-105"
+                          style={{
+                            backgroundColor: `${COLOURS[i % COLOURS.length]}18`,
+                            border: `1.5px solid ${COLOURS[i % COLOURS.length]}`,
+                          }}
+                        >
+                          {categoryInfo(name).emoji}
+                        </span>
                         <span className="min-w-0 flex-1 truncate font-bold">
                           {categoryLabel(name)}
                         </span>
-                        <span className="text-xs text-ink-muted">
-                          {total === 0 ? "—" : `${String(Math.round((amount / total) * 100))}%`}
+                        <span className="text-xs font-bold text-ink-muted">
+                          {formatPercent(amount, total)}
                         </span>
-                        <span className="text-sm tabular-nums">
+                        <span className="text-sm font-bold tabular-nums">
                           {formatAmount(amount, preferred)}
                         </span>
                       </button>

@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
+import { hapticTick } from "./haptics.js";
 import {
   CuteGroupsIcon,
   CuteHomeIcon,
@@ -41,10 +42,11 @@ function BottomBar() {
             <NavLink
               to={to}
               end={to === "/"}
+              onPointerDown={to === "/new" ? () => hapticTick(15) : undefined}
               className={({ isActive }) =>
-                `press-pill relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
-                  isActive ? "font-bold text-sprout-700" : "text-ink-muted"
-                }`
+                `group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
+                  to === "/new" ? "" : "press-pill"
+                } ${isActive ? "font-bold text-sprout-700" : "text-ink-muted"}`
               }
             >
               {({ isActive }) => (
@@ -57,7 +59,7 @@ function BottomBar() {
                   )}
                   {to === "/new" ? (
                     <span
-                      className={`press-icon relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
+                      className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-all duration-300 ease-(--ease-spring) active:scale-[0.85] active:-rotate-3 active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] group-active:scale-[0.85] group-active:-rotate-3 group-active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] motion-reduce:transition-none motion-reduce:transform-none ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
                     >
                       <Icon aria-hidden="true" className="size-6" />
                     </span>

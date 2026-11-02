@@ -37,7 +37,7 @@ export function ShareRing({ shares }: { shares: readonly number[] }) {
             strokeWidth="6"
             strokeDasharray={`${String(length)} ${String(CIRCUMFERENCE - length)}`}
             strokeDashoffset={-offset}
-            className="transition-[stroke-dasharray,stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none"
+            className="transition-[stroke-dasharray,stroke-dashoffset] duration-300 ease-(--ease-spring) motion-reduce:transition-none"
           />
         );
         offset += length;

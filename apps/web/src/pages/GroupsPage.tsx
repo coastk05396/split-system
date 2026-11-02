@@ -3,7 +3,6 @@ import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
-import { balanceLine } from "../groups/totals.js";
 import { GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { PressableLink } from "../shell/PressableLink.js";
@@ -26,8 +25,12 @@ export function GroupsPage() {
         <h1 className="text-2xl font-bold md:text-3xl">{t("groups.heading")}</h1>
       </header>
       <ul aria-label={t("groups.heading")} className="grid gap-2.5 md:grid-cols-2 md:gap-4">
-        {groups.data.map((g) => (
-          <li key={g.id}>
+        {groups.data.map((g, index) => (
+          <li
+            key={g.id}
+            className="list-stagger-item"
+            style={{ animationDelay: `${index * 40}ms` }}
+          >
             <GroupRow group={g} />
           </li>
         ))}
@@ -44,42 +47,34 @@ export function GroupsPage() {
 }
 
 function GroupRow({ group }: { group: Group }) {
-  const balance = group.me.balance;
   return (
     <PressableLink
       to={`/groups/${group.id}`}
-      className="surface-card group flex items-center gap-3.5 rounded-2xl border border-sprout-200/80 bg-white px-4 py-3 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
-      <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base md:size-12 md:text-lg" />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-base font-bold">{group.name}</span>
-          <span className="shrink-0 rounded-full bg-sprout-150 px-2 py-0.5 text-xs text-sprout-600">
-            {t(group.isTrip ? "usage.trip" : "usage.tab")}
+      <div className="flex min-w-0 items-center gap-3.5">
+        <GroupAvatar
+          name={group.name}
+          groupId={group.id}
+          className="size-11 shrink-0 text-base transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-95 group-active:-rotate-2 md:size-12 md:text-lg motion-reduce:transform-none"
+        />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-base font-bold text-ink">{group.name}</span>
+            {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
+          </div>
+          <span className="text-xs text-ink-muted">
+            {t("groups.memberCount", { count: group.memberCount })}
           </span>
-          {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
-        </span>
-        <span className="text-xs text-ink-muted">
-          {t("groups.people", { count: group.memberCount })}
-          {" · "}
-          <span
-            className={
-              balance < 0
-                ? "font-bold text-red-700"
-                : balance > 0
-                  ? "font-bold text-emerald-600"
-                  : ""
-            }
-          >
-            {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
-          </span>
-        </span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2.5">
         <AvatarStack members={group.memberPreview} total={group.memberCount} />
-      </span>
-      <ChevronRight
-        aria-hidden="true"
-        className="size-5 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
-      />
+        <ChevronRight
+          aria-hidden="true"
+          className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+        />
+      </div>
     </PressableLink>
   );
 }

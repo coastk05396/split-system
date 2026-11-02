@@ -1,6 +1,7 @@
-import type { Expense, Group } from "@split/shared";
+import type { Expense, Group, Invite } from "@split/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeps } from "../app/AppProviders.js";
-import { useEnsureInvite } from "../groups/api.js";
+import { groupKeys, useEnsureInvite } from "../groups/api.js";
 import type { ShareContent } from "../groups/ShareButtons.js";
 import { t } from "../i18n/messages.js";
 import {
@@ -20,6 +21,7 @@ export interface SavedShare {
 /** Prepare one Expense for sharing; a missing Invite never prevents sharing with existing Members. */
 export function useExpenseSharing(groupId: string) {
   const invite = useEnsureInvite(groupId);
+  const client = useQueryClient();
   const { line } = useDeps();
   async function prepare(
     expense: Expense,
@@ -27,7 +29,8 @@ export function useExpenseSharing(groupId: string) {
     nameOf: (memberId: string) => string,
     sendToChat: boolean,
   ): Promise<SavedShare> {
-    const link = await invite.mutateAsync().catch(() => null);
+    const cached = client.getQueryData<Invite>(groupKeys.invite(groupId));
+    const link = cached ?? (await invite.mutateAsync().catch(() => null));
     const card = buildExpenseCard(expense, group, nameOf, link?.token ?? null);
     let chat: ChatSendResult = "none";
     if (sendToChat) {

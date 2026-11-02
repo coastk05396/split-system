@@ -196,7 +196,7 @@ export function groupRoutes(deps: AppDeps) {
       const me = state.seated.find((member) => member.user_id === c.var.userId);
       if (!me) throw new ApiError("NOT_FOUND");
       const preview = await Promise.all(
-        state.seated.slice(0, 4).map(async (member) => {
+        state.seated.slice(0, 6).map(async (member) => {
           const user =
             member.user_id === null
               ? null

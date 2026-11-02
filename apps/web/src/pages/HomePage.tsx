@@ -6,8 +6,9 @@ import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
-import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js";
+import { convertedTotal, pendingTotals } from "../groups/totals.js";
 import { GroupAvatar, LoadError, MaintenanceTag } from "../groups/ui.js";
+import { AvatarStack } from "../groups/AvatarStack.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
@@ -28,9 +29,10 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-5 md:gap-8">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="text-balance text-2xl font-bold leading-snug md:text-3xl">
-          {t("home.greeting", { name })}
+      <header className="flex items-center justify-center text-center">
+        <h1 className="flex flex-wrap items-center justify-center gap-2 text-center text-balance text-2xl font-bold leading-snug md:text-3xl">
+          <span>{t("home.greeting", { name })}</span>
+          <SproutMascot className="size-9 -translate-y-0.5" mood="wave" interactive={true} />
         </h1>
       </header>
 
@@ -111,7 +113,7 @@ function BalanceCard(props: {
   return (
     <section
       aria-labelledby="home-balance"
-      className={`hero-balance-card rounded-3xl p-6 text-white ${isUpdating ? "halo-pulse" : ""}`}
+      className={`hero-balance-card rounded-3xl p-5 text-white ${isUpdating ? "halo-pulse" : ""}`}
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="home-balance" className="text-sm text-white/85">
@@ -174,23 +176,21 @@ function QuickStartSection({ hasGroups }: { hasGroups: boolean }) {
       <h2 id="quick-start" className="text-xl font-bold">
         {t("home.quickStart")}
       </h2>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <StartCard
           // With Groups already, 快速分帳 means 記在哪個群組, with 建立新群組 on that list.
           to={hasGroups ? "/new?pick=1" : "/groups/new?usage=tab"}
-          icon={<CuteQuickReceiptIcon aria-hidden="true" className="size-8.5" />}
+          icon={<CuteQuickReceiptIcon aria-hidden="true" className="size-7" />}
           iconClass="bg-peach"
           title={t("home.tab.title")}
           body={t("home.tab.body")}
-          hint={t("home.tab.hint")}
         />
         <StartCard
           to="/groups/new?usage=trip"
-          icon={<CuteTripPlaneIcon aria-hidden="true" className="size-8.5" />}
+          icon={<CuteTripPlaneIcon aria-hidden="true" className="size-7" />}
           iconClass="bg-sprout-100"
           title={t("home.trip.title")}
           body={t("home.trip.body")}
-          hint={t("home.trip.hint")}
           disabled={!TRIP_ENABLED}
         />
       </div>
@@ -222,9 +222,9 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
           </div>
         </div>
       ) : (
-        <ul className="surface-card overflow-hidden rounded-2xl border border-sprout-200 bg-white">
+        <ul className="flex flex-col gap-2.5">
           {pending.map((g) => (
-            <li key={g.id} className="border-b border-sprout-200 last:border-b-0">
+            <li key={g.id}>
               <HomeGroupRow group={g} />
             </li>
           ))}
@@ -249,37 +249,45 @@ function HomeGroupRow({ group }: { group: Group }) {
   return (
     <PressableLink
       to={`/groups/${group.id}?tab=settle`}
-      className="group flex items-center gap-3 px-4 py-3.5 text-ink transition-colors hover:bg-sprout-50 active:bg-sprout-100 focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
-      <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base" />
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-base font-bold">{group.name}</span>
-          <span className="shrink-0 rounded-full bg-sprout-150 px-2 py-0.5 text-xs text-sprout-600">
-            {t(group.isTrip ? "usage.trip" : "usage.tab")}
-          </span>
-          {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
-        </span>
-        <span className="text-xs text-ink-muted">
-          {t("groups.people", { count: group.memberCount })}
-          {" · "}
-          <span
-            className={
-              balance < 0
-                ? "font-bold text-red-700"
+      <div className="flex min-w-0 items-center gap-3.5">
+        <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-base font-bold text-ink">{group.name}</span>
+            {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
+          </div>
+          <div>
+            <span
+              className={
+                balance < 0
+                  ? "inline-flex items-center rounded-full border border-rose-200/60 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 tabular-nums"
+                  : balance > 0
+                    ? "inline-flex items-center rounded-full border border-sprout-200/60 bg-sprout-50 px-2 py-0.5 text-xs font-semibold text-sprout-700 tabular-nums"
+                    : "inline-flex items-center rounded-full bg-sprout-100/70 px-2 py-0.5 text-xs font-medium text-sprout-700"
+              }
+            >
+              {balance < 0
+                ? t("home.payAmount", {
+                    amount: formatAmount(Math.abs(balance), group.settlementCurrency),
+                  })
                 : balance > 0
-                  ? "font-bold text-emerald-600"
-                  : ""
-            }
-          >
-            {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
-          </span>
-        </span>
-      </span>
-      <ChevronRight
-        aria-hidden="true"
-        className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
-      />
+                  ? t("home.receiveAmount", {
+                      amount: formatAmount(Math.abs(balance), group.settlementCurrency),
+                    })
+                  : t("groups.settled")}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2.5">
+        <AvatarStack members={group.memberPreview} total={group.memberCount} />
+        <ChevronRight
+          aria-hidden="true"
+          className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
+        />
+      </div>
     </PressableLink>
   );
 }
@@ -290,26 +298,22 @@ function StartCard(props: {
   iconClass: string;
   title: string;
   body: string;
-  hint?: string;
   /** Under maintenance: shown with a red tag, not a link. */
   disabled?: boolean;
 }) {
   const content = (
     <>
       <span
-        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${props.iconClass} shadow-[inset_0_1.5px_0_0_rgb(255_255_255/0.85),0_4px_12px_-4px_rgba(20,63,42,0.14)] transition-transform duration-200 ease-(--ease-spring) group-hover:scale-108 group-hover:-rotate-2 group-active:scale-95`}
+        className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${props.iconClass} shadow-[inset_0_1.5px_0_0_rgb(255_255_255/0.9),0_3px_8px_-3px_rgba(20,63,42,0.12)] transition-transform duration-200 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95`}
       >
         {props.icon}
       </span>
       <span className="flex flex-col gap-1">
-        <span className="flex items-center gap-2">
-          <span className="text-lg font-bold">{props.title}</span>
+        <span className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-base font-bold text-ink">{props.title}</span>
           {props.disabled === true && <MaintenanceTag />}
         </span>
-        <span className="text-sm text-ink-muted">{props.body}</span>
-        {props.hint !== undefined && (
-          <span className="text-xs font-bold text-sprout-600">{props.hint}</span>
-        )}
+        <span className="text-xs text-ink-muted leading-relaxed line-clamp-2">{props.body}</span>
       </span>
     </>
   );
@@ -317,7 +321,7 @@ function StartCard(props: {
     return (
       <div
         aria-disabled="true"
-        className="flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 opacity-60"
+        className="flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 opacity-60 shadow-2xs text-left"
       >
         {content}
       </div>
@@ -326,13 +330,9 @@ function StartCard(props: {
   return (
     <PressableLink
       to={props.to}
-      className="surface-card group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-5 hover:border-sprout-400 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_12px_24px_-12px_rgba(20,63,42,0.15)] active:translate-y-0 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_8px_16px_-6px_rgba(20,63,42,0.12)] active:scale-[0.96] transition-all duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
     >
       {content}
-      <ChevronRight
-        aria-hidden="true"
-        className="size-5 shrink-0 text-sprout-600 transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
-      />
     </PressableLink>
   );
 }

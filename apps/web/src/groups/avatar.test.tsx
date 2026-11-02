@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Avatar, GroupAvatar, groupGlyph, groupPalette } from "./ui.js";
+import { AvatarStack } from "./AvatarStack.js";
+import { Avatar, GROUP_PALETTES, GroupAvatar, groupGlyph, groupPalette } from "./ui.js";
 
 describe("Avatar", () => {
   it("shows the LINE picture when there is one", () => {
@@ -57,5 +58,31 @@ describe("GroupAvatar", () => {
     const { container } = render(<GroupAvatar name="Test" groupId="g-3" interactive={true} />);
     const span = container.querySelector("span");
     expect(span?.className).toContain("ease-(--ease-spring)");
+  });
+
+  it("applies explicit paletteIndex when provided", () => {
+    const { container } = render(<GroupAvatar name="墾丁" paletteIndex={2} />);
+    const span = container.querySelector("span");
+    const target = GROUP_PALETTES[2];
+    expect(span?.className).toContain(target.bg);
+    expect(span?.className).toContain(target.text);
+  });
+});
+
+describe("AvatarStack", () => {
+  it("renders preview avatars and includes spring touch-spread classes", () => {
+    const members = [
+      { name: "小宇", pictureUrl: null },
+      { name: "宜庭", pictureUrl: null },
+      { name: "阿哲", pictureUrl: null },
+      { name: "Gulu", pictureUrl: null },
+      { name: "阿強", pictureUrl: null },
+      { name: "小花", pictureUrl: null },
+    ];
+    const { container } = render(<AvatarStack members={members} total={8} />);
+    const stack = container.querySelector("span");
+    expect(stack?.className).toContain("group-active:space-x-1");
+    expect(stack?.className).toContain("ease-(--ease-spring)");
+    expect(screen.getByText("+2")).toBeInTheDocument();
   });
 });

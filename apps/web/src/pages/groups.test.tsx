@@ -7,7 +7,7 @@ import { renderApp } from "../../test/render-app.js";
 const me = makeUser("小宇");
 
 describe("group list", () => {
-  it("lists each Group with its usage, size and my Balance in its Settlement currency", async () => {
+  it("lists each Group with 'N 位' subtitle and right avatar stack, without mode badge or balance text", async () => {
     renderApp({
       path: "/groups",
       cookieUser: me,
@@ -25,11 +25,27 @@ describe("group list", () => {
 
     const list = await screen.findByRole("list", { name: "我的群組" });
     const items = within(list).getAllByRole("listitem");
-    expect(items.map((li) => li.textContent)).toEqual([
-      expect.stringMatching(/紐約.*快速分帳.*1 人.*你要付 US\$ 12\.50/),
-      expect.stringMatching(/小屋生活費.*快速分帳.*3 人.*已結清/),
-      expect.stringMatching(/週末台南小旅行.*旅行行程.*4 人.*你可收 NT\$ 293/),
-    ]);
+    expect(items[0]).toHaveTextContent("紐約");
+    expect(items[0]).toHaveTextContent("1 位");
+    expect(items[0]).not.toHaveTextContent("快速分帳");
+
+    expect(items[1]).toHaveTextContent("小屋生活費");
+    expect(items[1]).toHaveTextContent("3 位");
+    expect(items[1]).not.toHaveTextContent("快速分帳");
+
+    expect(items[2]).toHaveTextContent("週末台南小旅行");
+    expect(items[2]).toHaveTextContent("4 位");
+
+    // Verify balance gray text is completely removed from all items
+    for (const item of items) {
+      expect(within(item).queryByText(/已結清/)).toBeNull();
+      expect(within(item).queryByText(/你要付/)).toBeNull();
+      expect(within(item).queryByText(/你可收/)).toBeNull();
+      expect(within(item).queryByText(/\d+\s*人\s*·/)).toBeNull();
+      // Ensure AvatarStack is rendered
+      expect(item.querySelector(".mt-1.flex.items-center")).not.toBeNull();
+    }
+
     expect(within(list).getByRole("link", { name: /紐約/ })).toHaveAttribute(
       "href",
       expect.stringMatching(/^\/groups\/g-\d+$/),

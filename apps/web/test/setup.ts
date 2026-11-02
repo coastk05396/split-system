@@ -23,6 +23,9 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// jsdom has no scrollIntoView; focus handlers that scroll a field into view call it.
+Element.prototype.scrollIntoView = vi.fn();
+
 // Node's own experimental `localStorage` global hides jsdom's and throws or is undefined here:
 // give the tests an in-memory one, emptied after each test like the DOM.
 const memoryStorage = (() => {

@@ -4,8 +4,8 @@ import type { LineMessage } from "../platform/line.js";
 
 /**
  * The LINE Flex card for an invitation, dressed like the Expense card: a peach strip on top, a
- * sprout bubble beside the app name, the Group to join with a mint chip, and one green button
- * that opens the invitation.
+ * mint invite tag, the Group to join with a friendly line, and one green button that opens the
+ * invitation.
  */
 export function inviteFlexMessage({
   groupName,
@@ -40,36 +40,14 @@ export function inviteFlexMessage({
           {
             type: "box",
             layout: "horizontal",
-            spacing: "md",
-            alignItems: "center",
             contents: [
-              {
-                type: "box",
-                layout: "vertical",
-                width: "44px",
-                height: "44px",
-                cornerRadius: "14px",
-                backgroundColor: COLOR.mint,
-                justifyContent: "center",
-                alignItems: "center",
-                flex: 0,
-                contents: [{ type: "text", text: "🌱", size: "xl", align: "center" }],
-              },
-              {
-                type: "text",
-                text: t("invite.card.app"),
-                size: "sm",
-                weight: "bold",
-                color: COLOR.muted,
-                flex: 1,
-              },
               {
                 type: "box",
                 layout: "vertical",
                 cornerRadius: "20px",
                 backgroundColor: COLOR.mint,
-                paddingTop: "6px",
-                paddingBottom: "6px",
+                paddingTop: "5px",
+                paddingBottom: "5px",
                 paddingStart: "12px",
                 paddingEnd: "12px",
                 flex: 0,
@@ -77,7 +55,7 @@ export function inviteFlexMessage({
                   {
                     type: "text",
                     text: t("invite.card.badge"),
-                    size: "xxs",
+                    size: "xs",
                     weight: "bold",
                     color: COLOR.sprout,
                   },
@@ -108,7 +86,7 @@ export function inviteFlexMessage({
             cornerRadius: "18px",
             backgroundColor: COLOR.sprout,
             paddingAll: "14px",
-            action: { type: "uri", label: t("invite.card.join"), uri: url },
+            action: { type: "uri", label: `${t("invite.card.join")} ↗`, uri: url },
             contents: [
               {
                 type: "text",

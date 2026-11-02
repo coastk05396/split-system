@@ -1,11 +1,13 @@
 import { type CurrencyCode, type Expense, formatAmount, type Member } from "@split/shared";
 import { useLocation } from "react-router";
+import { useAuth } from "../auth/AuthProvider.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { useMembers } from "../groups/api.js";
 import { card, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { longDate } from "../i18n/format.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 import { useExpenses } from "./api.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 
@@ -40,26 +42,59 @@ export const dateHeading = longDate;
 export function ExpenseList({
   groupId,
   settlementCurrency,
+  myMemberId,
 }: {
   groupId: string;
   settlementCurrency: CurrencyCode;
+  myMemberId?: string;
 }) {
+  const auth = useAuth();
   const expenses = useExpenses(groupId);
   // Coming back from saving one: that row drops in and glows once.
   const freshId = (useLocation().state as { newExpenseId?: string } | null)?.newExpenseId;
   const members = useMembers(groupId);
   const nameOf = memberNames(members.data);
+
+  const currentUserId = auth.state.status === "signedIn" ? auth.state.user.id : null;
+  const resolvedMyMemberId =
+    myMemberId ??
+    (currentUserId !== null
+      ? members.data?.find((m) => m.userId === currentUserId)?.id
+      : undefined);
+
   if (expenses.isError) {
     return <LoadError error={expenses.error} onRetry={() => void expenses.refetch()} />;
   }
   if (expenses.isPending) return <Loading />;
   const rows = expenses.data.pages.flatMap((p) => p.expenses);
+
+  const totalSettlement = rows.reduce((sum, e) => sum + e.settlementAmount, 0);
+  const myShare = resolvedMyMemberId
+    ? rows.reduce((sum, e) => {
+        const split = e.splits.find((s) => s.memberId === resolvedMyMemberId);
+        return sum + (split?.settlementAmount ?? 0);
+      }, 0)
+    : 0;
+
   return (
     <section aria-label={t("expense.list")} className="flex flex-col gap-4">
       {rows.length === 0 ? (
-        <p className="py-4 text-center text-ink-muted">{t("expense.empty")}</p>
+        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+          <span className="sprout-greet inline-flex">
+            <SproutMascot className="size-20" mood="happy" interactive={true} />
+          </span>
+          <p className="text-sm font-medium text-ink-muted">{t("expense.empty")}</p>
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-center pt-0.5 pb-1">
+            <span className="inline-flex items-center rounded-full border border-sprout-200/70 bg-sprout-100/90 px-3.5 py-1 text-xs font-medium text-sprout-800 shadow-2xs">
+              {t("expense.overviewCapsule", {
+                total: formatAmount(totalSettlement, settlementCurrency),
+                share: formatAmount(myShare, settlementCurrency),
+              })}
+            </span>
+          </div>
           {groupByDate(rows).map((day) => (
             <section
               key={day.date}
@@ -70,16 +105,24 @@ export function ExpenseList({
                 {dateHeading(day.date)}
               </h3>
               <ul className="flex flex-col gap-2">
-                {day.items.map((e) => (
-                  <li key={e.id} className={e.id === freshId ? "row-arrive" : undefined}>
-                    <ExpenseRow
-                      groupId={groupId}
-                      expense={e}
-                      nameOf={nameOf}
-                      settlementCurrency={settlementCurrency}
-                    />
-                  </li>
-                ))}
+                {day.items.map((e, itemIndex) => {
+                  const globalIndex = rows.findIndex((r) => r.id === e.id);
+                  const delay = (globalIndex >= 0 ? globalIndex : itemIndex) * 35;
+                  return (
+                    <li
+                      key={e.id}
+                      className={`list-stagger-item ${e.id === freshId ? "row-arrive" : ""}`}
+                      style={{ animationDelay: `${delay}ms` }}
+                    >
+                      <ExpenseRow
+                        groupId={groupId}
+                        expense={e}
+                        nameOf={nameOf}
+                        settlementCurrency={settlementCurrency}
+                      />
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ))}
@@ -122,10 +165,10 @@ function ExpenseRow({
   return (
     <PressableLink
       to={`/groups/${groupId}/expenses/${expense.id}`}
-      className={`${card} flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500 active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
+      className={`${card} group flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500 active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span
-        className={`flex size-11 shrink-0 items-center justify-center rounded-full shadow-[inset_0_1px_0_0_rgb(255_255_255/0.6)] ${categoryTone(expense.category).badge}`}
+        className={`flex size-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1.5px_1px_0_rgba(255,255,255,0.9),0_2px_6px_-1px_rgba(20,63,42,0.08)] transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-[1.08] motion-reduce:transform-none ${categoryTone(expense.category).badge}`}
       >
         <CategoryIcon category={expense.category} />
       </span>

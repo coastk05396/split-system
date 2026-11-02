@@ -22,6 +22,7 @@ import {
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
+import { hapticTick } from "../shell/haptics.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
@@ -175,7 +176,7 @@ export function ExpenseForm({
         </div>
       </Tabs.Content>
       <Tabs.Content value="spend" className="tab-panel">
-        <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
+        <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
           <AmountSection
             draft={draft}
             evaluation={evaluation}
@@ -213,13 +214,13 @@ export function ExpenseForm({
               </>
             }
           />
-          <fieldset className="flex flex-col gap-2">
-            <legend className={`${label} mb-2`}>{t("expense.category")}</legend>
-            <div className="flex flex-wrap gap-2">
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className={`${label} mb-1`}>{t("expense.category")}</legend>
+            <div className="flex flex-wrap gap-2 pb-1 pt-0.5">
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className={`press-pill flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 hover:border-sprout-500 has-[:checked]:font-bold ${categoryTone(category).chip}`}
+                  className={`press-pill flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-sprout-200 bg-white px-2.5 py-1 text-xs hover:border-sprout-500 has-[:checked]:font-bold active:scale-95 transition-transform duration-200 ease-(--ease-spring) sm:px-3 sm:py-1.5 sm:text-sm ${categoryTone(category).chip}`}
                 >
                   <input
                     type="radio"
@@ -227,15 +228,16 @@ export function ExpenseForm({
                     className="sr-only"
                     checked={draft.category === category}
                     onChange={() => {
+                      hapticTick(10);
                       update({ category });
                     }}
                   />
                   <span
-                    className={`flex size-5 items-center justify-center rounded-full ${
+                    className={`flex size-4 items-center justify-center rounded-full ${
                       draft.category === category ? "category-bloom" : ""
                     } ${categoryTone(category).badge}`}
                   >
-                    <CategoryIcon category={category} className="size-3.5" />
+                    <CategoryIcon category={category} className="size-2.5" />
                   </span>
                   {categoryLabel(category)}
                 </label>
@@ -593,64 +595,6 @@ function StopPicker({
   );
 }
 
-/** One payer, chosen from a menu in the same style as the currency picker. */
-function PayerPicker({
-  members,
-  value,
-  onChange,
-}: {
-  members: readonly SplitMember[];
-  value: string;
-  onChange: (memberId: string) => void;
-}) {
-  const current = members.find((m) => m.id === value);
-  return (
-    <Menu.Root>
-      <Menu.Trigger
-        aria-label={`${t("expense.payers")} ${current?.displayName ?? ""}`}
-        className={`${card} flex w-full items-center gap-3 px-4 py-3 text-left data-[state=open]:border-sprout-500`}
-      >
-        <Avatar
-          name={current?.displayName ?? "?"}
-          pictureUrl={current?.pictureUrl ?? null}
-          placeholder={current?.placeholder ?? false}
-          className="size-9"
-        />
-        <span className="min-w-0 flex-1 truncate text-lg font-bold">{current?.displayName}</span>
-        <ChevronDown aria-hidden="true" className="size-5 text-ink-muted" />
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Content
-          align="start"
-          sideOffset={6}
-          className="menu-content z-20 max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto rounded-2xl border border-sprout-200/90 p-1"
-        >
-          <Menu.RadioGroup value={value} onValueChange={onChange}>
-            {members.map((m) => (
-              <Menu.RadioItem
-                key={m.id}
-                value={m.id}
-                className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 outline-none data-[highlighted]:bg-sprout-100 data-[state=checked]:font-bold"
-              >
-                <Avatar
-                  name={m.displayName}
-                  pictureUrl={m.pictureUrl ?? null}
-                  placeholder={m.placeholder ?? false}
-                  className="size-8 text-sm"
-                />
-                <span className="min-w-0 flex-1 truncate">{m.displayName}</span>
-                <Menu.ItemIndicator>
-                  <Check aria-hidden="true" className="size-5 text-sprout-600" />
-                </Menu.ItemIndicator>
-              </Menu.RadioItem>
-            ))}
-          </Menu.RadioGroup>
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu.Root>
-  );
-}
-
 function PayersSection({
   members,
   myMemberId,
@@ -666,37 +610,164 @@ function PayersSection({
 }) {
   const { payers } = draft;
   const status = evaluation.payers;
+  const [open, setOpen] = useState(false);
+  const [rendered, setRendered] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setRendered(true);
+      setClosing(false);
+      const scrollTimer = setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+      }, 50);
+      return () => {
+        clearTimeout(scrollTimer);
+      };
+    } else if (rendered) {
+      setClosing(true);
+      const timer = setTimeout(() => {
+        setRendered(false);
+        setClosing(false);
+      }, 220);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [open, rendered]);
+
+  const currentPayer =
+    payers.mode === "single"
+      ? (members.find((m) => m.id === payers.memberId) ?? members[0])
+      : null;
+
+  const handleSelectPayer = (memberId: string) => {
+    setSelectedId(memberId);
+    update({ payers: { mode: "single", memberId } });
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setOpen(false);
+      setSelectedId(null);
+    }, 140);
+  };
+
   return (
-    <fieldset className="flex flex-col gap-3">
-      <legend className="mb-3 w-full">
-        <span className="flex items-center justify-between gap-3">
-          <span className="text-lg font-bold">{t("expense.payers")}</span>
+    <fieldset className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <legend className="text-sm font-bold text-ink">{t("expense.payers")}</legend>
+        <button
+          type="button"
+          aria-pressed={payers.mode === "several"}
+          className="press-pill flex cursor-pointer items-center gap-1.5 rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold text-sprout-600 hover:bg-sprout-200"
+          onClick={() => {
+            setOpen(false);
+            update({
+              payers:
+                payers.mode === "single"
+                  ? { mode: "several", amounts: {} }
+                  : { mode: "single", memberId: myMemberId },
+            });
+          }}
+        >
+          <Users aria-hidden="true" className="size-3.5" />
+          {t(payers.mode === "single" ? "expense.severalPayers" : "expense.onePayer")}
+        </button>
+      </div>
+      {payers.mode === "single" ? (
+        <>
           <button
             type="button"
-            aria-pressed={payers.mode === "several"}
-            className="flex items-center gap-2 shrink-0 rounded-full border border-sprout-200 px-3 py-1 text-sm font-bold"
+            aria-expanded={open}
+            aria-label={`${t("expense.payers")} ${currentPayer?.displayName ?? ""}`}
             onClick={() => {
-              update({
-                payers:
-                  payers.mode === "single"
-                    ? { mode: "several", amounts: {} }
-                    : { mode: "single", memberId: myMemberId },
-              });
+              setOpen((prev) => !prev);
             }}
+            className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
           >
-            <Users aria-hidden="true" className="size-4" />
-            {t(payers.mode === "single" ? "expense.severalPayers" : "expense.onePayer")}
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar
+                name={currentPayer?.displayName ?? "?"}
+                pictureUrl={currentPayer?.pictureUrl ?? null}
+                placeholder={currentPayer?.placeholder ?? false}
+                className="size-8 text-sm"
+              />
+              <span className="truncate font-bold text-ink">
+                {currentPayer?.displayName}
+              </span>
+            </div>
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-5 text-sprout-600 transition-transform motion-reduce:transition-none ${
+                open ? "rotate-180" : ""
+              }`}
+            />
           </button>
-        </span>
-      </legend>
-      {payers.mode === "single" ? (
-        <PayerPicker
-          members={members}
-          value={payers.memberId}
-          onChange={(memberId) => {
-            update({ payers: { mode: "single", memberId } });
-          }}
-        />
+          {rendered && (
+            <div className="collapse-grid" data-closing={closing ? "true" : undefined}>
+              <div className="collapse-grid-inner">
+                <ul
+                  role="menu"
+                  aria-label={t("expense.payers")}
+                  className="flex flex-col gap-2 pt-1 pb-1"
+                >
+                  {members.map((m, index) => {
+                    const isSelected = (selectedId ?? payers.memberId) === m.id;
+                    return (
+                      <li
+                        key={m.id}
+                        className="list-stagger-item"
+                        style={{ animationDelay: `${index * 25}ms` }}
+                      >
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isSelected}
+                          onClick={() => {
+                            handleSelectPayer(m.id);
+                          }}
+                          className={`${card} flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left outline-none transition-colors hover:bg-sprout-50 focus:bg-sprout-50 ${
+                            isSelected ? "border-sprout-500 bg-sprout-50/60 font-bold" : ""
+                          }`}
+                        >
+                          <div
+                            className={`transition-transform duration-140 ease-(--ease-spring) ${
+                              isSelected ? "scale-[1.06]" : ""
+                            }`}
+                          >
+                            <Avatar
+                              name={m.displayName}
+                              pictureUrl={m.pictureUrl ?? null}
+                              placeholder={m.placeholder ?? false}
+                              className="size-8 text-sm"
+                            />
+                          </div>
+                          <span className="min-w-0 flex-1 truncate text-ink">{m.displayName}</span>
+                          {isSelected && (
+                            <Check aria-hidden="true" className="settle-pop size-5 text-sprout-600" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div
+                  ref={bottomRef}
+                  className="h-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <>
           <ul className="flex flex-col gap-2">

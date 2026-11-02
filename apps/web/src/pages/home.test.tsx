@@ -85,7 +85,9 @@ describe("home", () => {
 
     const row = await screen.findByRole("link", { name: /台南小旅行/ });
     expect(row).toHaveAttribute("href", `/groups/${groupId}?tab=settle`);
-    expect(row).toHaveTextContent("你可收 NT$ 393");
+    expect(row).toHaveTextContent("你收 NT$ 393");
+    expect(row).not.toHaveTextContent("快速分帳");
+    expect(row).not.toHaveTextContent(/人/);
     expect(screen.queryByText("室友")).toBeNull();
   });
 
@@ -101,7 +103,8 @@ describe("home", () => {
       },
     });
 
-    expect(await screen.findByRole("link", { name: /戊/ })).toHaveTextContent("你要付 NT$ 50");
+    const row = await screen.findByRole("link", { name: /戊/ });
+    expect(row).toHaveTextContent("你付 NT$ 50");
     expect(screen.getByRole("link", { name: /還有 2 個群組待結算/ })).toHaveAttribute(
       "href",
       "/groups",
@@ -134,7 +137,9 @@ describe("home", () => {
     const tag = screen.getByText("保養中");
     expect(tag).toBeVisible();
     expect(screen.getByText("旅行行程")).toBeVisible();
-    expect(screen.getByText("適合：聚餐分帳、室友合租、日常活動")).toBeVisible();
+    expect(screen.queryByText(/適合：/)).toBeNull();
+    expect(screen.getByText("吃飯、搭車，立刻記一筆")).toBeVisible();
+    expect(screen.getByText("為旅程記行程與開銷")).toBeVisible();
     // The quick-split card comes first, the Trip card under it.
     expect(quick.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -142,6 +147,24 @@ describe("home", () => {
     expect(screen.queryByRole("link", { name: "查看群組" })).toBeNull();
     expect(screen.queryByRole("link", { name: /新增分帳或旅程/ })).toBeNull();
   });
+
+  it("renders greeting without punctuation alongside the waving Sprout mascot, and p-5 balance card", async () => {
+    renderApp({ cookieUser: me });
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("嗨 小宇");
+    expect(heading).not.toHaveTextContent("，");
+    expect(heading).not.toHaveTextContent("！");
+
+    const mascot = heading.querySelector("svg");
+    expect(mascot).toBeInTheDocument();
+    expect(heading).toHaveClass("justify-center");
+    expect(heading.closest("header")).toHaveClass("justify-center");
+
+    const card = screen.getByRole("region", { name: "目前淨收付" });
+    expect(card).toHaveClass("p-5");
+    expect(card).not.toHaveClass("p-6");
+  });
+
 
   it("shows the total in the Preferred currency, with a tag that opens settings", async () => {
     renderApp({
@@ -195,5 +218,72 @@ describe("home", () => {
     // Groups exist, so 快速分帳 goes to the Group picker, not to creating another Group.
     expect(quick).toHaveAttribute("href", "/new?pick=1");
     expect(pending.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders quick start in a 50/50 bento grid with squircle icons", async () => {
+    renderApp({ cookieUser: me });
+
+    const quickSection = await screen.findByRole("region", { name: "快速開始" });
+    const bentoGrid = quickSection.querySelector(".grid");
+    expect(bentoGrid).toHaveClass("grid-cols-2", "gap-3");
+
+    const quickLink = screen.getByRole("link", { name: /快速分帳/ });
+    const iconContainer = quickLink.querySelector(".size-12.rounded-2xl.bg-peach");
+    expect(iconContainer).not.toBeNull();
+  });
+
+  it("renders pending groups with delicate micro-capsules ('你付/你收') and right avatar stack", async () => {
+    const friend = makeUser("阿明");
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, {
+          name: "台南小旅行",
+          settlementCurrency: "TWD",
+          myBalance: 393,
+          others: [{ name: friend.displayName }],
+        });
+        groups.add(me, {
+          name: "日常合租",
+          settlementCurrency: "TWD",
+          myBalance: -250,
+          others: [{ name: friend.displayName }],
+        });
+      },
+    });
+
+    const pendingSection = await screen.findByRole("region", { name: "待結算的群組" });
+
+    // 1. Left side micro-capsule: bg-sprout-50 for receivable, bg-rose-50 for payable
+    const tainanRow = within(pendingSection).getByRole("link", { name: /台南小旅行/ });
+    const tainanAmount = within(tainanRow).getByText("你收 NT$ 393");
+    expect(tainanAmount).toHaveClass(
+      "bg-sprout-50",
+      "text-sprout-700",
+      "border-sprout-200/60",
+      "rounded-full",
+      "text-xs",
+      "font-semibold",
+    );
+    expect(tainanRow).not.toHaveTextContent("快速分帳");
+
+    const hezuRow = within(pendingSection).getByRole("link", { name: /日常合租/ });
+    const hezuAmount = within(hezuRow).getByText("你付 NT$ 250");
+    expect(hezuAmount).toHaveClass(
+      "bg-rose-50",
+      "text-rose-700",
+      "border-rose-200/60",
+      "rounded-full",
+      "text-xs",
+      "font-semibold",
+    );
+    expect(hezuRow).not.toHaveTextContent("快速分帳");
+
+    // 2. AvatarStack preview present on right side
+    const rows = pendingSection.querySelectorAll("li");
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      expect(row.querySelector(".mt-1.flex.items-center")).not.toBeNull();
+    }
   });
 });

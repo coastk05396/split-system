@@ -1,7 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type CurrencyCode, formatAmount, parseAmount } from "@split/shared";
 import { ArrowRight, HandCoins } from "lucide-react";
-import { type SubmitEvent, useState } from "react";
+import { type SubmitEvent, useEffect, useState } from "react";
+import { useDeps } from "../app/AppProviders.js";
 import { minorToText } from "../expenses/money.js";
 import { card, failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
@@ -31,18 +32,26 @@ export function ConfirmSettlementDialog({
   target: ConfirmTarget;
   currency: CurrencyCode;
   /** Sends the confirmed amount; resolves once saved, rejects with the API failure. */
-  submit: (amount: number) => Promise<unknown>;
+  submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
 }) {
+  const { line } = useDeps();
+  const [chatAvailable, setChatAvailable] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void line.canSendToChat().then((available) => {
+      if (current) setChatAvailable(available);
+    });
+    return () => {
+      current = false;
+    };
+  }, [line]);
+
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const triggerClass =
     tone === "behalf"
       ? "press-pill self-end rounded-full border border-dashed border-ink-muted/45 bg-sprout-50/60 px-3 py-1 text-xs font-bold text-ink-muted hover:border-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-muted"
-      : `press-pill w-full rounded-full px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 ${
-          tone === "pay"
-            ? "bg-red-700 hover:bg-red-800 focus-visible:outline-red-700"
-            : "bg-sprout-500 hover:bg-sprout-600 focus-visible:outline-sprout-600"
-        }`;
+      : "press-pill w-full rounded-full bg-sprout-600 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600";
   return (
     <Dialog.Root
       open={open}
@@ -54,11 +63,12 @@ export function ConfirmSettlementDialog({
       <Dialog.Trigger className={triggerClass}>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
           <ConfirmForm
             key={formKey}
             target={target}
             currency={currency}
+            chatAvailable={chatAvailable}
             submit={submit}
             onDone={() => {
               setOpen(false);
@@ -73,15 +83,18 @@ export function ConfirmSettlementDialog({
 function ConfirmForm({
   target,
   currency,
+  chatAvailable,
   submit,
   onDone,
 }: {
   target: ConfirmTarget;
   currency: CurrencyCode;
-  submit: (amount: number) => Promise<unknown>;
+  chatAvailable: boolean;
+  submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
   onDone: () => void;
 }) {
   const [text, setText] = useState(minorToText(target.suggested, currency));
+  const [notifyChat, setNotifyChat] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const parsed = parseAmount(text.trim(), currency);
@@ -93,7 +106,8 @@ function ConfirmForm({
     if (!valid || busy) return;
     setBusy(true);
     setFailure(null);
-    submit(amount).then(onDone, (error: unknown) => {
+    onDone();
+    submit(amount, { notifyChat: chatAvailable && notifyChat }).catch((error: unknown) => {
       setFailure(error);
       setBusy(false);
     });
@@ -101,15 +115,19 @@ function ConfirmForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      <span className="dialog-icon-enter mx-auto flex size-20 items-center justify-center rounded-full bg-peach text-sprout-600 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]">
-        <HandCoins aria-hidden="true" className="size-9" />
-      </span>
-      <Dialog.Title className="text-center text-xl font-bold">
-        {t("settle.confirm.title")}
-      </Dialog.Title>
-      <Dialog.Description className="text-center text-sm text-ink-muted">
-        {t("settle.confirm.body")}
-      </Dialog.Description>
+      <div className="flex items-center gap-3">
+        <span className="dialog-icon-enter flex size-10 shrink-0 items-center justify-center rounded-full bg-peach text-sprout-600 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]">
+          <HandCoins aria-hidden="true" className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <Dialog.Title className="text-lg font-bold text-ink">
+            {t("settle.confirm.title")}
+          </Dialog.Title>
+          <Dialog.Description className="text-xs text-ink-muted">
+            {t("settle.confirm.body")}
+          </Dialog.Description>
+        </div>
+      </div>
       <div className={`${card} grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-4`}>
         <span className="flex flex-col">
           <span className="text-xs text-ink-muted">{t("settle.payer")}</span>
@@ -129,6 +147,9 @@ function ConfirmForm({
           id="confirm-settlement-amount"
           inputMode="decimal"
           value={text}
+          onFocus={(e) => {
+            e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+          }}
           onChange={(e) => {
             setText(e.target.value);
           }}
@@ -139,17 +160,32 @@ function ConfirmForm({
           {t("settle.confirm.max", { amount: formatAmount(target.max, currency) })}
         </span>
       </div>
+      {chatAvailable && (
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl bg-sprout-100/70 px-3.5 py-2.5 text-xs font-bold text-sprout-800">
+          <input
+            type="checkbox"
+            checked={notifyChat}
+            onChange={(e) => {
+              setNotifyChat(e.target.checked);
+            }}
+            className="size-4 rounded accent-sprout-600"
+          />
+          <span>{t("settle.confirm.notifyChat")}</span>
+        </label>
+      )}
       {failure !== null && (
         <p role="alert" className="text-red-700">
           {failureMessage(failure)}
         </p>
       )}
-      <button type="submit" disabled={!valid || busy} className={`${primaryButton} py-3`}>
-        {busy ? t("settle.confirm.submitting") : t("settle.confirm.submit")}
-      </button>
-      <Dialog.Close type="button" className={`${secondaryButton} py-3`}>
-        {t("settle.confirm.wait")}
-      </Dialog.Close>
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <Dialog.Close type="button" className={`${secondaryButton} py-3`}>
+          {t("settle.confirm.wait")}
+        </Dialog.Close>
+        <button type="submit" disabled={!valid || busy} className={`${primaryButton} py-3`}>
+          {busy ? t("settle.confirm.submitting") : t("settle.confirm.submit")}
+        </button>
+      </div>
     </form>
   );
 }

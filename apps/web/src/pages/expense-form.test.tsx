@@ -293,4 +293,21 @@ describe("add Expense form", () => {
     await user.click(submit());
     await screen.findByRole("heading", { level: 1, name: "室友" });
   });
+
+  it("renders compact category pills with smaller icons and two-row friendly sizing", async () => {
+    openForm();
+    const group = await screen.findByRole("group", { name: "類別" });
+    const pills = within(group).getAllByRole("radio");
+    expect(pills).toHaveLength(7);
+
+    // Verify compact styling on category pills and smaller icons
+    const foodLabel = screen.getByText("餐飲").closest("label");
+    expect(foodLabel).toHaveClass("px-2.5", "py-1", "text-xs");
+
+    const foodIconContainer = foodLabel?.querySelector("span");
+    expect(foodIconContainer).toHaveClass("size-4");
+
+    const foodIcon = foodIconContainer?.querySelector("svg");
+    expect(foodIcon).toHaveClass("size-2.5");
+  });
 });

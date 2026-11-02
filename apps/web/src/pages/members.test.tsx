@@ -107,15 +107,17 @@ describe("members", () => {
     await waitFor(async () => expect((await rows())[1]).toHaveTextContent("小明（未加入）"));
   });
 
-  it("lets a plain Member rename a Placeholder without allowing removal", async () => {
+  it("lets a plain Member rename and remove a Placeholder", async () => {
     const user = userEvent.setup();
     membersOf({ name: "台南", role: "member", others: [{ name: "成員1", status: "placeholder" }] });
     await user.click(await screen.findByRole("button", { name: "修改 成員1 的名稱" }));
     await user.clear(screen.getByLabelText("成員名稱"));
     await user.type(screen.getByLabelText("成員名稱"), "小明");
     await user.click(screen.getByRole("button", { name: "儲存" }));
-    await waitFor(async () => expect((await rows())[1]).toHaveTextContent("小明（未加入）"));
-    expect(screen.queryByRole("button", { name: "移除 小明" })).toBeNull();
+    await waitFor(async () => {
+      expect((await rows())[1]).toHaveTextContent("小明（未加入）");
+    });
+    expect(screen.getByRole("button", { name: "移除 小明" })).toBeVisible();
   });
 
   it("gives a plain Member no controls on others", async () => {

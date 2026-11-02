@@ -500,14 +500,14 @@
     opacity: 0;
     transform: translateY(-14px);
     background-color: var(--color-sprout-100);
-    box-shadow: 0 0 0 2px rgba(46, 157, 113, 0.4), 0 0 16px -2px rgba(46, 157, 113, 0.35);
+    box-shadow: 0 0 0 2px rgba(46, 157, 113, 0.4), 0 0 24px -2px rgba(46, 157, 113, 0.35);
   }
-  40% {
-    box-shadow: 0 0 0 3px rgba(46, 157, 113, 0.5), 0 0 20px -2px rgba(46, 157, 113, 0.4);
+  30% {
+    box-shadow: 0 0 0 3px rgba(46, 157, 113, 0.5), 0 0 28px -2px rgba(46, 157, 113, 0.45);
     background-color: var(--color-sprout-100);
   }
-  70% {
-    box-shadow: 0 0 0 1px rgba(46, 157, 113, 0.2), 0 0 10px -4px rgba(46, 157, 113, 0.2);
+  60% {
+    box-shadow: 0 0 0 2px rgba(46, 157, 113, 0.3), 0 0 16px -4px rgba(46, 157, 113, 0.25);
     background-color: var(--color-sprout-100);
   }
   100% {
@@ -518,7 +518,7 @@
   }
 }
 .row-arrive {
-  animation: row-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: row-arrive 1200ms cubic-bezier(0.16, 1, 0.3, 1) both;
   border-radius: 1.5rem;
 }
 
@@ -905,6 +905,16 @@ body::before {
 }
 
 /* A member row shrinks away. */
+@keyframes expense-delete-slide {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
 @keyframes row-leave {
   from {
     opacity: 1;
@@ -912,11 +922,12 @@ body::before {
   }
   to {
     opacity: 0;
-    transform: scale(0.97) translateX(8px);
+    transform: translateX(-24px);
   }
 }
-.row-leave {
-  animation: row-leave 200ms var(--ease-out-expo) forwards;
+.row-leave,
+.expense-delete-slide {
+  animation: expense-delete-slide 180ms ease-out forwards;
   pointer-events: none;
 }
 .saved-toast {
@@ -1045,12 +1056,59 @@ body::before {
   animation: settle-cascade-in-2 240ms var(--ease-spring) 90ms both;
 }
 
+/* Staggered cascade entrance for list items (25ms offset per row) */
+@keyframes list-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.list-stagger-item {
+  animation: list-stagger-in 180ms var(--ease-spring) both;
+}
+
+/* Floating speech bubble spring pop-in for stats monthly bar */
+@keyframes bubble-spring {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bubble-spring {
+  animation: bubble-spring 260ms var(--ease-spring) both;
+}
+
+/* Hide scrollbar for seamless touch rails */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
     transition: opacity 120ms ease-out;
   }
   .settle-stagger-1,
   .settle-stagger-2,
+  .list-stagger-item,
+  .bubble-spring,
   .category-bloom,
   .copy-icon-pop,
   .dialog-icon-enter,
@@ -1058,7 +1116,8 @@ body::before {
   .transfer-arrow-pulse {
     animation: none;
   }
-  .row-leave {
+  .row-leave,
+  .expense-delete-slide {
     animation-name: none;
   }
   .saved-toast,

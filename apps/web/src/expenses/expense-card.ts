@@ -117,34 +117,13 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
         spacing: "lg",
         contents: [
           {
-            type: "box",
-            layout: "horizontal",
-            spacing: "md",
-            alignItems: "center",
-            contents: [
-              {
-                type: "box",
-                layout: "vertical",
-                width: "44px",
-                height: "44px",
-                cornerRadius: "14px",
-                backgroundColor: COLOR.peach,
-                justifyContent: "center",
-                alignItems: "center",
-                flex: 0,
-                contents: [{ type: "text", text: "🧾", size: "xl", align: "center" }],
-              },
-              {
-                type: "text",
-                text: card.groupName,
-                size: "sm",
-                weight: "bold",
-                color: COLOR.muted,
-                wrap: true,
-                maxLines: 2,
-                flex: 1,
-              },
-            ],
+            type: "text",
+            text: card.groupName,
+            size: "sm",
+            weight: "bold",
+            color: COLOR.muted,
+            wrap: true,
+            maxLines: 2,
           },
           {
             type: "text",
@@ -227,7 +206,7 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
             cornerRadius: "18px",
             backgroundColor: COLOR.sprout,
             paddingAll: "14px",
-            action: { type: "uri", label: t("expenseShare.view"), uri: card.lineUrl },
+            action: { type: "uri", label: `${t("expenseShare.view")} ↗`, uri: card.lineUrl },
             contents: [
               {
                 type: "text",

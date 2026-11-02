@@ -74,4 +74,53 @@ describe("personal spending stats", () => {
     expect(within(categories).getByText("—")).toBeVisible();
     expect(within(categories).queryByText(/NaN/)).toBeNull();
   });
+
+  it("displays floating bubble on selected bar, emoji badges, <1% label, and interactive donut center", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp({ path: "/stats", cookieUser: makeUser("小宇") });
+    api.spendingStats.push(
+      { month: month(0), category: "餐飲", currency: "TWD", amount: 450000 },
+      { month: month(0), category: "交通", currency: "TWD", amount: 200 },
+    );
+
+    const categories = await screen.findByRole("region", { name: "花在哪裡？" });
+    // Category list displays emoji badges
+    expect(within(categories).getByText("🍽️")).toBeVisible();
+    expect(within(categories).getByText("🚗")).toBeVisible();
+
+    // Tiny share shows <1% instead of 0%
+    expect(within(categories).getByText("<1%")).toBeVisible();
+
+    // Selected month has floating bubble (450,200 TWD -> 45萬)
+    const bars = screen.getByRole("group", { name: "最近六個月" });
+    const currentMonthBar = within(bars).getAllByRole("button")[5];
+    if (currentMonthBar === undefined) throw new Error("Missing current month");
+    expect(within(currentMonthBar).getByText("45萬")).toBeVisible();
+
+    // Donut center displays selected category emoji and amount when clicked
+    const foodButton = within(categories).getByRole("button", { name: /餐飲/ });
+    await user.click(foodButton);
+    expect(within(categories).getAllByText("🍽️")).toHaveLength(2); // In list and in donut center
+    expect(within(categories).getAllByText("NT$ 450,000")).toHaveLength(2);
+
+    // Clicking center resets back to total
+    const centerEmoji = within(categories).getAllByText("🍽️")[0];
+    if (centerEmoji === undefined) throw new Error("Missing center emoji");
+    await user.click(centerEmoji);
+    expect(within(categories).getAllByText("🍽️")).toHaveLength(1); // Only in list
+    expect(within(categories).getByText("我的分攤")).toBeVisible();
+  });
+
+  it("formats floating bubble amounts using major units for USD", async () => {
+    const { api } = renderApp({
+      path: "/stats",
+      cookieUser: { ...makeUser("小宇"), preferredCurrency: "USD" },
+    });
+    api.spendingStats.push({ month: month(0), category: "餐飲", currency: "USD", amount: 1000 }); // $10.00
+    const bars = await screen.findByRole("group", { name: "最近六個月" });
+    const currentMonthBar = within(bars).getAllByRole("button")[5];
+    if (currentMonthBar === undefined) throw new Error("Missing current month");
+    // $10 should display as US$ 10.00, not 1k
+    expect(within(currentMonthBar).getByText("US$ 10.00")).toBeVisible();
+  });
 });

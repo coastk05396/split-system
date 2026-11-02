@@ -140,4 +140,33 @@ describe("group detail", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("找不到這筆資料。");
   });
+
+  it("renders segmented pill slider tabs with haptic feedback and mint border", async () => {
+    const user = userEvent.setup();
+    let id = "";
+    const vibrateMock = vi.fn().mockReturnValue(true);
+    navigator.vibrate = vibrateMock;
+
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "室友" });
+      },
+      pathFor: () => `/groups/${id}`,
+    });
+
+    const tablist = await screen.findByRole("tablist", { name: "群組分頁" });
+    expect(tablist).toHaveClass("bg-sprout-100/70", "p-1", "rounded-2xl", "border", "border-sprout-200/60");
+
+    // Active tab pill should not have bottom underline bar class
+    const activeTab = within(tablist).getByRole("tab", { name: "帳目" });
+    const pill = activeTab.querySelector("span");
+    expect(pill).toHaveClass("rounded-xl", "bg-white", "shadow-2xs");
+    expect(pill?.className).not.toContain("after:bg-sprout-500");
+
+    // Clicking another tab triggers hapticTick(10)
+    const settleTab = within(tablist).getByRole("tab", { name: "結算" });
+    await user.click(settleTab);
+    expect(vibrateMock).toHaveBeenCalledWith(10);
+  });
 });
