@@ -215,11 +215,11 @@ export function ExpenseForm({
           />
           <fieldset className="flex flex-col gap-2">
             <legend className={`${label} mb-2`}>{t("expense.category")}</legend>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className={`press-pill flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-4 py-1.5 hover:border-sprout-500 has-[:checked]:font-bold ${categoryTone(category).chip}`}
+                  className={`press-pill flex cursor-pointer items-center gap-1 rounded-full border border-sprout-200 bg-white px-2.5 py-1 text-xs hover:border-sprout-500 has-[:checked]:font-bold sm:px-3 sm:py-1.5 sm:text-sm ${categoryTone(category).chip}`}
                 >
                   <input
                     type="radio"
@@ -231,11 +231,11 @@ export function ExpenseForm({
                     }}
                   />
                   <span
-                    className={`flex size-5 items-center justify-center rounded-full ${
+                    className={`flex size-4 items-center justify-center rounded-full ${
                       draft.category === category ? "category-bloom" : ""
                     } ${categoryTone(category).badge}`}
                   >
-                    <CategoryIcon category={category} className="size-3.5" />
+                    <CategoryIcon category={category} className="size-2.5" />
                   </span>
                   {categoryLabel(category)}
                 </label>
