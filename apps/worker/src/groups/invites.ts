@@ -41,8 +41,7 @@ async function ledgerInvite(
         action,
         now,
         actorMemberId,
-        token:
-          token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined),
+        token: token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined),
         expiresAt: now + INVITE_TTL_MS,
       }),
     },
@@ -121,12 +120,7 @@ async function ownRow(db: Db, groupId: string, userId: string): Promise<MemberRo
       netBalance: groupMemberSummary.netBalance,
     })
     .from(groupMemberSummary)
-    .where(
-      and(
-        eq(groupMemberSummary.groupId, groupId),
-        eq(groupMemberSummary.userId, userId),
-      ),
-    );
+    .where(and(eq(groupMemberSummary.groupId, groupId), eq(groupMemberSummary.userId, userId)));
   if (row === undefined) return undefined;
   return {
     id: row.memberId,
@@ -187,6 +181,12 @@ export async function previewInvite(
   };
 }
 
+/** Whether the ledger has the User seated in the Group: the truth after an unclear failure. */
+async function isSeated(db: Db, env: Bindings, groupId: string, userId: string): Promise<boolean> {
+  const everyone = await listMembers(db, groupId, null, env);
+  return everyone.some((m) => m.userId === userId && m.status !== "former");
+}
+
 /**
  * Joins at once as a plain Member. Someone already in the Group just opens it; a Former
  * Member's row comes back to life. The seat check runs inside the writing statement.
@@ -200,17 +200,24 @@ export async function joinGroup(
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
-  const result = await withReservation(env.DB, userId, group.id, now, async () => {
-    const mine = await ownRow(db, group.id, userId);
-    if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
-    return memberOperation(env, group.id, {
-      action: "join",
-      inviteToken: token,
-      userId,
-      targetMemberId: mine?.id ?? crypto.randomUUID(),
-      now,
-    });
-  });
+  const result = await withReservation(
+    env.DB,
+    userId,
+    group.id,
+    now,
+    async () => {
+      const mine = await ownRow(db, group.id, userId);
+      if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
+      return memberOperation(env, group.id, {
+        action: "join",
+        inviteToken: token,
+        userId,
+        targetMemberId: mine?.id ?? crypto.randomUUID(),
+        now,
+      });
+    },
+    () => isSeated(db, env, group.id, userId),
+  );
   setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
 }
@@ -227,14 +234,20 @@ export async function claimPlaceholder(
   const { group } = await openInvite(db, token, now, env);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
-  const result = await withReservation(env.DB, userId, group.id, now, () =>
-    memberOperation(env, group.id, {
-      action: "claim",
-      inviteToken: token,
-      userId,
-      targetMemberId: placeholderId,
-      now,
-    }),
+  const result = await withReservation(
+    env.DB,
+    userId,
+    group.id,
+    now,
+    () =>
+      memberOperation(env, group.id, {
+        action: "claim",
+        inviteToken: token,
+        userId,
+        targetMemberId: placeholderId,
+        now,
+      }),
+    () => isSeated(db, env, group.id, userId),
   );
   setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
