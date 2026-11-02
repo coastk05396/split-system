@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createDb } from "../src/db/client.js";
-import { expenses, groups, members } from "../src/db/schema.js";
+import { groupDirectory, groupMemberSummary } from "../src/db/schema.js";
 import { bearer, call, clock, signIn, uniqueSub, type Session } from "./auth-harness.js";
 import { failDirectoryWrites } from "./d1-faults.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
@@ -136,24 +136,21 @@ describe("POST /groups and GET /groups/:id", () => {
     const currentState = await current.json<{ rev: number }>();
     expect(currentState.rev).toBe(1);
   });
-  it("labels a Members read with the projection's own revision, never the ledger's newer one", async () => {
+  it("labels a Members read with the ledger revision the Members were read at", async () => {
     const yu = await person("小宇");
-    const group = await createGroup(yu, { name: "投影版本" });
+    const group = await createGroup(yu, { name: "成員版本" });
     expect((await send(yu, "POST", `/groups/${group.id}/members`, { name: "小明" })).status).toBe(
       201,
     );
-    // Simulate a projection that has not caught up with the ledger yet.
-    await env.DB.prepare("UPDATE group_directory SET rev = 0 WHERE group_id = ?")
-      .bind(group.id)
-      .run();
     const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
     const state = await (await stub.fetch("https://ledger.internal/state")).json<{ rev: number }>();
     expect(state.rev).toBeGreaterThan(0);
 
     const read = await send(yu, "GET", `/groups/${group.id}/members`);
     expect(read.status).toBe(200);
-    expect(read.headers.get("X-Group-Rev")).toBe("0");
+    expect(read.headers.get("X-Group-Rev")).toBe(String(state.rev));
   });
+
   it("creates a Running Tab with the creator as its only Member and Admin", async () => {
     const yu = await person("小宇");
     const group = await createGroup(yu, { name: "室友帳", settlementCurrency: "USD" });
@@ -424,8 +421,11 @@ describe("DELETE /groups/:id", () => {
     await createExpense(yu, group.id, twdExpense(group.me.memberId, [group.me.memberId], 600));
     const res = await send(yu, "DELETE", `/groups/${group.id}`);
     expect(res.status).toBe(204);
-    expect(await db.select().from(groups).where(eq(groups.id, group.id))).toEqual([]);
-    expect(await db.select().from(expenses).where(eq(expenses.groupId, group.id))).toEqual([]);
+    const dir = await db.select().from(groupDirectory).where(eq(groupDirectory.groupId, group.id));
+    expect(dir[0]?.deleted).toBe(1);
+    expect(
+      await db.select().from(groupMemberSummary).where(eq(groupMemberSummary.groupId, group.id)),
+    ).toEqual([]);
     expect((await send(yu, "GET", `/groups/${group.id}`)).status).toBe(404);
   });
 
@@ -492,9 +492,18 @@ describe("ledger authority for admin actions (stale D1 projection)", () => {
 
     // Force D1 to be stale: set yu's role back to admin in D1 members table
     await db
-      .update(members)
-      .set({ role: "admin", status: "active" })
-      .where(eq(members.id, group.me.memberId));
+      .insert(groupMemberSummary)
+      .values({
+        userId: admin.userId,
+        groupId: group.id,
+        memberId: group.me.memberId,
+        role: "admin",
+        rev: 0,
+      })
+      .onConflictDoUpdate({
+        target: [groupMemberSummary.userId, groupMemberSummary.groupId],
+        set: { role: "admin" },
+      });
 
     // yu attempts PATCH: D1 filter passes, but DO ledger rejects with 403
     const patchRes = await send(
@@ -526,9 +535,18 @@ describe("ledger authority for admin actions (stale D1 projection)", () => {
 
     // Force D1 to be stale again: set yu's status back to active admin in D1
     await db
-      .update(members)
-      .set({ role: "admin", status: "active" })
-      .where(eq(members.id, group.me.memberId));
+      .insert(groupMemberSummary)
+      .values({
+        userId: admin.userId,
+        groupId: group.id,
+        memberId: group.me.memberId,
+        role: "admin",
+        rev: 0,
+      })
+      .onConflictDoUpdate({
+        target: [groupMemberSummary.userId, groupMemberSummary.groupId],
+        set: { role: "admin" },
+      });
 
     const patchRes2 = await send(
       admin,

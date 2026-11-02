@@ -559,6 +559,7 @@ const zhErrors: Record<ErrorCode, string> = {
   RATE_LIMITED: "操作太頻繁了，請稍後再試。",
   INTERNAL: "小芽出了點狀況，請稍後再試。",
   MAINTENANCE: "小芽正在維護中，暫時無法儲存變更，請稍後再試。",
+  SERVICE_UNAVAILABLE: "服務暫時無法使用，請稍後再試。",
   RATE_UNAVAILABLE: "暫時查不到匯率，請自行輸入匯率。",
 };
 

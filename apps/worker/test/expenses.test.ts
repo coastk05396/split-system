@@ -1,9 +1,8 @@
 import type { Expense, ExpensePage } from "@split/shared";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
 import { createDb } from "../src/db/client.js";
-import { fxRates, members } from "../src/db/schema.js";
+import { fxRates, groupMemberSummary } from "../src/db/schema.js";
 import { clock } from "./auth-harness.js";
 import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { balances, createExpense, newKey, postExpense, twdExpense } from "./expenses-harness.js";
@@ -30,9 +29,15 @@ describe("Expenses and Balances", () => {
     });
     expect(removed.status).toBe(200);
     await createDb(env.DB)
-      .update(members)
-      .set({ status: "active" })
-      .where(eq(members.id, memberRow.id));
+      .insert(groupMemberSummary)
+      .values({
+        userId: member.userId,
+        groupId: group.id,
+        memberId: memberRow.id,
+        role: "member",
+        rev: 0,
+      })
+      .onConflictDoNothing();
     expect((await send(member, "GET", `/groups/${group.id}/expenses`)).status).toBe(403);
     expect((await send(member, "GET", `/groups/${group.id}/expenses/${expense.id}`)).status).toBe(
       403,

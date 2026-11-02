@@ -1,5 +1,4 @@
 import { expenseInputSchema } from "@split/shared";
-import { z } from "zod";
 import { and, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
@@ -13,7 +12,7 @@ import { fxRates } from "../db/schema.js";
 import { rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey, requireIfMatch } from "../request-guards.js";
 import { personalSpending } from "./personal-spending.js";
-import { groupBalances } from "./expenses.js";
+import { listMembers } from "../groups/members.js";
 
 /** Expenses and Balances (SPEC §5.1, decisions 15, 16, 23). Any active Member may write. */
 export function expenseRoutes(deps: AppDeps) {
@@ -195,22 +194,21 @@ export function expenseRoutes(deps: AppDeps) {
     .get("/groups/:id/balances", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      const result = await groupBalances(db, me);
-      const balances = z
-        .array(z.object({ id: z.string(), net_balance: z.number() }))
-        .parse(
-          await expenseLedgerOperation(c.env, me.groupId, {
-            action: "balances",
-            actorMemberId: me.id,
-          }),
-        );
-      const byId = new Map(balances.map((m) => [m.id, m.net_balance]));
+      const groupRes = await c.env.DB.prepare(
+        "SELECT settlement_currency FROM group_directory WHERE group_id = ?",
+      )
+        .bind(me.groupId)
+        .first<{ settlement_currency: "TWD" | "USD" | "JPY" | "THB" }>();
+      if (!groupRes) throw new ApiError("NOT_FOUND");
+      const list = await listMembers(db, me.groupId, me.id, c.env);
       return c.json(
         {
-          ...result,
-          balances: result.balances.map((m) => ({
-            ...m,
-            balance: byId.get(m.memberId) ?? m.balance,
+          settlementCurrency: groupRes.settlement_currency,
+          balances: list.map((m) => ({
+            memberId: m.id,
+            displayName: m.displayName,
+            status: m.status,
+            balance: m.balance,
           })),
         },
         200,

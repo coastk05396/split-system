@@ -536,5 +536,6 @@ export const enErrors: Record<ErrorCode, string> = {
   INTERNAL: "Something went wrong on our side. Please try again later.",
   MAINTENANCE:
     "Split is undergoing maintenance. Changes cannot be saved right now; please try again later.",
+  SERVICE_UNAVAILABLE: "Service is temporarily unavailable. Please try again later.",
   RATE_UNAVAILABLE: "The rate cannot be found right now. Please enter one yourself.",
 };
