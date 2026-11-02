@@ -19,8 +19,6 @@ export interface SettleCard {
   url: string;
   /** The same as a LIFF address, for what goes into LINE. */
   lineUrl: string;
-  /** Public HTTPS URL of the sprout hero banner image. */
-  heroUrl: string;
 }
 
 export function buildSettleCard(
@@ -57,7 +55,6 @@ export function buildSettleCard(
     lines,
     url,
     lineUrl: liffLink(url),
-    heroUrl: `${window.location.origin}/settle-hero.png`,
   };
 }
 

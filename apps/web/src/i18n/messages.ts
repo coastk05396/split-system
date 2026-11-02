@@ -224,7 +224,6 @@ const zhTW = {
   "invite.shareUnavailable": "無法開啟 LINE 選人畫面，請複製連結並貼給朋友。",
   "invite.shareMessage": "一起用小芽分帳記「{name}」的開銷吧！{url}",
   "invite.card.alt": "邀請你加入「{name}」一起分帳",
-  "invite.card.app": "小芽分帳",
   "invite.card.badge": "💌 收到一份分帳邀請",
   "invite.card.body": "聚餐出遊好幫手，輕鬆算清每一筆 ✨",
   "invite.card.join": "加入群組",

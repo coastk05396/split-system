@@ -94,6 +94,7 @@ describe("expense share card", () => {
       expect(json).toContain(text);
     }
     expect(json).toContain(`"uri":"${card.url}"`);
+    expect(json).toContain('"label":"查看明細 ↗"');
     expect(json).not.toContain('"text":"🧾"');
   });
 

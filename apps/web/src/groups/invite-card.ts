@@ -4,8 +4,8 @@ import type { LineMessage } from "../platform/line.js";
 
 /**
  * The LINE Flex card for an invitation, dressed like the Expense card: a peach strip on top, a
- * sprout bubble beside the app name, the Group to join with a mint chip, and one green button
- * that opens the invitation.
+ * mint invite tag, the Group to join with a friendly line, and one green button that opens the
+ * invitation.
  */
 export function inviteFlexMessage({
   groupName,

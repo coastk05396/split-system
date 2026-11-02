@@ -206,7 +206,7 @@ export function expenseFlexMessage(card: ExpenseCard): LineMessage {
             cornerRadius: "18px",
             backgroundColor: COLOR.sprout,
             paddingAll: "14px",
-            action: { type: "uri", label: t("expenseShare.view"), uri: card.lineUrl },
+            action: { type: "uri", label: `${t("expenseShare.view")} ↗`, uri: card.lineUrl },
             contents: [
               {
                 type: "text",

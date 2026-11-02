@@ -225,7 +225,6 @@ export const en: Record<MessageId, string> = {
     "Can't open LINE's recipient picker. Copy the link and send it to a friend instead.",
   "invite.shareMessage": "Let's log the spending of “{name}” in Sprout Split! {url}",
   "invite.card.alt": "You're invited to split costs in “{name}”",
-  "invite.card.app": "Sprout Split",
   "invite.card.badge": "💌 You received a split invite",
   "invite.card.body": "Perfect for dining and trips — split every bill with ease ✨",
   "invite.card.join": "Join group",
