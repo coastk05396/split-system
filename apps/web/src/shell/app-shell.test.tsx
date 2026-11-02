@@ -1,0 +1,48 @@
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppShell } from "./AppShell.js";
+
+describe("AppShell BottomBar", () => {
+  const originalVibrate = navigator.vibrate;
+
+  afterEach(() => {
+    if (originalVibrate !== undefined) {
+      navigator.vibrate = originalVibrate;
+    } else {
+      // @ts-expect-error - clean up mock
+      delete navigator.vibrate;
+    }
+  });
+
+  it("triggers 15ms haptic vibration and applies jelly spring with mint halo styling on the + Add button", () => {
+    const vibrateMock = vi.fn().mockReturnValue(true);
+    navigator.vibrate = vibrateMock;
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppShell>
+          <div>Content</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const bottomNav = screen.getByRole("navigation", { name: "底部導覽" });
+    const newLink = within(bottomNav).getByRole("link", { name: /新增/ });
+    expect(newLink).toHaveAttribute("href", "/new");
+
+    // Verify onPointerDown triggers haptic vibration
+    fireEvent.pointerDown(newLink);
+    expect(vibrateMock).toHaveBeenCalledWith(15);
+
+    // Verify jelly spring and mint halo classes on the button element
+    const floatingButton = newLink.querySelector("span");
+    expect(floatingButton).toHaveClass(
+      "active:scale-[0.85]",
+      "active:-rotate-3",
+      "active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)]",
+      "duration-300",
+      "ease-(--ease-spring)",
+    );
+  });
+});
