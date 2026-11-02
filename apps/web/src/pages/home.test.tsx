@@ -134,7 +134,9 @@ describe("home", () => {
     const tag = screen.getByText("保養中");
     expect(tag).toBeVisible();
     expect(screen.getByText("旅行行程")).toBeVisible();
-    expect(screen.getByText("適合：聚餐分帳、室友合租、日常活動")).toBeVisible();
+    expect(screen.queryByText(/適合：/)).toBeNull();
+    expect(screen.getByText("吃飯、搭車，立刻記一筆")).toBeVisible();
+    expect(screen.getByText("為旅程記行程與開銷")).toBeVisible();
     // The quick-split card comes first, the Trip card under it.
     expect(quick.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -195,5 +197,57 @@ describe("home", () => {
     // Groups exist, so 快速分帳 goes to the Group picker, not to creating another Group.
     expect(quick).toHaveAttribute("href", "/new?pick=1");
     expect(pending.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders quick start in a 50/50 bento grid with squircle icons", async () => {
+    renderApp({ cookieUser: me });
+
+    const quickSection = await screen.findByRole("region", { name: "快速開始" });
+    const bentoGrid = quickSection.querySelector(".grid");
+    expect(bentoGrid).toHaveClass("grid-cols-2", "gap-3");
+
+    const quickLink = screen.getByRole("link", { name: /快速分帳/ });
+    const iconContainer = quickLink.querySelector(".size-12.rounded-2xl.bg-peach");
+    expect(iconContainer).not.toBeNull();
+  });
+
+  it("renders pending groups as floating cards with two-tone debt pills and avatar preview", async () => {
+    const friend = makeUser("阿明");
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, {
+          name: "台南小旅行",
+          settlementCurrency: "TWD",
+          myBalance: 393,
+          others: [{ name: friend.displayName }],
+        });
+        groups.add(me, {
+          name: "日常合租",
+          settlementCurrency: "TWD",
+          myBalance: -250,
+          others: [{ name: friend.displayName }],
+        });
+      },
+    });
+
+    const pendingSection = await screen.findByRole("region", { name: "待結算的群組" });
+    const list = pendingSection.querySelector("ul");
+    expect(list).toHaveClass("flex", "flex-col", "gap-2.5");
+    expect(list).not.toHaveClass("overflow-hidden");
+
+    // Two-tone debt pills
+    const receivePill = within(pendingSection).getByText("你可收 NT$ 393");
+    expect(receivePill).toHaveClass("bg-sprout-600", "text-white", "rounded-full");
+
+    const payPill = within(pendingSection).getByText("你要付 NT$ 250");
+    expect(payPill).toHaveClass("bg-rose-500", "text-white", "rounded-full");
+
+    // AvatarStack preview
+    const rows = pendingSection.querySelectorAll("li");
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      expect(row.querySelector(".mt-1.flex.items-center")).not.toBeNull();
+    }
   });
 });
