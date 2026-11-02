@@ -139,7 +139,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh md:flex">
       <Sidebar />
-      <main className="min-w-0 flex-1 pb-24 md:pb-0">
+      <main className="min-w-0 flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="mx-auto w-full max-w-5xl px-5 pt-4 md:px-12 md:pt-12">{children}</div>
       </main>
       <BottomBar />

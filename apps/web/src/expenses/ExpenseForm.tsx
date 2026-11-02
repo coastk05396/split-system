@@ -797,7 +797,7 @@ function PayersSection({
                 </ul>
                 <div
                   ref={bottomRef}
-                  className="h-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+                  className="h-4 scroll-mb-[calc(6.5rem+env(safe-area-inset-bottom))]"
                   aria-hidden="true"
                 />
               </div>

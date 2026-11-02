@@ -15,7 +15,7 @@ describe("Expense category knowledge", () => {
     expect(categoryInfo("門票")).toMatchObject({ icon: "fun", emoji: "🎟️" });
     for (const name of ["自訂", "constructor", "__proto__"]) {
       expect(categoryLabel(name)).toBe(name);
-      expect(categoryInfo(name)).toMatchObject({ icon: "other", emoji: "✨" });
+      expect(categoryInfo(name)).toMatchObject({ icon: "other", emoji: "📦" });
     }
   });
 });

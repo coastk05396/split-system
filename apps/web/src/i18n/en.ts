@@ -408,8 +408,6 @@ export const en: Record<MessageId, string> = {
   "settle.status.undone": "Undone",
   "settle.status.cancelled": "Cancelled",
   "settle.confirm.title": "Has this been paid?",
-  "settle.confirm.body":
-    "Once you confirm this payment, everyone's balance updates and a settlement record is kept.",
   "settle.confirm.amount": "Settlement amount ({currency})",
   "settle.confirm.max": "Up to {amount}; what is not paid yet stays owed",
   "settle.confirm.submit": "Confirm settled",

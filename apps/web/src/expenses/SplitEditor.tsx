@@ -1,6 +1,6 @@
 import { type CurrencyCode, formatAmount, type SplitMethod } from "@split/shared";
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { ShareBar } from "./ShareRing.js";
@@ -81,11 +81,20 @@ export function SplitEditor({
   const isExpanded = !equal || open;
   const [rendered, setRendered] = useState(isExpanded);
   const [closing, setClosing] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isExpanded) {
       setRendered(true);
       setClosing(false);
+      if (!equal) return;
+      // Equal splits open a dropdown: bring its last row above the bottom bar.
+      const scrollTimer = setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+      }, 50);
+      return () => {
+        clearTimeout(scrollTimer);
+      };
     } else if (rendered) {
       setClosing(true);
       const timer = setTimeout(() => {
@@ -96,7 +105,7 @@ export function SplitEditor({
         clearTimeout(timer);
       };
     }
-  }, [isExpanded, rendered]);
+  }, [isExpanded, rendered, equal]);
   // One pill for both directions, so it never needs a second button: 清空 while everyone is in.
   const everyoneIn = included.size === members.length;
   const toggleAll = (
@@ -179,7 +188,9 @@ export function SplitEditor({
           </div>
         </button>
       ) : (
-        <div className={`${card} flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3`}>
+        <div
+          className={`${card} flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3`}
+        >
           <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
             {members
               .filter((m) => included.has(m.id))
@@ -268,6 +279,11 @@ export function SplitEditor({
                 );
               })}
             </ul>
+            <div
+              ref={bottomRef}
+              className="h-px scroll-mb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+              aria-hidden="true"
+            />
           </div>
         </div>
       )}

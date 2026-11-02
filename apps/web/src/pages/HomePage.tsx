@@ -216,7 +216,7 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
           </span>
           <div className="flex flex-col gap-0.5">
             <p className="font-bold text-sprout-800">{t("home.allSettled")}</p>
-            <span className="text-xs text-sprout-600">所有帳目已全部結清，輕鬆無負擔 ✨</span>
+            <span className="text-xs text-sprout-600">所有帳目已全部結清，輕鬆無負擔</span>
           </div>
         </div>
       ) : (
