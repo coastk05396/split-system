@@ -29,16 +29,16 @@ describe("settle share card", () => {
 
     expect(card.groupName).toBe("週末台南小旅行");
     expect(card.lines).toEqual([
-      { payer: "小宇", receiver: "Gulu", label: "小宇 欠了 Gulu", amount: "NT$ 430" },
-      { payer: "Yizhen", receiver: "ty", label: "Yizhen 欠了 ty", amount: "NT$ 194" },
-      { payer: "Gulu", receiver: "ty", label: "Gulu 欠了 ty", amount: "NT$ 99" },
+      { payer: "小宇", receiver: "Gulu", label: "小宇 ➔ Gulu", amount: "NT$ 430" },
+      { payer: "Yizhen", receiver: "ty", label: "Yizhen ➔ ty", amount: "NT$ 194" },
+      { payer: "Gulu", receiver: "ty", label: "Gulu ➔ ty", amount: "NT$ 99" },
     ]);
     expect(card.url).toBe(
       `${window.location.origin}/join/tok-1?next=${encodeURIComponent("/groups/g-1?tab=settle")}`,
     );
   });
 
-  it("builds a mega Flex card with the hero banner, group name, payment rows and settle button", () => {
+  it("builds a kilo-sized ticket Flex card with peach top strip, white background, group name, payment rows and settle button", () => {
     const card = buildSettleCard(payments, group, "TWD", nameOf);
     const message = settleFlexMessage(card);
 
@@ -47,23 +47,44 @@ describe("settle share card", () => {
     expect(message.altText).toBe("「週末台南小旅行」的結算通知");
     expect(message.contents).toMatchObject({
       type: "bubble",
-      size: "mega",
+      size: "kilo",
+      styles: {
+        header: { backgroundColor: "#FFE3CA" },
+        body: { backgroundColor: "#FFFFFF" },
+      },
+      header: {
+        type: "box",
+        paddingAll: "3px",
+        contents: [{ type: "filler" }],
+      },
     });
+    expect((message.contents as Record<string, unknown>).hero).toBeUndefined();
+
     const json = JSON.stringify(message.contents);
-    for (const text of [
-      "🌱 週末台南小旅行",
-      "小芽幫你算好囉～ 一起來結清吧！",
-      "小宇 欠了 Gulu",
-      "NT$ 430",
-      "Yizhen 欠了 ty",
-      "NT$ 194",
-      "Gulu 欠了 ty",
-      "NT$ 99",
-      "✨ 前往結清款項",
-      "/settle-hero.png",
-    ]) {
-      expect(json).toContain(text);
-    }
+    // Group name without sprout emoji
+    expect(json).toContain('"text":"週末台南小旅行"');
+    expect(json).not.toContain('"text":"🌱 週末台南小旅行"');
+
+    // Subtitle with count
+    expect(json).toContain("✨ 智慧平帳 · 共 3 筆待結算");
+
+    // Flow arrows without 欠了
+    expect(json).toContain("小宇 ➔ Gulu");
+    expect(json).toContain("Yizhen ➔ ty");
+    expect(json).toContain("Gulu ➔ ty");
+    expect(json).not.toContain("欠了");
+
+    // Amounts with dark ink color (#163D2A), no legacy brown (#A85520)
+    expect(json).toContain('"text":"NT$ 430"');
+    expect(json).toContain('"color":"#163D2A"');
+    expect(json).not.toContain("#A85520");
+
+    // Settle button with arrow
+    expect(json).toContain('"text":"前往結算 ↗"');
+    expect(json).not.toContain("前往結清款項");
+
+    // No legacy hero image
+    expect(json).not.toContain("/settle-hero.png");
     expect(json).not.toContain('"contents":[]');
   });
 
@@ -71,11 +92,11 @@ describe("settle share card", () => {
     const card = buildSettleCard(payments, group, "TWD", nameOf);
     expect(settleText(card)).toBe(
       [
-        "🌱 週末台南小旅行",
-        "小芽幫你算好囉～ 一起來結清吧！",
-        "小宇 欠了 Gulu  NT$ 430",
-        "Yizhen 欠了 ty  NT$ 194",
-        "Gulu 欠了 ty  NT$ 99",
+        "週末台南小旅行",
+        "✨ 智慧平帳 · 共 3 筆待結算",
+        "小宇 ➔ Gulu  NT$ 430",
+        "Yizhen ➔ ty  NT$ 194",
+        "Gulu ➔ ty  NT$ 99",
         `${window.location.origin}/groups/g-1?tab=settle`,
       ].join("\n"),
     );
@@ -126,26 +147,25 @@ describe("settled flex card", () => {
     });
 
     const json = JSON.stringify(message.contents);
-    // Group name without sprout emoji
+    // Group name without sprout emoji and no handshake badge
     expect(json).toContain('"text":"週末台南小旅行"');
     expect(json).not.toContain('"text":"🌱 週末台南小旅行"');
-
-    // Small handshake badge
-    expect(json).toContain('"text":"🤝"');
+    expect(json).not.toContain('"text":"🤝"');
 
     // Payer and receiver flow row
     expect(json).toContain('"text":"小宇"');
     expect(json).toContain('"text":"➔"');
     expect(json).toContain('"text":"Gulu"');
 
-    // Large amount and mint settled chip
+    // Large amount and mint settled stamp chip
     expect(json).toContain('"text":"NT$ 449,325"');
     expect(json).toContain('"size":"xxl"');
-    expect(json).toContain('"text":"已結清"');
+    expect(json).toContain('"text":"✨ 已結清"');
     expect(json).toContain('"backgroundColor":"#E8F5EB"');
 
     // Bottom sprout green button
-    expect(json).toContain('"text":"✨ 查看結算 ↗"');
+    expect(json).toContain('"text":"查看結算 ↗"');
+    expect(json).not.toContain('"text":"✨ 查看結算 ↗"');
     expect(json).toContain('"backgroundColor":"#2E9D71"');
 
     // No legacy texts or image hero banners

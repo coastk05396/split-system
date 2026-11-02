@@ -2,15 +2,48 @@ import { describe, expect, it } from "vitest";
 import { inviteFlexMessage } from "./invite-card.js";
 
 describe("inviteFlexMessage", () => {
-  it("names the Group and opens the invitation from one button", () => {
+  it("builds a Japanese envelope-style Flex card with envelope tag, lifestyle copy and join button", () => {
     const message = inviteFlexMessage({
-      groupName: "台南",
+      groupName: "台南小旅行",
       url: "https://liff.line.me/1-a/join/t",
     });
     const json = JSON.stringify(message);
 
-    expect(message).toMatchObject({ type: "flex", altText: "邀請你加入「台南」一起分帳" });
-    expect(json).toContain('"text":"台南"');
+    expect(message).toMatchObject({
+      type: "flex",
+      altText: "邀請你加入「台南小旅行」一起分帳",
+      contents: {
+        type: "bubble",
+        size: "kilo",
+        styles: {
+          header: { backgroundColor: "#FFE3CA" },
+          body: { backgroundColor: "#FFFFFF" },
+        },
+        header: {
+          type: "box",
+          paddingAll: "3px",
+          contents: [{ type: "filler" }],
+        },
+      },
+    });
+
+    // Envelope badge tag in mint pill
+    expect(json).toContain('"text":"💌 收到一份分帳邀請"');
+    expect(json).toContain('"backgroundColor":"#E8F5EB"');
+
+    // Group name
+    expect(json).toContain('"text":"台南小旅行"');
+
+    // Lifestyle description
+    expect(json).toContain('"text":"聚餐出遊好幫手，輕鬆算清每一筆 ✨"');
+
+    // Join button with arrow
+    expect(json).toContain('"text":"加入群組 ↗"');
     expect(json).toContain('"uri":"https://liff.line.me/1-a/join/t"');
+
+    // No sprout emoji box
+    expect(json).not.toContain('"text":"🌱"');
+    // No legacy robotic corporate copy
+    expect(json).not.toContain("大家的開銷與結算都在同一個地方");
   });
 });

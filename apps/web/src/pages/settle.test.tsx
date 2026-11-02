@@ -427,9 +427,9 @@ describe("Notifying the Group of the Payment plan", () => {
       altText: "「台南小旅行」的結算通知",
     });
     const json = JSON.stringify(lineShareMessages[0]);
-    expect(json).toContain("阿哲 欠了 小宇");
-    expect(json).toContain("宜庭 欠了 小宇");
-    expect(json).not.toContain("欠了 你");
+    expect(json).toContain("阿哲 ➔ 小宇");
+    expect(json).toContain("宜庭 ➔ 小宇");
+    expect(json).not.toContain("➔ 你");
   });
 
   it("posts the Payment plan Flex card into the current LINE chat when opened from a chat", async () => {

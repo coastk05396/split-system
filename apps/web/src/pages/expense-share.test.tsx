@@ -58,7 +58,7 @@ describe("sharing a new Expense", () => {
     expect(dialog.getByText("3 人一起分")).toBeVisible();
     expect(dialog.getByText("小宇先付")).toBeVisible();
     expect(dialog.getByText("每人約 NT$ 720")).toBeVisible();
-    expect(dialog.getByText(/查看這筆開銷/)).toBeVisible();
+    expect(dialog.getByText(/查看明細/)).toBeVisible();
     // The card opens through the Group's Invite, so someone outside the Group can get in.
     const link = `${window.location.origin}/join/`;
     const next = encodeURIComponent(`/groups/${id()}/expenses/`);

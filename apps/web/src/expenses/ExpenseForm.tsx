@@ -216,7 +216,7 @@ export function ExpenseForm({
           />
           <fieldset className="flex flex-col gap-1.5">
             <legend className={`${label} mb-1`}>{t("expense.category")}</legend>
-            <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar sm:flex-wrap">
+            <div className="flex flex-wrap gap-2 pb-1 pt-0.5">
               {CATEGORIES.map((category) => (
                 <label
                   key={category}

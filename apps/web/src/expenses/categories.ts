@@ -59,7 +59,7 @@ const entries: Readonly<Record<string, Category>> = {
   其他: { label: "category.other", icon: "other", emoji: "✨", ...defaultTone },
 };
 const fallback: Category = { icon: "other", emoji: "✨", ...defaultTone };
-export const CATEGORIES = ["餐飲", "交通", "住宿", "購物", "娛樂", "醫療", "其他"] as const;
+export const CATEGORIES = ["餐飲", "交通", "住宿", "購物", "娛樂", "其他", "醫療"] as const;
 export const DEFAULT_CATEGORY = "其他";
 
 /** Preserves unknown stored categories; only known category labels are translated. */

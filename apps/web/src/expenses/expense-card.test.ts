@@ -89,11 +89,12 @@ describe("expense share card", () => {
       "4 人一起分",
       "小宇先付",
       "每人約 NT$ 540",
-      "查看這筆開銷 ↗",
+      "查看明細 ↗",
     ]) {
       expect(json).toContain(text);
     }
     expect(json).toContain(`"uri":"${card.url}"`);
+    expect(json).not.toContain('"text":"🧾"');
   });
 
   it("leaves out the headline and the tagline", () => {

@@ -23,9 +23,6 @@ export interface SettleCard {
   heroUrl: string;
 }
 
-const SETTLE_BG = "#EFF8F1";
-const SETTLE_AMOUNT = "#A85520";
-
 export function buildSettleCard(
   payments: readonly PlannedPayment[],
   group: Group,
@@ -68,17 +65,17 @@ export function buildSettleCard(
 export function settleText(card: SettleCard): string {
   const rows = card.lines.map((line) => `${line.label}  ${line.amount}`).join("\n");
   return [
-    `🌱 ${card.groupName}`,
-    t("settleShare.subtitle"),
+    card.groupName,
+    t("settleShare.subtitle", { count: card.lines.length }),
     ...(rows === "" ? [] : [rows]),
     card.lineUrl,
   ].join("\n");
 }
 
 /**
- * The LINE Flex card for the Group's Payment plan: the sprout hero banner on top, the Group name
- * and friendly prompt, every planned payment sorted by amount, and a green button that opens the
- * Group's 結算 tab.
+ * The LINE Flex card for the Group's Payment plan: a clean ticket style with peach top strip,
+ * white background, group name without emoji, smart settlement subtitle with count,
+ * planned payment rows with flow arrows, and a sprout green button that opens the settlement tab.
  */
 export function settleFlexMessage(card: SettleCard): LineMessage {
   return {
@@ -86,28 +83,26 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
     altText: t("settleShare.alt", { name: card.groupName }),
     contents: {
       type: "bubble",
-      size: "mega",
+      size: "kilo",
       styles: {
-        hero: { backgroundColor: SETTLE_BG },
-        body: { backgroundColor: SETTLE_BG },
+        header: { backgroundColor: COLOR.peach },
+        body: { backgroundColor: COLOR.white },
       },
-      hero: {
-        type: "image",
-        url: card.heroUrl,
-        size: "full",
-        aspectRatio: "13:5",
-        aspectMode: "cover",
-        action: { type: "uri", label: t("settleShare.action"), uri: card.lineUrl },
+      header: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "3px",
+        contents: [{ type: "filler" }],
       },
       body: {
         type: "box",
         layout: "vertical",
-        paddingAll: "20px",
+        paddingAll: "18px",
         spacing: "md",
         contents: [
           {
             type: "text",
-            text: `🌱 ${card.groupName}`,
+            text: card.groupName,
             weight: "bold",
             size: "xl",
             color: COLOR.ink,
@@ -116,18 +111,19 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
           },
           {
             type: "text",
-            text: t("settleShare.subtitle"),
+            text: t("settleShare.subtitle", { count: card.lines.length }),
             size: "sm",
             color: COLOR.muted,
             wrap: true,
           },
+          { type: "separator", color: COLOR.line },
           ...(card.lines.length === 0
             ? []
             : [
                 {
                   type: "box" as const,
                   layout: "vertical" as const,
-                  margin: "lg" as const,
+                  margin: "md" as const,
                   spacing: "sm" as const,
                   contents: card.lines.map((line) => ({
                     type: "box" as const,
@@ -139,7 +135,7 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
                         type: "text" as const,
                         text: line.label,
                         size: "sm" as const,
-                        color: COLOR.muted,
+                        color: COLOR.ink,
                         flex: 1,
                         wrap: true,
                       },
@@ -148,7 +144,7 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
                         text: line.amount,
                         size: "md" as const,
                         weight: "bold" as const,
-                        color: SETTLE_AMOUNT,
+                        color: COLOR.ink,
                         align: "end" as const,
                         flex: 0,
                       },
@@ -163,11 +159,11 @@ export function settleFlexMessage(card: SettleCard): LineMessage {
             cornerRadius: "18px",
             backgroundColor: COLOR.sprout,
             paddingAll: "14px",
-            action: { type: "uri", label: t("settleShare.action"), uri: card.lineUrl },
+            action: { type: "uri", label: `${t("settleShare.action")} ↗`, uri: card.lineUrl },
             contents: [
               {
                 type: "text",
-                text: `✨ ${t("settleShare.action")}`,
+                text: `${t("settleShare.action")} ↗`,
                 color: COLOR.white,
                 weight: "bold",
                 align: "center",
@@ -294,34 +290,13 @@ export function settledFlexMessage(card: SettledCard): LineMessage {
         spacing: "lg",
         contents: [
           {
-            type: "box",
-            layout: "horizontal",
-            spacing: "md",
-            alignItems: "center",
-            contents: [
-              {
-                type: "box",
-                layout: "vertical",
-                width: "44px",
-                height: "44px",
-                cornerRadius: "14px",
-                backgroundColor: COLOR.peach,
-                justifyContent: "center",
-                alignItems: "center",
-                flex: 0,
-                contents: [{ type: "text", text: "🤝", size: "xl", align: "center" }],
-              },
-              {
-                type: "text",
-                text: card.groupName,
-                size: "sm",
-                weight: "bold",
-                color: COLOR.muted,
-                wrap: true,
-                maxLines: 2,
-                flex: 1,
-              },
-            ],
+            type: "text",
+            text: card.groupName,
+            size: "sm",
+            weight: "bold",
+            color: COLOR.muted,
+            wrap: true,
+            maxLines: 2,
           },
           {
             type: "box",
@@ -387,7 +362,7 @@ export function settledFlexMessage(card: SettledCard): LineMessage {
                 contents: [
                   {
                     type: "text",
-                    text: t("groups.settled"),
+                    text: `✨ ${t("groups.settled")}`,
                     size: "xxs",
                     weight: "bold",
                     color: COLOR.sprout,
@@ -402,11 +377,11 @@ export function settledFlexMessage(card: SettledCard): LineMessage {
             cornerRadius: "18px",
             backgroundColor: COLOR.sprout,
             paddingAll: "14px",
-            action: { type: "uri", label: t("settleShare.viewSettle"), uri: card.lineUrl },
+            action: { type: "uri", label: `${t("settleShare.viewSettle")} ↗`, uri: card.lineUrl },
             contents: [
               {
                 type: "text",
-                text: `✨ ${t("settleShare.viewSettle")} ↗`,
+                text: `${t("settleShare.viewSettle")} ↗`,
                 color: COLOR.white,
                 weight: "bold",
                 align: "center",

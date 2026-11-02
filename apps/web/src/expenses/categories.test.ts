@@ -4,7 +4,7 @@ import { setLocale } from "../i18n/messages.js";
 
 describe("Expense category knowledge", () => {
   it("keeps picker categories, icons, shared-card emoji and translated labels together", () => {
-    expect(CATEGORIES).toEqual(["餐飲", "交通", "住宿", "購物", "娛樂", "醫療", "其他"]);
+    expect(CATEGORIES).toEqual(["餐飲", "交通", "住宿", "購物", "娛樂", "其他", "醫療"]);
     expect(categoryInfo("餐飲")).toMatchObject({ icon: "food", emoji: "🍽️" });
     setLocale("en");
     expect(categoryLabel("餐飲")).toBe("Food & drink");
