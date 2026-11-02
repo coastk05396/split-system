@@ -148,6 +148,22 @@ describe("home", () => {
     expect(screen.queryByRole("link", { name: /新增分帳或旅程/ })).toBeNull();
   });
 
+  it("renders greeting without punctuation alongside the waving Sprout mascot, and p-5 balance card", async () => {
+    renderApp({ cookieUser: me });
+    const heading = await screen.findByRole("heading", { level: 1 });
+    expect(heading).toHaveTextContent("嗨 小宇");
+    expect(heading).not.toHaveTextContent("，");
+    expect(heading).not.toHaveTextContent("！");
+
+    const mascot = heading.querySelector("svg");
+    expect(mascot).toBeInTheDocument();
+
+    const card = screen.getByRole("region", { name: "目前淨收付" });
+    expect(card).toHaveClass("p-5");
+    expect(card).not.toHaveClass("p-6");
+  });
+
+
   it("shows the total in the Preferred currency, with a tag that opens settings", async () => {
     renderApp({
       cookieUser: { ...me, preferredCurrency: "USD" },

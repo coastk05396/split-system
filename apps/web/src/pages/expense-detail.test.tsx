@@ -165,7 +165,7 @@ describe("Expense list and detail", () => {
     const dialog = await screen.findByRole("dialog", { name: "刪除「晚餐」？" });
     await user.click(within(dialog).getByRole("button", { name: "刪除這筆" }));
 
-    expect(await screen.findByText("還沒有任何帳目，記下第一筆吧！")).toBeVisible();
+    expect(await screen.findByText("喝杯咖啡？記下第一筆吧 ☕️")).toBeVisible();
     expect(api.groups.expenses.list(id())).toHaveLength(0);
   });
 

@@ -10,6 +10,7 @@ import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { hapticTick } from "../shell/haptics.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 import { SettlePanel } from "../settlements/SettlePanel.js";
@@ -91,22 +92,28 @@ function GroupDetail({ group }: { group: Group }) {
           </Link>
         </section>
       )}
-      <Tabs.Root value={activeTab} onValueChange={setActiveTab}>
+      <Tabs.Root
+        value={activeTab}
+        onValueChange={(val) => {
+          hapticTick(10);
+          setActiveTab(val);
+        }}
+      >
         <div className="flex items-center gap-2">
           <Tabs.List
             aria-label={t("group.tabs")}
-            className="flex flex-1 gap-1 rounded-2xl bg-sprout-150 p-1"
+            className="flex flex-1 gap-1 rounded-2xl border border-sprout-200/60 bg-sprout-100/70 p-1"
           >
             {tabs.map((tab) => (
               <Tabs.Trigger
                 key={tab.value}
                 value={tab.value}
-                className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-ink focus-visible:outline-2 focus-visible:outline-sprout-600"
+                className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-sprout-800 focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
                 {activeTab === tab.value && (
                   <SelectionPill
                     layoutId={`group-tab-${group.id}`}
-                    className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a] after:absolute after:bottom-1 after:left-1/2 after:h-0.5 after:w-6 after:-translate-x-1/2 after:rounded-full after:bg-sprout-500"
+                    className="inset-0 rounded-xl bg-white shadow-2xs"
                   />
                 )}
                 <span className="relative">{t(tab.label)}</span>

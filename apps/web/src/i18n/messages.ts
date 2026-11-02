@@ -49,7 +49,7 @@ const zhTW = {
   "signIn.test.provider": "身分來源",
   "signIn.test.submit": "測試登入",
 
-  "home.greeting": "嗨，{name}！",
+  "home.greeting": "嗨 {name}",
   "home.balance": "目前淨收付",
   "home.noPending": "目前沒有待結算的款項",
   "home.rateNote": "依 {date} 的參考匯率換算，僅供參考",
@@ -341,7 +341,7 @@ const zhTW = {
   "expense.networkError": "網路連線不穩，這筆還沒確定有沒有存到。請再送出一次，不會重複記帳。",
   "expense.list": "帳目",
   "expense.overviewCapsule": "本群累計 {total} · 你分攤 {share}",
-  "expense.empty": "還沒有任何帳目，記下第一筆吧！",
+  "expense.empty": "喝杯咖啡？記下第一筆吧 ☕️",
   "expense.more": "載入更多",
   "expense.paidByLine": "{name} 先付 {amount}",
   "expense.total": "總金額",

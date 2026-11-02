@@ -30,8 +30,9 @@ export function HomePage() {
   return (
     <div className="flex flex-col gap-5 md:gap-8">
       <header className="flex items-center justify-between gap-3">
-        <h1 className="text-balance text-2xl font-bold leading-snug md:text-3xl">
-          {t("home.greeting", { name })}
+        <h1 className="flex items-center gap-2 text-balance text-2xl font-bold leading-snug md:text-3xl">
+          <span>{t("home.greeting", { name })}</span>
+          <SproutMascot className="size-9 -translate-y-0.5" mood="wave" interactive={true} />
         </h1>
       </header>
 
@@ -112,7 +113,7 @@ function BalanceCard(props: {
   return (
     <section
       aria-labelledby="home-balance"
-      className={`hero-balance-card rounded-3xl p-6 text-white ${isUpdating ? "halo-pulse" : ""}`}
+      className={`hero-balance-card rounded-3xl p-5 text-white ${isUpdating ? "halo-pulse" : ""}`}
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="home-balance" className="text-sm text-white/85">

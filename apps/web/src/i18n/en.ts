@@ -46,7 +46,7 @@ export const en: Record<MessageId, string> = {
   "signIn.test.provider": "Identity source",
   "signIn.test.submit": "Test sign-in",
 
-  "home.greeting": "Hi, {name}!",
+  "home.greeting": "Hi {name}",
   "home.balance": "Net balance",
   "home.noPending": "Nothing waiting to be settled",
   "home.rateNote": "Converted at the reference rate of {date}, for reference only",
@@ -346,7 +346,7 @@ export const en: Record<MessageId, string> = {
     "The connection is unstable, so we are not sure this was saved. Send it again; it will not be logged twice.",
   "expense.list": "Expenses",
   "expense.overviewCapsule": "Group total {total} · Your share {share}",
-  "expense.empty": "No expenses yet. Log the first one!",
+  "expense.empty": "Coffee break? Log your first expense ☕️",
   "expense.more": "Load more",
   "expense.paidByLine": "{name} paid {amount}",
   "expense.total": "Total",

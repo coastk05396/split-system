@@ -7,6 +7,7 @@ import { card, LoadError, Loading, secondaryButton } from "../groups/ui.js";
 import { longDate } from "../i18n/format.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 import { useExpenses } from "./api.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 
@@ -78,7 +79,12 @@ export function ExpenseList({
   return (
     <section aria-label={t("expense.list")} className="flex flex-col gap-4">
       {rows.length === 0 ? (
-        <p className="py-4 text-center text-ink-muted">{t("expense.empty")}</p>
+        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+          <span className="sprout-greet inline-flex">
+            <SproutMascot className="size-20" mood="happy" interactive={true} />
+          </span>
+          <p className="text-sm font-medium text-ink-muted">{t("expense.empty")}</p>
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-center pt-0.5 pb-1">

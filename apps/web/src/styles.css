@@ -1092,6 +1092,15 @@ body::before {
   animation: bubble-spring 260ms var(--ease-spring) both;
 }
 
+/* Hide scrollbar for seamless touch rails */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
     transition: opacity 120ms ease-out;

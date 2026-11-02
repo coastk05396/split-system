@@ -22,6 +22,7 @@ import {
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
+import { hapticTick } from "../shell/haptics.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
@@ -175,7 +176,7 @@ export function ExpenseForm({
         </div>
       </Tabs.Content>
       <Tabs.Content value="spend" className="tab-panel">
-        <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
+        <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
           <AmountSection
             draft={draft}
             evaluation={evaluation}
@@ -213,13 +214,13 @@ export function ExpenseForm({
               </>
             }
           />
-          <fieldset className="flex flex-col gap-2">
-            <legend className={`${label} mb-2`}>{t("expense.category")}</legend>
-            <div className="flex flex-wrap gap-1.5 sm:gap-2">
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className={`${label} mb-1`}>{t("expense.category")}</legend>
+            <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar sm:flex-wrap">
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className={`press-pill flex cursor-pointer items-center gap-1 rounded-full border border-sprout-200 bg-white px-2.5 py-1 text-xs hover:border-sprout-500 has-[:checked]:font-bold sm:px-3 sm:py-1.5 sm:text-sm ${categoryTone(category).chip}`}
+                  className={`press-pill flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-sprout-200 bg-white px-2.5 py-1 text-xs hover:border-sprout-500 has-[:checked]:font-bold active:scale-95 transition-transform duration-200 ease-(--ease-spring) sm:px-3 sm:py-1.5 sm:text-sm ${categoryTone(category).chip}`}
                 >
                   <input
                     type="radio"
@@ -227,6 +228,7 @@ export function ExpenseForm({
                     className="sr-only"
                     checked={draft.category === category}
                     onChange={() => {
+                      hapticTick(10);
                       update({ category });
                     }}
                   />
