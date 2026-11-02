@@ -68,6 +68,7 @@ export function BalanceChart({
       <div
         className="collapse-grid"
         data-closing={!isOpen ? "true" : undefined}
+        inert={!isOpen}
       >
         <div className="collapse-grid-inner pt-3">
           <ul key={animKey} aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">

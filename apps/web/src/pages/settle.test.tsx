@@ -45,6 +45,16 @@ const rows = async () =>
     .map((li) => li.textContent);
 
 describe("Balances and the Payment plan", () => {
+  it("makes the collapsed chart inert", async () => {
+    const { user } = await openSettle(owedToMe);
+    const chart = await screen.findByRole("list", { name: "大家的結餘" });
+    const container = chart.closest(".collapse-grid");
+    expect(container).not.toHaveAttribute("inert");
+    await user.click(screen.getByRole("button", { name: "大家的結餘" }));
+    expect(container).toHaveAttribute("inert");
+    await user.click(screen.getByRole("button", { name: "大家的結餘" }));
+    expect(container).not.toHaveAttribute("inert");
+  });
   it("draws everyone's Balance as bars, the biggest receiver first, settled people folded away", async () => {
     await openSettle({
       name: "台南小旅行",
@@ -338,6 +348,18 @@ describe("Recording and confirming Settlements", () => {
 });
 
 describe("Notifying the Group of the Payment plan", () => {
+  it("supports keyboard navigation and restores focus when dismissed", async () => {
+    const { user } = await openSettle(owedToMe);
+    const trigger = await screen.findByRole("button", { name: "LINE 通知" });
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    const first = await screen.findByRole("menuitem", { name: "當前對話框" });
+    expect(first).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "通知好友" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+  });
   it("hides the notify buttons when everyone is settled", async () => {
     await openSettle({ name: "室友", others: [{ name: "宜庭" }] });
 

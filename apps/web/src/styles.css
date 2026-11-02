@@ -981,22 +981,6 @@ body::before {
   animation: dialog-icon-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Delete expense card slide-out and fade */
-@keyframes expense-delete-slide {
-  0% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-}
-.expense-delete-slide {
-  animation: expense-delete-slide 180ms ease-in forwards;
-  pointer-events: none;
-}
-
 /* Navigation tab active bouncy pop */
 @keyframes nav-icon-pop {
   0% {
@@ -1070,7 +1054,6 @@ body::before {
   .category-bloom,
   .copy-icon-pop,
   .dialog-icon-enter,
-  .expense-delete-slide,
   .nav-icon-pop,
   .transfer-arrow-pulse {
     animation: none;

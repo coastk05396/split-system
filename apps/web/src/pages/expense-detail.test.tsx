@@ -169,6 +169,19 @@ describe("Expense list and detail", () => {
     expect(api.groups.expenses.list(id())).toHaveLength(0);
   });
 
+  it("keeps the expense visible when deletion fails", async () => {
+    const user = userEvent.setup();
+    const { api, id, eid } = withExpense({ path: (groupId, expenseId) => `/groups/${groupId}/expenses/${expenseId}` });
+    api.failNext(`DELETE /api/v1/groups/${id()}/expenses/${eid()}`);
+    await user.click(await screen.findByRole("button", { name: "刪除" }));
+    const dialog = await screen.findByRole("dialog", { name: "刪除「晚餐」？" });
+    await user.click(within(dialog).getByRole("button", { name: "刪除這筆" }));
+    expect(await within(dialog).findByRole("alert")).toBeVisible();
+    await user.click(within(dialog).getByRole("button", { name: "取消" }));
+    expect(screen.getByRole("heading", { level: 2, name: "晚餐" })).toBeVisible();
+    expect(api.groups.expenses.list(id())).toHaveLength(1);
+  });
+
   it("offers edit and delete only to the creator or an Admin", async () => {
     withExpense({
       role: "member",

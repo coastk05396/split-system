@@ -5,7 +5,8 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ArrowRight, ChevronDown, MessageCircle, Send } from "lucide-react";
 import { useDeps } from "../app/AppProviders.js";
 import {
@@ -203,29 +204,6 @@ function SettleNotifyActions({
   const { line } = useDeps();
   const invite = useEnsureInvite(group.id);
   const [busy, setBusy] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleDown = (e: MouseEvent | TouchEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", handleDown);
-    document.addEventListener("touchstart", handleDown);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleDown);
-      document.removeEventListener("touchstart", handleDown);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [menuOpen]);
-
   async function prepareCard() {
     const link = await invite.mutateAsync().catch(() => null);
     return buildSettleCard(payments, group, currency, nameOf, link?.token ?? null);
@@ -273,58 +251,38 @@ function SettleNotifyActions({
   }
 
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
-      <button
-        type="button"
+    <Menu.Root>
+      <Menu.Trigger
         disabled={busy}
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        onClick={() => {
-          setMenuOpen((o) => !o);
-        }}
         className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
       >
         <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-700" />
         <span>{t("settleShare.menuTrigger")}</span>
-        <ChevronDown
-          aria-hidden="true"
-          className={`size-3 text-sprout-700 transition-transform duration-180 ease-(--ease-spring) ${
-            menuOpen ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-      {menuOpen && (
-        <div
-          role="menu"
-          className="glass-dialog surface-card absolute right-0 z-20 mt-1.5 flex w-40 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg backdrop-blur-md"
+        <ChevronDown aria-hidden="true" className="size-3 text-sprout-700" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content
+          align="end"
+          sideOffset={6}
+          className="menu-content glass-dialog surface-card z-20 flex w-40 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg backdrop-blur-md"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false);
-              void sendToChat();
-            }}
-            className="press-pill flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink hover:bg-sprout-100"
+          <Menu.Item
+            onSelect={() => void sendToChat()}
+            className="press-pill flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink outline-none data-[highlighted]:bg-sprout-100"
           >
             <Send aria-hidden="true" className="size-3.5 text-sprout-600" />
             {t("settleShare.sendToChat")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenuOpen(false);
-              void shareLine();
-            }}
-            className="press-pill flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink hover:bg-sprout-100"
+          </Menu.Item>
+          <Menu.Item
+            onSelect={() => void shareLine()}
+            className="press-pill flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink outline-none data-[highlighted]:bg-sprout-100"
           >
             <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-600" />
             {t("settleShare.shareLine")}
-          </button>
-        </div>
-      )}
-    </div>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 

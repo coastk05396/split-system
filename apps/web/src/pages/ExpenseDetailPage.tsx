@@ -64,7 +64,6 @@ function Detail({
   const canChange = expense.creatorMemberId === group.me.memberId || group.me.role === "admin";
   const [sharing, setSharing] = useState(false);
   const [shareCard, setShareCard] = useState<ExpenseCard | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const joined = joinedGroupName(useLocation().state);
   const share = useExpenseSharing(group.id);
   const settlement = group.settlementCurrency;
@@ -106,11 +105,7 @@ function Detail({
           </span>
         }
       />
-      <section
-        className={`surface-card overflow-hidden rounded-3xl border border-sprout-200 bg-white ${
-          isDeleting ? "expense-delete-slide" : ""
-        }`}
-      >
+      <section className="surface-card overflow-hidden rounded-3xl border border-sprout-200 bg-white">
         <div className="flex items-center gap-3 bg-sprout-150 px-6 py-4">
           <span
             className={`flex size-12 shrink-0 items-center justify-center rounded-full shadow-xs ${categoryTone(expense.category).badge}`}
@@ -204,16 +199,7 @@ function Detail({
         </ul>
       </section>
       {canChange && (
-        <DeleteExpense
-          group={group}
-          expense={expense}
-          onDeleting={() => {
-            setIsDeleting(true);
-          }}
-          onDeleteFailed={() => {
-            setIsDeleting(false);
-          }}
-        />
+        <DeleteExpense group={group} expense={expense} />
       )}
       {shareCard !== null && (
         <ExpenseShareDialog card={shareCard} open={sharing} onOpenChange={setSharing} />
@@ -225,13 +211,9 @@ function Detail({
 function DeleteExpense({
   group,
   expense,
-  onDeleting,
-  onDeleteFailed,
 }: {
   group: Group;
   expense: Expense;
-  onDeleting?: () => void;
-  onDeleteFailed?: () => void;
 }) {
   const remove = useDeleteExpense(group.id);
   const navigate = useNavigate();
@@ -268,12 +250,8 @@ function DeleteExpense({
               className={`${primaryButton} flex-1 bg-red-700 py-3 hover:bg-red-700/90`}
               disabled={remove.isPending}
               onClick={() => {
-                onDeleting?.();
                 remove.mutate(expense.id, {
                   onSuccess: () => void navigate(`/groups/${group.id}`),
-                  onError: () => {
-                    onDeleteFailed?.();
-                  },
                 });
               }}
             >
