@@ -55,6 +55,8 @@ const zhTW = {
   "home.rateNote": "依 {date} 的參考匯率換算，僅供參考",
   "home.rateNoteRange": "依 {from} 至 {to} 的參考匯率換算，僅供參考",
   "home.morePending": "還有 {count} 個群組待結算",
+  "home.toPay": "要付",
+  "home.toReceive": "可收",
   "home.quickStart": "快速開始",
   "home.pendingGroups": "待結算的群組",
   "home.allSettled": "全部結清 ✓",

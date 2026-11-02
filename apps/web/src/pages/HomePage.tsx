@@ -6,7 +6,7 @@ import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
-import { balanceLine, convertedTotal, pendingTotals } from "../groups/totals.js";
+import { convertedTotal, pendingTotals } from "../groups/totals.js";
 import { GroupAvatar, LoadError, MaintenanceTag } from "../groups/ui.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
 import { t } from "../i18n/messages.js";
@@ -248,43 +248,48 @@ function HomeGroupRow({ group }: { group: Group }) {
   return (
     <PressableLink
       to={`/groups/${group.id}?tab=settle`}
-      className="surface-card group flex items-center gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
-      <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
-      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-base font-bold">{group.name}</span>
-          <span className="shrink-0 rounded-full bg-sprout-150 px-2 py-0.5 text-xs text-sprout-600">
-            {t(group.isTrip ? "usage.trip" : "usage.tab")}
+      <div className="flex min-w-0 items-center gap-3.5">
+        <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-base font-bold">{group.name}</span>
+            {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
+          </div>
+          <AvatarStack members={group.memberPreview} total={group.memberCount} />
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex flex-col items-end gap-0.5 text-right">
+          <span
+            className={
+              balance < 0
+                ? "text-base font-bold text-rose-600 tabular-nums"
+                : balance > 0
+                  ? "text-base font-bold text-emerald-600 tabular-nums"
+                  : "text-base font-bold text-ink-muted tabular-nums"
+            }
+          >
+            {formatAmount(Math.abs(balance), group.settlementCurrency)}
           </span>
-          {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
-        </span>
-        <span className="flex items-center gap-2 text-xs text-ink-muted">
-          {group.memberPreview && group.memberPreview.length > 0 && (
-            <AvatarStack members={group.memberPreview} total={group.memberCount} />
-          )}
-          <span>{t("groups.people", { count: group.memberCount })}</span>
-        </span>
-      </span>
-      <span className="shrink-0 flex items-center gap-2">
-        {balance < 0 ? (
-          <span className="inline-flex items-center rounded-full bg-rose-500 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs">
-            {balanceLine(balance, group.settlementCurrency)}
+          <span
+            className={
+              balance < 0
+                ? "text-xs text-rose-600/80 text-right"
+                : balance > 0
+                  ? "text-xs text-emerald-600/80 text-right"
+                  : "text-xs text-ink-muted text-right"
+            }
+          >
+            {balance < 0 ? t("home.toPay") : balance > 0 ? t("home.toReceive") : t("groups.settled")}
           </span>
-        ) : balance > 0 ? (
-          <span className="inline-flex items-center rounded-full bg-sprout-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs">
-            {balanceLine(balance, group.settlementCurrency)}
-          </span>
-        ) : (
-          <span className="inline-flex items-center rounded-full bg-sprout-100 px-2.5 py-1 text-xs font-medium text-sprout-700">
-            {t("groups.settled")}
-          </span>
-        )}
+        </div>
         <ChevronRight
           aria-hidden="true"
           className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
         />
-      </span>
+      </div>
     </PressableLink>
   );
 }

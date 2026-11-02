@@ -85,7 +85,11 @@ describe("home", () => {
 
     const row = await screen.findByRole("link", { name: /台南小旅行/ });
     expect(row).toHaveAttribute("href", `/groups/${groupId}?tab=settle`);
-    expect(row).toHaveTextContent("你可收 NT$ 393");
+    expect(row).toHaveTextContent("NT$ 393");
+    expect(row).toHaveTextContent("可收");
+    expect(row).not.toHaveTextContent("你可收");
+    expect(row).not.toHaveTextContent("快速分帳");
+    expect(row).not.toHaveTextContent(/人/);
     expect(screen.queryByText("室友")).toBeNull();
   });
 
@@ -101,7 +105,10 @@ describe("home", () => {
       },
     });
 
-    expect(await screen.findByRole("link", { name: /戊/ })).toHaveTextContent("你要付 NT$ 50");
+    const row = await screen.findByRole("link", { name: /戊/ });
+    expect(row).toHaveTextContent("NT$ 50");
+    expect(row).toHaveTextContent("要付");
+    expect(row).not.toHaveTextContent("你要付");
     expect(screen.getByRole("link", { name: /還有 2 個群組待結算/ })).toHaveAttribute(
       "href",
       "/groups",
@@ -211,7 +218,7 @@ describe("home", () => {
     expect(iconContainer).not.toBeNull();
   });
 
-  it("renders pending groups as floating cards with two-tone debt pills and avatar preview", async () => {
+  it("renders pending groups with two-layer amount layout, avatar stack, and without '你' or mode badges", async () => {
     const friend = makeUser("阿明");
     renderApp({
       cookieUser: me,
@@ -232,18 +239,27 @@ describe("home", () => {
     });
 
     const pendingSection = await screen.findByRole("region", { name: "待結算的群組" });
-    const list = pendingSection.querySelector("ul");
-    expect(list).toHaveClass("flex", "flex-col", "gap-2.5");
-    expect(list).not.toHaveClass("overflow-hidden");
 
-    // Two-tone debt pills
-    const receivePill = within(pendingSection).getByText("你可收 NT$ 393");
-    expect(receivePill).toHaveClass("bg-sprout-600", "text-white", "rounded-full");
+    // 1. Two-layer right side: numbers with color, 2-char status without '你'
+    const tainanRow = within(pendingSection).getByRole("link", { name: /台南小旅行/ });
+    const tainanAmount = within(tainanRow).getByText("NT$ 393");
+    expect(tainanAmount).toHaveClass("text-emerald-600", "font-bold", "text-base");
+    const tainanStatus = within(tainanRow).getByText("可收");
+    expect(tainanStatus).toHaveClass("text-xs");
+    expect(tainanRow).not.toHaveTextContent("你可收");
+    expect(tainanRow).not.toHaveTextContent("快速分帳");
+    expect(tainanRow).not.toHaveTextContent(/2\s*人/);
 
-    const payPill = within(pendingSection).getByText("你要付 NT$ 250");
-    expect(payPill).toHaveClass("bg-rose-500", "text-white", "rounded-full");
+    const hezuRow = within(pendingSection).getByRole("link", { name: /日常合租/ });
+    const hezuAmount = within(hezuRow).getByText("NT$ 250");
+    expect(hezuAmount).toHaveClass("text-rose-600", "font-bold", "text-base");
+    const hezuStatus = within(hezuRow).getByText("要付");
+    expect(hezuStatus).toHaveClass("text-xs");
+    expect(hezuRow).not.toHaveTextContent("你要付");
+    expect(hezuRow).not.toHaveTextContent("快速分帳");
+    expect(hezuRow).not.toHaveTextContent(/2\s*人/);
 
-    // AvatarStack preview
+    // 2. AvatarStack preview present in both rows
     const rows = pendingSection.querySelectorAll("li");
     expect(rows.length).toBe(2);
     for (const row of rows) {
