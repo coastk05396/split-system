@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ClientRequestOptions } from "hono/client";
 import { withJson } from "../api/client.js";
 import { groupKeys, read, send, useApi } from "../groups/api.js";
+import { abortable } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Trip settings and Stop routes (SPEC §5.1). */
 
@@ -35,7 +36,8 @@ export function useStops(id: string) {
   const api = useApi();
   return useQuery({
     queryKey: tripKeys.stops(id),
-    queryFn: (ctx) => read<Stop[]>(api.groups[":id"].stops.$get({ param: { id } }), ctx),
+    queryFn: (ctx) =>
+      read<Stop[]>(api.groups[":id"].stops.$get({ param: { id } }, { init: abortable(ctx) }), ctx),
   });
 }
 
@@ -54,7 +56,10 @@ export function useStopExpenses(id: string) {
           param: { id },
           query: cursor === null ? {} : { cursor },
         };
-        const page: ExpensePage = await read<ExpensePage>(api.groups[":id"].expenses.$get(args), ctx);
+        const page: ExpensePage = await read<ExpensePage>(
+          api.groups[":id"].expenses.$get(args, { init: abortable(ctx) }),
+          ctx,
+        );
         linked.push(...page.expenses.filter((e) => e.stopId !== null));
         cursor = page.nextCursor;
       } while (cursor !== null);
