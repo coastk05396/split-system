@@ -243,7 +243,7 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
     it("aborts a Group read still loading its first answer when the socket first opens", async () => {
       let signal: AbortSignal | undefined;
       const keyed = ["groups", "g-1"] as const;
-      const pending = client.fetchQuery({
+      const pending = client.query({
         queryKey: keyed,
         queryFn: (ctx) => {
           signal = ctx.signal;
