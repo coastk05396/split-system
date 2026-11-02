@@ -15,7 +15,7 @@ import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { consumeRateLimit, rateLimit } from "../rate-limit.js";
 import { parseBody, requireIfMatch } from "../request-guards.js";
-import { assertUnderGroupCap, listGroups, loadGroup } from "./groups.js";
+import { assertUnderGroupCap, listGroups } from "./groups.js";
 import {
   claimPlaceholder,
   currentInvite,
@@ -24,7 +24,7 @@ import {
   previewInvite,
   regenerateInvite,
 } from "./invites.js";
-import { addPlaceholder, leaveGroup, listMembers, patchMember, removeMember } from "./members.js";
+import { addPlaceholder, leaveGroup, listMembersWithRev, patchMember, removeMember } from "./members.js";
 import { requireAdmin, requireMember } from "./membership.js";
 import type { Bindings } from "../env.js";
 import type { MemberRow } from "./membership.js";
@@ -40,6 +40,7 @@ async function readLedgerGroup(env: Bindings, me: MemberRow) {
     rev: number;
     locked: boolean;
     group: {
+      id: string;
       name: string;
       settlement_currency: "TWD" | "USD" | "JPY" | "THB";
       is_trip: number;
@@ -47,15 +48,40 @@ async function readLedgerGroup(env: Bindings, me: MemberRow) {
       trip_start_date: string | null;
       trip_end_date: string | null;
       trip_notes: string | null;
+      created_at: number;
       updated_at: number;
     };
+    seated: Array<{
+      id: string;
+      user_id: string | null;
+      placeholder_name: string | null;
+      role: "admin" | "member";
+      net_balance: number;
+    }>;
   }>();
-  const legacy = await loadGroup(createDb(env.DB), me);
+  const seatedMe = state.seated.find((member) => member.id === me.id) ?? {
+    id: me.id,
+    role: me.role,
+    net_balance: me.netBalance,
+  };
+  const preview = await Promise.all(
+    state.seated.slice(0, 4).map(async (member) => {
+      const user =
+        member.user_id === null
+          ? null
+          : await env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?")
+              .bind(member.user_id)
+              .first<{ display_name: string; picture_url: string | null }>();
+      return {
+        name: user?.display_name ?? member.placeholder_name ?? "?",
+        pictureUrl: user?.picture_url ?? null,
+      };
+    }),
+  );
   return {
     rev: state.rev,
     group: {
-      ...legacy,
-      settlementCurrencyLocked: state.locked,
+      id: state.group.id,
       name: state.group.name,
       settlementCurrency: state.group.settlement_currency,
       isTrip: state.group.is_trip === 1,
@@ -63,7 +89,12 @@ async function readLedgerGroup(env: Bindings, me: MemberRow) {
       tripStartDate: state.group.trip_start_date,
       tripEndDate: state.group.trip_end_date,
       tripNotes: state.group.trip_notes,
+      createdAt: state.group.created_at,
       updatedAt: state.group.updated_at,
+      settlementCurrencyLocked: state.locked,
+      memberCount: state.seated.length,
+      memberPreview: preview,
+      me: { memberId: seatedMe.id, role: seatedMe.role, balance: seatedMe.net_balance },
     },
   };
 }
@@ -286,13 +317,9 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id/members", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      // Members come from the D1 projection, so the answer carries the projection's own revision:
-      // the ledger's revision may already be newer than the rows served here.
-      const projected = await c.env.DB.prepare("SELECT rev FROM group_directory WHERE group_id = ?")
-        .bind(me.groupId)
-        .first<{ rev: number }>();
-      c.header("X-Group-Rev", String(projected?.rev ?? 0));
-      return c.json(await listMembers(db, me.groupId, me.id), 200);
+      const { members, rev } = await listMembersWithRev(db, me.groupId, me.id, c.env);
+      c.header("X-Group-Rev", String(rev));
+      return c.json(members, 200);
     })
     .post("/groups/:id/members", signedIn, async (c) => {
       const db = createDb(c.env.DB);

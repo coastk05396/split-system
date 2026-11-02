@@ -10,7 +10,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import type { Bindings } from "../env.js";
 import { memberOperation } from "./ledger-client.js";
-import { groups, invites, members } from "../db/schema.js";
+import { groupDirectory, groupMemberSummary, invites } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
 import { listMembers } from "./members.js";
@@ -93,21 +93,44 @@ export async function ensureInvite(
 /** A live Invite's Group; a regenerated (deleted) link is 404, a lapsed one INVITE_EXPIRED. */
 async function openInvite(db: Db, token: string, now: number, env: Bindings) {
   const [row] = await db
-    .select({ group: groups, expiresAt: invites.expiresAt })
+    .select({ groupId: invites.groupId, expiresAt: invites.expiresAt })
     .from(invites)
-    .innerJoin(groups, eq(groups.id, invites.groupId))
     .where(eq(invites.token, token));
   if (row === undefined) throw new ApiError("NOT_FOUND");
-  await ledgerInvite(env, row.group.id, "validate", now, token);
-  return row;
+  await ledgerInvite(env, row.groupId, "validate", now, token);
+  const [dir] = await db
+    .select({ name: groupDirectory.name, settlementCurrency: groupDirectory.settlementCurrency })
+    .from(groupDirectory)
+    .where(eq(groupDirectory.groupId, row.groupId));
+  const group = {
+    id: row.groupId,
+    name: dir?.name ?? "",
+    settlementCurrency: dir?.settlementCurrency ?? "TWD",
+  };
+  return { group, expiresAt: row.expiresAt };
 }
 
 async function ownRow(db: Db, groupId: string, userId: string): Promise<MemberRow | undefined> {
   const [row] = await db
-    .select()
-    .from(members)
-    .where(and(eq(members.groupId, groupId), eq(members.userId, userId)));
-  return row;
+    .select({
+      memberId: groupMemberSummary.memberId,
+      groupId: groupMemberSummary.groupId,
+      userId: groupMemberSummary.userId,
+      role: groupMemberSummary.role,
+      netBalance: groupMemberSummary.netBalance,
+    })
+    .from(groupMemberSummary)
+    .where(and(eq(groupMemberSummary.groupId, groupId), eq(groupMemberSummary.userId, userId)));
+  if (row === undefined) return undefined;
+  return {
+    id: row.memberId,
+    groupId: row.groupId,
+    userId: row.userId,
+    role: row.role,
+    status: "active",
+    netBalance: row.netBalance,
+    createdAt: 0,
+  };
 }
 
 /**
@@ -124,15 +147,11 @@ export async function previewInvite(
   const { group, expiresAt } = await openInvite(db, token, now, env);
   const mine = await ownRow(db, group.id, userId);
   const isMember = mine?.status === "active";
-  const everyone = await listMembers(db, group.id, mine?.id ?? null);
+  const everyone = await listMembers(db, group.id, mine?.id ?? null, env);
   const seated = everyone.filter((m) => m.status !== "former");
   if (!isMember && seated.length >= MAX_MEMBERS_PER_GROUP) throw new ApiError("GROUP_FULL");
 
-  const rows = await db
-    .select({ id: members.id, createdBy: members.createdByMemberId })
-    .from(members)
-    .where(and(eq(members.groupId, group.id), eq(members.status, "placeholder")));
-  const creatorOf = new Map(rows.map((r) => [r.id, r.createdBy]));
+  const creatorOf = new Map(everyone.map((m) => [m.id, m.createdByMemberId]));
   const nameOf = new Map(everyone.map((m) => [m.id, m.displayName]));
   const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id)).fetch(
     "https://ledger.internal/placeholder-counts",
@@ -162,6 +181,12 @@ export async function previewInvite(
   };
 }
 
+/** Whether the ledger has the User seated in the Group: the truth after an unclear failure. */
+async function isSeated(db: Db, env: Bindings, groupId: string, userId: string): Promise<boolean> {
+  const everyone = await listMembers(db, groupId, null, env);
+  return everyone.some((m) => m.userId === userId && m.status !== "former");
+}
+
 /**
  * Joins at once as a plain Member. Someone already in the Group just opens it; a Former
  * Member's row comes back to life. The seat check runs inside the writing statement.
@@ -175,17 +200,24 @@ export async function joinGroup(
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
-  const result = await withReservation(env.DB, userId, group.id, now, async () => {
-    const mine = await ownRow(db, group.id, userId);
-    if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
-    return memberOperation(env, group.id, {
-      action: "join",
-      inviteToken: token,
-      userId,
-      targetMemberId: mine?.id ?? crypto.randomUUID(),
-      now,
-    });
-  });
+  const result = await withReservation(
+    env.DB,
+    userId,
+    group.id,
+    now,
+    async () => {
+      const mine = await ownRow(db, group.id, userId);
+      if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
+      return memberOperation(env, group.id, {
+        action: "join",
+        inviteToken: token,
+        userId,
+        targetMemberId: mine?.id ?? crypto.randomUUID(),
+        now,
+      });
+    },
+    () => isSeated(db, env, group.id, userId),
+  );
   setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };
 }
@@ -202,14 +234,20 @@ export async function claimPlaceholder(
   const { group } = await openInvite(db, token, now, env);
   if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
-  const result = await withReservation(env.DB, userId, group.id, now, () =>
-    memberOperation(env, group.id, {
-      action: "claim",
-      inviteToken: token,
-      userId,
-      targetMemberId: placeholderId,
-      now,
-    }),
+  const result = await withReservation(
+    env.DB,
+    userId,
+    group.id,
+    now,
+    () =>
+      memberOperation(env, group.id, {
+        action: "claim",
+        inviteToken: token,
+        userId,
+        targetMemberId: placeholderId,
+        now,
+      }),
+    () => isSeated(db, env, group.id, userId),
   );
   setRev?.(String(result.rev));
   return { groupId: group.id, memberId: result.memberId };

@@ -121,10 +121,10 @@ Only after verifying all retained groups and with explicit owner approval:
 
 ## Release 2 Follow-up & Known Edge Cases
 
-The following items are deferred to Release 2 as documented non-blocking backlog:
-1. **D1 Legacy Table Drop**: Once the group ledger Durable Object has run stably in production, apply migration `0008` to drop legacy tables (`expenses`, `expense_payers`, `expense_splits`, `settlements`, `stops`, `members`, `groups`, `migration_wipe_pending`).
-2. **Reservation Concurrency Hardening**: In `auth/reservations.ts`, harden `withReservation` to distinguish transient network failures from confirmed commits so concurrent joins cannot prematurely remove a valid reservation.
-3. **Signal & Projection Drainage Sequencing**: Ensure live WebSocket signals for `member-op` are dispatched only after D1 read-model projection batches have fully completed.
-4. **Multi-DO Account Deletion Compensation**: In `auth/accounts.ts`, implement two-phase rollback/unfreeze if multi-ledger finalization fails midway.
-5. **Initial In-Flight Query Cancellation**: Enhance `sync.ts` to abort in-flight fetch requests on first socket connect when no cached data exists.
-6. **Placeholder Ghost Member Cleanup**: Purge legacy placeholder members from D1 once referenced legacy expenses are removed.
+Completed after the production cutover:
+1. **D1 Legacy Table Drop**: migration `0008` drops `expenses`, `expense_payers`, `expense_splits`, `settlements`, `stops`, `members`, `groups` and `migration_wipe_pending`. Members, balances and settlement routing are served from the group ledger; the cutover snapshot and `wipe-excluded` routes are removed with the tables they read.
+2. **Reservation Concurrency Hardening**: `withReservation` releases a reservation only after a confirmed refusal, or once the ledger confirms the User is not seated. A network failure or 5xx keeps it, and a release removes only the row its own attempt stamped.
+3. **Signal & Projection Drainage Sequencing**: a `member-op` live signal goes out only after every D1 projection batch it dirtied has completed.
+4. **Multi-DO Account Deletion Compensation**: finalising records what it removed; a deletion that fails midway restores every finalised ledger (`restore`) before unfreezing.
+5. **Initial In-Flight Query Cancellation**: on the first socket connect, Group reads still loading their first answer are aborted (queries pass their abort signal to `fetch`) and replaced by the catch-up read.
+6. **Placeholder Ghost Member Cleanup**: dropping the legacy `members` table removes the legacy placeholder members from D1; placeholders now live only in the ledger.

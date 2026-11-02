@@ -1,10 +1,20 @@
-import { MAX_MEMBERS_PER_GROUP } from "@split/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { members } from "../db/schema.js";
+import { groupMemberSummary } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 
-export type MemberRow = typeof members.$inferSelect;
+export interface MemberRow {
+  id: string;
+  groupId: string;
+  userId: string | null;
+  placeholderName?: string | null;
+  nickname?: string | null;
+  role: "admin" | "member";
+  status: "active" | "former" | "placeholder";
+  netBalance: number;
+  createdByMemberId?: string | null;
+  createdAt: number;
+}
 
 /**
  * The signed-in User's active Member row in a Group. Anyone else, including a Former
@@ -12,29 +22,32 @@ export type MemberRow = typeof members.$inferSelect;
  */
 export async function requireMember(db: Db, groupId: string, userId: string): Promise<MemberRow> {
   const [me] = await db
-    .select()
-    .from(members)
+    .select({
+      memberId: groupMemberSummary.memberId,
+      groupId: groupMemberSummary.groupId,
+      userId: groupMemberSummary.userId,
+      role: groupMemberSummary.role,
+      netBalance: groupMemberSummary.netBalance,
+    })
+    .from(groupMemberSummary)
     .where(
-      and(eq(members.groupId, groupId), eq(members.userId, userId), eq(members.status, "active")),
+      and(
+        eq(groupMemberSummary.groupId, groupId),
+        eq(groupMemberSummary.userId, userId),
+      ),
     );
   if (me === undefined) throw new ApiError("NOT_FOUND");
-  return me;
+  return {
+    id: me.memberId,
+    groupId: me.groupId,
+    userId: me.userId,
+    role: me.role,
+    status: "active",
+    netBalance: me.netBalance,
+    createdAt: 0,
+  };
 }
 
 export function requireAdmin(me: MemberRow): void {
   if (me.role !== "admin") throw new ApiError("FORBIDDEN");
-}
-
-/**
- * SQL condition: the Group still has a free seat. Active and Placeholder Members take a
- * seat (decision 31). Used inside the writing statement so two joins cannot both take the
- * 30th seat.
- */
-export function hasFreeSeat(groupId: string) {
-  return sql`(SELECT count(*) FROM members s WHERE s.group_id = ${groupId} AND s.status IN ('active', 'placeholder')) < ${MAX_MEMBERS_PER_GROUP}`;
-}
-
-/** SQL condition: some active Admin other than `memberId` remains in the Group. */
-export function anotherAdmin(groupId: string, memberId: string) {
-  return sql`EXISTS (SELECT 1 FROM members a WHERE a.group_id = ${groupId} AND a.id <> ${memberId} AND a.role = 'admin' AND a.status = 'active')`;
 }

@@ -15,6 +15,15 @@ export function ensureFreezeTable(sql: SqlStorage): void {
   );
 }
 
+/** What finalising took away, kept so a failed multi-Group deletion can put it back. */
+function ensureFinalizationTable(sql: SqlStorage): void {
+  sql.exec(
+    `CREATE TABLE IF NOT EXISTS account_finalizations (
+      user_id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, member_id TEXT NOT NULL,
+      role TEXT NOT NULL, nickname TEXT, group_deleted INTEGER NOT NULL)`,
+  );
+}
+
 export function isFrozen(sql: SqlStorage, userId: string, now: number): boolean {
   ensureFreezeTable(sql);
   return (
@@ -88,13 +97,58 @@ export function finalizeAccount(
     !rows.some((row) => row.id !== member.id && row.role === "admin")
   )
     throw new ApiError("LAST_ADMIN");
-  if (rows.length === 1) sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
+  const soleMember = rows.length === 1;
+  ensureFinalizationTable(sql);
+  const previous = sql
+    .exec<{ nickname: string | null }>("SELECT nickname FROM ledger_members WHERE id=?", member.id)
+    .one();
+  sql.exec(
+    "INSERT OR REPLACE INTO account_finalizations(user_id,expires_at,member_id,role,nickname,group_deleted) VALUES (?,?,?,?,?,?)",
+    userId,
+    expires,
+    member.id,
+    member.role,
+    previous.nickname,
+    soleMember ? 1 : 0,
+  );
+  if (soleMember) sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
   else
     sql.exec(
       "UPDATE ledger_members SET status='former', user_id=NULL, nickname=? WHERE id=?",
       DELETED_USER_NAME,
       member.id,
     );
+  sql.exec("UPDATE ledger_meta SET rev=rev+1");
+  sql.exec(
+    "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+  );
+  return true;
+}
+
+/**
+ * Compensates a finalised deletion that the account could not complete in every Group: the
+ * Member (or the sole Member's Group) comes back exactly as it was frozen. Nothing to undo when
+ * this ledger never finalised the deletion, so it is safe to call after an unclear failure.
+ */
+export function restoreAccount(sql: SqlStorage, userId: string, expires: number): boolean {
+  ensureFinalizationTable(sql);
+  const saved = sql
+    .exec<{ member_id: string; role: string; nickname: string | null; group_deleted: number }>(
+      "SELECT member_id,role,nickname,group_deleted FROM account_finalizations WHERE user_id=? AND expires_at=?",
+      userId,
+      expires,
+    )
+    .toArray()[0];
+  if (saved === undefined) return false;
+  if (saved.group_deleted === 1) sql.exec("UPDATE ledger_group SET deleted=0");
+  sql.exec(
+    "UPDATE ledger_members SET status='active', user_id=?, nickname=?, role=? WHERE id=?",
+    userId,
+    saved.nickname,
+    saved.role,
+    saved.member_id,
+  );
+  sql.exec("DELETE FROM account_finalizations WHERE user_id=?", userId);
   sql.exec("UPDATE ledger_meta SET rev=rev+1");
   sql.exec(
     "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",

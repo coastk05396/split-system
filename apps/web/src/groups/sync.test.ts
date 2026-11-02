@@ -240,6 +240,40 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
       sync.disconnect();
     });
 
+    it("aborts a Group read still loading its first answer when the socket first opens", async () => {
+      let signal: AbortSignal | undefined;
+      const keyed = ["groups", "g-1"] as const;
+      const pending = client.query({
+        queryKey: keyed,
+        queryFn: (ctx) => {
+          signal = ctx.signal;
+          return new Promise<string>(() => undefined);
+        },
+      });
+      void pending.catch(() => undefined);
+      const mounted = new QueryObserver(client, {
+        queryKey: keyed,
+        queryFn: () => Promise.resolve("catch-up"),
+      });
+      const unsubscribe = mounted.subscribe(() => undefined);
+
+      const sync = new GroupLiveSync({
+        groupId: "g-1",
+        queryClient: client,
+        getAccessToken: () => "token-123",
+        WebSocket: FakeWebSocket as unknown as typeof WebSocket,
+        baseUrl: "http://localhost:5173",
+      });
+      sync.connect();
+      await Promise.resolve();
+      expect(signal?.aborted).toBe(false);
+      getSocket(0).open();
+
+      expect(signal?.aborted).toBe(true);
+      unsubscribe();
+      sync.disconnect();
+    });
+
     it("refetches the Group once after every successful open, the first included", async () => {
       const sync = new GroupLiveSync({
         groupId: "g-1",

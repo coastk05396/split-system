@@ -1,7 +1,4 @@
-import { env } from "cloudflare:workers";
-import { createDb } from "../src/db/client.js";
-import { expensePayers, expenses, expenseSplits } from "../src/db/schema.js";
-import { bearer, call, clock, json, type Session, signIn, uniqueSub } from "./auth-harness.js";
+import { bearer, call, json, type Session, signIn, uniqueSub } from "./auth-harness.js";
 
 export interface GroupBody {
   id: string;
@@ -85,53 +82,6 @@ export async function groupWith(adminName: string, ...memberNames: string[]) {
     others.push(member);
   }
   return { admin, group, token, others };
-}
-
-/**
- * Expense routes come in a later ticket, so an Expense is seeded straight into D1: created
- * and paid by `memberId`, split to `splitMemberIds` (default: the payer alone).
- */
-export async function seedExpense(
-  groupId: string,
-  memberId: string,
-  splitMemberIds: string[] = [memberId],
-): Promise<string> {
-  const db = createDb(env.DB);
-  const id = crypto.randomUUID();
-  await db.batch([
-    db.insert(expenses).values({
-      id,
-      groupId,
-      creatorMemberId: memberId,
-      description: "晚餐",
-      category: "food",
-      originalAmount: 600,
-      originalCurrency: "TWD",
-      fxRateScaled: 1_000_000,
-      fxDate: "2026-06-13",
-      settlementAmount: 600,
-      splitType: "equal",
-      expenseDate: "2026-06-13",
-      createdAt: clock.now,
-      updatedAt: clock.now,
-    }),
-    db.insert(expensePayers).values({
-      id: crypto.randomUUID(),
-      expenseId: id,
-      memberId,
-      amount: 600,
-      settlementAmount: 600,
-    }),
-    ...splitMemberIds.map((splitMemberId) =>
-      db.insert(expenseSplits).values({
-        id: crypto.randomUUID(),
-        expenseId: id,
-        memberId: splitMemberId,
-        settlementAmount: 600 / splitMemberIds.length,
-      }),
-    ),
-  ]);
-  return id;
 }
 
 export async function errorCode(res: Response): Promise<string | undefined> {

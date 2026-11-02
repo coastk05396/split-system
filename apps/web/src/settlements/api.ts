@@ -11,7 +11,7 @@ import type { ClientRequestOptions } from "hono/client";
 import { createApiClient } from "../api/client.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
-import { readWithRev } from "../groups/sync.js";
+import { abortable, readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Balance and Settlement routes (SPEC §5.1). */
 
@@ -42,7 +42,11 @@ export function useBalances(groupId: string) {
   const { api } = useSession();
   return useQuery({
     queryKey: settlementKeys.balances(groupId),
-    queryFn: (ctx) => read<Balances>(api.groups[":id"].balances.$get({ param: { id: groupId } }), ctx),
+    queryFn: (ctx) =>
+      read<Balances>(
+        api.groups[":id"].balances.$get({ param: { id: groupId } }, { init: abortable(ctx) }),
+        ctx,
+      ),
   });
 }
 
@@ -56,7 +60,7 @@ export function useSettlements(groupId: string) {
       const base = `/api/v1/groups/${encodeURIComponent(groupId)}/settlements`;
       const url =
         ctx.pageParam === undefined ? base : `${base}?cursor=${encodeURIComponent(ctx.pageParam)}`;
-      return read<SettlementPage>(fetch(url), ctx);
+      return read<SettlementPage>(fetch(url, abortable(ctx)), ctx);
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });

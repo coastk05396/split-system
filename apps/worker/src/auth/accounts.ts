@@ -225,7 +225,11 @@ export async function deleteAccount(
     .run();
   if (mark.meta.changes !== 1) throw new ApiError("FORBIDDEN");
   const frozen: string[] = [];
-  const operation = async (groupId: string, action: "freeze" | "unfreeze" | "finalize") => {
+  const finalized: string[] = [];
+  const operation = async (
+    groupId: string,
+    action: "freeze" | "unfreeze" | "finalize" | "restore",
+  ) => {
     const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId));
     const response = await stub.fetch("https://ledger.internal/account-deletion", {
       method: "POST",
@@ -269,7 +273,11 @@ export async function deleteAccount(
     }
     if (owing.length > 0) throw new ApiError("BALANCE_NOT_ZERO", { groupIds: owing });
     if (lastAdmin.length > 0) throw new ApiError("LAST_ADMIN", { groupIds: lastAdmin });
-    for (const groupId of frozen) await operation(groupId, "finalize");
+    for (const groupId of frozen) {
+      // Counted before the call: a lost response may still have finalised this Group.
+      finalized.push(groupId);
+      await operation(groupId, "finalize");
+    }
     const finishNow = clock();
     const spending = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='personal_spending'",
@@ -313,6 +321,9 @@ export async function deleteAccount(
     const results = await env.DB.batch(statements);
     if ((results.at(-2)?.meta.changes ?? 0) < 1) throw new ApiError("FORBIDDEN");
   } catch (error) {
+    // Two phases across Groups: a finalised Group is put back before any Group is unfrozen, so
+    // a deletion that fails midway never leaves the User a Former Member of only some Groups.
+    await Promise.allSettled(finalized.map((id) => operation(id, "restore")));
     await Promise.allSettled(frozen.map((id) => operation(id, "unfreeze")));
     await env.DB.prepare("DELETE FROM account_deletions WHERE user_id=? AND expires_at=?")
       .bind(userId, expires)
