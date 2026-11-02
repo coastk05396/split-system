@@ -1,7 +1,14 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { bearer, call, clock, json, signIn, uniqueSub, withCookie } from "./auth-harness.js";
-import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
+import {
+  createGroup,
+  groupWith,
+  inviteToken,
+  listMembers,
+  person,
+  send,
+} from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 
 function deleteMe(accessToken: string) {
@@ -160,6 +167,37 @@ it("unfreezes a Group after account deletion fails", async () => {
       (member) => member.userId === user.userId && member.status === "active",
     ),
   ).toBe(true);
+});
+
+it("rolls every finalised Group back when the deletion fails after finalising several", async () => {
+  const { admin, group, others } = await groupWith("rollback admin", "rollback member");
+  const user = others[0];
+  if (user === undefined) throw new Error("missing member");
+  const second = await createGroup(admin, { name: "第二個群組" });
+  const secondToken = await inviteToken(admin, second.id);
+  expect((await send(user, "POST", `/invites/${secondToken}/join`)).status).toBe(200);
+  // A sole-Member Group is deleted outright by finalising, and must come back too.
+  const solo = await createGroup(user, { name: "獨自一人" });
+
+  await env.DB.exec(
+    "CREATE TRIGGER fail_user_delete_multi BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, 'injected failure'); END",
+  );
+  try {
+    expect((await deleteMe(user.accessToken)).status).toBe(500);
+  } finally {
+    await env.DB.exec("DROP TRIGGER IF EXISTS fail_user_delete_multi");
+  }
+
+  for (const id of [group.id, second.id]) {
+    expect(
+      (await listMembers(admin, id)).some(
+        (member) => member.userId === user.userId && member.status === "active",
+      ),
+    ).toBe(true);
+  }
+  expect((await send(user, "GET", `/groups/${solo.id}`)).status).toBe(200);
+  // The compensation leaves nothing frozen: the User can delete the account afterwards.
+  expect((await send(user, "POST", `/groups/${group.id}/leave`)).status).toBe(204);
 });
 
 it("refuses a concurrent Expense that would change a frozen Member's Balance", async () => {

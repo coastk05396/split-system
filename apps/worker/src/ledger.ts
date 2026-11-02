@@ -4,6 +4,7 @@ import {
   frozenBalances,
   finalizeAccount,
   freezeAccount,
+  restoreAccount,
   isFrozen,
 } from "./ledger-account-deletion.js";
 import { DurableObject } from "cloudflare:workers";
@@ -643,7 +644,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     }
     if (new URL(request.url).pathname === "/account-deletion" && request.method === "POST") {
       const op = await request.json<{
-        action: "freeze" | "unfreeze" | "finalize";
+        action: "freeze" | "unfreeze" | "finalize" | "restore";
         userId: string;
         now: number;
         expires: number;
@@ -653,6 +654,33 @@ export class GroupLedger extends DurableObject<Bindings> {
           freezeAccount(this.ctx.storage.sql, op.userId, op.expires),
         );
         return Response.json(result);
+      }
+      if (op.action === "restore") {
+        const restored = this.ctx.storage.transactionSync(() =>
+          restoreAccount(this.ctx.storage.sql, op.userId, op.expires),
+        );
+        if (restored) {
+          if ((await this.ctx.storage.getAlarm()) === null)
+            await this.ctx.storage.setAlarm(Date.now() + 2000);
+          await this.drainAll();
+          const rev = this.ctx.storage.sql
+            .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
+            .one().rev;
+          const signal: SyncNeeded = {
+            version: 1,
+            type: "sync needed",
+            rev,
+            timestamp: Date.now(),
+          };
+          for (const socket of this.ctx.getWebSockets()) {
+            try {
+              socket.send(JSON.stringify(signal));
+            } catch {
+              /* socket has closed */
+            }
+          }
+        }
+        return Response.json({ ok: true, restored });
       }
       if (op.action === "unfreeze") {
         this.ctx.storage.transactionSync(() => {
