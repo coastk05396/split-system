@@ -252,39 +252,34 @@ function HomeGroupRow({ group }: { group: Group }) {
     >
       <div className="flex min-w-0 items-center gap-3.5">
         <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <span className="truncate text-base font-bold">{group.name}</span>
+            <span className="truncate text-base font-bold text-ink">{group.name}</span>
             {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
           </div>
-          <AvatarStack members={group.memberPreview} total={group.memberCount} />
+          <span
+            className={
+              balance < 0
+                ? "text-sm font-semibold text-rose-600 tabular-nums"
+                : balance > 0
+                  ? "text-sm font-semibold text-emerald-600 tabular-nums"
+                  : "text-sm text-ink-muted"
+            }
+          >
+            {balance < 0
+              ? t("home.payAmount", {
+                  amount: formatAmount(Math.abs(balance), group.settlementCurrency),
+                })
+              : balance > 0
+                ? t("home.receiveAmount", {
+                    amount: formatAmount(Math.abs(balance), group.settlementCurrency),
+                  })
+                : t("groups.settled")}
+          </span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2.5">
-        <div className="flex flex-col items-end gap-0.5 text-right">
-          <span
-            className={
-              balance < 0
-                ? "text-base font-bold text-rose-600 tabular-nums"
-                : balance > 0
-                  ? "text-base font-bold text-emerald-600 tabular-nums"
-                  : "text-base font-bold text-ink-muted tabular-nums"
-            }
-          >
-            {formatAmount(Math.abs(balance), group.settlementCurrency)}
-          </span>
-          <span
-            className={
-              balance < 0
-                ? "text-xs text-rose-600/80 text-right"
-                : balance > 0
-                  ? "text-xs text-emerald-600/80 text-right"
-                  : "text-xs text-ink-muted text-right"
-            }
-          >
-            {balance < 0 ? t("home.toPay") : balance > 0 ? t("home.toReceive") : t("groups.settled")}
-          </span>
-        </div>
+        <AvatarStack members={group.memberPreview} total={group.memberCount} />
         <ChevronRight
           aria-hidden="true"
           className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
