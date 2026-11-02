@@ -4,7 +4,7 @@ import { Avatar } from "./ui.js";
 /**
  * A Group's first few Members as overlapping avatars; the count of the rest sits at the end.
  * Inside a `group` parent they spread apart on hover and spring open on touch/click
- * (group-active:space-x-1 with spring easing).
+ * (group-active:space-x-1.5 with spring easing).
  */
 export function AvatarStack({
   members,
@@ -17,7 +17,7 @@ export function AvatarStack({
   return (
     <span
       aria-hidden="true"
-      className="mt-1 flex items-center -space-x-2.5 transition-all duration-300 ease-(--ease-spring) group-hover:-space-x-1 group-active:space-x-1 motion-reduce:group-hover:-space-x-2.5 motion-reduce:group-active:-space-x-2.5 motion-reduce:transition-none"
+      className="mt-1 flex items-center -space-x-2.5 transition-all duration-300 ease-(--ease-spring) group-hover:-space-x-1 group-active:space-x-1.5 motion-reduce:group-hover:-space-x-2.5 motion-reduce:group-active:-space-x-2.5 motion-reduce:transition-none"
     >
       {members.map((m, i) => (
         <span

@@ -252,30 +252,32 @@ function HomeGroupRow({ group }: { group: Group }) {
     >
       <div className="flex min-w-0 items-center gap-3.5">
         <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-bold text-ink">{group.name}</span>
             {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
           </div>
-          <span
-            className={
-              balance < 0
-                ? "text-sm font-semibold text-rose-600 tabular-nums"
-                : balance > 0
-                  ? "text-sm font-semibold text-emerald-600 tabular-nums"
-                  : "text-sm text-ink-muted"
-            }
-          >
-            {balance < 0
-              ? t("home.payAmount", {
-                  amount: formatAmount(Math.abs(balance), group.settlementCurrency),
-                })
-              : balance > 0
-                ? t("home.receiveAmount", {
+          <div>
+            <span
+              className={
+                balance < 0
+                  ? "inline-flex items-center rounded-full border border-rose-200/60 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 tabular-nums"
+                  : balance > 0
+                    ? "inline-flex items-center rounded-full border border-sprout-200/60 bg-sprout-50 px-2 py-0.5 text-xs font-semibold text-sprout-700 tabular-nums"
+                    : "inline-flex items-center rounded-full bg-sprout-100/70 px-2 py-0.5 text-xs font-medium text-sprout-700"
+              }
+            >
+              {balance < 0
+                ? t("home.payAmount", {
                     amount: formatAmount(Math.abs(balance), group.settlementCurrency),
                   })
-                : t("groups.settled")}
-          </span>
+                : balance > 0
+                  ? t("home.receiveAmount", {
+                      amount: formatAmount(Math.abs(balance), group.settlementCurrency),
+                    })
+                  : t("groups.settled")}
+            </span>
+          </div>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2.5">
