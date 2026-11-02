@@ -51,6 +51,33 @@ function withExpense(options: {
 }
 
 describe("Expense list and detail", () => {
+  it("stamps the receipt only when the group has no outstanding balances", async () => {
+    withExpense({ path: (id, eid) => `/groups/${id}/expenses/${eid}` });
+    await screen.findByRole("heading", { name: "晚餐" });
+    expect(screen.queryByRole("status", { name: "已結清 · SETTLED" })).toBeNull();
+  });
+
+  it("embosses a settled receipt when the payer covered only their own share", async () => {
+    withExpense({
+      path: (id, eid) => `/groups/${id}/expenses/${eid}`,
+      body: (ids) => ({
+        description: "自己的午餐",
+        category: "餐飲",
+        originalAmount: 100,
+        originalCurrency: "TWD",
+        fxRateScaled: 1_000_000,
+        fxDate: "2026-05-17",
+        isCustomRate: false,
+        settlementAmount: 100,
+        payers: [{ memberId: ids[0], amountMinor: 100 }],
+        split: { method: "equal", participants: [ids[0]] },
+        expenseDate: "2026-05-17",
+        expenseTime: null,
+      }),
+    });
+    expect(await screen.findByRole("status", { name: "已結清 · SETTLED" })).toBeVisible();
+  });
+
   it("lists the Group's Expenses on the 帳目 tab and opens one", async () => {
     const user = userEvent.setup();
     withExpense({ path: (id) => `/groups/${id}` });
@@ -171,7 +198,9 @@ describe("Expense list and detail", () => {
 
   it("keeps the expense visible when deletion fails", async () => {
     const user = userEvent.setup();
-    const { api, id, eid } = withExpense({ path: (groupId, expenseId) => `/groups/${groupId}/expenses/${expenseId}` });
+    const { api, id, eid } = withExpense({
+      path: (groupId, expenseId) => `/groups/${groupId}/expenses/${expenseId}`,
+    });
     api.failNext(`DELETE /api/v1/groups/${id()}/expenses/${eid()}`);
     await user.click(await screen.findByRole("button", { name: "刪除" }));
     const dialog = await screen.findByRole("dialog", { name: "刪除「晚餐」？" });

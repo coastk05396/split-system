@@ -22,6 +22,8 @@ import {
 } from "../groups/ui.js";
 import { categoryLabel } from "../expenses/categories.js";
 import { t } from "../i18n/messages.js";
+import { useBalances } from "../settlements/api.js";
+import { SettledStamp } from "../settlements/SettledStamp.js";
 
 /**
  * Screen 10 as amended: original amount and currency, the rate with its date and edited flag,
@@ -66,6 +68,11 @@ function Detail({
   const [shareCard, setShareCard] = useState<ExpenseCard | null>(null);
   const joined = joinedGroupName(useLocation().state);
   const share = useExpenseSharing(group.id);
+  const balances = useBalances(group.id);
+  const settled =
+    balances.isSuccess &&
+    balances.data.balances.length > 0 &&
+    balances.data.balances.every((row) => row.balance === 0);
   const settlement = group.settlementCurrency;
   const foreign = expense.originalCurrency !== settlement;
   return (
@@ -105,7 +112,7 @@ function Detail({
           </span>
         }
       />
-      <section className="surface-card overflow-hidden rounded-3xl border border-sprout-200 bg-white">
+      <section className="surface-card tactile-receipt overflow-hidden rounded-3xl border border-sprout-200 bg-white">
         <div className="flex items-center gap-3 bg-sprout-150 px-6 py-4">
           <span
             className={`flex size-12 shrink-0 items-center justify-center rounded-full shadow-xs ${categoryTone(expense.category).badge}`}
@@ -148,6 +155,7 @@ function Detail({
               </span>
             </div>
           )}
+          {settled && <SettledStamp />}
           <p className="mt-1 text-sm text-ink-muted">
             {dateHeading(expense.expenseDate)}
             {expense.expenseTime === null ? "" : ` ${expense.expenseTime}`}
@@ -198,9 +206,7 @@ function Detail({
           ))}
         </ul>
       </section>
-      {canChange && (
-        <DeleteExpense group={group} expense={expense} />
-      )}
+      {canChange && <DeleteExpense group={group} expense={expense} />}
       {shareCard !== null && (
         <ExpenseShareDialog card={shareCard} open={sharing} onOpenChange={setSharing} />
       )}
@@ -208,13 +214,7 @@ function Detail({
   );
 }
 
-function DeleteExpense({
-  group,
-  expense,
-}: {
-  group: Group;
-  expense: Expense;
-}) {
+function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
   const remove = useDeleteExpense(group.id);
   const navigate = useNavigate();
   return (

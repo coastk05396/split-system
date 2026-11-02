@@ -66,7 +66,7 @@ describe("settle share card", () => {
     expect(json).not.toContain('"text":"🌱 週末台南小旅行"');
 
     // Subtitle with count
-    expect(json).toContain("✨ 智慧平帳 · 共 3 筆待結算");
+    expect(json).toContain("共 3 筆待結算");
 
     // Flow arrows without 欠了
     expect(json).toContain("小宇 ➔ Gulu");
@@ -93,7 +93,7 @@ describe("settle share card", () => {
     expect(settleText(card)).toBe(
       [
         "週末台南小旅行",
-        "✨ 智慧平帳 · 共 3 筆待結算",
+        "共 3 筆待結算",
         "小宇 ➔ Gulu  NT$ 430",
         "Yizhen ➔ ty  NT$ 194",
         "Gulu ➔ ty  NT$ 99",

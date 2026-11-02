@@ -25,7 +25,7 @@ function CardPreview({ card }: { card: ExpenseCard }) {
         </p>
         <div className="flex items-center justify-between gap-3">
           <p className="text-3xl font-bold tabular-nums">{card.amount}</p>
-          <span className="shrink-0 rounded-full bg-sprout-150 px-3 py-1.5 text-[10px] font-bold text-sprout-500">
+          <span className="shrink-0 rounded-full bg-sprout-150 px-3 py-1.5 text-[10px] font-bold text-sprout-700">
             {card.split}
           </span>
         </div>

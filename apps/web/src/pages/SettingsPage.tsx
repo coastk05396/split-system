@@ -122,7 +122,7 @@ export function SettingsPage() {
           {linked.has("line") && (
             <span
               aria-hidden="true"
-              className="rounded-full bg-line px-2 py-0.5 text-[11px] font-bold tracking-wide text-white"
+              className="rounded-full bg-line px-2 py-0.5 text-[11px] font-bold tracking-wide text-sprout-900"
             >
               LINE
             </span>

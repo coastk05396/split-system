@@ -260,7 +260,7 @@ function HomeGroupRow({ group }: { group: Group }) {
             <span
               className={
                 balance < 0
-                  ? "inline-flex items-center whitespace-nowrap rounded-full border border-rose-200/60 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 tabular-nums"
+                  ? "inline-flex items-center whitespace-nowrap rounded-full border border-terracotta/20 bg-terracotta-soft px-2 py-0.5 text-xs font-semibold text-terracotta-ink tabular-nums"
                   : balance > 0
                     ? "inline-flex items-center whitespace-nowrap rounded-full border border-sprout-200/60 bg-sprout-50 px-2 py-0.5 text-xs font-semibold text-sprout-700 tabular-nums"
                     : "inline-flex items-center whitespace-nowrap rounded-full bg-sprout-100/70 px-2 py-0.5 text-xs font-medium text-sprout-700"

@@ -21,7 +21,7 @@
 
   /* Fluid ease-out and spring release curves for tactile micro-interactions. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @layer base {
@@ -950,14 +950,14 @@ body::before {
     transform: scale(0.88);
   }
   60% {
-    transform: scale(1.14);
+    transform: scale(1.04);
   }
   100% {
     transform: scale(1);
   }
 }
 .category-bloom {
-  animation: category-bloom 160ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: category-bloom 160ms var(--ease-spring) both;
 }
 
 /* Copy icon micro-rotation and scale entrance on success */
@@ -990,23 +990,23 @@ body::before {
   animation: dialog-icon-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Navigation tab active bouncy pop */
+/* Navigation tab selection: a brief, controlled pop. */
 @keyframes nav-icon-pop {
   0% {
     transform: scale(0.92);
   }
   40% {
-    transform: scale(1.18) rotate(-3deg);
+    transform: scale(1.04) rotate(-1deg);
   }
   75% {
-    transform: scale(0.96) rotate(1deg);
+    transform: scale(1) rotate(0deg);
   }
   100% {
     transform: scale(1) rotate(0deg);
   }
 }
 .nav-icon-pop {
-  animation: nav-icon-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: nav-icon-pop 180ms var(--ease-spring) both;
 }
 
 /* Connected transfer arrow subtle nudge in direction of payment */
@@ -1137,5 +1137,107 @@ body::before {
   }
   .sparkle {
     opacity: 0.8;
+  }
+}
+
+/* Quiet paper and a softly lifted clay receipt for the editorial landing page. */
+.landing-editorial {
+  background: #f8f5ee;
+}
+.clay-receipt {
+  background: linear-gradient(145deg, #fffefb, #f3efe5);
+  border: 0.5px solid rgb(255 255 255 / 0.95);
+  box-shadow:
+    inset 0.5px 0.5px 0 0 #fff,
+    inset -0.5px -0.5px 0 0 rgb(120 105 78 / 0.14),
+    0 18px 36px -24px rgb(74 64 42 / 0.35),
+    0 3px 6px -4px rgb(74 64 42 / 0.16);
+  transform: rotate(-2deg);
+  transition: transform 240ms var(--ease-spring);
+}
+@media (hover: hover) {
+  .clay-receipt:hover {
+    transform: translateY(-4px) rotate(0deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clay-receipt,
+  .clay-receipt:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Warm clay for balances, with a darker ink for small text. */
+@theme {
+  --color-terracotta: #c85a32;
+  --color-terracotta-ink: #984126;
+  --color-terracotta-soft: #fbede5;
+}
+.tactile-receipt {
+  padding-bottom: 6px;
+  mask: radial-gradient(circle at 4px 100%, transparent 3px, #000 3.5px) 0 0 / 8px 100% repeat-x;
+}
+.settled-stamp {
+  display: inline-flex;
+  width: 92px;
+  height: 92px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 8px;
+  border: 1px solid rgb(38 104 75 / 0.4);
+  border-radius: 50%;
+  outline: 1px solid rgb(38 104 75 / 0.18);
+  outline-offset: -5px;
+  background: rgb(228 249 233 / 0.25);
+  color: var(--color-sprout-700);
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 1px 0 #fff;
+  box-shadow:
+    inset 0 1px 1px rgb(20 63 42 / 0.08),
+    0 1px 0 #fff;
+  transform: rotate(-2deg);
+  animation: stamp-settle 220ms var(--ease-spring) both;
+}
+@keyframes stamp-settle {
+  from {
+    opacity: 0;
+    transform: rotate(-2deg) scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-2deg) scale(1);
+  }
+}
+.metadata-ticket summary::-webkit-details-marker {
+  display: none;
+}
+.metadata-chevron {
+  transition: transform 180ms var(--ease-spring);
+}
+.metadata-ticket[open] .metadata-chevron {
+  transform: rotate(180deg);
+}
+.splitter-avatar {
+  transition:
+    opacity 160ms ease-out,
+    transform 180ms var(--ease-spring);
+}
+.splitter-row:active .splitter-avatar {
+  transform: scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settled-stamp {
+    animation: none;
+  }
+  .metadata-chevron,
+  .splitter-avatar {
+    transition: none;
+  }
+  .splitter-row:active .splitter-avatar {
+    transform: none;
   }
 }

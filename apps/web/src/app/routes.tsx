@@ -77,6 +77,11 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, n
 }
 
 export const routes: RouteObject[] = [
+  {
+    path: "/landing",
+    lazy: page(() => import("../pages/LandingPage.js"), "LandingPage"),
+    ErrorBoundary: RouteError,
+  },
   { path: "/sign-in", Component: SignInRoute, ErrorBoundary: RouteError },
   // Policy pages are public: linked from sign-in, readable signed in or out.
   {
