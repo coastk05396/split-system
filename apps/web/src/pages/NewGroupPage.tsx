@@ -1,11 +1,13 @@
 import { CURRENCY_CODES, type CurrencyCode } from "@split/shared";
-import { ArrowRight, Plane, ReceiptText, Users } from "lucide-react";
+import { ArrowRight, Plane, ReceiptText } from "lucide-react";
 import { type SubmitEvent, type ReactNode, useId, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useCreateGroup } from "../groups/api.js";
 import {
   failureMessage,
+  GROUP_PALETTES,
+  GroupAvatar,
   input,
   MaintenanceTag,
   primaryButton,
@@ -13,6 +15,7 @@ import {
 } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
+import { SproutMascot } from "../shell/SproutMascot.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
 
 function isCurrency(value: string): value is CurrencyCode {
@@ -29,10 +32,20 @@ export function NewGroupPage() {
   const create = useCreateGroup();
   const { state } = useAuth();
   const [name, setName] = useState("");
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const [diceRolling, setDiceRolling] = useState(false);
   const [isTrip, setIsTrip] = useState(TRIP_ENABLED && params.get("usage") === "trip");
   const [settlementCurrency, setSettlementCurrency] = useState<CurrencyCode>(
     state.status === "signedIn" ? state.user.preferredCurrency : "TWD",
   );
+
+  function rollPalette() {
+    setPaletteIndex((prev) => (prev + 1) % GROUP_PALETTES.length);
+    setDiceRolling(true);
+    setTimeout(() => {
+      setDiceRolling(false);
+    }, 400);
+  }
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,20 +56,52 @@ export function NewGroupPage() {
   }
 
   return (
-    <form onSubmit={submit} className="flex max-w-xl flex-col gap-6">
-      <ScreenHeader title={t("create.title")} back="/groups" subtitle={t("create.subtitle")} />
-      <label className="flex flex-col gap-2">
-        <span className="font-bold">{t("create.name")}</span>
-        <input
-          value={name}
-          maxLength={60}
-          placeholder={t("create.namePlaceholder")}
-          onChange={(e) => {
-            setName(e.target.value);
-          }}
-          className={input}
-        />
-      </label>
+    <form onSubmit={submit} className="flex max-w-xl flex-col gap-4">
+      <ScreenHeader title={t("create.title")} back="/groups" compact={true} />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="group-name-input" className="font-bold">
+          {t("create.name")}
+        </label>
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={rollPalette}
+              aria-label="隨機換色"
+              title="隨機換色"
+              className="group flex items-center justify-center rounded-2xl p-0.5 focus-visible:outline-2 focus-visible:outline-sprout-600"
+            >
+              <GroupAvatar
+                name={name}
+                paletteIndex={paletteIndex}
+                className="size-12 rounded-2xl text-lg shadow-2xs transition-all duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95"
+                interactive={false}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={rollPalette}
+              aria-label="隨機換色"
+              title="隨機換色"
+              className={`absolute -bottom-1 -right-1 flex size-5.5 items-center justify-center rounded-full border border-sprout-200 bg-white text-xs shadow-xs transition-transform duration-300 ease-(--ease-spring) hover:scale-115 active:scale-90 ${
+                diceRolling ? "rotate-[360deg] scale-110" : ""
+              }`}
+            >
+              <span aria-hidden="true">🎲</span>
+            </button>
+          </div>
+          <input
+            id="group-name-input"
+            value={name}
+            maxLength={60}
+            placeholder={t("create.namePlaceholder")}
+            onChange={(e) => {
+              setName(e.target.value);
+            }}
+            className={`${input} flex-1`}
+          />
+        </div>
+      </div>
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 font-bold">{t("create.usage")}</legend>
         <div className="grid grid-cols-2 gap-1 rounded-2xl bg-sprout-150 p-1">
@@ -85,10 +130,10 @@ export function NewGroupPage() {
         value={settlementCurrency}
         onChange={setSettlementCurrency}
       />
-      <div className="flex flex-col items-center gap-2 rounded-3xl bg-sprout-150 p-6 text-center">
-        <Users aria-hidden="true" className="size-10 text-sprout-500" />
-        <p className="font-bold">{t("create.invite.title")}</p>
-        <p className="text-sm text-ink-muted">{t("create.invite.body")}</p>
+      <div className="surface-card flex flex-col items-center gap-2 rounded-3xl border border-sprout-200/80 bg-gradient-to-b from-sprout-100/90 to-sprout-50/70 p-5 text-center shadow-2xs">
+        <SproutMascot className="-mb-1 size-14" mood="happy" />
+        <p className="font-bold text-ink">{t("create.invite.title")}</p>
+        <p className="max-w-xs text-xs text-ink-muted">{t("create.invite.body")}</p>
       </div>
       {create.isError && (
         <p role="alert" className="text-red-700">

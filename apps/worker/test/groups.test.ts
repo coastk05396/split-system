@@ -19,15 +19,15 @@ import {
 const db = createDb(env.DB);
 
 describe("a Group's member preview", () => {
-  it("lists the first four seated Members in joining order, for the card's avatars", async () => {
-    const { admin, group } = await groupWith("小宇", "甲", "乙", "丙", "丁", "戊");
+  it("lists the first six seated Members in joining order, for the card's avatars", async () => {
+    const { admin, group } = await groupWith("小宇", "甲", "乙", "丙", "丁", "戊", "己");
     const list = await (
       await send(admin, "GET", "/groups")
     ).json<{ id: string; memberCount: number; memberPreview: { name: string }[] }[]>();
     const mine = list.find((g) => g.id === group.id);
 
-    expect(mine?.memberCount).toBe(6);
-    expect(mine?.memberPreview.map((m) => m.name)).toEqual(["小宇", "甲", "乙", "丙"]);
+    expect(mine?.memberCount).toBe(7);
+    expect(mine?.memberPreview.map((m) => m.name)).toEqual(["小宇", "甲", "乙", "丙", "丁", "戊"]);
   });
 });
 

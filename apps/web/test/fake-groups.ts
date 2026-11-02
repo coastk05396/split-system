@@ -215,7 +215,7 @@ export function createFakeGroups(): FakeGroups {
       settlementCurrencyLocked: g.locked,
       memberCount: seated(g).length,
       memberPreview: seated(g)
-        .slice(0, 4)
+        .slice(0, 6)
         .map((m) => ({ name: displayName(m), pictureUrl: null })),
       createdAt: 0,
       updatedAt: g.updatedAt,

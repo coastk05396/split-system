@@ -19,7 +19,7 @@ type GroupRow = typeof groups.$inferSelect;
 const lockedSql = sql<number>`COALESCE((SELECT settlement_currency_locked FROM group_directory d WHERE d.group_id = "groups"."id"), 0)`;
 const seatedSql = sql<number>`(SELECT count(*) FROM members s WHERE s.group_id = "groups"."id" AND s.status IN ('active', 'placeholder'))`;
 
-const PREVIEW_SIZE = 4;
+const PREVIEW_SIZE = 6;
 
 /** The first few seated Members of each Group, in joining order, for the card's avatars. */
 async function previewsOf(db: Db, groupIds: readonly string[]) {

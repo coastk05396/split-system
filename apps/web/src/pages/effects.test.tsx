@@ -69,7 +69,15 @@ describe("the groups list", () => {
       seed: (groups) => {
         groups.add(me, {
           name: "大團",
-          others: [{ name: "甲" }, { name: "乙" }, { name: "丙" }, { name: "丁" }, { name: "戊" }],
+          others: [
+            { name: "甲" },
+            { name: "乙" },
+            { name: "丙" },
+            { name: "丁" },
+            { name: "戊" },
+            { name: "己" },
+            { name: "庚" },
+          ],
         });
       },
     });

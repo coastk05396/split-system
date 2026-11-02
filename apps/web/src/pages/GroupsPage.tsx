@@ -26,8 +26,12 @@ export function GroupsPage() {
         <h1 className="text-2xl font-bold md:text-3xl">{t("groups.heading")}</h1>
       </header>
       <ul aria-label={t("groups.heading")} className="grid gap-2.5 md:grid-cols-2 md:gap-4">
-        {groups.data.map((g) => (
-          <li key={g.id}>
+        {groups.data.map((g, index) => (
+          <li
+            key={g.id}
+            className="list-stagger-item"
+            style={{ animationDelay: `${index * 40}ms` }}
+          >
             <GroupRow group={g} />
           </li>
         ))}
@@ -50,7 +54,11 @@ function GroupRow({ group }: { group: Group }) {
       to={`/groups/${group.id}`}
       className="surface-card group flex items-center gap-3.5 rounded-2xl border border-sprout-200/80 bg-white px-4 py-3 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
     >
-      <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base md:size-12 md:text-lg" />
+      <GroupAvatar
+        name={group.name}
+        groupId={group.id}
+        className="size-11 text-base transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-90 group-active:-rotate-2 md:size-12 md:text-lg motion-reduce:transform-none"
+      />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span className="truncate text-base font-bold">{group.name}</span>

@@ -205,15 +205,20 @@ export function groupGlyph(name: string): string {
 export function GroupAvatar({
   name,
   groupId,
+  paletteIndex,
   className = "size-11 text-base",
   interactive = true,
 }: {
   name: string;
-  groupId: string;
+  groupId?: string;
+  paletteIndex?: number;
   className?: string;
   interactive?: boolean;
 }) {
-  const palette = groupPalette(groupId || name);
+  const palette =
+    paletteIndex !== undefined
+      ? GROUP_PALETTES[((paletteIndex % GROUP_PALETTES.length) + GROUP_PALETTES.length) % GROUP_PALETTES.length]!
+      : groupPalette(groupId || name);
   const glyph = groupGlyph(name);
   const isEmoji = /\p{Extended_Pictographic}/u.test(glyph);
 

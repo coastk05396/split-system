@@ -73,4 +73,34 @@ describe("create Group", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("你最多只能加入 20 個群組。");
   });
+
+  it("updates live avatar glyph and rolls color with the dice button", async () => {
+    const user = userEvent.setup();
+    renderApp({ path: "/groups/new", cookieUser: me });
+
+    expect(await screen.findByRole("heading", { name: "建立群組" })).toBeVisible();
+
+    // Subtitle is removed
+    expect(screen.queryByText("同一個群組，可以快分，也可以開啟旅程。")).toBeNull();
+
+    // Default glyph is "群"
+    expect(screen.getByText("群")).toBeInTheDocument();
+
+    // Type group name and check glyph updates in real-time
+    const nameInput = screen.getByLabelText("群組名稱");
+    await user.type(nameInput, "沖繩耍廢團");
+    expect(screen.getByText("沖")).toBeInTheDocument();
+
+    // Sprout mascot invite card is present
+    expect(screen.getByText("邀請朋友，一起開始")).toBeVisible();
+    expect(screen.getByText("建立後就能分享連結，同一份帳大家都看得到")).toBeVisible();
+
+    // Clicking the 🎲 dice button changes the avatar styling
+    const diceButton = screen.getAllByRole("button", { name: "隨機換色" })[1];
+    if (diceButton === undefined) throw new Error("Missing dice button");
+    const avatarEl = screen.getByText("沖").parentElement;
+    const initialClass = avatarEl?.className;
+    await user.click(diceButton);
+    expect(avatarEl?.className).not.toBe(initialClass);
+  });
 });

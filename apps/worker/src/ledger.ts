@@ -467,7 +467,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               ? null
               : JSON.stringify(
                   active
-                    .slice(0, 4)
+                    .slice(0, 6)
                     .map((m) => ({ userId: m.user_id, placeholderName: m.placeholder_name })),
                 ),
             g.deleted ? null : g.created_at,
