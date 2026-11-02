@@ -575,7 +575,7 @@ function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
     <span aria-hidden="true" className="flex shrink-0 items-center">
       <span className="h-0.5 w-2 bg-sprout-200" />
       <span className={`flex size-6 items-center justify-center rounded-full border shadow-2xs ${badge}`}>
-        <ArrowRight className="size-3.5" />
+        <ArrowRight className="size-3.5 transfer-arrow-pulse" />
       </span>
       <span className="h-0.5 w-2 bg-sprout-200" />
     </span>
