@@ -64,10 +64,8 @@
 
 /* Frosted glass surfaces with specular top highlight and ambient depth. */
 .glass-nav {
-  /* A small blur: this bar sits over scrolling content, so the blur is redone every scroll frame. */
-  background-color: rgb(255 255 255 / 0.88);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* Nearly opaque instead of blurred: this bar sits over scrolling content, so a blur would be redone every scroll frame. */
+  background-color: rgb(255 255 255 / 0.94);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.75),
     0 -8px 24px -22px #143f2a;

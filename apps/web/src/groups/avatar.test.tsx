@@ -70,7 +70,7 @@ describe("GroupAvatar", () => {
 });
 
 describe("AvatarStack", () => {
-  it("renders preview avatars and includes spring touch-spread classes", () => {
+  it("shows at most four avatars, counts the rest, and keeps the spring touch-spread classes", () => {
     const members = [
       { name: "小宇", pictureUrl: null },
       { name: "宜庭", pictureUrl: null },
@@ -83,6 +83,6 @@ describe("AvatarStack", () => {
     const stack = container.querySelector("span");
     expect(stack?.className).toContain("group-active:space-x-1");
     expect(stack?.className).toContain("ease-(--ease-spring)");
-    expect(screen.getByText("+2")).toBeInTheDocument();
+    expect(screen.getByText("+4")).toBeInTheDocument();
   });
 });

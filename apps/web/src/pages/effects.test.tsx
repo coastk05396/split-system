@@ -62,7 +62,7 @@ describe("a new expense", () => {
 });
 
 describe("the groups list", () => {
-  it("shows the first members as overlapping avatars with the rest counted", async () => {
+  it("shows the first four members as overlapping avatars with the rest counted", async () => {
     renderApp({
       cookieUser: me,
       path: "/groups",
@@ -83,7 +83,7 @@ describe("the groups list", () => {
     });
 
     const card = await screen.findByRole("link", { name: /大團/ });
-    expect(within(card).getByText("+2")).toBeInTheDocument();
+    expect(within(card).getByText("+4")).toBeInTheDocument();
     expect(within(card).getByText("小")).toBeInTheDocument();
   });
 });

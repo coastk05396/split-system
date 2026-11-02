@@ -63,7 +63,7 @@ function GroupRow({ group }: { group: Group }) {
             <span className="truncate text-base font-bold text-ink">{group.name}</span>
             {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
           </div>
-          <span className="text-xs text-ink-muted">
+          <span className="whitespace-nowrap text-xs text-ink-muted">
             {t("groups.memberCount", { count: group.memberCount })}
           </span>
         </div>

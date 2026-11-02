@@ -215,9 +215,7 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
             <SproutMascot className="size-10" mood="cheer" />
           </span>
           <div className="flex flex-col gap-0.5">
-            <p className="font-bold text-sprout-800">
-              {t("home.allSettled")}
-            </p>
+            <p className="font-bold text-sprout-800">{t("home.allSettled")}</p>
             <span className="text-xs text-sprout-600">所有帳目已全部結清，輕鬆無負擔 ✨</span>
           </div>
         </div>
@@ -262,10 +260,10 @@ function HomeGroupRow({ group }: { group: Group }) {
             <span
               className={
                 balance < 0
-                  ? "inline-flex items-center rounded-full border border-rose-200/60 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 tabular-nums"
+                  ? "inline-flex items-center whitespace-nowrap rounded-full border border-rose-200/60 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 tabular-nums"
                   : balance > 0
-                    ? "inline-flex items-center rounded-full border border-sprout-200/60 bg-sprout-50 px-2 py-0.5 text-xs font-semibold text-sprout-700 tabular-nums"
-                    : "inline-flex items-center rounded-full bg-sprout-100/70 px-2 py-0.5 text-xs font-medium text-sprout-700"
+                    ? "inline-flex items-center whitespace-nowrap rounded-full border border-sprout-200/60 bg-sprout-50 px-2 py-0.5 text-xs font-semibold text-sprout-700 tabular-nums"
+                    : "inline-flex items-center whitespace-nowrap rounded-full bg-sprout-100/70 px-2 py-0.5 text-xs font-medium text-sprout-700"
               }
             >
               {balance < 0

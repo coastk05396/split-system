@@ -16,6 +16,10 @@ _Avoid_: Room, team, party
 The visual glyph representing a Group, displaying its first character or emoji on a deterministic pastel palette with spring motion feedback.
 _Avoid_: Group icon, group logo
 
+**Member stack**:
+The overlapping pictures of a Group's first four Members on a Group card, with the number of everyone else in a "+N" chip. It gives way to the Balance beside it, which is never squeezed.
+_Avoid_: Avatar row, member faces
+
 **Running Tab**:
 A Group with no itinerary, used for ongoing everyday splitting.
 _Avoid_: Casual group, daily group
