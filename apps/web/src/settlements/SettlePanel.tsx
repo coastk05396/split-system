@@ -5,7 +5,8 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ArrowRight, ChevronDown, MessageCircle, Send } from "lucide-react";
 import { useDeps } from "../app/AppProviders.js";
 import {
@@ -51,8 +52,6 @@ export function SettlePanel({ group }: { group: Group }) {
     balances.data?.balances.map((b) => ({ memberId: b.memberId, amountMinor: b.balance })),
   );
   const action = useSettlementAction(group.id);
-  // Whether I was last owed or owing: a debt that shrinks to 0 is good news, a credit that does not.
-  const owedSign = useRef(0);
   // Whether there was anything to settle while this screen was open: only then is "all settled"
   // news worth a ring, rather than the calm state of a group that never owed anything.
   const sawWork = useRef(false);
@@ -71,7 +70,6 @@ export function SettlePanel({ group }: { group: Group }) {
   const rows = new Map(balances.data.balances.map((b) => [b.memberId, b]));
   const nameOf = (id: string) => localName(rows.get(id)?.displayName ?? "?");
   const mine = rows.get(group.me.memberId)?.balance ?? 0;
-  if (mine !== 0) owedSign.current = Math.sign(mine);
   const all = settlements.data.pages.flatMap((p) => p.settlements);
   const history = all.filter((s) => s.status !== "pending");
   const planned = plan.status === "ready" ? plan.plan.payments : [];
@@ -86,32 +84,6 @@ export function SettlePanel({ group }: { group: Group }) {
   return (
     <PictureContext value={memberPictures(members.data)}>
       <div className="flex flex-col gap-4 text-ink">
-        <section
-          className={`flex flex-col gap-0.5 rounded-2xl px-5 py-3.5 transition-colors ${
-            mine > 0 ? "settle-aura-get" : mine < 0 ? "settle-aura-pay" : "settle-aura-even"
-          }`}
-        >
-          <h2
-            className={`text-sm font-bold ${
-              mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink-muted"
-            }`}
-          >
-            {t(mine > 0 ? "settle.owedToMe" : mine < 0 ? "settle.iOwe" : "settle.mineSettled")}
-          </h2>
-          <p
-            className={`text-3xl font-bold tabular-nums ${
-              mine > 0 ? "text-sprout-700" : mine < 0 ? "text-red-700" : "text-ink"
-            }`}
-          >
-            <CountUp
-              value={Math.abs(mine)}
-              format={(n) => formatAmount(n, currency)}
-              goodWhen={owedSign.current >= 0 ? "up" : "down"}
-              updating={isUpdating}
-            />
-          </p>
-        </section>
-
         <BalanceChart
           rows={balances.data.balances}
           myMemberId={group.me.memberId}
@@ -126,7 +98,7 @@ export function SettlePanel({ group }: { group: Group }) {
           </p>
         )}
 
-        <section className="flex flex-col gap-3">
+        <section className="settle-stagger-2 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="mr-auto text-lg font-bold">{t("settle.planTitle")}</h2>
             {/* Only an approximate plan says so; the fewest-payments one needs no label. */}
@@ -170,7 +142,13 @@ export function SettlePanel({ group }: { group: Group }) {
               <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
                 {orderedPlan.map((p) => (
                   <li key={`${p.fromMemberId}-${p.toMemberId}`} className={paymentCard()}>
-                    <PlannedRow group={group} payment={p} rows={rows} currency={currency} />
+                    <PlannedRow
+                      group={group}
+                      payment={p}
+                      rows={rows}
+                      currency={currency}
+                      updating={isUpdating}
+                    />
                   </li>
                 ))}
               </ul>
@@ -225,19 +203,7 @@ function SettleNotifyActions({
 }) {
   const { line } = useDeps();
   const invite = useEnsureInvite(group.id);
-  const [chatAvailable, setChatAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let current = true;
-    void line.canSendToChat().then((available) => {
-      if (current) setChatAvailable(available);
-    });
-    return () => {
-      current = false;
-    };
-  }, [line]);
-
   async function prepareCard() {
     const link = await invite.mutateAsync().catch(() => null);
     return buildSettleCard(payments, group, currency, nameOf, link?.token ?? null);
@@ -248,7 +214,15 @@ function SettleNotifyActions({
     setBusy(true);
     try {
       const card = await prepareCard();
-      await line.sendToChat([settleFlexMessage(card)]);
+      try {
+        await line.sendToChat([settleFlexMessage(card)]);
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.log("[DEV] sendToChat simulated:", settleFlexMessage(card));
+        } else {
+          throw err;
+        }
+      }
       onNotice(t("settleShare.sentToChat"));
     } catch (error) {
       onNotice(failureMessage(error), true);
@@ -277,34 +251,54 @@ function SettleNotifyActions({
   }
 
   return (
-    <span className="flex flex-wrap items-center gap-2">
-      {chatAvailable && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void sendToChat()}
-          className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-900 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
-        >
-          <Send aria-hidden="true" className="size-3.5 text-sprout-700" />
-          {t("settleShare.sendToChat")}
-        </button>
-      )}
-      <button
-        type="button"
+    <Menu.Root>
+      <Menu.Trigger
         disabled={busy}
-        onClick={() => void shareLine()}
         className="press-pill flex items-center gap-1.5 rounded-full border border-sprout-200 bg-peach px-3.5 py-1.5 text-xs font-bold text-sprout-700 shadow-2xs hover:border-sprout-500 disabled:opacity-60"
       >
         <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-700" />
-        {t("settleShare.shareLine")}
-      </button>
-    </span>
+        <span>{t("settleShare.menuTrigger")}</span>
+        <ChevronDown aria-hidden="true" className="size-3 text-sprout-700" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content
+          align="end"
+          sideOffset={6}
+          className="menu-content glass-dialog surface-card z-20 flex w-40 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg backdrop-blur-md"
+        >
+          <Menu.Item
+            onSelect={() => void sendToChat()}
+            className="press-pill flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink outline-none data-[highlighted]:bg-sprout-100"
+          >
+            <Send aria-hidden="true" className="size-3.5 text-sprout-600" />
+            {t("settleShare.sendToChat")}
+          </Menu.Item>
+          <Menu.Item
+            onSelect={() => void shareLine()}
+            className="press-pill flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-ink outline-none data-[highlighted]:bg-sprout-100"
+          >
+            <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-600" />
+            {t("settleShare.shareLine")}
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 
 function SettledMessage({ celebrate }: { celebrate: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-[1.75rem] bg-sprout-150 px-4 py-6 font-bold text-sprout-700">
+    <div className="relative overflow-hidden flex flex-col items-center justify-center gap-2 rounded-[1.75rem] bg-sprout-150 px-4 py-6 font-bold text-sprout-700">
+      {celebrate && (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <span className="leaf-particle p1" />
+          <span className="leaf-particle p2" />
+          <span className="leaf-particle p3" />
+          <span className="leaf-particle p4" />
+          <span className="leaf-particle p5" />
+          <span className="leaf-particle p6" />
+        </div>
+      )}
       <span aria-hidden="true" className="relative inline-flex">
         {celebrate && (
           <span className="settle-ring absolute inset-2 rounded-full border-2 border-sprout-500" />
@@ -554,8 +548,8 @@ function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
   return (
     <span aria-hidden="true" className="flex shrink-0 items-center">
       <span className="h-0.5 w-2 bg-sprout-200" />
-      <span className={`flex size-6 items-center justify-center rounded-full border ${badge}`}>
-        <ArrowRight className="size-3.5" />
+      <span className={`flex size-6 items-center justify-center rounded-full border shadow-2xs ${badge}`}>
+        <ArrowRight className="size-3.5 transfer-arrow-pulse" />
       </span>
       <span className="h-0.5 w-2 bg-sprout-200" />
     </span>
@@ -586,6 +580,7 @@ function PaymentLine({
   badge,
   showRole = false,
   struck = false,
+  updating = false,
 }: {
   /** Real display names; the line itself says 你 for me. */
   payer: string;
@@ -599,6 +594,7 @@ function PaymentLine({
   /** Tag the card 你要付 or 你可收 when it is mine to pay or collect. */
   showRole?: boolean;
   struck?: boolean;
+  updating?: boolean | undefined;
 }) {
   const label = (id: string, name: string) => (id === myMemberId ? t("settle.you") : name);
   const mine = payerId === myMemberId || receiverId === myMemberId;
@@ -617,7 +613,11 @@ function PaymentLine({
             receiver: label(receiverId, receiver),
           })}
         </span>
-        <span
+        <CountUp
+          value={amount}
+          format={(n) => formatAmount(n, currency)}
+          goodWhen={tone === "pay" ? "down" : "up"}
+          updating={updating}
           className={`shrink-0 text-lg font-bold tabular-nums ${
             struck
               ? "text-ink-muted line-through"
@@ -625,9 +625,7 @@ function PaymentLine({
                 ? "text-red-700"
                 : "text-sprout-600"
           }`}
-        >
-          {formatAmount(amount, currency)}
-        </span>
+        />
       </div>
       {((showRole && mine) || badge !== undefined) && (
         <div className="flex flex-wrap items-center gap-2">
@@ -651,11 +649,13 @@ function PlannedRow({
   payment,
   rows,
   currency,
+  updating,
 }: {
   group: Group;
   payment: PlannedPayment;
   rows: ReadonlyMap<string, BalanceRow>;
   currency: CurrencyCode;
+  updating?: boolean | undefined;
 }) {
   const record = useRecordSettlement(group.id);
   // One key per suggested payment, reused if a lost answer makes the person tap again.
@@ -691,6 +691,7 @@ function PlannedRow({
         myMemberId={group.me.memberId}
         amount={payment.amountMinor}
         currency={currency}
+        updating={updating}
       />
       {canConfirm(group.me, payer, receiver) && (
         <ConfirmSettlementDialog

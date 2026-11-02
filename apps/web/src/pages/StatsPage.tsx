@@ -8,7 +8,6 @@ import { read } from "../groups/api.js";
 import { card, LoadError, Loading } from "../groups/ui.js";
 import { categoryLabel } from "../expenses/categories.js";
 import { getLocale, t } from "../i18n/messages.js";
-import { SproutMark } from "../shell/SproutMark.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
 import { convertSpending, type SpendingRow } from "./spending-conversion.js";
@@ -163,7 +162,6 @@ export function StatsPage() {
           <h1 className="text-2xl font-bold md:text-3xl">{t("stats.title")}</h1>
           <p className="mt-1 text-sm text-ink-muted">{t("stats.subtitle")}</p>
         </div>
-        <SproutMark className="size-12" />
       </header>
       {query.isError ? (
         <LoadError error={query.error} onRetry={() => void query.refetch()} />
@@ -232,7 +230,10 @@ export function StatsPage() {
                     <span className="flex h-28 w-full items-end justify-center rounded-xl bg-sprout-50">
                       <span
                         className={`${interacted ? "" : "stats-bar-enter"} w-5 max-w-full rounded-t-lg ${selected ? "bg-sprout-500" : "bg-sprout-200"}`}
-                        style={{ height: `${String(max === 0 ? 0 : (amount / max) * 100)}%` }}
+                        style={{
+                          height: `${String(max === 0 ? 0 : (amount / max) * 100)}%`,
+                          animationDelay: `${String(i * 50)}ms`,
+                        }}
                       />
                     </span>
                     <span

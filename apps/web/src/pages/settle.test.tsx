@@ -45,6 +45,16 @@ const rows = async () =>
     .map((li) => li.textContent);
 
 describe("Balances and the Payment plan", () => {
+  it("makes the collapsed chart inert", async () => {
+    const { user } = await openSettle(owedToMe);
+    const chart = await screen.findByRole("list", { name: "大家的結餘" });
+    const container = chart.closest(".collapse-grid");
+    expect(container).not.toHaveAttribute("inert");
+    await user.click(screen.getByRole("button", { name: "大家的結餘" }));
+    expect(container).toHaveAttribute("inert");
+    await user.click(screen.getByRole("button", { name: "大家的結餘" }));
+    expect(container).not.toHaveAttribute("inert");
+  });
   it("draws everyone's Balance as bars, the biggest receiver first, settled people folded away", async () => {
     await openSettle({
       name: "台南小旅行",
@@ -71,7 +81,7 @@ describe("Balances and the Payment plan", () => {
       ["阿哲", "阿哲", "-NT$ 200"],
     ]);
     expect(screen.getByText("其他 1 人已結清")).toBeVisible();
-    expect(screen.getByText("紅色是要付，綠色是可收")).toBeVisible();
+    expect(screen.queryByText("紅色是要付，綠色是可收")).toBeNull();
   });
 
   it("leaves the chart out when everyone is settled", async () => {
@@ -84,8 +94,8 @@ describe("Balances and the Payment plan", () => {
   it("shows my Balance and the fewest-payments plan in whole dollars", async () => {
     await openSettle(owedToMe);
 
-    expect(await screen.findByText("NT$ 300")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "你可收" })).toBeVisible();
+    expect(await screen.findByText("NT$ 200")).toBeVisible();
+    expect(await screen.findAllByText("你可收")).toHaveLength(2);
     expect(screen.queryByText("最少筆數")).toBeNull();
     expect(await rows()).toEqual([
       expect.stringContaining("阿哲付給你NT$ 200"),
@@ -249,7 +259,7 @@ describe("Recording and confirming Settlements", () => {
     const dropped = screen.getByRole("list", { name: "已取消與已撤銷" });
     expect(within(dropped).getAllByRole("heading", { level: 3 })).toHaveLength(1);
     expect(within(dropped).getByText(/^\d{2}:\d{2}$/)).toBeVisible();
-    expect(await screen.findByText("NT$ 300")).toBeVisible();
+    expect(within(dropped).getByText("NT$ 200")).toBeVisible();
     expect(api.groups.members(id())[2]?.balance).toBe(-200);
   });
 
@@ -259,10 +269,6 @@ describe("Recording and confirming Settlements", () => {
       myBalance: -200,
       others: [{ name: "宜庭", balance: 200 }],
     });
-
-    const heading = await screen.findByRole("heading", { name: "你要付" });
-    expect(heading).toHaveClass("text-red-700");
-    expect(heading.closest("section")).toHaveClass("settle-aura-pay");
 
     const plannedRow = await row("要付給誰", "你付給宜庭");
     expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-red-700");
@@ -342,10 +348,23 @@ describe("Recording and confirming Settlements", () => {
 });
 
 describe("Notifying the Group of the Payment plan", () => {
+  it("supports keyboard navigation and restores focus when dismissed", async () => {
+    const { user } = await openSettle(owedToMe);
+    const trigger = await screen.findByRole("button", { name: "LINE 通知" });
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    const first = await screen.findByRole("menuitem", { name: "當前對話框" });
+    expect(first).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "通知好友" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+  });
   it("hides the notify buttons when everyone is settled", async () => {
     await openSettle({ name: "室友", others: [{ name: "宜庭" }] });
 
     expect(await screen.findByText("大家都結清了！")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "LINE 通知" })).toBeNull();
     expect(screen.queryByRole("button", { name: "通知款項" })).toBeNull();
     expect(screen.queryByRole("button", { name: "傳到對話框" })).toBeNull();
   });
@@ -355,7 +374,8 @@ describe("Notifying the Group of the Payment plan", () => {
       insideLine: { idToken: null },
     });
 
-    await user.click(await screen.findByRole("button", { name: "通知款項" }));
+    await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
+    await user.click(await screen.findByRole("menuitem", { name: "通知好友" }));
 
     expect(await screen.findByText("已分享到 LINE ✓")).toBeVisible();
     expect(lineShareMessages).toHaveLength(1);
@@ -375,7 +395,8 @@ describe("Notifying the Group of the Payment plan", () => {
       lineChat: true,
     });
 
-    await user.click(await screen.findByRole("button", { name: "傳到對話框" }));
+    await user.click(await screen.findByRole("button", { name: "LINE 通知" }));
+    await user.click(await screen.findByRole("menuitem", { name: "當前對話框" }));
 
     expect(await screen.findByText("已發送到對話框 ✓")).toBeVisible();
     expect(lineChatMessages).toHaveLength(1);

@@ -1,11 +1,10 @@
 import { type Group } from "@split/shared";
-import { ArrowRight, ChevronRight, House, Plane, Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
 import { balanceLine } from "../groups/totals.js";
-import { card, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
+import { GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
@@ -14,7 +13,6 @@ import { TRIP_ENABLED } from "../trip/enabled.js";
 /** Screen 12 (group list) and screen 19 (no Groups yet). */
 export function GroupsPage() {
   const groups = useGroups();
-  const [query, setQuery] = useState("");
 
   if (groups.isPending) return <Loading />;
   if (groups.isError) {
@@ -22,32 +20,13 @@ export function GroupsPage() {
   }
   if (groups.data.length === 0) return <NoGroups />;
 
-  const needle = query.trim();
-  const shown = groups.data.filter((g) => g.name.includes(needle));
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-6">
       <header>
         <h1 className="text-2xl font-bold md:text-3xl">{t("groups.heading")}</h1>
-        <p className="mt-1 text-sm text-ink-muted">{t("groups.subtitle")}</p>
       </header>
-      <label className="flex items-center gap-3 rounded-2xl border border-sprout-200 bg-white px-4 py-3">
-        <Search aria-hidden="true" className="size-5 text-ink-muted" />
-        <input
-          type="search"
-          aria-label={t("groups.search")}
-          placeholder={t("groups.search")}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-          }}
-          className="w-full bg-transparent outline-none"
-        />
-      </label>
-      {shown.length === 0 && (
-        <p className="text-ink-muted">{t("groups.noMatch", { query: needle })}</p>
-      )}
-      <ul aria-label={t("groups.heading")} className="grid gap-4 md:grid-cols-2">
-        {shown.map((g) => (
+      <ul aria-label={t("groups.heading")} className="grid gap-2.5 md:grid-cols-2 md:gap-4">
+        {groups.data.map((g) => (
           <li key={g.id}>
             <GroupRow group={g} />
           </li>
@@ -65,37 +44,30 @@ export function GroupsPage() {
 }
 
 function GroupRow({ group }: { group: Group }) {
-  const Icon = group.isTrip ? Plane : House;
   const balance = group.me.balance;
   return (
     <PressableLink
       to={`/groups/${group.id}`}
-      className={`${card} group flex items-center gap-4 p-5 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
+      className="surface-card group flex items-center gap-3.5 rounded-2xl border border-sprout-200/80 bg-white px-4 py-3 hover:border-sprout-500 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_10px_22px_-14px_#143f2a] active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
     >
-      <span
-        className={`flex size-14 shrink-0 items-center justify-center rounded-2xl ${
-          group.isTrip ? "bg-sprout-100" : "bg-peach"
-        }`}
-      >
-        <Icon aria-hidden="true" className="size-7 text-sprout-500" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
+      <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base md:size-12 md:text-lg" />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
-          <span className="truncate text-lg font-bold">{group.name}</span>
+          <span className="truncate text-base font-bold">{group.name}</span>
           <span className="shrink-0 rounded-full bg-sprout-150 px-2 py-0.5 text-xs text-sprout-600">
             {t(group.isTrip ? "usage.trip" : "usage.tab")}
           </span>
           {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
         </span>
-        <span className="text-sm text-ink-muted">
+        <span className="text-xs text-ink-muted">
           {t("groups.people", { count: group.memberCount })}
           {" · "}
           <span
             className={
               balance < 0
-                ? "font-semibold text-red-700"
+                ? "font-bold text-red-700"
                 : balance > 0
-                  ? "font-semibold text-sprout-700"
+                  ? "font-bold text-emerald-600"
                   : ""
             }
           >

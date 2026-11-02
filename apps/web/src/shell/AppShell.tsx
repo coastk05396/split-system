@@ -1,23 +1,30 @@
-import { ChartColumn, House, type LucideIcon, Plus, Settings, Users } from "lucide-react";
-import type { ReactNode } from "react";
+import { Plus } from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
+import {
+  CuteGroupsIcon,
+  CuteHomeIcon,
+  CuteSettingsIcon,
+  CuteStatsIcon,
+  type NavIconProps,
+} from "./NavIcons.js";
 import { SelectionPill } from "./SelectionPill.js";
-import { SproutMark } from "./SproutMark.js";
+import { SproutMascot } from "./SproutMascot.js";
 
 interface Tab {
   to: string;
   label: MessageId;
-  icon: LucideIcon;
+  icon: ComponentType<NavIconProps>;
 }
 
 /** SPEC §6: the same five destinations on every screen size. */
 const TABS: readonly Tab[] = [
-  { to: "/", label: "nav.home", icon: House },
-  { to: "/groups", label: "nav.groups", icon: Users },
+  { to: "/", label: "nav.home", icon: CuteHomeIcon },
+  { to: "/groups", label: "nav.groups", icon: CuteGroupsIcon },
   { to: "/new", label: "nav.new", icon: Plus },
-  { to: "/stats", label: "nav.stats", icon: ChartColumn },
-  { to: "/settings", label: "nav.settings", icon: Settings },
+  { to: "/stats", label: "nav.stats", icon: CuteStatsIcon },
+  { to: "/settings", label: "nav.settings", icon: CuteSettingsIcon },
 ];
 
 const SIDEBAR_TABS = TABS.filter((tab) => tab.to !== "/new");
@@ -35,7 +42,7 @@ function BottomBar() {
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
+                `press-pill relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
                   isActive ? "font-bold text-sprout-700" : "text-ink-muted"
                 }`
               }
@@ -57,8 +64,13 @@ function BottomBar() {
                   ) : (
                     <Icon
                       aria-hidden="true"
-                      strokeWidth={isActive ? 2.5 : 2}
-                      className={`relative size-5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${isActive ? "-translate-y-0.5 scale-[1.08] motion-reduce:translate-y-0 motion-reduce:scale-100" : ""}`}
+                      active={isActive}
+                      strokeWidth={isActive ? 2.4 : 1.9}
+                      className={`relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
+                        isActive
+                          ? "-translate-y-0.5 scale-[1.1] nav-icon-pop motion-reduce:translate-y-0 motion-reduce:scale-100"
+                          : ""
+                      }`}
                     />
                   )}
                   <span className="relative">{t(label)}</span>
@@ -76,7 +88,7 @@ function Sidebar() {
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col bg-sprout-900 px-4 py-7 text-white md:flex">
       <Link to="/" className="mb-8 flex items-center gap-3 px-2">
-        <SproutMark className="size-9" />
+        <SproutMascot className="size-8" mood="happy" interactive={false} />
         <span className="text-xl font-bold">{t("app.name")}</span>
       </Link>
       <nav aria-label={t("nav.side")}>
@@ -87,7 +99,7 @@ function Sidebar() {
                 to={to}
                 end={to === "/"}
                 className={({ isActive }) =>
-                  `relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                  `press-pill relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
                     isActive ? "font-bold" : "text-white/85 hover:bg-white/10"
                   }`
                 }
@@ -100,7 +112,7 @@ function Sidebar() {
                         className="inset-0 rounded-xl bg-sprout-600"
                       />
                     )}
-                    <Icon aria-hidden="true" className="relative size-5" />
+                    <Icon aria-hidden="true" active={isActive} className="relative size-5" />
                     <span className="relative">{t(label)}</span>
                   </>
                 )}
@@ -126,7 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh md:flex">
       <Sidebar />
       <main className="min-w-0 flex-1 pb-24 md:pb-0">
-        <div className="mx-auto w-full max-w-5xl px-5 pt-8 md:px-12 md:pt-12">{children}</div>
+        <div className="mx-auto w-full max-w-5xl px-5 pt-4 md:px-12 md:pt-12">{children}</div>
       </main>
       <BottomBar />
     </div>

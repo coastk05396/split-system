@@ -131,7 +131,7 @@ function ExpenseRow({
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-bold">{expense.description}</span>
-        <span className="truncate text-sm text-ink-muted">{payers}</span>
+        <span className="truncate text-xs text-ink-muted">{payers}</span>
       </span>
       <span className="flex shrink-0 flex-col items-end">
         <span className="font-bold text-sprout-700">

@@ -198,7 +198,9 @@ function Detail({
           ))}
         </ul>
       </section>
-      {canChange && <DeleteExpense group={group} expense={expense} />}
+      {canChange && (
+        <DeleteExpense group={group} expense={expense} />
+      )}
       {shareCard !== null && (
         <ExpenseShareDialog card={shareCard} open={sharing} onOpenChange={setSharing} />
       )}
@@ -206,7 +208,13 @@ function Detail({
   );
 }
 
-function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
+function DeleteExpense({
+  group,
+  expense,
+}: {
+  group: Group;
+  expense: Expense;
+}) {
   const remove = useDeleteExpense(group.id);
   const navigate = useNavigate();
   return (

@@ -101,7 +101,7 @@ function ConfirmForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-peach text-sprout-600">
+      <span className="dialog-icon-enter mx-auto flex size-20 items-center justify-center rounded-full bg-peach text-sprout-600 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]">
         <HandCoins aria-hidden="true" className="size-9" />
       </span>
       <Dialog.Title className="text-center text-xl font-bold">

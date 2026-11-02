@@ -1,38 +1,51 @@
-import type { Balance, PaymentPlan, PaymentPlanReply } from "@split/shared";
-import { useEffect, useState } from "react";
+import { type Balance, type PaymentPlan, type PaymentPlanReply, planPayments } from "@split/shared";
+import { useEffect, useMemo, useState } from "react";
 import { startPlanWorker } from "./plan-worker.js";
 
 export type PlanState =
   { status: "computing" } | { status: "ready"; plan: PaymentPlan } | { status: "failed" };
 
-/**
- * The Payment plan for these Balances, computed in a Web Worker (SPEC §3.4). Every device gets
- * the same plan for the same Balances: the tie-breaks are fixed in `@split/shared`. A new list
- * of Balances (after any write) asks again; an answer for an older list is dropped.
- */
+/** Small plans are available on the first render; larger plans run in a worker. */
 export function usePaymentPlan(balances: readonly Balance[] | undefined): PlanState {
-  const [state, setState] = useState<PlanState>({ status: "computing" });
   const key = balances === undefined ? null : JSON.stringify(balances);
+  const input = useMemo(() => {
+    if (key === null) return null;
+    const parsed = JSON.parse(key) as Balance[];
+    if (parsed.filter((b) => b.amountMinor !== 0).length > 15) return { kind: "worker" as const };
+    const result = planPayments(parsed);
+    return {
+      kind: "sync" as const,
+      state: result.ok
+        ? { status: "ready" as const, plan: result.value }
+        : { status: "failed" as const },
+    };
+  }, [key]);
+  const [workerResult, setWorkerResult] = useState<{ key: string; state: PlanState } | null>(null);
 
   useEffect(() => {
-    if (key === null) return;
-    setState({ status: "computing" });
+    if (key === null || input?.kind !== "worker") return;
     const worker = startPlanWorker();
     let live = true;
     worker.onmessage = (event: MessageEvent<PaymentPlanReply>) => {
       if (!live) return;
       const reply = event.data;
-      setState(reply.ok ? { status: "ready", plan: reply.value } : { status: "failed" });
+      setWorkerResult({
+        key,
+        state: reply.ok ? { status: "ready", plan: reply.value } : { status: "failed" },
+      });
     };
     worker.onerror = () => {
-      if (live) setState({ status: "failed" });
+      if (live) setWorkerResult({ key, state: { status: "failed" } });
     };
     worker.postMessage(JSON.parse(key) as Balance[]);
     return () => {
       live = false;
       worker.terminate();
     };
-  }, [key]);
+  }, [key, input]);
 
-  return state;
+  if (input?.kind === "sync") return input.state;
+  if (key !== null && input?.kind === "worker" && workerResult?.key === key)
+    return workerResult.state;
+  return { status: "computing" };
 }
