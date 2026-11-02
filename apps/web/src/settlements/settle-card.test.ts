@@ -1,6 +1,12 @@
 import type { Group, PlannedPayment } from "@split/shared";
 import { describe, expect, it } from "vitest";
-import { buildSettleCard, settleFlexMessage, settleText } from "./settle-card.js";
+import {
+  buildSettleCard,
+  buildSettledCard,
+  settleFlexMessage,
+  settledFlexMessage,
+  settleText,
+} from "./settle-card.js";
 
 const group = { id: "g-1", name: "週末台南小旅行" } as Group;
 const names: Record<string, string> = {
@@ -73,5 +79,101 @@ describe("settle share card", () => {
         `${window.location.origin}/groups/g-1?tab=settle`,
       ].join("\n"),
     );
+  });
+});
+
+describe("settled flex card", () => {
+  it("builds a kilo-sized minimal flex card with peach top strip, white background and no sprout emoji in title", () => {
+    const card = buildSettledCard(
+      {
+        payer: "小宇",
+        receiver: "Gulu",
+        amount: 449325,
+      },
+      group,
+      "TWD",
+      "tok-1",
+    );
+
+    expect(card.groupName).toBe("週末台南小旅行");
+    expect(card.payer).toBe("小宇");
+    expect(card.receiver).toBe("Gulu");
+    expect(card.amount).toBe("NT$ 449,325");
+    expect(card.url).toBe(
+      `${window.location.origin}/join/tok-1?next=${encodeURIComponent("/groups/g-1?tab=settle")}`,
+    );
+
+    const message = settledFlexMessage(card);
+    expect(message.type).toBe("flex");
+    if (message.type !== "flex") return;
+    expect(message.altText).toContain("週末台南小旅行");
+    expect(message.altText).toContain("小宇");
+    expect(message.altText).toContain("Gulu");
+    expect(message.altText).toContain("NT$ 449,325");
+
+    expect(message.contents).toMatchObject({
+      type: "bubble",
+      size: "kilo",
+      styles: {
+        header: { backgroundColor: "#FFE3CA" },
+        body: { backgroundColor: "#FFFFFF" },
+      },
+      header: {
+        type: "box",
+        paddingAll: "3px",
+        contents: [{ type: "filler" }],
+      },
+    });
+
+    const json = JSON.stringify(message.contents);
+    // Group name without sprout emoji
+    expect(json).toContain('"text":"週末台南小旅行"');
+    expect(json).not.toContain('"text":"🌱 週末台南小旅行"');
+
+    // Small handshake badge
+    expect(json).toContain('"text":"🤝"');
+
+    // Payer and receiver flow row
+    expect(json).toContain('"text":"小宇"');
+    expect(json).toContain('"text":"➔"');
+    expect(json).toContain('"text":"Gulu"');
+
+    // Large amount and mint settled chip
+    expect(json).toContain('"text":"NT$ 449,325"');
+    expect(json).toContain('"size":"xxl"');
+    expect(json).toContain('"text":"已結清"');
+    expect(json).toContain('"backgroundColor":"#E8F5EB"');
+
+    // Bottom sprout green button
+    expect(json).toContain('"text":"✨ 查看結算 ↗"');
+    expect(json).toContain('"backgroundColor":"#2E9D71"');
+
+    // No legacy texts or image hero banners
+    expect(json).not.toContain("幾人分");
+    expect(json).not.toContain("每人多少");
+    expect(json).not.toContain("settle-hero.png");
+  });
+
+  it("renders profile images when picture URLs are available and letter glyphs when not", () => {
+    const withImages = buildSettledCard(
+      {
+        payer: "Alice",
+        receiver: "Bob",
+        amount: 500,
+        payerPictureUrl: "https://example.com/alice.png",
+        receiverPictureUrl: null,
+      },
+      group,
+      "TWD",
+    );
+    const msg = settledFlexMessage(withImages);
+    expect(msg.type).toBe("flex");
+    if (msg.type !== "flex") return;
+    const json = JSON.stringify(msg.contents);
+
+    // Alice has image
+    expect(json).toContain('"url":"https://example.com/alice.png"');
+    // Bob has initial box
+    expect(json).toContain('"text":"B"');
   });
 });

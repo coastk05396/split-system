@@ -140,7 +140,7 @@ const row = async (list: string, text: string) => {
 };
 
 describe("Recording and confirming Settlements", () => {
-  it("lets the payer confirm payment with a red button: Balances move at once and the record can be undone", async () => {
+  it("lets the payer confirm payment with a green button: Balances move at once and the record can be undone", async () => {
     const { user, api, id } = await openSettle({
       name: "室友",
       role: "member",
@@ -151,10 +151,11 @@ describe("Recording and confirming Settlements", () => {
     const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
       name: "確認付款",
     });
-    expect(payButton).toHaveClass("bg-red-700");
+    expect(payButton).toHaveClass("bg-sprout-600");
     await user.click(payButton);
 
     const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+    expect(dialog.queryByLabelText("💬 通知目前聊天室（發送已結清卡片）")).toBeNull();
     await user.click(dialog.getByRole("button", { name: "確認已結清" }));
 
     expect(await (await row("結算紀錄", "你付給宜庭")).findByText("NT$ 200")).toBeVisible();
@@ -212,6 +213,7 @@ describe("Recording and confirming Settlements", () => {
       (await row("要付給誰", "宜庭付給你")).getByRole("button", { name: "確認收款" }),
     );
     const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+    expect(dialog.queryByLabelText("💬 通知目前聊天室（發送已結清卡片）")).toBeNull();
     await user.click(dialog.getByRole("button", { name: "確認已結清" }));
 
     expect(await screen.findByText("大家都結清了！")).toBeVisible();
@@ -273,7 +275,7 @@ describe("Recording and confirming Settlements", () => {
     const plannedRow = await row("要付給誰", "你付給宜庭");
     expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-red-700");
     expect(plannedRow.getByText("你要付")).toHaveClass("bg-red-700");
-    expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass("bg-red-700");
+    expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass("bg-sprout-600");
   });
 
   it("draws the full Group Payment plan matching Everyone's balance, sorting my rows first", async () => {
@@ -344,6 +346,42 @@ describe("Recording and confirming Settlements", () => {
     await waitFor(() => {
       expect(screen.queryByRole("heading", { name: "這筆款項已付清嗎？" })).toBeNull();
     });
+  });
+
+  it("shows notify chat checkbox checked by default in LINE chat and sends settled card upon confirm", async () => {
+    const { user, lineChatMessages } = await openSettle(
+      {
+        name: "室友",
+        role: "member",
+        myBalance: -200,
+        others: [{ name: "宜庭", balance: 200 }],
+      },
+      undefined,
+      {
+        insideLine: { idToken: null },
+        lineChat: true,
+      },
+    );
+
+    const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
+      name: "確認付款",
+    });
+    await user.click(payButton);
+
+    const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+    const checkbox = await dialog.findByRole("checkbox", {
+      name: "💬 通知目前聊天室（發送已結清卡片）",
+    });
+    expect(checkbox).toBeChecked();
+
+    await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+
+    expect(lineChatMessages).toHaveLength(1);
+    expect(lineChatMessages[0]).toMatchObject({
+      type: "flex",
+    });
+    const json = JSON.stringify(lineChatMessages[0]);
+    expect(json).toContain("已結清");
   });
 });
 

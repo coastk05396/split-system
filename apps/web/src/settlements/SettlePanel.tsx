@@ -683,6 +683,7 @@ function PlannedRow({
   onToast?: (text: string, isError?: boolean) => void;
 }) {
   const { line } = useDeps();
+  const pictureOf = useContext(PictureContext);
   const invite = useEnsureInvite(group.id);
   const record = useRecordSettlement(group.id);
   // One key per suggested payment, reused if a lost answer makes the person tap again.
@@ -732,7 +733,13 @@ function PlannedRow({
     }
   }
 
-  async function sendSettledNotice(payerName: string, receiverName: string, amount: number) {
+  async function sendSettledNotice(
+    payerName: string,
+    receiverName: string,
+    amount: number,
+    payerPictureUrl?: string | null,
+    receiverPictureUrl?: string | null,
+  ) {
     try {
       const link = await invite.mutateAsync().catch(() => null);
       const card = buildSettledCard(
@@ -740,6 +747,8 @@ function PlannedRow({
           payer: payerName,
           receiver: receiverName,
           amount,
+          payerPictureUrl,
+          receiverPictureUrl,
         },
         group,
         currency,
@@ -791,6 +800,8 @@ function PlannedRow({
                     localName(payer.displayName),
                     localName(receiver.displayName),
                     amount,
+                    pictureOf(payer.memberId),
+                    pictureOf(receiver.memberId),
                   );
                 }
               } catch (err: unknown) {
@@ -820,6 +831,8 @@ function PlannedRow({
                       localName(payer.displayName),
                       localName(receiver.displayName),
                       amount,
+                      pictureOf(payer.memberId),
+                      pictureOf(receiver.memberId),
                     );
                   }
                 } catch (err: unknown) {

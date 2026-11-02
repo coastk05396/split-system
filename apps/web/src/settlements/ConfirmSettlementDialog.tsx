@@ -1,7 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type CurrencyCode, formatAmount, parseAmount } from "@split/shared";
 import { ArrowRight, HandCoins } from "lucide-react";
-import { type SubmitEvent, useState } from "react";
+import { type SubmitEvent, useEffect, useState } from "react";
+import { useDeps } from "../app/AppProviders.js";
 import { minorToText } from "../expenses/money.js";
 import { card, failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
@@ -33,16 +34,24 @@ export function ConfirmSettlementDialog({
   /** Sends the confirmed amount; resolves once saved, rejects with the API failure. */
   submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
 }) {
+  const { line } = useDeps();
+  const [chatAvailable, setChatAvailable] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void line.canSendToChat().then((available) => {
+      if (current) setChatAvailable(available);
+    });
+    return () => {
+      current = false;
+    };
+  }, [line]);
+
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const triggerClass =
     tone === "behalf"
       ? "press-pill self-end rounded-full border border-dashed border-ink-muted/45 bg-sprout-50/60 px-3 py-1 text-xs font-bold text-ink-muted hover:border-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-muted"
-      : `press-pill w-full rounded-full px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 ${
-          tone === "pay"
-            ? "bg-red-700 hover:bg-red-800 focus-visible:outline-red-700"
-            : "bg-sprout-600 hover:bg-sprout-700 focus-visible:outline-sprout-600"
-        }`;
+      : "press-pill w-full rounded-full bg-sprout-600 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600";
   return (
     <Dialog.Root
       open={open}
@@ -59,6 +68,7 @@ export function ConfirmSettlementDialog({
             key={formKey}
             target={target}
             currency={currency}
+            chatAvailable={chatAvailable}
             submit={submit}
             onDone={() => {
               setOpen(false);
@@ -73,11 +83,13 @@ export function ConfirmSettlementDialog({
 function ConfirmForm({
   target,
   currency,
+  chatAvailable,
   submit,
   onDone,
 }: {
   target: ConfirmTarget;
   currency: CurrencyCode;
+  chatAvailable: boolean;
   submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
   onDone: () => void;
 }) {
@@ -95,7 +107,7 @@ function ConfirmForm({
     setBusy(true);
     setFailure(null);
     onDone();
-    submit(amount, { notifyChat }).catch((error: unknown) => {
+    submit(amount, { notifyChat: chatAvailable && notifyChat }).catch((error: unknown) => {
       setFailure(error);
       setBusy(false);
     });
@@ -148,17 +160,19 @@ function ConfirmForm({
           {t("settle.confirm.max", { amount: formatAmount(target.max, currency) })}
         </span>
       </div>
-      <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl bg-sprout-100/70 px-3.5 py-2.5 text-xs font-bold text-sprout-800">
-        <input
-          type="checkbox"
-          checked={notifyChat}
-          onChange={(e) => {
-            setNotifyChat(e.target.checked);
-          }}
-          className="size-4 rounded accent-sprout-600"
-        />
-        <span>{t("settle.confirm.notifyChat")}</span>
-      </label>
+      {chatAvailable && (
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-2xl bg-sprout-100/70 px-3.5 py-2.5 text-xs font-bold text-sprout-800">
+          <input
+            type="checkbox"
+            checked={notifyChat}
+            onChange={(e) => {
+              setNotifyChat(e.target.checked);
+            }}
+            className="size-4 rounded accent-sprout-600"
+          />
+          <span>{t("settle.confirm.notifyChat")}</span>
+        </label>
+      )}
       {failure !== null && (
         <p role="alert" className="text-red-700">
           {failureMessage(failure)}

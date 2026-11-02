@@ -423,6 +423,7 @@ export const en: Record<MessageId, string> = {
   "settleShare.settledTitle": "Settled up!",
   "settleShare.settledAlt": "{name}: {payer} paid {receiver} {amount}",
   "settleShare.viewLedger": "View group ledger",
+  "settleShare.viewSettle": "View settlement",
 
   "new.title": "Add",
   "stats.title": "Stats",

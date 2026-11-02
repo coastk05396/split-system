@@ -416,6 +416,7 @@ const zhTW = {
   "settleShare.settledTitle": "款項已結清！",
   "settleShare.settledAlt": "「{name}」已結清通知：{payer} 已支付 {receiver} {amount}",
   "settleShare.viewLedger": "前往查看帳本",
+  "settleShare.viewSettle": "查看結算",
 
   "new.title": "新增一筆",
   "stats.title": "統計",
