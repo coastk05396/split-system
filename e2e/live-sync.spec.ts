@@ -61,7 +61,7 @@ test.describe("Two-user live update via WebSocket (SPEC §5, Ticket 12)", () => 
     await expect(pageB.getByRole("heading", { name: "花蓮放空行" })).toBeVisible();
 
     // Verify initial empty expense state on User B's screen
-    await expect(pageB.getByText("還沒有任何帳目，記下第一筆吧！")).toBeVisible();
+    await expect(pageB.getByText("喝杯咖啡？記下第一筆吧 ☕️")).toBeVisible();
 
     // 4. User A records a new expense
     await pageA.getByRole("link", { name: "新增支出" }).click();
@@ -78,7 +78,7 @@ test.describe("Two-user live update via WebSocket (SPEC §5, Ticket 12)", () => 
     // 5. Without any reload or user interaction, User B's screen receives the WebSocket live update
     await expect(pageB.getByText("包子豆漿")).toBeVisible({ timeout: 15_000 });
     await expect(pageB.getByText("NT$ 300", { exact: true })).toBeVisible();
-    await expect(pageB.getByText("還沒有任何帳目，記下第一筆吧！")).not.toBeVisible();
+    await expect(pageB.getByText("喝杯咖啡？記下第一筆吧 ☕️")).not.toBeVisible();
 
     // Clean up second browser context
     await contextB.close();
