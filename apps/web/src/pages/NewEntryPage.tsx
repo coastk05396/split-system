@@ -1,9 +1,11 @@
-import { ChevronRight, Plus } from "lucide-react";
+import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link, Navigate, useSearchParams } from "react-router";
 import { useGroups } from "../groups/api.js";
-import { GroupAvatar, LoadError, Loading, primaryButton } from "../groups/ui.js";
+import { AvatarStack } from "../groups/AvatarStack.js";
+import { GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { t } from "../i18n/messages.js";
+import { TRIP_ENABLED } from "../trip/enabled.js";
 
 /**
  * ＋記一筆: pick the Group (screen 4's 選擇群組), or go straight there when there is one. From
@@ -27,38 +29,49 @@ export function NewEntryPage() {
       {groups.data.length === 0 ? (
         <>
           <p className="text-ink-muted">{t("expense.noGroups")}</p>
-          <Link to="/groups/new" className={`${primaryButton} py-3`}>
-            {t("groups.create")}
+          <Link to="/groups/new" className={`${primaryButton} justify-between`}>
+            <span className="flex items-center gap-2">
+              <Plus aria-hidden="true" className="size-5" />
+              {t("groups.create")}
+            </span>
+            <ArrowRight aria-hidden="true" className="size-5" />
           </Link>
         </>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {groups.data.map((g) => (
-            <li key={g.id}>
+        <ul aria-label={t("expense.chooseGroup")} className="grid gap-2.5 md:grid-cols-2 md:gap-4">
+          {groups.data.map((g, index) => (
+            <li
+              key={g.id}
+              className="list-stagger-item"
+              style={{ animationDelay: `${index * 40}ms` }}
+            >
               <PressableLink
                 to={`/groups/${g.id}/expenses/new`}
-                className="surface-card group flex items-center gap-4 rounded-3xl border border-sprout-200 bg-white p-4 hover:border-sprout-400 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_12px_24px_-12px_rgba(20,63,42,0.15)] active:translate-y-0 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+                className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
-                <GroupAvatar
-                  name={g.name}
-                  groupId={g.id}
-                  className="size-12 text-base font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]"
-                  interactive={true}
-                />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-lg font-bold">{g.name}</span>
-                  <span className="text-xs text-ink-muted">
-                    {t("groups.people", { count: g.memberCount })}
-                    <span className="mx-1.5 opacity-60">·</span>
-                    <span className="font-semibold text-sprout-700">
-                      {t(g.isTrip ? "usage.trip" : "usage.tab")}
+                <div className="flex min-w-0 items-center gap-3.5">
+                  <GroupAvatar
+                    name={g.name}
+                    groupId={g.id}
+                    className="size-11 shrink-0 text-base transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-95 group-active:-rotate-2 md:size-12 md:text-lg motion-reduce:transform-none"
+                  />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-base font-bold text-ink">{g.name}</span>
+                      {g.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
+                    </div>
+                    <span className="text-xs text-ink-muted">
+                      {t("groups.memberCount", { count: g.memberCount })}
                     </span>
-                  </span>
-                </span>
-                <ChevronRight
-                  aria-hidden="true"
-                  className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 group-hover:text-sprout-700 motion-reduce:group-hover:translate-x-0"
-                />
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <AvatarStack members={g.memberPreview} total={g.memberCount} />
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+                  />
+                </div>
               </PressableLink>
             </li>
           ))}
@@ -67,10 +80,13 @@ export function NewEntryPage() {
       {groups.data.length > 0 && (
         <Link
           to="/groups/new?usage=tab"
-          className="press-pill flex items-center justify-center gap-2 rounded-2xl bg-sprout-600 px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_8px_18px_-8px_#143f2a] hover:bg-sprout-700 active:bg-sprout-800 active:scale-[0.98] transition-all duration-180 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
+          className={`${primaryButton} justify-between`}
         >
-          <Plus aria-hidden="true" className="size-5" />
-          {t("groups.create")}
+          <span className="flex items-center gap-2">
+            <Plus aria-hidden="true" className="size-5" />
+            {t("groups.create")}
+          </span>
+          <ArrowRight aria-hidden="true" className="size-5" />
         </Link>
       )}
     </div>
