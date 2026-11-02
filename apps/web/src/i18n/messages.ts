@@ -337,6 +337,7 @@ const zhTW = {
   "expense.saving": "儲存中…",
   "expense.networkError": "網路連線不穩，這筆還沒確定有沒有存到。請再送出一次，不會重複記帳。",
   "expense.list": "帳目",
+  "expense.overviewCapsule": "本群累計 {total} · 你分攤 {share}",
   "expense.empty": "還沒有任何帳目，記下第一筆吧！",
   "expense.more": "載入更多",
   "expense.paidByLine": "{name} 先付 {amount}",

@@ -144,4 +144,40 @@ describe("Expense list", () => {
       "午餐小宇 先付 NT$ 100NT$ 100",
     ]);
   });
+
+  it("renders the top overview capsule, squircle badges with stamp press, and staggered cascade", async () => {
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, {
+          name: "室友",
+          settlementCurrency: "TWD",
+          others: [{ name: "宜庭" }],
+        });
+        const ids = groups.members(id).map((m) => m.id);
+        groups.addExpense(id, expense(ids, "早餐", "2026-10-29", "08:00"), 0);
+        groups.addExpense(id, expense(ids, "午餐", "2026-10-29", "12:00"), 0);
+      },
+      pathFor: () => `/groups/${id}`,
+    });
+
+    // 1. Overview capsule: 本群累計 NT$ 200 · 你分攤 NT$ 100, without 🌱
+    const capsule = await screen.findByText(/本群累計.*NT\$ 200.*你分攤.*NT\$ 100/);
+    expect(capsule).toBeVisible();
+    expect(capsule.textContent).not.toContain("🌱");
+
+    // 2. Category badge is a squircle (rounded-2xl) with squishy stamp press (scale-[1.08] on active)
+    const row = screen.getByRole("link", { name: /早餐/ });
+    const badge = row.querySelector(".rounded-2xl");
+    expect(badge).not.toBeNull();
+    expect(badge?.className).toContain("group-active:scale-[1.08]");
+    expect(badge?.className).toContain("ease-(--ease-spring)");
+
+    // 3. 35ms staggered cascade items
+    const items = screen.getAllByRole("listitem");
+    const itemWithStagger = items.find((li) => li.classList.contains("list-stagger-item"));
+    expect(itemWithStagger).toBeDefined();
+    expect(itemWithStagger).toHaveStyle({ animationDelay: "0ms" });
+  });
 });

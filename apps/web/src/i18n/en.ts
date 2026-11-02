@@ -342,6 +342,7 @@ export const en: Record<MessageId, string> = {
   "expense.networkError":
     "The connection is unstable, so we are not sure this was saved. Send it again; it will not be logged twice.",
   "expense.list": "Expenses",
+  "expense.overviewCapsule": "Group total {total} · Your share {share}",
   "expense.empty": "No expenses yet. Log the first one!",
   "expense.more": "Load more",
   "expense.paidByLine": "{name} paid {amount}",

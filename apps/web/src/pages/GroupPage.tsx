@@ -130,7 +130,11 @@ function GroupDetail({ group }: { group: Group }) {
                 value={tab.value}
                 className="tab-panel pt-3 pb-6 text-ink-muted"
               >
-                <ExpenseList groupId={group.id} settlementCurrency={group.settlementCurrency} />
+                <ExpenseList
+                  groupId={group.id}
+                  settlementCurrency={group.settlementCurrency}
+                  myMemberId={group.me.memberId}
+                />
               </Tabs.Content>
             );
           }
