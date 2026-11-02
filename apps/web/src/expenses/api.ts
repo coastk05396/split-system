@@ -14,7 +14,7 @@ import { createApiClient } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
-import { readWithRev } from "../groups/sync.js";
+import { abortable, readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Expense, Rate and Stop routes (SPEC §5.1). */
 
@@ -64,6 +64,7 @@ export function useExpenses(groupId: string) {
       read<ExpensePage>(
         fetch(
           path(`/api/v1/groups/${encodeURIComponent(groupId)}/expenses`, { cursor: ctx.pageParam }),
+          abortable(ctx),
         ),
         ctx,
       ),
@@ -77,7 +78,10 @@ export function useExpense(groupId: string, expenseId: string) {
     queryKey: expenseKeys.one(groupId, expenseId),
     queryFn: (ctx) =>
       read<Expense>(
-        api.groups[":id"].expenses[":eid"].$get({ param: { id: groupId, eid: expenseId } }),
+        api.groups[":id"].expenses[":eid"].$get(
+          { param: { id: groupId, eid: expenseId } },
+          { init: abortable(ctx) },
+        ),
         ctx,
       ),
   });

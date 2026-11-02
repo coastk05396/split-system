@@ -46,6 +46,15 @@ export function setQueryRev(client: QueryClient, queryKey: QueryKey, rev: number
 }
 
 /**
+ * The request init that ties an in-flight read to its query: Query aborts the signal when the
+ * query is cancelled, so a read superseded by a catch-up stops on the network instead of
+ * finishing and being thrown away.
+ */
+export function abortable(context: { signal?: AbortSignal } | undefined): { signal?: AbortSignal } {
+  return context?.signal === undefined ? {} : { signal: context.signal };
+}
+
+/**
  * Reads a JSON response and checks X-Group-Rev against the query's recorded rev.
  * Discards an older response if the query already holds newer data (ADR 0004 & SPEC §5).
  */
@@ -177,6 +186,7 @@ export class GroupLiveSync {
   private awaitingPong = false;
   private missedPongs = 0;
   private isDisposed = false;
+  private hasOpened = false;
 
   constructor(private readonly options: GroupLiveSyncOptions) {}
 
@@ -201,8 +211,7 @@ export class GroupLiveSync {
       return;
     }
 
-    const WS =
-      this.options.WebSocket ?? (typeof WebSocket !== "undefined" ? WebSocket : undefined);
+    const WS = this.options.WebSocket ?? (typeof WebSocket !== "undefined" ? WebSocket : undefined);
     if (!WS) return;
 
     const url = getLiveWsUrl(this.options.groupId, this.options.baseUrl);
@@ -227,6 +236,9 @@ export class GroupLiveSync {
     // Catch up once on every open, the first too: changes made between the initial read and the
     // socket being accepted raised no signal this client could hear. Cancelling an in-flight read
     // matters because it may have been answered before the socket was listening.
+    const firstOpen = !this.hasOpened;
+    this.hasOpened = true;
+    if (firstOpen) this.abortInitialReads();
     void this.options.queryClient.refetchQueries(
       {
         predicate: (query) => {
@@ -239,6 +251,25 @@ export class GroupLiveSync {
 
     this.startPing();
   };
+
+  /**
+   * On the first connect, a Group query that is still loading its first answer holds nothing worth
+   * keeping: abort its request so the catch-up read replaces it, rather than racing a response
+   * that may predate the socket. A query with cached data is left to the refetch, which cancels
+   * and reverts to that data.
+   */
+  private abortInitialReads(): void {
+    const { queryClient, groupId } = this.options;
+    for (const query of queryClient.getQueryCache().findAll({
+      predicate: (candidate) => {
+        const key = candidate.queryKey;
+        return key[0] === "groups" && key[1] === groupId && candidate.isActive();
+      },
+    })) {
+      if (query.state.data === undefined && query.state.fetchStatus === "fetching")
+        void query.cancel({ silent: true });
+    }
+  }
 
   private startPing(): void {
     this.stopPing();

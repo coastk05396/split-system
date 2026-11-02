@@ -17,7 +17,7 @@ import { useMemo } from "react";
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
-import { readWithRev, useGroupLiveSync } from "./sync.js";
+import { abortable, readWithRev, useGroupLiveSync } from "./sync.js";
 
 /** TanStack Query hooks over the Worker's Group, Member and Invite routes (SPEC §5.1). */
 
@@ -54,7 +54,8 @@ export function useGroup(id: string) {
   useGroupLiveSync(id);
   return useQuery({
     queryKey: groupKeys.group(id),
-    queryFn: (ctx) => read<Group>(api.groups[":id"].$get({ param: { id } }), ctx),
+    queryFn: (ctx) =>
+      read<Group>(api.groups[":id"].$get({ param: { id } }, { init: abortable(ctx) }), ctx),
   });
 }
 
@@ -62,7 +63,11 @@ export function useMembers(id: string) {
   const api = useApi();
   return useQuery({
     queryKey: groupKeys.members(id),
-    queryFn: (ctx) => read<Member[]>(api.groups[":id"].members.$get({ param: { id } }), ctx),
+    queryFn: (ctx) =>
+      read<Member[]>(
+        api.groups[":id"].members.$get({ param: { id } }, { init: abortable(ctx) }),
+        ctx,
+      ),
   });
 }
 
