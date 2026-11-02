@@ -234,7 +234,6 @@ export class GroupLedger extends DurableObject<Bindings> {
       invite,
       members,
       settlements,
-      deletedStops,
       rev,
       locked,
       expenses,
@@ -249,34 +248,6 @@ export class GroupLedger extends DurableObject<Bindings> {
           .bind(g.id, g.id, rev),
       ];
       if (!g.deleted) {
-        for (const stop of deletedStops)
-          statements.push(
-            db
-              .prepare(`DELETE FROM stops WHERE id=? AND group_id=? AND ${fence}`)
-              .bind(stop.id, g.id, g.id, rev),
-          );
-        statements.push(
-          db
-            .prepare(
-              `INSERT INTO groups (id,name,settlement_currency,default_expense_currency,is_trip,trip_destination,trip_start_date,trip_end_date,trip_notes,created_at,updated_at)
-          SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET name=excluded.name, settlement_currency=excluded.settlement_currency, default_expense_currency=excluded.default_expense_currency, is_trip=excluded.is_trip, trip_destination=excluded.trip_destination, trip_start_date=excluded.trip_start_date, trip_end_date=excluded.trip_end_date, trip_notes=excluded.trip_notes, updated_at=excluded.updated_at`,
-            )
-            .bind(
-              g.id,
-              g.name,
-              g.settlement_currency,
-              g.default_expense_currency,
-              g.is_trip,
-              g.trip_destination,
-              g.trip_start_date,
-              g.trip_end_date,
-              g.trip_notes,
-              g.created_at,
-              g.updated_at,
-              g.id,
-              rev,
-            ),
-        );
         statements.push(
           db.prepare(`DELETE FROM invites WHERE group_id=? AND ${fence}`).bind(g.id, g.id, rev),
         );
@@ -296,44 +267,7 @@ export class GroupLedger extends DurableObject<Bindings> {
                 rev,
               ),
           );
-        const ids = members.map((member) => member.id);
-        if (ids.length > 0) {
-          statements.push(
-            db
-              .prepare(
-                // Legacy Expense and Settlement rows may still reference a removed Member; those
-                // rows are kept, since deleting them would violate the legacy foreign keys.
-                `DELETE FROM members WHERE group_id = ? AND id NOT IN (${ids.map(() => "?").join(",")}) AND ${fence}
-                 AND NOT EXISTS (SELECT 1 FROM expense_payers WHERE member_id = members.id)
-                 AND NOT EXISTS (SELECT 1 FROM expense_splits WHERE member_id = members.id)
-                 AND NOT EXISTS (SELECT 1 FROM expenses WHERE creator_member_id = members.id)
-                 AND NOT EXISTS (SELECT 1 FROM settlements WHERE payer_member_id = members.id OR receiver_member_id = members.id)`,
-              )
-              .bind(g.id, ...ids, g.id, rev),
-          );
-        }
         for (const member of members) {
-          statements.push(
-            db
-              .prepare(
-                `INSERT INTO members (id,group_id,user_id,role,status,net_balance,created_at,placeholder_name,nickname,created_by_member_id)
-                 SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,role=excluded.role,status=excluded.status,net_balance=excluded.net_balance,placeholder_name=excluded.placeholder_name,nickname=excluded.nickname,created_by_member_id=excluded.created_by_member_id`,
-              )
-              .bind(
-                member.id,
-                g.id,
-                member.user_id,
-                member.role,
-                member.status,
-                member.net_balance,
-                member.created_at,
-                member.placeholder_name,
-                member.nickname,
-                member.created_by_member_id,
-                g.id,
-                rev,
-              ),
-          );
           if (member.user_id !== null && member.status !== "active") {
             statements.push(
               db
@@ -371,7 +305,12 @@ export class GroupLedger extends DurableObject<Bindings> {
         }
       } else {
         statements.push(
-          db.prepare(`DELETE FROM groups WHERE id = ? AND ${fence}`).bind(g.id, g.id, rev),
+          db.prepare(`DELETE FROM invites WHERE group_id = ? AND ${fence}`).bind(g.id, g.id, rev),
+        );
+        statements.push(
+          db
+            .prepare(`DELETE FROM settlement_routes WHERE group_id = ? AND ${fence}`)
+            .bind(g.id, g.id, rev),
         );
         statements.push(
           db
@@ -379,35 +318,20 @@ export class GroupLedger extends DurableObject<Bindings> {
             .bind(g.id, g.id, rev),
         );
       }
-      if (!g.deleted)
+      if (!g.deleted) {
         for (const row of settlements) {
           const item = settlementSchema.parse(JSON.parse(row.data) as unknown);
           statements.push(
             db
               .prepare(
-                `INSERT INTO settlements (id,group_id,payer_member_id,receiver_member_id,amount,status,created_by_member_id,confirmed_by_member_id,confirmed_at,undone_by_member_id,undone_at,idempotency_key,created_at,updated_at)
-          SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${fence} ON CONFLICT(id) DO UPDATE SET amount=excluded.amount,status=excluded.status,confirmed_by_member_id=excluded.confirmed_by_member_id,confirmed_at=excluded.confirmed_at,undone_by_member_id=excluded.undone_by_member_id,undone_at=excluded.undone_at,updated_at=excluded.updated_at`,
+                `INSERT INTO settlement_routes (settlement_id, group_id, created_at)
+                 SELECT ?, ?, ? WHERE ${fence}
+                 ON CONFLICT(settlement_id) DO UPDATE SET group_id=excluded.group_id`,
               )
-              .bind(
-                item.id,
-                item.groupId,
-                item.payerMemberId,
-                item.receiverMemberId,
-                item.amount,
-                item.status,
-                item.createdByMemberId,
-                item.confirmedByMemberId,
-                item.confirmedAt,
-                item.undoneByMemberId,
-                item.undoneAt,
-                row.idempotency_key,
-                item.createdAt,
-                item.updatedAt,
-                g.id,
-                rev,
-              ),
+              .bind(item.id, item.groupId, item.createdAt, g.id, rev),
           );
         }
+      }
       const spending = g.deleted
         ? []
         : expenses.flatMap((expense) =>
@@ -1070,6 +994,31 @@ export class GroupLedger extends DurableObject<Bindings> {
         { token: result.token, expiresAt: result.expiresAt },
         { headers: { "X-Group-Rev": String(rev) } },
       );
+    }
+    if (new URL(request.url).pathname === "/members" && request.method === "GET") {
+      const members = this.ctx.storage.sql
+        .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
+        .toArray();
+      const { rev } = this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one();
+      return Response.json({ members, rev });
+    }
+    if (new URL(request.url).pathname === "/settlement-check" && request.method === "GET") {
+      const candidate = request.headers.get("X-User-Id");
+      const sid = new URL(request.url).searchParams.get("id");
+      if (!candidate || !sid) return new Response(null, { status: 400 });
+      const sql = this.ctx.storage.sql;
+      const isMember =
+        sql
+          .exec(
+            "SELECT 1 FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'",
+            candidate,
+          )
+          .toArray().length > 0;
+      if (!isMember) return new Response(null, { status: 404 });
+      const found =
+        sql.exec("SELECT 1 FROM ledger_settlements WHERE id=?", sid).toArray().length > 0;
+      if (!found) return new Response(null, { status: 404 });
+      return Response.json({ found: true });
     }
     if (new URL(request.url).pathname === "/state" && request.method === "GET") {
       const group = this.ctx.storage.sql

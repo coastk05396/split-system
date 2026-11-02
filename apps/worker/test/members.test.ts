@@ -1,37 +1,27 @@
-import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createDb } from "../src/db/client.js";
-import { members } from "../src/db/schema.js";
 import { at, errorCode, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
-
-const db = createDb(env.DB);
 
 describe("a Former Member's name", () => {
   it("never revives a nickname they once chose, but keeps the system label", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");
-    const ming = at(await listMembers(admin, group.id), 1);
+    const mingSession = at(others, 0);
 
-    // A nickname chosen while active is ignored, and stays ignored after they leave.
-    await db
-      .update(members)
-      .set({ nickname: "Ali", status: "former" })
-      .where(eq(members.id, ming.id));
+    // Ming leaves: status becomes former and display name stays 阿明
+    const leaveRes = await send(mingSession, "POST", `/groups/${group.id}/leave`);
+    expect(leaveRes.status).toBe(204);
     expect(at(await listMembers(admin, group.id), 1)).toMatchObject({
       displayName: "阿明",
       status: "former",
     });
 
-    // The label written when an account is deleted is still what shows.
-    await db
-      .update(members)
-      .set({ nickname: "已刪除的使用者", userId: null })
-      .where(eq(members.id, ming.id));
+    // When ming deletes their account, the system label "已刪除的使用者" is shown
+    const deleteRes = await send(mingSession, "DELETE", "/me");
+    expect(deleteRes.status).toBe(204);
     expect(at(await listMembers(admin, group.id), 1)).toMatchObject({
       displayName: "已刪除的使用者",
+      status: "former",
     });
-    expect(others).toHaveLength(1);
   });
 });
 

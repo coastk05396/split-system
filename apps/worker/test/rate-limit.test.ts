@@ -79,6 +79,7 @@ describe("consumeRateLimit", () => {
       invite_join: { limit: 10, windowMs: 60_000 },
       group_create: { limit: 5, windowMs: 3_600_000 },
       membership_lookup: { limit: 30, windowMs: 60_000 },
+      settlement_lookup_fallback: { limit: 30, windowMs: 60_000 },
     });
   });
 });
