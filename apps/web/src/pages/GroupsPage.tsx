@@ -3,7 +3,6 @@ import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
-import { balanceLine } from "../groups/totals.js";
 import { GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { PressableLink } from "../shell/PressableLink.js";
@@ -48,7 +47,6 @@ export function GroupsPage() {
 }
 
 function GroupRow({ group }: { group: Group }) {
-  const balance = group.me.balance;
   return (
     <PressableLink
       to={`/groups/${group.id}`}
@@ -66,21 +64,6 @@ function GroupRow({ group }: { group: Group }) {
             {t(group.isTrip ? "usage.trip" : "usage.tab")}
           </span>
           {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
-        </span>
-        <span className="text-xs text-ink-muted">
-          {t("groups.people", { count: group.memberCount })}
-          {" · "}
-          <span
-            className={
-              balance < 0
-                ? "font-bold text-red-700"
-                : balance > 0
-                  ? "font-bold text-emerald-600"
-                  : ""
-            }
-          >
-            {balance === 0 ? t("groups.settled") : balanceLine(balance, group.settlementCurrency)}
-          </span>
         </span>
         <AvatarStack members={group.memberPreview} total={group.memberCount} />
       </span>
