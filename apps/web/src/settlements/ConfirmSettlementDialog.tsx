@@ -148,7 +148,7 @@ function ConfirmForm({
           inputMode="decimal"
           value={text}
           onFocus={(e) => {
-            e.currentTarget.scrollIntoView?.({ block: "center", behavior: "smooth" });
+            e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
           }}
           onChange={(e) => {
             setText(e.target.value);

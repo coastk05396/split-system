@@ -3,21 +3,18 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell.js";
 
-describe("AppShell BottomBar", () => {
-  const originalVibrate = navigator.vibrate;
+function setVibrate(fn: (pattern: VibratePattern) => boolean): void {
+  Object.defineProperty(navigator, "vibrate", { value: fn, configurable: true, writable: true });
+}
 
+describe("AppShell BottomBar", () => {
   afterEach(() => {
-    if (originalVibrate !== undefined) {
-      navigator.vibrate = originalVibrate;
-    } else {
-      // @ts-expect-error - clean up mock
-      delete navigator.vibrate;
-    }
+    Reflect.deleteProperty(navigator, "vibrate");
   });
 
   it("triggers 15ms haptic vibration and applies jelly spring with mint halo styling on the + Add button", () => {
     const vibrateMock = vi.fn().mockReturnValue(true);
-    navigator.vibrate = vibrateMock;
+    setVibrate(vibrateMock);
 
     render(
       <MemoryRouter initialEntries={["/"]}>

@@ -63,7 +63,7 @@ describe("GroupAvatar", () => {
   it("applies explicit paletteIndex when provided", () => {
     const { container } = render(<GroupAvatar name="墾丁" paletteIndex={2} />);
     const span = container.querySelector("span");
-    const target = GROUP_PALETTES[2]!;
+    const target = GROUP_PALETTES[2];
     expect(span?.className).toContain(target.bg);
     expect(span?.className).toContain(target.text);
   });

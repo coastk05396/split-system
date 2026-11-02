@@ -67,8 +67,12 @@ export function SettlePanel({ group }: { group: Group }) {
 
   useEffect(() => {
     if (!toastNotice) return;
-    const timer = window.setTimeout(() => setToastNotice(null), 4000);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      setToastNotice(null);
+    }, 4000);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [toastNotice]);
 
   if (balances.isError) {
@@ -763,10 +767,8 @@ function PlannedRow({
       );
       try {
         await line.sendToChat([settledFlexMessage(card)]);
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          console.log("[DEV] sendToChat simulated:", settledFlexMessage(card));
-        }
+      } catch {
+        // Outside LINE there is no chat to send to.
       }
     } catch {
       // Non-blocking notification

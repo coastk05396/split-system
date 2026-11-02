@@ -263,7 +263,7 @@ export function useRemoveMember(id: string) {
     ...optimistic,
     onSuccess: (data, variables, context) => {
       optimistic.onSuccess(data, variables, context);
-      refresh();
+      void refresh();
     },
   });
 }

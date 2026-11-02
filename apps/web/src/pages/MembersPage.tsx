@@ -275,7 +275,7 @@ function MemberControls({
                   maxLength={50}
                   value={draftName}
                   onFocus={(event) => {
-                    event.currentTarget.scrollIntoView?.({ block: "center", behavior: "smooth" });
+                    event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
                   }}
                   onChange={(event) => {
                     setDraftName(event.target.value);

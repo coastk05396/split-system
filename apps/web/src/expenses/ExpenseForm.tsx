@@ -628,16 +628,20 @@ function PayersSection({
       setRendered(true);
       setClosing(false);
       const scrollTimer = setTimeout(() => {
-        bottomRef.current?.scrollIntoView?.({ block: "end", behavior: "smooth" });
+        bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
       }, 50);
-      return () => clearTimeout(scrollTimer);
+      return () => {
+        clearTimeout(scrollTimer);
+      };
     } else if (rendered) {
       setClosing(true);
       const timer = setTimeout(() => {
         setRendered(false);
         setClosing(false);
       }, 220);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+      };
     }
   }, [open, rendered]);
 

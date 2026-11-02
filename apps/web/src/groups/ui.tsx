@@ -217,7 +217,9 @@ export function GroupAvatar({
 }) {
   const palette =
     paletteIndex !== undefined
-      ? GROUP_PALETTES[((paletteIndex % GROUP_PALETTES.length) + GROUP_PALETTES.length) % GROUP_PALETTES.length]!
+      ? (GROUP_PALETTES[
+          ((paletteIndex % GROUP_PALETTES.length) + GROUP_PALETTES.length) % GROUP_PALETTES.length
+        ] ?? GROUP_PALETTES[0])
       : groupPalette(groupId || name);
   const glyph = groupGlyph(name);
   const isEmoji = /\p{Extended_Pictographic}/u.test(glyph);

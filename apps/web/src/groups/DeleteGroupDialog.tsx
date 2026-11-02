@@ -59,7 +59,7 @@ function DeleteForm({ group }: { group: Group }) {
         <input
           value={typed}
           onFocus={(e) => {
-            e.currentTarget.scrollIntoView?.({ block: "center", behavior: "smooth" });
+            e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
           }}
           onChange={(e) => {
             setTyped(e.target.value);
