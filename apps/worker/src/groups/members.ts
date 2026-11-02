@@ -113,8 +113,10 @@ export async function removeMember(
   env: Bindings,
 ): Promise<{ rev: number }> {
   if (memberId === me.id) return leaveGroup(db, me, env);
-  requireAdmin(me);
   const target = await findMember(db, me.groupId, memberId);
+  if (target.status !== "placeholder") {
+    requireAdmin(me);
+  }
   const [group] = await db
     .select({ currency: groups.settlementCurrency })
     .from(groups)

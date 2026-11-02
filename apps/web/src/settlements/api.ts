@@ -79,6 +79,7 @@ function useRefresh(groupId: string) {
 export function useRecordSettlement(groupId: string) {
   const { api } = useSession();
   const refresh = useRefresh(groupId);
+  const client = useQueryClient();
   return useMutation({
     mutationFn: ({ input, idempotencyKey }: { input: SettlementInput; idempotencyKey: string }) =>
       read<Settlement>(
@@ -87,7 +88,33 @@ export function useRecordSettlement(groupId: string) {
           jsonWith(input, { "Idempotency-Key": idempotencyKey }),
         ),
       ),
-    onSuccess: refresh,
+    onMutate: async ({ input }) => {
+      await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
+      const previousBalances = client.getQueryData<Balances>(settlementKeys.balances(groupId));
+      if (previousBalances) {
+        client.setQueryData<Balances>(settlementKeys.balances(groupId), {
+          ...previousBalances,
+          balances: previousBalances.balances.map((b) => {
+            if (b.memberId === input.payerMemberId) {
+              return { ...b, balance: b.balance + input.amount };
+            }
+            if (b.memberId === input.receiverMemberId) {
+              return { ...b, balance: b.balance - input.amount };
+            }
+            return b;
+          }),
+        });
+      }
+      return { previousBalances };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousBalances) {
+        client.setQueryData(settlementKeys.balances(groupId), context.previousBalances);
+      }
+    },
+    onSettled: () => {
+      void refresh();
+    },
   });
 }
 

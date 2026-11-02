@@ -157,9 +157,20 @@ export function useSaveExpense(groupId: string) {
               jsonWith(save.input, { "If-Match": String(save.expense.updatedAt) }),
             ),
           ),
-    onSuccess: async (expense) => {
+    onSuccess: (expense) => {
       client.setQueryData(expenseKeys.one(groupId, expense.id), expense);
-      await refresh();
+      client.setQueryData<InfiniteData<ExpensePage>>(expenseKeys.list(groupId), (data) => {
+        if (!data) return data;
+        const exists = data.pages.some((p) => p.expenses.some((e) => e.id === expense.id));
+        if (exists) return data;
+        const [first, ...rest] = data.pages;
+        if (!first) return data;
+        return {
+          ...data,
+          pages: [{ ...first, expenses: [expense, ...first.expenses] }, ...rest],
+        };
+      });
+      void refresh();
     },
   });
 }

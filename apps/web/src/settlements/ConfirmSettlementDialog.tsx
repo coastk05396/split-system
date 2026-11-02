@@ -54,7 +54,7 @@ export function ConfirmSettlementDialog({
       <Dialog.Trigger className={triggerClass}>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
           <ConfirmForm
             key={formKey}
             target={target}
@@ -93,7 +93,8 @@ function ConfirmForm({
     if (!valid || busy) return;
     setBusy(true);
     setFailure(null);
-    submit(amount).then(onDone, (error: unknown) => {
+    onDone();
+    submit(amount).catch((error: unknown) => {
       setFailure(error);
       setBusy(false);
     });
@@ -101,15 +102,19 @@ function ConfirmForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-      <span className="dialog-icon-enter mx-auto flex size-20 items-center justify-center rounded-full bg-peach text-sprout-600 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]">
-        <HandCoins aria-hidden="true" className="size-9" />
-      </span>
-      <Dialog.Title className="text-center text-xl font-bold">
-        {t("settle.confirm.title")}
-      </Dialog.Title>
-      <Dialog.Description className="text-center text-sm text-ink-muted">
-        {t("settle.confirm.body")}
-      </Dialog.Description>
+      <div className="flex items-center gap-3">
+        <span className="dialog-icon-enter flex size-10 shrink-0 items-center justify-center rounded-full bg-peach text-sprout-600 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8)]">
+          <HandCoins aria-hidden="true" className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <Dialog.Title className="text-lg font-bold text-ink">
+            {t("settle.confirm.title")}
+          </Dialog.Title>
+          <Dialog.Description className="text-xs text-ink-muted">
+            {t("settle.confirm.body")}
+          </Dialog.Description>
+        </div>
+      </div>
       <div className={`${card} grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-4`}>
         <span className="flex flex-col">
           <span className="text-xs text-ink-muted">{t("settle.payer")}</span>
@@ -129,6 +134,9 @@ function ConfirmForm({
           id="confirm-settlement-amount"
           inputMode="decimal"
           value={text}
+          onFocus={(e) => {
+            e.currentTarget.scrollIntoView?.({ block: "center", behavior: "smooth" });
+          }}
           onChange={(e) => {
             setText(e.target.value);
           }}
@@ -144,12 +152,14 @@ function ConfirmForm({
           {failureMessage(failure)}
         </p>
       )}
-      <button type="submit" disabled={!valid || busy} className={`${primaryButton} py-3`}>
-        {busy ? t("settle.confirm.submitting") : t("settle.confirm.submit")}
-      </button>
-      <Dialog.Close type="button" className={`${secondaryButton} py-3`}>
-        {t("settle.confirm.wait")}
-      </Dialog.Close>
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <Dialog.Close type="button" className={`${secondaryButton} py-3`}>
+          {t("settle.confirm.wait")}
+        </Dialog.Close>
+        <button type="submit" disabled={!valid || busy} className={`${primaryButton} py-3`}>
+          {busy ? t("settle.confirm.submitting") : t("settle.confirm.submit")}
+        </button>
+      </div>
     </form>
   );
 }

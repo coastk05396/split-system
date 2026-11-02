@@ -25,7 +25,7 @@ export function DeleteGroupDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-4 top-1/2 z-30 mx-auto flex max-w-md -translate-y-1/2 flex-col gap-4 rounded-3xl border border-sprout-200/80 p-6 text-ink">
+        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
           {open && <DeleteForm group={group} />}
         </Dialog.Content>
       </Dialog.Portal>
@@ -58,6 +58,9 @@ function DeleteForm({ group }: { group: Group }) {
         <span className="text-sm font-bold">{t("group.delete.confirmLabel")}</span>
         <input
           value={typed}
+          onFocus={(e) => {
+            e.currentTarget.scrollIntoView?.({ block: "center", behavior: "smooth" });
+          }}
           onChange={(e) => {
             setTyped(e.target.value);
           }}

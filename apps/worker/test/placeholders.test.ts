@@ -145,13 +145,12 @@ describe("POST /invites/:token/claim", () => {
 });
 
 describe("removing a Placeholder Member", () => {
-  it("is Admin only and deletes the typed name", async () => {
+  it("allows any Member to delete a Placeholder Member and deletes the typed name", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");
-    const kai = await addPlaceholder(at(others, 0), group.id, "阿凱");
+    const kai = await addPlaceholder(admin, group.id, "阿凱");
     expect(
       (await send(at(others, 0), "DELETE", `/groups/${group.id}/members/${kai.id}`)).status,
-    ).toBe(403);
-    expect((await send(admin, "DELETE", `/groups/${group.id}/members/${kai.id}`)).status).toBe(204);
+    ).toBe(204);
     expect((await listMembers(admin, group.id)).some((member) => member.id === kai.id)).toBe(false);
   });
 

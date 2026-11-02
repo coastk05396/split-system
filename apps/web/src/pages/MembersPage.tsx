@@ -36,7 +36,7 @@ export function MembersPage() {
   return <MemberList group={group.data} members={members.data} />;
 }
 
-const LEAVE_MS = 200;
+const LEAVE_MS = 180;
 
 /**
  * The seated Members, plus anyone who has just left, kept in place for a moment so their row can
@@ -115,7 +115,7 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
           <li
             key={rowKeys[m.id] ?? m.id}
             aria-hidden={leaving ? true : undefined}
-            className={`${card} flex items-center gap-4 p-4 ${leaving ? "row-leave" : isUnsavedMember(m) || m.id in rowKeys ? "row-arrive" : ""}`}
+            className={`${card} flex items-center gap-4 p-4 ${leaving ? "row-leave expense-delete-slide" : isUnsavedMember(m) || m.id in rowKeys ? "row-arrive" : ""}`}
           >
             <Avatar
               name={m.displayName}
@@ -244,7 +244,7 @@ function MemberControls({
               event.preventDefault();
               renameTriggerRef.current?.focus();
             }}
-            className="fixed top-1/2 left-1/2 z-40 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl"
+            className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[calc(100%-2rem)] md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[2rem] md:p-6"
           >
             <Dialog.Title className="text-xl font-bold">{t("members.renameTitle")}</Dialog.Title>
             <Dialog.Description className="mt-2 text-sm text-ink-muted">
@@ -274,6 +274,9 @@ function MemberControls({
                   required
                   maxLength={50}
                   value={draftName}
+                  onFocus={(event) => {
+                    event.currentTarget.scrollIntoView?.({ block: "center", behavior: "smooth" });
+                  }}
                   onChange={(event) => {
                     setDraftName(event.target.value);
                   }}
@@ -301,7 +304,7 @@ function MemberControls({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      {isAdmin && (
+      {(isAdmin || member.status === "placeholder") && (
         <button
           type="button"
           aria-label={t("members.removeAria", { name })}
@@ -362,7 +365,7 @@ function ConfirmDialog(props: {
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-40 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl">
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[calc(100%-2rem)] md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[2rem] md:p-6">
           <Dialog.Title className="text-xl font-bold text-sprout-900">{props.title}</Dialog.Title>
           <Dialog.Description className="mt-2 text-sm text-ink-muted">
             {props.body}

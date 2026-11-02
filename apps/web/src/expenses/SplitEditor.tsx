@@ -181,14 +181,17 @@ export function SplitEditor({
         <div className="collapse-grid" data-closing={closing ? "true" : undefined}>
           <div className="collapse-grid-inner">
             <ul className="flex flex-col gap-2 pt-1 pb-0.5">
-              {members.map((m) => {
+              {members.map((m, index) => {
                 const takesPart = included.has(m.id);
                 const amount = amounts.get(m.id);
                 return (
                   <li
                     key={m.id}
                     aria-label={m.displayName}
-                    className={`${card} flex items-center gap-3 px-4 py-3`}
+                    style={{ animationDelay: `${index * 25}ms` }}
+                    className={`${card} list-stagger-item flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
+                      !takesPart ? "opacity-40 grayscale" : ""
+                    }`}
                   >
                     <Avatar
                       name={m.displayName}

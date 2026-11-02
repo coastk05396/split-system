@@ -905,6 +905,16 @@ body::before {
 }
 
 /* A member row shrinks away. */
+@keyframes expense-delete-slide {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
 @keyframes row-leave {
   from {
     opacity: 1;
@@ -912,11 +922,12 @@ body::before {
   }
   to {
     opacity: 0;
-    transform: scale(0.97) translateX(8px);
+    transform: translateX(-24px);
   }
 }
-.row-leave {
-  animation: row-leave 200ms var(--ease-out-expo) forwards;
+.row-leave,
+.expense-delete-slide {
+  animation: expense-delete-slide 180ms ease-out forwards;
   pointer-events: none;
 }
 .saved-toast {
@@ -1045,12 +1056,29 @@ body::before {
   animation: settle-cascade-in-2 240ms var(--ease-spring) 90ms both;
 }
 
+/* Staggered cascade entrance for list items (25ms offset per row) */
+@keyframes list-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.list-stagger-item {
+  animation: list-stagger-in 180ms var(--ease-spring) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
     transition: opacity 120ms ease-out;
   }
   .settle-stagger-1,
   .settle-stagger-2,
+  .list-stagger-item,
   .category-bloom,
   .copy-icon-pop,
   .dialog-icon-enter,
@@ -1058,7 +1086,8 @@ body::before {
   .transfer-arrow-pulse {
     animation: none;
   }
-  .row-leave {
+  .row-leave,
+  .expense-delete-slide {
     animation-name: none;
   }
   .saved-toast,

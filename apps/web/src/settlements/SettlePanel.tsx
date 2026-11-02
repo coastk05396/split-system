@@ -5,7 +5,7 @@ import {
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
-import { createContext, type ReactNode, useContext, useRef, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ArrowRight, ChevronDown, MessageCircle, Send } from "lucide-react";
 import { useDeps } from "../app/AppProviders.js";
@@ -57,6 +57,13 @@ export function SettlePanel({ group }: { group: Group }) {
   const sawWork = useRef(false);
   const members = useMembers(group.id);
   const [shareNotice, setShareNotice] = useState<{ text: string; isError: boolean } | null>(null);
+  const [toastNotice, setToastNotice] = useState<{ text: string; isError: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!toastNotice) return;
+    const timer = window.setTimeout(() => setToastNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [toastNotice]);
 
   if (balances.isError) {
     return <LoadError error={balances.error} onRetry={() => void balances.refetch()} />;
@@ -148,6 +155,9 @@ export function SettlePanel({ group }: { group: Group }) {
                       rows={rows}
                       currency={currency}
                       updating={isUpdating}
+                      onToast={(text, isError = false) => {
+                        setToastNotice({ text, isError });
+                      }}
                     />
                   </li>
                 ))}
@@ -178,6 +188,14 @@ export function SettlePanel({ group }: { group: Group }) {
               ) : null
             }
           />
+        )}
+        {toastNotice !== null && (
+          <div
+            role={toastNotice.isError ? "alert" : "status"}
+            className={`saved-toast fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full ${toastNotice.isError ? "bg-red-700" : "bg-sprout-900"} px-5 py-3 text-sm font-bold text-white shadow-lg md:bottom-8`}
+          >
+            {toastNotice.text}
+          </div>
         )}
       </div>
     </PictureContext>
@@ -650,12 +668,14 @@ function PlannedRow({
   rows,
   currency,
   updating,
+  onToast,
 }: {
   group: Group;
   payment: PlannedPayment;
   rows: ReadonlyMap<string, BalanceRow>;
   currency: CurrencyCode;
   updating?: boolean | undefined;
+  onToast?: (text: string, isError?: boolean) => void;
 }) {
   const record = useRecordSettlement(group.id);
   // One key per suggested payment, reused if a lost answer makes the person tap again.
@@ -705,7 +725,13 @@ function PlannedRow({
             max: maxPayable(payer, receiver),
           }}
           submit={(amount) =>
-            record.mutateAsync({ input: input(amount), idempotencyKey: key.current }).then(saved)
+            record
+              .mutateAsync({ input: input(amount), idempotencyKey: key.current })
+              .then(saved)
+              .catch((err: unknown) => {
+                onToast?.(failureMessage(err), true);
+                throw err;
+              })
           }
         />
       )}
