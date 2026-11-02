@@ -56,9 +56,9 @@ const entries: Readonly<Record<string, Category>> = {
     chip: "has-[:checked]:border-amber-400 has-[:checked]:bg-amber-100/85 has-[:checked]:text-amber-950",
   },
   醫療: { label: "category.medical", icon: "medical", emoji: "💊", ...defaultTone },
-  其他: { label: "category.other", icon: "other", emoji: "✨", ...defaultTone },
+  其他: { label: "category.other", icon: "other", emoji: "📦", ...defaultTone },
 };
-const fallback: Category = { icon: "other", emoji: "✨", ...defaultTone };
+const fallback: Category = { icon: "other", emoji: "📦", ...defaultTone };
 export const CATEGORIES = ["餐飲", "交通", "住宿", "購物", "娛樂", "其他", "醫療"] as const;
 export const DEFAULT_CATEGORY = "其他";
 

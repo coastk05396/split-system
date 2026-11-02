@@ -402,7 +402,6 @@ const zhTW = {
   "settle.status.undone": "已撤銷",
   "settle.status.cancelled": "已取消",
   "settle.confirm.title": "這筆款項已付清嗎？",
-  "settle.confirm.body": "確認款項後，群組成員的債務會同步更新，也會留下結算紀錄。",
   "settle.confirm.amount": "結算金額（{currency}）",
   "settle.confirm.max": "最多 {amount}，未付清的部分會繼續欠著",
   "settle.confirm.submit": "確認已結清",

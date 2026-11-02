@@ -1,11 +1,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type CurrencyCode, formatAmount, parseAmount } from "@split/shared";
 import { ArrowRight, HandCoins } from "lucide-react";
-import { type SubmitEvent, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, type SubmitEvent, useEffect, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
 import { minorToText } from "../expenses/money.js";
 import { card, failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { useKeyboardInset } from "../shell/keyboard.js";
 
 export interface ConfirmTarget {
   payerName: string;
@@ -63,7 +64,7 @@ export function ConfirmSettlementDialog({
       <Dialog.Trigger className={triggerClass}>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
+        <SheetContent>
           <ConfirmForm
             key={formKey}
             target={target}
@@ -74,7 +75,7 @@ export function ConfirmSettlementDialog({
               setOpen(false);
             }}
           />
-        </Dialog.Content>
+        </SheetContent>
       </Dialog.Portal>
     </Dialog.Root>
   );
@@ -123,9 +124,6 @@ function ConfirmForm({
           <Dialog.Title className="text-lg font-bold text-ink">
             {t("settle.confirm.title")}
           </Dialog.Title>
-          <Dialog.Description className="text-xs text-ink-muted">
-            {t("settle.confirm.body")}
-          </Dialog.Description>
         </div>
       </div>
       <div className={`${card} grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-4`}>
@@ -187,5 +185,39 @@ function ConfirmForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The sheet lifts above the on-screen keyboard and scrolls within what is left. Some in-app
+ * browsers (LINE's) report no keyboard at all, so once the amount is being typed on a phone the
+ * sheet moves to the top of the screen, where the keyboard cannot cover its buttons.
+ */
+function SheetContent({ children }: { children: ReactNode }) {
+  const { inset, height } = useKeyboardInset();
+  const [typing, setTyping] = useState(false);
+  const phone = window.innerWidth < 768;
+  let style: CSSProperties | undefined;
+  if (inset > 0) {
+    style = { bottom: inset, maxHeight: height - 8 };
+  } else if (typing && phone) {
+    style = {
+      top: "max(0.5rem, env(safe-area-inset-top))",
+      bottom: "auto",
+      maxHeight: "calc(100dvh - 1rem)",
+      borderRadius: "2rem",
+    };
+  }
+  return (
+    <Dialog.Content
+      aria-describedby={undefined}
+      style={style}
+      onFocus={(event) => {
+        if (event.target instanceof HTMLInputElement) setTyping(true);
+      }}
+      className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6"
+    >
+      {children}
+    </Dialog.Content>
   );
 }
