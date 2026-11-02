@@ -41,7 +41,7 @@
 .press-pill,
 .press-icon {
   transition-property: transform, background-color, border-color, box-shadow, color, opacity;
-  transition-duration: 360ms, 180ms, 180ms, 220ms, 180ms, 180ms;
+  transition-duration: 160ms, 180ms, 180ms, 220ms, 180ms, 180ms;
   transition-timing-function:
     var(--ease-spring), var(--ease-out-expo), var(--ease-out-expo), var(--ease-out-expo),
     var(--ease-out-expo), var(--ease-out-expo);
@@ -62,7 +62,7 @@
   transform: scale(0.92);
 }
 
-/* Frosted glass surfaces with specular top highlight and ambient depth. */
+/* Navigation and dialog surfaces. */
 .glass-nav {
   /* A small blur: this bar sits over scrolling content, so the blur is redone every scroll frame. */
   background-color: rgb(255 255 255 / 0.88);
@@ -86,26 +86,12 @@
 }
 .glass-pill {
   background-color: rgb(255 255 255 / 0.16);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.28);
 }
 .hero-balance-card {
-  background-color: var(--color-sprout-500);
-  background-image:
-    radial-gradient(120% 100% at 100% 0%, rgb(255 255 255 / 0.16) 0%, transparent 60%),
-    radial-gradient(90% 90% at 0% 100%, rgb(20 63 42 / 0.22) 0%, transparent 65%);
-  box-shadow:
-    inset 0 1.5px 0 0 rgb(255 255 255 / 0.35),
-    inset 0 -2px 6px -2px rgb(20 63 42 / 0.28),
-    0 12px 26px -14px #143f2a;
+  background-color: var(--color-sprout-600);
 }
 .surface-card {
-  box-shadow:
-    inset 0 1.5px 0 0 rgb(255 255 255 / 0.95),
-    inset 0 -3px 8px -4px rgb(46 157 113 / 0.12),
-    0 12px 26px -16px rgb(46 157 113 / 0.4),
-    0 2px 6px rgb(20 63 42 / 0.04);
+  box-shadow: 0 2px 6px rgb(20 63 42 / 0.06);
 }
 
 /* Digital receipt perforated divider with half-circle side notches. */
@@ -494,31 +480,19 @@
   animation: halo-pulse 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* A new row drops in under its day and glows with a soft sprout halo, so the eye finds where it was logged. */
+/* A brief entrance identifies a newly saved Expense or Member without a painted glow. */
 @keyframes row-arrive {
-  0% {
+  from {
     opacity: 0;
-    transform: translateY(-14px);
-    background-color: var(--color-sprout-100);
-    box-shadow: 0 0 0 2px rgba(46, 157, 113, 0.4), 0 0 24px -2px rgba(46, 157, 113, 0.35);
+    transform: translateY(-6px);
   }
-  30% {
-    box-shadow: 0 0 0 3px rgba(46, 157, 113, 0.5), 0 0 28px -2px rgba(46, 157, 113, 0.45);
-    background-color: var(--color-sprout-100);
-  }
-  60% {
-    box-shadow: 0 0 0 2px rgba(46, 157, 113, 0.3), 0 0 16px -4px rgba(46, 157, 113, 0.25);
-    background-color: var(--color-sprout-100);
-  }
-  100% {
+  to {
     opacity: 1;
     transform: none;
-    background-color: transparent;
-    box-shadow: none;
   }
 }
 .row-arrive {
-  animation: row-arrive 1200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: row-arrive 220ms var(--ease-out-expo) both;
   border-radius: 1.5rem;
 }
 
@@ -649,19 +623,6 @@
   .press-icon:active:not(:disabled) {
     transform: none;
   }
-}
-
-/* Pastel aurora behind every screen: peach and lavender glows over the mint page. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(60% 40% at 0% 0%, rgb(255 227 202 / 0.55) 0%, transparent 70%),
-    radial-gradient(50% 35% at 100% 12%, rgb(224 216 255 / 0.45) 0%, transparent 70%),
-    radial-gradient(60% 40% at 80% 100%, rgb(190 240 214 / 0.5) 0%, transparent 70%);
 }
 
 /* 小芽 the mascot bobs and blinks; its leaves sway once in a while. Only the outer bob loops
@@ -1011,20 +972,6 @@ body::before {
   animation: nav-icon-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* Connected transfer arrow subtle nudge in direction of payment */
-@keyframes transfer-arrow-nudge {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(2.5px);
-  }
-}
-.transfer-arrow-pulse {
-  animation: transfer-arrow-nudge 1.6s ease-in-out infinite;
-}
-
 /* Staggered cascade entrance for settlement screen (0ms and +90ms) */
 @keyframes settle-cascade-in-1 {
   from {
@@ -1112,8 +1059,7 @@ body::before {
   .category-bloom,
   .copy-icon-pop,
   .dialog-icon-enter,
-  .nav-icon-pop,
-  .transfer-arrow-pulse {
+  .nav-icon-pop {
     animation: none;
   }
   .row-leave,
