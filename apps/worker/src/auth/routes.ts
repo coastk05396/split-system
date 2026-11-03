@@ -3,7 +3,7 @@ import {
   idTokenRequestSchema,
   mePatchSchema,
   providerSchema,
-  REFRESH_TOKEN_TTL_SECONDS,
+  SESSION_MAX_AGE_SECONDS,
   type SessionResponse,
   testSignInRequestSchema,
 } from "@split/shared";
@@ -13,7 +13,7 @@ import type { AppEnv } from "../api.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
-import { parseBody } from "../request-guards.js";
+import { parseBody, sameOriginWrites } from "../request-guards.js";
 import {
   createSession,
   deleteAccount,
@@ -39,7 +39,7 @@ function setRefreshCookie(c: Context, refresh: RefreshToken): void {
     secure: true,
     sameSite: "Lax",
     path: COOKIE_PATH,
-    maxAge: REFRESH_TOKEN_TTL_SECONDS,
+    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }
 
@@ -88,6 +88,7 @@ export function authRoutes(deps: AppDeps) {
   }
 
   return new Hono<AppEnv>()
+    .use("/auth/*", sameOriginWrites)
     .post("/auth/google", async (c) => signIn(c, await verify(c, "google")))
     .post("/auth/line", async (c) => signIn(c, await verify(c, "line")))
     .post("/auth/test-sign-in", async (c) => {

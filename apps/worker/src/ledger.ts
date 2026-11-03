@@ -5,6 +5,7 @@ import {
   finalizeAccount,
   freezeAccount,
   restoreAccount,
+  commitAccountDeletion,
   isFrozen,
 } from "./ledger-account-deletion.js";
 import { DurableObject } from "cloudflare:workers";
@@ -77,6 +78,17 @@ export interface SyncNeeded {
   rev: number;
   timestamp: number;
 }
+
+const MEMBER_FACING_PATHS: ReadonlySet<string> = new Set([
+  "/stop-op",
+  "/settlement-op",
+  "/expense-op",
+  "/member-op",
+  "/invite",
+  "/members",
+  "/placeholder-counts",
+  "/settlement-check",
+]);
 
 export class GroupLedger extends DurableObject<Bindings> {
   private drainInFlight: Promise<void> | undefined;
@@ -441,7 +453,23 @@ export class GroupLedger extends DurableObject<Bindings> {
     await this.drain();
   }
 
+  /** Whether the Group has been deleted (its tombstone is kept, with its rows). */
+  private isDeleted(): boolean {
+    const sql = this.ctx.storage.sql;
+    return (
+      sql
+        .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_group'")
+        .toArray().length > 0 &&
+      sql.exec("SELECT 1 FROM ledger_group WHERE deleted=1").toArray().length > 0
+    );
+  }
+
   override async fetch(request: Request): Promise<Response> {
+    // What Members reach through the API stops with the Group. Delete, account deletion and
+    // the maintenance paths stay open so a failed deletion can still be put back.
+    if (MEMBER_FACING_PATHS.has(new URL(request.url).pathname) && this.isDeleted()) {
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+    }
     if (new URL(request.url).pathname === "/stop-op" && request.method === "POST") {
       const op: unknown = await request.json();
       try {
@@ -644,7 +672,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     }
     if (new URL(request.url).pathname === "/account-deletion" && request.method === "POST") {
       const op = await request.json<{
-        action: "freeze" | "unfreeze" | "finalize" | "restore";
+        action: "freeze" | "unfreeze" | "finalize" | "restore" | "commit";
         userId: string;
         now: number;
         expires: number;
@@ -681,6 +709,12 @@ export class GroupLedger extends DurableObject<Bindings> {
           }
         }
         return Response.json({ ok: true, restored });
+      }
+      if (op.action === "commit") {
+        this.ctx.storage.transactionSync(() => {
+          commitAccountDeletion(this.ctx.storage.sql, op.userId, op.expires);
+        });
+        return Response.json({ ok: true });
       }
       if (op.action === "unfreeze") {
         this.ctx.storage.transactionSync(() => {
@@ -1038,6 +1072,14 @@ export class GroupLedger extends DurableObject<Bindings> {
       );
     }
     if (new URL(request.url).pathname === "/members" && request.method === "GET") {
+      const asUser = request.headers.get("X-User-Id");
+      if (
+        asUser !== null &&
+        this.ctx.storage.sql
+          .exec("SELECT 1 FROM ledger_members WHERE user_id=? AND status='active'", asUser)
+          .toArray().length === 0
+      )
+        return new Response(null, { status: 404 });
       const members = this.ctx.storage.sql
         .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
         .toArray();

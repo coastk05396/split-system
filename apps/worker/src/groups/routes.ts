@@ -24,7 +24,13 @@ import {
   previewInvite,
   regenerateInvite,
 } from "./invites.js";
-import { addPlaceholder, leaveGroup, listMembersWithRev, patchMember, removeMember } from "./members.js";
+import {
+  addPlaceholder,
+  leaveGroup,
+  listMembersWithRev,
+  patchMember,
+  removeMember,
+} from "./members.js";
 import { requireAdmin, requireMember } from "./membership.js";
 import type { Bindings } from "../env.js";
 import type { MemberRow } from "./membership.js";
@@ -317,7 +323,7 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id/members", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      const { members, rev } = await listMembersWithRev(db, me.groupId, me.id, c.env);
+      const { members, rev } = await listMembersWithRev(db, me.groupId, me.id, c.env, c.var.userId);
       c.header("X-Group-Rev", String(rev));
       return c.json(members, 200);
     })
@@ -354,13 +360,13 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id/invite", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      return c.json(await currentInvite(db, me, deps.now(), c.env), 200);
+      return c.json(await currentInvite(me, deps.now(), c.env), 200);
     })
     .post("/groups/:id/invite", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(
-        await regenerateInvite(db, me, deps.now(), c.env, (rev) => {
+        await regenerateInvite(me, deps.now(), c.env, (rev) => {
           c.header("X-Group-Rev", rev);
         }),
         201,
@@ -370,7 +376,7 @@ export function groupRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(
-        await ensureInvite(db, me, deps.now(), c.env, (rev) => {
+        await ensureInvite(me, deps.now(), c.env, (rev) => {
           c.header("X-Group-Rev", rev);
         }),
         200,

@@ -1,4 +1,4 @@
-import { lt, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { createMiddleware } from "hono/factory";
 import type { SignedInEnv } from "./auth/require-user.js";
 import { createDb, type Db } from "./db/client.js";
@@ -12,17 +12,17 @@ import { ApiError } from "./errors.js";
  */
 export const RATE_LIMITS = {
   expense_write: { limit: 30, windowMs: 60_000 },
-  receipt_upload: { limit: 10, windowMs: 60_000 },
   invite_join: { limit: 10, windowMs: 60_000 },
   group_create: { limit: 5, windowMs: 3_600_000 },
   membership_lookup: { limit: 30, windowMs: 60_000 },
   settlement_lookup_fallback: { limit: 30, windowMs: 60_000 },
+  rates_lookup: { limit: 30, windowMs: 60_000 },
 } as const satisfies Record<string, { limit: number; windowMs: number }>;
 
 export type RouteGroup = keyof typeof RATE_LIMITS;
 
-/** Counters older than this are purged whenever a counter is written. */
-const RETENTION_MS = 3_600_000;
+/** Counters older than this are purged by the daily maintenance run. */
+export const RATE_COUNTER_RETENTION_MS = 3_600_000;
 
 /** Counts one write; throws 429 RATE_LIMITED with `Retry-After` once the window is full. */
 export async function consumeRateLimit(
@@ -33,17 +33,14 @@ export async function consumeRateLimit(
 ): Promise<void> {
   const { limit, windowMs } = RATE_LIMITS[routeGroup];
   const windowStart = now - (now % windowMs);
-  const [, counted] = await db.batch([
-    db.delete(rateCounters).where(lt(rateCounters.windowStart, now - RETENTION_MS)),
-    db
-      .insert(rateCounters)
-      .values({ userId, routeGroup, windowStart, count: 1 })
-      .onConflictDoUpdate({
-        target: [rateCounters.userId, rateCounters.routeGroup, rateCounters.windowStart],
-        set: { count: sql`${rateCounters.count} + 1` },
-      })
-      .returning({ count: rateCounters.count }),
-  ]);
+  const counted = await db
+    .insert(rateCounters)
+    .values({ userId, routeGroup, windowStart, count: 1 })
+    .onConflictDoUpdate({
+      target: [rateCounters.userId, rateCounters.routeGroup, rateCounters.windowStart],
+      set: { count: sql`${rateCounters.count} + 1` },
+    })
+    .returning({ count: rateCounters.count });
   const count = counted[0]?.count ?? 1;
   if (count > limit) {
     const retryAfter = Math.ceil((windowStart + windowMs - now) / 1000);

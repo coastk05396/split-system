@@ -1,8 +1,10 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import {
   bearer,
   call,
   clock,
+  json,
   refreshCookie,
   signIn,
   uniqueSub,
@@ -55,15 +57,43 @@ describe("POST /auth/refresh", () => {
     }
   });
 
-  it("keeps a session alive past 30 days while it keeps rotating", async () => {
-    const session = await signIn("google", uniqueSub("slide"));
+  it("refuses a refresh token at the very moment its 15 days since sign-in end", async () => {
+    const justBefore = await signIn("google", uniqueSub("edge-before"));
+    const atTheLimit = await signIn("google", uniqueSub("edge-at"));
     const started = clock.now;
     try {
-      clock.now = started + 20 * DAY;
-      const first = await refresh(session.refresh);
-      expect(first.res.status).toBe(200);
-      clock.now = started + 40 * DAY;
-      expect((await refresh(first.next ?? "")).res.status).toBe(200);
+      clock.now = started + 15 * DAY - 1;
+      expect((await refresh(justBefore.refresh)).res.status).toBe(200);
+      clock.now = started + 15 * DAY;
+      expect((await refresh(atTheLimit.refresh)).res.status).toBe(401);
+    } finally {
+      clock.now = started;
+    }
+  });
+
+  it("ends a session signed in before the 15-day limit existed, even with its old expiry still ahead", async () => {
+    const session = await signIn("google", uniqueSub("legacy"));
+    // The old rule gave 30 days from the last use, so this row looks valid to an expiry check.
+    await env.DB.prepare("UPDATE sessions SET created_at=?, expires_at=? WHERE user_id=?")
+      .bind(clock.now - 20 * DAY, clock.now + 10 * DAY, session.userId)
+      .run();
+
+    expect((await refresh(session.refresh)).res.status).toBe(401);
+  });
+
+  it("keeps a session alive while it rotates, but only for 15 days after sign-in", async () => {
+    const session = await signIn("google", uniqueSub("cap"));
+    const started = clock.now;
+    try {
+      let cookie = session.refresh;
+      for (const day of [5, 10, 14]) {
+        clock.now = started + day * DAY;
+        const rotated = await refresh(cookie);
+        expect(rotated.res.status).toBe(200);
+        cookie = rotated.next ?? "";
+      }
+      clock.now = started + 15 * DAY;
+      expect((await refresh(cookie)).res.status).toBe(401);
     } finally {
       clock.now = started;
     }
@@ -96,5 +126,13 @@ describe("POST /auth/logout and /auth/logout-all", () => {
     expect(res.status).toBe(204);
     expect((await refresh(phone.refresh)).res.status).toBe(401);
     expect((await refresh(laptop.refresh)).res.status).toBe(401);
+  });
+});
+
+describe("the refresh cookie", () => {
+  it("lasts as long as a session may, 15 days, not longer", async () => {
+    const res = await call("/auth/google", json({ idToken: `fake|${uniqueSub("age")}|小宇` }));
+
+    expect(res.headers.get("Set-Cookie")).toContain(`Max-Age=${String(15 * 24 * 3600)}`);
   });
 });

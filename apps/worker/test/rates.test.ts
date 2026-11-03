@@ -123,6 +123,40 @@ describe("GET /rates", () => {
     expect(state.calls).toHaveLength(0);
   });
 
+  it("refuses a day more than five years back without asking a source", async () => {
+    const { state, get } = await setup();
+    // The test clock reads 2025-06-15.
+    const tooOld = await get("date=2020-06-14&base=USD&quote=TWD");
+    const oldest = await get("date=2020-06-15&base=USD&quote=TWD");
+
+    expect(tooOld.status).toBe(400);
+    expect(oldest.status).toBe(200);
+    expect(state.calls).toEqual([{ date: "2020-06-15", base: "USD", quote: "TWD" }]);
+  });
+
+  it("answers every future day from today's rate under one cache entry", async () => {
+    const { state, get } = await setup();
+
+    const first = await get("date=2026-01-01&base=JPY&quote=TWD");
+    const second = await get("date=2027-07-07&base=JPY&quote=TWD");
+
+    expect(first.status).toBe(200);
+    expect(await second.json<Rate>()).toMatchObject({ rateDate: "2025-06-15" });
+    expect(state.calls).toEqual([{ date: "2025-06-15", base: "JPY", quote: "TWD" }]);
+  });
+
+  it("lets a User look up 30 rates a minute, then answers 429", async () => {
+    const { get } = await setup();
+
+    for (let i = 0; i < 30; i += 1) {
+      expect((await get("date=2025-06-02&base=TWD&quote=TWD")).status).toBe(200);
+    }
+    const blocked = await get("date=2025-06-02&base=TWD&quote=TWD");
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("Retry-After")).not.toBeNull();
+  });
+
   it("rejects a bad query", async () => {
     const { get } = await setup();
     expect((await get("date=2025-13-01&base=USD&quote=TWD")).status).toBe(400);
@@ -148,11 +182,17 @@ describe("daily rate refresh", () => {
         { date: "2025-07-01", base: "THB", quote: "USD" },
       ]),
     );
-    const { state: later, get } = await setup();
-    later.down = true;
-    expect(await (await get("date=2025-07-01&base=USD&quote=TWD")).json<Rate>()).toMatchObject({
-      rateScaled: 29_000_000,
-      stale: false,
-    });
+    const started = clock.now;
+    clock.now = Date.parse("2025-07-01T17:00:00Z"); // the same day the refresh ran
+    try {
+      const { state: later, get } = await setup();
+      later.down = true;
+      expect(await (await get("date=2025-07-01&base=USD&quote=TWD")).json<Rate>()).toMatchObject({
+        rateScaled: 29_000_000,
+        stale: false,
+      });
+    } finally {
+      clock.now = started;
+    }
   });
 });

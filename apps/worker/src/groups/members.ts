@@ -37,15 +37,20 @@ export async function listMembers(
   return (await listMembersWithRev(db, groupId, meId, env)).members;
 }
 
-/** As listMembers, with the ledger revision the Members were read at. */
+/**
+ * As listMembers, with the ledger revision the Members were read at. With `asUserId` the
+ * ledger itself checks that User is seated, so a lagging D1 copy cannot widen who may read.
+ */
 export async function listMembersWithRev(
   db: Db,
   groupId: string,
   meId: string | null,
   env: Bindings,
+  asUserId?: string,
 ): Promise<{ members: Array<Member & { createdByMemberId?: string | null }>; rev: number }> {
   const resp = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
     "https://ledger.internal/members",
+    asUserId === undefined ? undefined : { headers: { "X-User-Id": asUserId } },
   );
   if (!resp.ok) throw new ApiError("NOT_FOUND");
   const { members: ledgerMembers, rev } = await resp.json<{
@@ -71,7 +76,9 @@ export async function listMembersWithRev(
       displayName:
         (member.status === "former" && isSystemLabel(member.nickname) ? member.nickname : null) ??
         user?.displayName ??
-        (member.user_id ? DELETED_USER_NAME : (member.placeholder_name ?? REMOVED_PLACEHOLDER_NAME)),
+        (member.user_id
+          ? DELETED_USER_NAME
+          : (member.placeholder_name ?? REMOVED_PLACEHOLDER_NAME)),
       pictureUrl: member.status === "placeholder" ? null : (user?.pictureUrl ?? null),
       role: member.role,
       status: member.status,
@@ -83,12 +90,7 @@ export async function listMembersWithRev(
   return { members, rev };
 }
 
-async function oneMember(
-  db: Db,
-  me: MemberRow,
-  memberId: string,
-  env: Bindings,
-): Promise<Member> {
+async function oneMember(db: Db, me: MemberRow, memberId: string, env: Bindings): Promise<Member> {
   const found = (await listMembers(db, me.groupId, me.id, env)).find((m) => m.id === memberId);
   if (found === undefined) throw new ApiError("NOT_FOUND");
   return found;

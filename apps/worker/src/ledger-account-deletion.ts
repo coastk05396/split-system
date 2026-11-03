@@ -156,6 +156,31 @@ export function restoreAccount(sql: SqlStorage, userId: string, expires: number)
   return true;
 }
 
+/**
+ * Called once the account is gone for good: the rollback copy and the freeze are dropped, and
+ * a Group that was the User's alone loses its last link to them. Safe to repeat.
+ */
+export function commitAccountDeletion(sql: SqlStorage, userId: string, expires: number): void {
+  ensureFinalizationTable(sql);
+  const saved = sql
+    .exec<{ member_id: string; group_deleted: number }>(
+      "SELECT member_id,group_deleted FROM account_finalizations WHERE user_id=? AND expires_at=?",
+      userId,
+      expires,
+    )
+    .toArray()[0];
+  if (saved?.group_deleted === 1) {
+    sql.exec(
+      "UPDATE ledger_members SET status='former', user_id=NULL, nickname=? WHERE id=?",
+      DELETED_USER_NAME,
+      saved.member_id,
+    );
+  }
+  sql.exec("DELETE FROM account_finalizations WHERE user_id=? AND expires_at=?", userId, expires);
+  ensureFreezeTable(sql);
+  sql.exec("DELETE FROM account_freezes WHERE user_id=? AND expires_at=?", userId, expires);
+}
+
 /** Capture authoritative balances while a deletion is being checked. */
 export function frozenBalances(sql: SqlStorage, now: number): Map<string, number> {
   ensureFreezeTable(sql);

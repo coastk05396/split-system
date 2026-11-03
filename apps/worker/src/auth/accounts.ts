@@ -1,14 +1,26 @@
-import { type MePatch, type Me, type Provider, REFRESH_TOKEN_TTL_SECONDS } from "@split/shared";
-import { and, asc, eq, lt, sql } from "drizzle-orm";
+import {
+  type MePatch,
+  type Me,
+  type Provider,
+  REFRESH_TOKEN_TTL_SECONDS,
+  SESSION_MAX_AGE_SECONDS,
+} from "@split/shared";
+import { and, asc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
 import { identities, sessions, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
+import { commitAccountCleanups } from "./account-cleanup.js";
 import type { Bindings } from "../env.js";
 import type { VerifiedIdentity } from "./identity-verifier.js";
 import { newRefreshToken, readRefreshToken, type RefreshToken } from "./tokens.js";
 
 const REFRESH_TTL_MS = REFRESH_TOKEN_TTL_SECONDS * 1000;
+const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
+
+/** The idle window renews at each use, but never runs past the session's absolute limit. */
+const sessionEnd = (signedInAt: number, now: number): number =>
+  Math.min(now + REFRESH_TTL_MS, signedInAt + SESSION_MAX_AGE_MS);
 const MAX_USER_AGENT_LENGTH = 200;
 
 /** The signed-in User as `GET /me` shows them, or null when the account is gone. */
@@ -109,7 +121,7 @@ export async function createSession(
     userId,
     refreshTokenHash: refresh.hash,
     userAgent: userAgent?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
-    expiresAt: now + REFRESH_TTL_MS,
+    expiresAt: sessionEnd(now, now),
     createdAt: now,
   });
   return refresh;
@@ -119,14 +131,14 @@ export async function createSession(
  * Rotates a refresh token: the presented one stops working and a new one is returned.
  * A token whose session exists but whose secret no longer matches was already rotated, so
  * someone is replaying it: the whole session is revoked, which also signs out whoever
- * holds the newer token. Expired sessions are purged here.
+ * holds the newer token. A lapsed session never rotates, and none outlives its 15 days since
+ * sign-in; the daily run purges its row.
  */
 export async function rotateSession(
   db: Db,
   presented: string,
   now: number,
 ): Promise<{ userId: string; refresh: RefreshToken } | null> {
-  await db.delete(sessions).where(lt(sessions.expiresAt, now));
   const parsed = await readRefreshToken(presented);
   if (parsed === null) return null;
   const [session] = await db.select().from(sessions).where(eq(sessions.id, parsed.sessionId));
@@ -135,8 +147,16 @@ export async function rotateSession(
   const refresh = await newRefreshToken(session.id);
   const [rotated] = await db
     .update(sessions)
-    .set({ refreshTokenHash: refresh.hash, expiresAt: now + REFRESH_TTL_MS })
-    .where(and(eq(sessions.id, session.id), eq(sessions.refreshTokenHash, parsed.hash)))
+    .set({ refreshTokenHash: refresh.hash, expiresAt: sessionEnd(session.createdAt, now) })
+    .where(
+      and(
+        eq(sessions.id, session.id),
+        eq(sessions.refreshTokenHash, parsed.hash),
+        gt(sessions.expiresAt, now),
+        // Rows made before the cap existed can still have an expiry far ahead.
+        gt(sessions.createdAt, now - SESSION_MAX_AGE_MS),
+      ),
+    )
     .returning({ userId: sessions.userId });
   if (rotated === undefined) {
     await db.delete(sessions).where(eq(sessions.id, session.id));
@@ -279,22 +299,15 @@ export async function deleteAccount(
       await operation(groupId, "finalize");
     }
     const finishNow = clock();
-    const spending = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='personal_spending'",
-    ).first();
     const guard =
       "EXISTS (SELECT 1 FROM account_deletions WHERE user_id=? AND expires_at=? AND expires_at>?)";
-    const statements = [
-      ...(spending === null
-        ? []
-        : [
-            env.DB.prepare(`DELETE FROM personal_spending WHERE user_id=? AND ${guard}`).bind(
-              userId,
-              userId,
-              expires,
-              finishNow,
-            ),
-          ]),
+    const deletes = [
+      env.DB.prepare(`DELETE FROM personal_spending WHERE user_id=? AND ${guard}`).bind(
+        userId,
+        userId,
+        expires,
+        finishNow,
+      ),
       env.DB.prepare(`DELETE FROM group_reservations WHERE user_id=? AND ${guard}`).bind(
         userId,
         userId,
@@ -313,13 +326,24 @@ export async function deleteAccount(
         expires,
         finishNow,
       ),
+    ];
+    // Written in the same batch, and only once the User row is really gone, so a ledger that
+    // keeps a rollback copy is always cleaned up later even if the next call to it fails.
+    const cleanups = frozen.map((groupId) =>
+      env.DB.prepare(
+        "INSERT OR IGNORE INTO account_cleanups(user_id,group_id,expires_at) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM users WHERE id=?)",
+      ).bind(userId, groupId, expires, userId),
+    );
+    const results = await env.DB.batch([
+      ...deletes,
+      ...cleanups,
       env.DB.prepare("DELETE FROM account_deletions WHERE user_id=? AND expires_at=?").bind(
         userId,
         expires,
       ),
-    ];
-    const results = await env.DB.batch(statements);
-    if ((results.at(-2)?.meta.changes ?? 0) < 1) throw new ApiError("FORBIDDEN");
+    ]);
+    if ((results[deletes.length - 1]?.meta.changes ?? 0) < 1) throw new ApiError("FORBIDDEN");
+    await commitAccountCleanups(env);
   } catch (error) {
     // Two phases across Groups: a finalised Group is put back before any Group is unfrozen, so
     // a deletion that fails midway never leaves the User a Former Member of only some Groups.

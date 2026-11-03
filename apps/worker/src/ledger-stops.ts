@@ -80,7 +80,8 @@ export function stopOperation(
   if (!trip.is_trip) throw new ApiError("TRIP_MODULE_OFF");
   if (!stopDayInTrip(day, trip.trip_start_date, trip.trip_end_date))
     throw invalid("dayDate", "STOP_DAY_OUTSIDE_TRIP");
-  if (op.action === "create") {
+  // A create lands on `day`, and so does a patch that changes the day; an edit that stays put does not.
+  if (op.action === "create" || day !== previous?.dayDate) {
     const count = sql
       .exec<{ n: number }>(
         "SELECT count(*) n FROM ledger_stops WHERE json_extract(data,'$.dayDate')=?",
@@ -88,6 +89,8 @@ export function stopOperation(
       )
       .one().n;
     if (count >= MAX_STOPS_PER_DAY) throw new ApiError("STOP_LIMIT_REACHED");
+  }
+  if (op.action === "create") {
     const stop: Stop = {
       id: crypto.randomUUID(),
       dayDate: day,
