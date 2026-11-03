@@ -31,26 +31,50 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
   const api = createApiClient(baseFetch);
   let accessToken: string | null = null;
   let refreshing: Promise<Me | null> | null = null;
+  // Bumped by sign-out, so a refresh already in flight cannot hand the token back afterwards.
+  let generation = 0;
+
+  async function readSession(res: Response): Promise<{ accessToken: string; user: Me }> {
+    if (!res.ok) throw await toApiFailure(res);
+    return (await res.json()) as { accessToken: string; user: Me };
+  }
 
   async function accept(res: Response): Promise<Me> {
-    if (!res.ok) throw await toApiFailure(res);
-    const body = (await res.json()) as { accessToken: string; user: Me };
+    const body = await readSession(res);
     accessToken = body.accessToken;
     return body.user;
   }
 
+  /**
+   * One refresh at a time across every tab: the cookie rotates on use, so two tabs sending the
+   * old one together would look like a replay and the Worker would end the session.
+   * shortcut: without Web Locks (old browsers) tabs can still race, upgrade when that matters.
+   */
+  async function oneAtATime(run: () => Promise<Me | null>): Promise<Me | null> {
+    return typeof navigator !== "undefined" && "locks" in navigator
+      ? await navigator.locks.request("split-refresh", run)
+      : run();
+  }
+
   function refresh(): Promise<Me | null> {
-    refreshing ??= (async () => {
-      try {
-        // Widened: the typed client only describes the 200 answer.
-        const res: Response = await api.auth.refresh.$post();
-        if (res.ok) return await accept(res);
-        accessToken = null;
+    // Taken when the refresh is asked for: a sign-out after that voids it, whether it is
+    // still queued for the lock, in flight, or only waiting on its body.
+    const asked = generation;
+    refreshing ??= oneAtATime(async () => {
+      if (asked !== generation) return null;
+      // Widened: the typed client only describes the 200 answer.
+      const res: Response = await api.auth.refresh.$post();
+      if (!res.ok) {
+        if (asked === generation) accessToken = null;
         return null;
-      } finally {
-        refreshing = null;
       }
-    })();
+      const body = await readSession(res);
+      if (asked !== generation) return null;
+      accessToken = body.accessToken;
+      return body.user;
+    }).finally(() => {
+      refreshing = null;
+    });
     return refreshing;
   }
 
@@ -77,8 +101,13 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     },
 
     async signOut() {
+      generation += 1;
       accessToken = null;
-      await api.auth.logout.$post();
+      // Behind any refresh in flight, so the cookie it rotated is the one logout presents.
+      await oneAtATime(async () => {
+        await api.auth.logout.$post();
+        return null;
+      });
     },
 
     async fetch(input, init) {

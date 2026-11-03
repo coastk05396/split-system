@@ -86,6 +86,10 @@ async function store(
   return row;
 }
 
+/** Rates are only looked up for the last five years, so the cache cannot be filled with old days. */
+const earliestDate = (today: string): string =>
+  `${String(Number(today.slice(0, 4)) - 5)}${today.slice(4)}`;
+
 /**
  * The reference rate for an Expense's date (decision 11): the D1 cache when it answers, else
  * the sources (whose answer is cached for that day). With every source down it is the newest
@@ -97,16 +101,21 @@ export async function lookupRate(
   query: RateQuery,
   now: number,
 ): Promise<Rate> {
-  const { date, base, quote } = query;
-  if (base === quote) return { base, quote, rateScaled: RATE_SCALE, rateDate: date, stale: false };
+  const { base, quote } = query;
+  if (base === quote) {
+    return { base, quote, rateScaled: RATE_SCALE, rateDate: query.date, stale: false };
+  }
+  const today = utcDate(now);
+  if (query.date < earliestDate(today)) throw new ApiError("VALIDATION_FAILED");
+  // A day still to come has no rate yet: it is answered, and cached, as today.
+  const date = query.date > today ? today : query.date;
 
   const cached = await cachedRow(db, base, quote, date);
   if (cached !== undefined && answers(cached, date, now)) return toRate(cached, false);
 
-  const today = utcDate(now);
   let fetched: FetchedRate;
   try {
-    fetched = await source.fetchRate(date < today ? date : today, base, quote);
+    fetched = await source.fetchRate(date, base, quote);
   } catch {
     const fallback = cached ?? (await cachedRow(db, base, quote));
     if (fallback === undefined) throw new ApiError("RATE_UNAVAILABLE");

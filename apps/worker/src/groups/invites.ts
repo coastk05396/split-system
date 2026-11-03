@@ -61,7 +61,6 @@ async function ledgerInvite(
 }
 
 export async function regenerateInvite(
-  _db: Db,
   me: MemberRow,
   now: number,
   env: Bindings,
@@ -71,17 +70,11 @@ export async function regenerateInvite(
   return ledgerInvite(env, me.groupId, "regenerate", now, undefined, me.id, setRev);
 }
 
-export async function currentInvite(
-  _db: Db,
-  me: MemberRow,
-  now: number,
-  env: Bindings,
-): Promise<Invite> {
+export async function currentInvite(me: MemberRow, now: number, env: Bindings): Promise<Invite> {
   return ledgerInvite(env, me.groupId, "get", now, undefined, me.id);
 }
 
 export async function ensureInvite(
-  _db: Db,
   me: MemberRow,
   now: number,
   env: Bindings,

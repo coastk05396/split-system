@@ -55,7 +55,7 @@ describe("consumeRateLimit", () => {
 
   it("answers a blocked request with 429 RATE_LIMITED and Retry-After", async () => {
     const now = () => MINUTE_START + 50_000;
-    const api = newApi().post("/probe", requireUser(now), rateLimit("receipt_upload", now), (c) =>
+    const api = newApi().post("/probe", requireUser(now), rateLimit("invite_join", now), (c) =>
       c.body(null, 204),
     );
     const session = await signIn("google", uniqueSub("http"));
@@ -75,11 +75,11 @@ describe("consumeRateLimit", () => {
   it("matches the limits of decision 27", () => {
     expect(RATE_LIMITS).toEqual({
       expense_write: { limit: 30, windowMs: 60_000 },
-      receipt_upload: { limit: 10, windowMs: 60_000 },
       invite_join: { limit: 10, windowMs: 60_000 },
       group_create: { limit: 5, windowMs: 3_600_000 },
       membership_lookup: { limit: 30, windowMs: 60_000 },
       settlement_lookup_fallback: { limit: 30, windowMs: 60_000 },
+      rates_lookup: { limit: 30, windowMs: 60_000 },
     });
   });
 });

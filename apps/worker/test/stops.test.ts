@@ -121,6 +121,41 @@ describe("POST and GET /groups/:id/stops", () => {
     await addStop(admin, group.id, { title: "隔天", dayDate: "2026-07-02" });
   }, 15_000);
 
+  it("refuses to move a Stop onto a day that already holds 50", async () => {
+    const { admin, group } = await tripFor("小宇");
+    for (let i = 0; i < 50; i += 1) await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    const stray = await addStop(admin, group.id, { title: "隔天", dayDate: "2026-07-02" });
+
+    const res = await send(
+      admin,
+      "PATCH",
+      `/groups/${group.id}/stops/${stray.id}`,
+      { dayDate: "2026-07-01" },
+      { "If-Match": String(stray.updatedAt) },
+    );
+
+    expect(await errorCode(res)).toBe("STOP_LIMIT_REACHED");
+    expect(await stopTitles(admin, group.id, "?day=2026-07-01")).toHaveLength(50);
+  }, 15_000);
+
+  it("still edits a Stop that is already on a full day", async () => {
+    const { admin, group } = await tripFor("小宇");
+    let last = await addStop(admin, group.id, { title: "站 0" });
+    for (let i = 1; i < 50; i += 1)
+      last = await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    clock.now += 1000;
+
+    const res = await send(
+      admin,
+      "PATCH",
+      `/groups/${group.id}/stops/${last.id}`,
+      { dayDate: "2026-07-01", title: "改名" },
+      { "If-Match": String(last.updatedAt) },
+    );
+
+    expect(res.status).toBe(200);
+  }, 15_000);
+
   it("lets any Member add Stops but hides them from non-Members", async () => {
     const { admin, group, others } = await groupWith("小宇", "阿明");
     await send(

@@ -1,9 +1,14 @@
 import type { Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { z } from "zod";
 import { ApiError } from "./errors.js";
 
 /** Parses a JSON body with a shared Zod schema; a bad body is 400 VALIDATION_FAILED. */
 export async function parseBody<T>(c: Context, schema: z.ZodType<T>): Promise<T> {
+  // A form on another site can post text/plain without a CORS preflight; JSON cannot be.
+  if (!/^application\/json\s*(;|$)/i.test(c.req.header("Content-Type") ?? "")) {
+    throw new ApiError("VALIDATION_FAILED");
+  }
   let body: unknown;
   try {
     body = await c.req.json();
@@ -52,3 +57,21 @@ export function assertIfMatch(expected: number, current: { updatedAt: number }):
     throw new ApiError("EDIT_CONFLICT", { current });
   }
 }
+
+/**
+ * Refuses a browser write that another site started. The browser's own `Sec-Fetch-Site` wins
+ * (a dev proxy or tunnel can make the Worker's URL differ from the page's); without it the
+ * Origin must match. A request with neither (a script or tool, not a browser form) is left to
+ * the token checks.
+ */
+export const sameOriginWrites = createMiddleware(async (c, next) => {
+  const safe = c.req.method === "GET" || c.req.method === "HEAD" || c.req.method === "OPTIONS";
+  const site = c.req.header("Sec-Fetch-Site");
+  const origin = c.req.header("Origin");
+  const foreign =
+    site === undefined
+      ? origin !== undefined && origin !== new URL(c.req.url).origin
+      : site !== "same-origin" && site !== "none";
+  if (!safe && foreign) throw new ApiError("FORBIDDEN");
+  await next();
+});

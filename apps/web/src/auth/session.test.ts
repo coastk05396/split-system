@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeApi, makeUser } from "../../test/fake-api.js";
 import { ApiFailure } from "../api/errors.js";
 import { createSession } from "./session.js";
@@ -99,5 +99,180 @@ describe("session", () => {
 
     expect((await session.fetch("/api/v1/me")).status).toBe(401);
     expect(await session.restore()).toBeNull();
+  });
+});
+
+/**
+ * The Worker's refresh rule in miniature: one cookie shared by every tab that rotates on
+ * each use, and a rotated cookie presented again revokes the session.
+ */
+function rotatingServer() {
+  const user = makeUser("小宇");
+  let cookie = "v1"; // what the server holds as current
+  let jar: string | null = "v1"; // what the browser holds, updated when a response arrives
+  let revoked = false;
+  let rotations = 0;
+  let hold: Promise<void> | null = null;
+  let bodyGate: Promise<void> | null = null;
+  let responseGate: Promise<void> | null = null;
+
+  const fetchFn: typeof fetch = async (input, init) => {
+    const url = new URL(
+      input instanceof Request ? input.url : input.toString(),
+      "http://localhost",
+    );
+    const route = `${(init?.method ?? "GET").toUpperCase()} ${url.pathname}`;
+    if (route === "POST /api/v1/auth/logout") {
+      if (jar === cookie) revoked = true; // only the current cookie ends the session
+      jar = null; // and the browser drops its cookie either way
+      return new Response(null, { status: 204 });
+    }
+    if (route !== "POST /api/v1/auth/refresh") return new Response(null, { status: 404 });
+    const sent = jar; // the browser attaches the cookie when the request leaves
+    await hold;
+    if (revoked || sent !== cookie) {
+      if (sent !== null) revoked = true;
+      jar = null;
+      return Response.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
+    }
+    rotations += 1;
+    cookie = `v${String(rotations + 1)}`;
+    await responseGate; // the server has rotated; the answer is still on its way
+    jar = cookie;
+    const answer = { accessToken: `access-${String(rotations)}`, expiresIn: 3600, user };
+    if (bodyGate === null) return Response.json(answer);
+    const gate = bodyGate;
+    // Headers arrive now; the body only once the gate opens.
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          void gate.then(() => {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(answer)));
+            controller.close();
+          });
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  return {
+    fetch: fetchFn,
+    /** Answers refreshes with their headers at once but their body only when released. */
+    holdBody(): () => void {
+      let release = () => {};
+      bodyGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
+    /** Holds a refresh's answer after the server rotated, before the browser sees it. */
+    holdResponse(): () => void {
+      let release = () => {};
+      responseGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
+    /** Makes the next refresh answers wait until the returned function is called. */
+    holdRefresh(): () => void {
+      let release = () => {};
+      hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
+  };
+}
+
+/** Browsers share one lock table across tabs; a queue stands in for it. */
+function stubWebLocks() {
+  let tail: Promise<unknown> = Promise.resolve();
+  vi.stubGlobal("navigator", {
+    locks: {
+      request: <T>(_name: string, run: () => Promise<T>): Promise<T> => {
+        const next = tail.then(run, run);
+        tail = next.catch(() => undefined);
+        return next;
+      },
+    },
+  });
+}
+
+describe("session refresh across tabs and sign-out", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("lets two tabs refresh at once without revoking the shared session", async () => {
+    stubWebLocks();
+    const server = rotatingServer();
+    const tabA = createSession({ fetch: server.fetch });
+    const tabB = createSession({ fetch: server.fetch });
+
+    const [a, b] = await Promise.all([tabA.restore(), tabB.restore()]);
+
+    expect(a?.displayName).toBe("小宇");
+    expect(b?.displayName).toBe("小宇");
+  });
+
+  it("does not let a refresh that lands after sign-out bring the token back", async () => {
+    const server = rotatingServer();
+    const release = server.holdRefresh();
+    const session = createSession({ fetch: server.fetch });
+    const pending = session.restore();
+
+    await session.signOut();
+    release();
+
+    expect(await pending).toBeNull();
+    expect(session.getAccessToken()).toBeNull();
+  });
+
+  it("does not let a refresh whose body is still arriving at sign-out bring the token back", async () => {
+    const server = rotatingServer();
+    const release = server.holdBody();
+    const session = createSession({ fetch: server.fetch });
+    const pending = session.restore();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // headers are in, body is not
+
+    await session.signOut();
+    release();
+
+    expect(await pending).toBeNull();
+    expect(session.getAccessToken()).toBeNull();
+  });
+
+  it("does not send a refresh that was still queued for the lock when the User signed out", async () => {
+    stubWebLocks();
+    const server = rotatingServer();
+    const release = server.holdRefresh();
+    const other = createSession({ fetch: server.fetch });
+    const session = createSession({ fetch: server.fetch });
+    const first = other.restore();
+    const queued = session.restore(); // waits behind the other tab's refresh
+
+    const leaving = session.signOut(); // waits for the lock too, so it is released below
+    release();
+    await Promise.all([first, leaving]);
+
+    expect(await queued).toBeNull();
+    expect(session.getAccessToken()).toBeNull();
+  });
+
+  it("keeps a refresh whose answer arrives after sign-out from signing the User back in", async () => {
+    stubWebLocks();
+    const server = rotatingServer();
+    const release = server.holdResponse();
+    const session = createSession({ fetch: server.fetch });
+    const pending = session.restore(); // the server rotates v1 to v2, the answer is still coming
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const leaving = session.signOut();
+    release();
+    await Promise.all([pending, leaving]);
+    const reloaded = await createSession({ fetch: server.fetch }).restore();
+
+    expect(reloaded).toBeNull();
   });
 });

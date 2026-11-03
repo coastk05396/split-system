@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { at, errorCode, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
@@ -191,5 +192,24 @@ describe("DELETE /groups/:id/members/:mid and POST /groups/:id/leave", () => {
     const res = await send(admin, "POST", `/groups/${group.id}/leave`);
     expect(res.status).toBe(409);
     expect(await errorCode(res)).toBe("LAST_ADMIN");
+  });
+});
+
+describe("GET /groups/:id/members for someone the ledger no longer seats", () => {
+  it("answers 404 with no roster or revision while a stale summary row remains", async () => {
+    const { group, others } = await groupWith("小宇", "阿明");
+    const ming = at(others, 0);
+    expect((await send(ming, "POST", `/groups/${group.id}/leave`)).status).toBe(204);
+    // The D1 copy lags behind the ledger: put Ming's old row back.
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO group_member_summary(user_id,group_id,member_id,role,net_balance,rev) VALUES (?,?,?,?,0,0)",
+    )
+      .bind(ming.userId, group.id, "stale-member-id", "member")
+      .run();
+
+    const res = await send(ming, "GET", `/groups/${group.id}/members`);
+
+    expect(res.status).toBe(404);
+    expect(res.headers.has("X-Group-Rev")).toBe(false);
   });
 });
