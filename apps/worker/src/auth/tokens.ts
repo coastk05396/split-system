@@ -1,4 +1,4 @@
-import { ACCESS_TOKEN_TTL_SECONDS } from "@split/shared";
+import { ACCESS_TOKEN_TTL_SECONDS, type Provider, providerSchema } from "@split/shared";
 import { errors, jwtVerify, SignJWT } from "jose";
 
 const ISSUER = "split";
@@ -10,9 +10,14 @@ function signingKey(secret: string): Uint8Array {
 }
 
 /** Signs the 1-hour access token. Requests check only this JWT, never the database. */
-export function signAccessToken(userId: string, secret: string, now: number): Promise<string> {
+export function signAccessToken(
+  userId: string,
+  secret: string,
+  now: number,
+  provider: Provider | null,
+): Promise<string> {
   const iat = Math.floor(now / 1000);
-  return new SignJWT({})
+  return new SignJWT(provider === null ? {} : { prv: provider })
     .setProtectedHeader({ alg: ALGORITHM })
     .setIssuer(ISSUER)
     .setSubject(userId)
@@ -27,6 +32,15 @@ export async function verifyAccessToken(
   secret: string,
   now: number,
 ): Promise<string | null> {
+  return (await verifyAccess(token, secret, now))?.userId ?? null;
+}
+
+/** Like `verifyAccessToken`, plus the provider the session signed in with (null on older tokens). */
+export async function verifyAccess(
+  token: string,
+  secret: string,
+  now: number,
+): Promise<{ userId: string; provider: Provider | null } | null> {
   try {
     const { payload } = await jwtVerify(token, signingKey(secret), {
       issuer: ISSUER,
@@ -34,7 +48,9 @@ export async function verifyAccessToken(
       currentDate: new Date(now),
       requiredClaims: ["sub", "exp"],
     });
-    return payload.sub ?? null;
+    if (payload.sub === undefined) return null;
+    const provider = providerSchema.safeParse(payload["prv"]);
+    return { userId: payload.sub, provider: provider.success ? provider.data : null };
   } catch (error) {
     if (error instanceof errors.JOSEError) return null;
     throw error;

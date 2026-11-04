@@ -77,6 +77,8 @@ export const sessions = sqliteTable("sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   refreshTokenHash: text("refresh_token_hash").notNull().unique(),
+  /** The Identity this session signed in with; null for sessions made before it was recorded. */
+  provider: text("provider", { enum: PROVIDERS }),
   userAgent: text("user_agent"),
   expiresAt: integer("expires_at").notNull(),
   createdAt: integer("created_at").notNull(),

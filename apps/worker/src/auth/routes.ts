@@ -61,12 +61,13 @@ export function authRoutes(deps: AppDeps) {
   async function issueSession(
     c: Context<AppEnv>,
     userId: string,
+    provider: Provider | null,
     refresh: RefreshToken,
   ): Promise<SessionResponse> {
-    const me = await loadMe(createDb(c.env.DB), userId);
+    const me = await loadMe(createDb(c.env.DB), userId, provider);
     if (me === null) throw new ApiError("UNAUTHORIZED");
     setRefreshCookie(c, refresh);
-    const accessToken = await signAccessToken(userId, c.env.SESSION_SIGNING_KEY, deps.now());
+    const accessToken = await signAccessToken(userId, c.env.SESSION_SIGNING_KEY, deps.now(), provider);
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, user: me };
   }
 
@@ -74,8 +75,9 @@ export function authRoutes(deps: AppDeps) {
     const db = createDb(c.env.DB);
     const now = deps.now();
     const userId = await signInIdentity(db, identity, now);
-    const refresh = await createSession(db, userId, c.req.header("User-Agent"), now);
-    return c.json(await issueSession(c, userId, refresh), 200);
+    const ua = c.req.header("User-Agent");
+    const refresh = await createSession(db, userId, identity.provider, ua, now);
+    return c.json(await issueSession(c, userId, identity.provider, refresh), 200);
   }
 
   async function verify<E extends AppEnv>(c: Context<E>, provider: Provider) {
@@ -109,7 +111,7 @@ export function authRoutes(deps: AppDeps) {
         clearRefreshCookie(c);
         throw new ApiError("UNAUTHORIZED");
       }
-      return c.json(await issueSession(c, rotated.userId, rotated.refresh), 200);
+      return c.json(await issueSession(c, rotated.userId, rotated.provider, rotated.refresh), 200);
     })
     .post("/auth/logout", async (c) => {
       const presented = getCookie(c, REFRESH_COOKIE);
@@ -122,7 +124,7 @@ export function authRoutes(deps: AppDeps) {
       const identity = await verify(c, provider);
       const db = createDb(c.env.DB);
       await linkIdentity(db, c.var.userId, identity, deps.now());
-      return c.json(await requireMe(db, c.var.userId), 200);
+      return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
     })
     // From LINE's in-app browser, where Google refuses to sign in: the signed-in User gets a code
     // to open in an outside browser, whose Google sign-in then joins this same User.
@@ -136,23 +138,23 @@ export function authRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       const now = deps.now();
       const userId = await redeemLinkCode(db, code, identity, now);
-      const refresh = await createSession(db, userId, c.req.header("User-Agent"), now);
-      return c.json(await issueSession(c, userId, refresh), 200);
+      const refresh = await createSession(db, userId, "google", c.req.header("User-Agent"), now);
+      return c.json(await issueSession(c, userId, "google", refresh), 200);
     })
     .delete("/auth/identities/:provider", signedIn, async (c) => {
       const provider = readProvider(c.req.param("provider"));
       const db = createDb(c.env.DB);
       await unlinkIdentity(db, c.var.userId, provider);
-      return c.json(await requireMe(db, c.var.userId), 200);
+      return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
     })
     .get("/me", signedIn, async (c) =>
-      c.json(await requireMe(createDb(c.env.DB), c.var.userId), 200),
+      c.json(await requireMe(createDb(c.env.DB), c.var.userId, c.var.signedInWith), 200),
     )
     .patch("/me", signedIn, async (c) => {
       const patch = await parseBody(c, mePatchSchema);
       const db = createDb(c.env.DB);
       await updateSettings(db, c.var.userId, patch, deps.now());
-      return c.json(await requireMe(db, c.var.userId), 200);
+      return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
     })
     .delete("/me", signedIn, async (c) => {
       await deleteAccount(c.env, c.var.userId, deps.now);
@@ -162,8 +164,12 @@ export function authRoutes(deps: AppDeps) {
 }
 
 /** A valid access token can outlive its account by up to an hour; treat that as signed out. */
-async function requireMe(db: ReturnType<typeof createDb>, userId: string) {
-  const me = await loadMe(db, userId);
+async function requireMe(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  signedInWith: Provider | null,
+) {
+  const me = await loadMe(db, userId, signedInWith);
   if (me === null) throw new ApiError("UNAUTHORIZED");
   return me;
 }

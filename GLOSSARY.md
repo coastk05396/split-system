@@ -40,6 +40,10 @@ _Avoid_: Account, member (when meaning the person outside a Group)
 One way a User proves who they are, such as a Google sign-in or a LINE sign-in.
 _Avoid_: Login, provider account
 
+**Session**:
+One browser or device being signed in as a User, remembering which Identity it signed in with. Signing in elsewhere, by LINE or Google, never changes it, so both can be signed in at once.
+_Avoid_: Login (that is an Identity), account
+
 **Linked account**:
 An Identity attached to a User; Settings lists LINE and Google and shows which are linked. Only a Google one carries an email, shown on the Profile card.
 _Avoid_: Binding, connection
@@ -49,7 +53,7 @@ The User's first Identity; its name and picture are the ones shown everywhere, a
 _Avoid_: Main account, primary login
 
 **Profile card**:
-The card at the top of Settings: the Profile source's name and picture (as in Groups), a tag for the latest sign-in (LINE or Google), and, after a Google sign-in, the Google email as a small line.
+The card at the top of Settings: the Profile source's name and picture (as in Groups), a tag for how this Session signed in (LINE or Google), and, in a Google Session, the Google email as a small line.
 _Avoid_: Header, avatar row
 
 **Link code**:
