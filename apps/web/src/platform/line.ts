@@ -211,10 +211,16 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       liff.login({ redirectUri: window.location.href });
     },
 
-    // Works without a LIFF ID: LINE opens any URL carrying this parameter in the outside browser.
-    openExternal(url) {
+    // Inside LIFF, LINE ignores the openExternalBrowser parameter, so use LIFF's own external
+    // window; a failure there is reported, never hidden behind the parameter. In LINE's plain
+    // in-app browser (no LIFF) the parameter still works, with no LIFF ID.
+    async openExternal(url) {
+      const liff = await loadLiff();
+      if (liff?.isInClient() === true) {
+        liff.openWindow({ url, external: true });
+        return;
+      }
       window.location.assign(externalBrowserUrl(url));
-      return Promise.resolve();
     },
 
     share: (text, options) => shareMessages([{ type: "text", text }], options),

@@ -89,6 +89,8 @@ export function GoogleButton({
     };
   }, [google]);
 
+  // The real button sits on top at opacity 0.01, not 0: Google ignores finger taps on a fully
+  // transparent one (Android Chrome), while 0.01 is invisible and works.
   // A face with nothing behind it would look like a button that does nothing.
   if (status === "failed") return null;
   if (compact) {
@@ -101,14 +103,14 @@ export function GoogleButton({
         >
           {label}
         </span>
-        <div ref={container} className="absolute inset-0 overflow-hidden opacity-0" />
+        <div ref={container} className="absolute inset-0 overflow-hidden opacity-[0.01]" />
       </div>
     );
   }
   return (
     <div className="relative h-14 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2">
       <GoogleFace label={label} dim={status === "loading"} />
-      <div className="absolute inset-0 overflow-hidden opacity-0">
+      <div className="absolute inset-0 overflow-hidden opacity-[0.01]">
         <div
           ref={container}
           style={{ width: `${String(100 / SCALE)}%`, transform: `scale(${String(SCALE)})` }}

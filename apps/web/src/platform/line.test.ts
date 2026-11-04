@@ -13,6 +13,7 @@ const liff = vi.hoisted(() => ({
   ),
   isInClient: vi.fn(() => true),
   closeWindow: vi.fn(),
+  openWindow: vi.fn(),
   sendMessages: vi.fn((): Promise<void> => Promise.resolve()),
   getContext: vi.fn((): { type: string } | null => ({ type: "group" })),
   permission: {
@@ -261,5 +262,45 @@ describe("externalBrowserUrl", () => {
     expect(externalBrowserUrl("https://split.example/link")).toBe(
       "https://split.example/link?openExternalBrowser=1",
     );
+  });
+});
+
+describe("openExternal", () => {
+  it("inside the LINE app, leaves it with LIFF's own external window: the URL parameter is ignored in LIFF", async () => {
+    liff.isInClient.mockReturnValue(true);
+
+    await createLineSignIn("liff-id").openExternal("https://split.example/link?code=abc");
+
+    expect(liff.openWindow).toHaveBeenCalledWith({
+      url: "https://split.example/link?code=abc",
+      external: true,
+    });
+  });
+
+  it("inside the LINE app, reports a failing LIFF call instead of falling back to the ignored URL parameter", async () => {
+    liff.isInClient.mockReturnValue(true);
+    liff.openWindow.mockImplementationOnce(() => {
+      throw new Error("native bridge failed");
+    });
+
+    await expect(
+      createLineSignIn("liff-id").openExternal("https://split.example/link?code=abc"),
+    ).rejects.toThrow("native bridge failed");
+  });
+
+  it("reports it when LIFF cannot start", async () => {
+    liff.init.mockRejectedValueOnce(new Error("init failed"));
+
+    await expect(
+      createLineSignIn("liff-id").openExternal("https://split.example/link?code=abc"),
+    ).rejects.toThrow("init failed");
+  });
+
+  it("outside the LINE app's LIFF, does not use LIFF's window", async () => {
+    liff.isInClient.mockReturnValue(false);
+
+    await createLineSignIn("liff-id").openExternal("https://split.example/link?code=abc");
+
+    expect(liff.openWindow).not.toHaveBeenCalled();
   });
 });
