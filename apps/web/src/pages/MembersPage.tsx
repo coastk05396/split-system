@@ -80,7 +80,8 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const isAdmin = group.me.role === "admin";
   // Set by the page that has just created this Group, so its creator can go on from here.
   const state: unknown = useLocation().state;
-  const created = typeof state === "object" && state !== null && "created" in state;
+  const created =
+    typeof state === "object" && state !== null && "created" in state && state.created === true;
   const add = useAddPlaceholder(group.id);
   const [blocked, setBlocked] = useState<string | null>(null);
   // Saved Member id -> the unsaved id its row began as, so the row is kept when the server answers.
