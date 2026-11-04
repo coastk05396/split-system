@@ -481,7 +481,11 @@ export const en: Record<MessageId, string> = {
   "link.title": "Link your Google account",
   "link.body": "Sign in with Google to join the Sprout Split account you were using in LINE.",
   "link.inLine": "Please open this page in your phone's browser, not LINE's built-in browser.",
+  "signIn.googleExternalTitle": "Sign in with Google in your browser",
+  "signIn.googleExternalBody":
+    "Google does not allow sign-in inside LINE's built-in browser. Tap \"Open in browser\" to go straight to Google's account chooser in your phone's browser.",
   "signIn.googleExternalOpen": "Open in browser",
+  "signIn.googleExternalCancel": "Cancel",
   "settings.deleteAccount": "Delete account",
   "settings.deleteTitle": "Delete your account?",
   "settings.deleteBody":

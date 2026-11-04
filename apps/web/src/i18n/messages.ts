@@ -471,7 +471,11 @@ const zhTW = {
   "link.title": "連結 Google 帳號",
   "link.body": "用 Google 登入，就會連到你剛才在 LINE 裡的小芽帳號。",
   "link.inLine": "請用外部瀏覽器開啟這個頁面，不要用 LINE 內建瀏覽器。",
+  "signIn.googleExternalTitle": "請用外部瀏覽器登入 Google",
+  "signIn.googleExternalBody":
+    "Google 不允許在 LINE 內建瀏覽器登入。按下「用瀏覽器開啟」，會在手機的瀏覽器直接前往 Google 的帳號選擇頁。",
   "signIn.googleExternalOpen": "用瀏覽器開啟",
+  "signIn.googleExternalCancel": "取消",
   "settings.deleteAccount": "刪除帳號",
   "settings.deleteTitle": "確定要刪除帳號嗎？",
   "settings.deleteBody":
