@@ -1,7 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight, MessageCircle } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { safeNext } from "../app/routes.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleButton, GoogleFace } from "../auth/GoogleButton.js";
@@ -15,7 +16,8 @@ const TestSignInForm = lazy(() =>
 /** Screen 1 (歡迎登入) with the decision 29 data summary above the consent line. */
 export function SignInPage() {
   const { line, google, testSignIn } = useDeps();
-  const { state, signIn } = useAuth();
+  const { state } = useAuth();
+  const [params] = useSearchParams();
   const [lineError, setLineError] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const insideLine = line.isInClient();
@@ -57,7 +59,7 @@ export function SignInPage() {
         {!insideLine && google.available && (
           <GoogleButton
             label={t("signIn.google")}
-            onIdToken={(idToken) => void signIn("google", idToken)}
+            errand={{ purpose: "signIn", next: safeNext(params.get("next")) }}
           />
         )}
         {insideLine && google.available && (

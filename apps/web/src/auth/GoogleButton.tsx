@@ -1,9 +1,8 @@
-import { ArrowRight } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
-
-/** Google's own button stops at 40px tall; the hidden one is scaled to cover the 56px face. */
-const SCALE = 1.4;
+import { t } from "../i18n/messages.js";
+import type { GoogleErrand } from "../platform/google.js";
 
 /** Google's colour "G" (its branding guidelines allow no recolouring or stretching). */
 export function GoogleG({ className = "size-5" }: { className?: string }) {
@@ -30,93 +29,96 @@ export function GoogleG({ className = "size-5" }: { className?: string }) {
 }
 
 /** The look shared by every Google entry, laid out like the LINE button above it. */
-export function GoogleFace({ label, dim = false }: { label: ReactNode; dim?: boolean }) {
+export function GoogleFace({
+  label,
+  waiting = false,
+}: {
+  label: ReactNode;
+  /** Google's account chooser is opening: the arrow gives way to a spinner. */
+  waiting?: boolean;
+}) {
   return (
-    <span
-      className={`flex h-14 w-full items-center justify-between rounded-full border border-[#747775] bg-white px-[23px] text-base font-medium text-[#1F1F1F] transition-opacity ${
-        dim ? "opacity-60" : ""
-      }`}
-    >
+    <span className="google-face flex h-14 w-full items-center justify-between rounded-full px-[22px] text-base font-medium text-[#1F1F1F]">
       <span className="flex items-center gap-2">
         <GoogleG />
         {label}
       </span>
-      <ArrowRight aria-hidden="true" className="size-5" />
+      {waiting ? (
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-5 animate-spin motion-reduce:animate-none"
+        />
+      ) : (
+        <ArrowRight
+          aria-hidden="true"
+          className="size-5 transition-transform duration-300 ease-(--ease-spring) group-hover:translate-x-1 motion-reduce:transition-none"
+        />
+      )}
     </span>
   );
 }
 
+/** A Google entry that is a row's action: the same face as the full-width button, in a pill. */
+export const GOOGLE_PILL =
+  "press-pill press-deep google-face flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-5 text-sm font-bold text-[#1F1F1F]";
+
 /**
- * Our own face over Google's real button, which sits on top, invisible, and takes the click:
- * the ID token still comes from Google's script. Hands it to `onIdToken` (sign-in or linking).
+ * Our own button, so a press shrinks it at once. It sends the page to Google's account chooser;
+ * `errand` says what the answer is for, and `/google-return` carries it out.
  */
 export function GoogleButton({
   label,
-  onIdToken,
+  errand,
   compact = false,
 }: {
   label: ReactNode;
-  onIdToken: (idToken: string) => void;
+  errand: GoogleErrand;
   /** A small pill (a row's action) instead of the full-width button. */
   compact?: boolean;
 }) {
   const { google } = useDeps();
-  const container = useRef<HTMLDivElement>(null);
-  const callback = useRef(onIdToken);
-  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [going, setGoing] = useState(false);
 
+  // Back from Google can restore this page as it was left, spinner and all.
   useEffect(() => {
-    callback.current = onIdToken;
-  });
-
-  useEffect(() => {
-    const element = container.current;
-    if (element === null) return;
-    let active = true;
-    google
-      .renderButton(element, (idToken) => {
-        if (active) callback.current(idToken);
-      })
-      .then(() => {
-        if (active) setStatus("ready");
-      })
-      .catch(() => {
-        if (active) setStatus("failed");
-      });
-    return () => {
-      active = false;
-      element.replaceChildren();
+    const reset = (event: PageTransitionEvent) => {
+      if (event.persisted) setGoing(false);
     };
-  }, [google]);
+    window.addEventListener("pageshow", reset);
+    return () => {
+      window.removeEventListener("pageshow", reset);
+    };
+  }, []);
 
-  // The real button sits on top at opacity 0.01, not 0: Google ignores finger taps on a fully
-  // transparent one (Android Chrome), while 0.01 is invisible and works.
-  // A face with nothing behind it would look like a button that does nothing.
-  if (status === "failed") return null;
+  const shown = going ? t("settings.linkingGoogle") : label;
+  const go = () => {
+    setGoing(true);
+    google.redirect(errand);
+  };
   if (compact) {
     return (
-      <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2">
-        <span
-          className={`block rounded-full bg-sprout-600 px-4 py-1.5 text-sm font-bold text-white ${
-            status === "loading" ? "opacity-60" : ""
-          }`}
-        >
-          {label}
-        </span>
-        <div ref={container} className="absolute inset-0 overflow-hidden opacity-[0.01]" />
-      </div>
+      <button type="button" disabled={going} aria-busy={going} onClick={go} className={GOOGLE_PILL}>
+        {going ? (
+          <LoaderCircle
+            aria-hidden="true"
+            className="size-4 animate-spin motion-reduce:animate-none"
+          />
+        ) : (
+          <GoogleG className="size-4" />
+        )}
+        {shown}
+      </button>
     );
   }
   return (
-    <div className="relative h-14 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2">
-      <GoogleFace label={label} dim={status === "loading"} />
-      <div className="absolute inset-0 overflow-hidden opacity-[0.01]">
-        <div
-          ref={container}
-          style={{ width: `${String(100 / SCALE)}%`, transform: `scale(${String(SCALE)})` }}
-          className="origin-top-left"
-        />
-      </div>
-    </div>
+    <button
+      type="button"
+      disabled={going}
+      aria-busy={going}
+      onClick={go}
+      className="press-pill press-deep rise group block w-full rounded-full text-left"
+    >
+      <GoogleFace label={shown} waiting={going} />
+    </button>
   );
 }

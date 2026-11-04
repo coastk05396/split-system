@@ -474,6 +474,7 @@ export const en: Record<MessageId, string> = {
   "settings.unlink": "Unlink {provider}",
   "settings.unlinkShort": "Unlink",
   "settings.linkGoogle": "Connect",
+  "settings.linkingGoogle": "Opening Google…",
   "settings.comingSoon": "Coming soon",
   "link.signedIn":
     "You are already signed in. To link another account, log out first, then come back to this page.",
