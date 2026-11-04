@@ -93,4 +93,19 @@ describe("saved expense toast", () => {
     advance(180);
     expect(screen.queryByRole("status")).toBeNull();
   });
+
+  it("tells its owner once when it has gone, and not while it is held", () => {
+    const onDone = vi.fn();
+    render(<ExpenseSavedToast saved={saved} onDone={onDone} />);
+    const toast = screen.getByRole("status");
+    fireEvent.mouseEnter(toast);
+    advance(10_000);
+    expect(onDone).not.toHaveBeenCalled();
+    fireEvent.mouseLeave(toast);
+    advance(6000);
+    advance(180);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    advance(10_000);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
 });

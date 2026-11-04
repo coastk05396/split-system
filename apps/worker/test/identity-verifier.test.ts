@@ -7,9 +7,10 @@ import {
   type JWTPayload,
   SignJWT,
 } from "jose";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createJoseVerifier,
+  fetchJwks,
   type IdentityVerifier,
   JWKS_URLS,
 } from "../src/auth/identity-verifier.js";
@@ -65,6 +66,7 @@ describe("createJoseVerifier", () => {
   let published: Record<string, JSONWebKeySet>;
   let downloads: string[];
   let verifier: IdentityVerifier;
+  let now: number;
 
   beforeEach(async () => {
     lineKey = await keyPair("ES256", `line-${crypto.randomUUID()}`);
@@ -74,6 +76,7 @@ describe("createJoseVerifier", () => {
       [JWKS_URLS.google]: { keys: [googleKey.jwk] },
     };
     downloads = [];
+    now = NOW;
     await env.JWKS_CACHE.delete("jwks:line");
     await env.JWKS_CACHE.delete("jwks:google");
     verifier = createJoseVerifier({
@@ -87,7 +90,7 @@ describe("createJoseVerifier", () => {
       },
       googleClientId: GOOGLE_CLIENT,
       lineChannelId: LINE_CHANNEL,
-      now: () => NOW,
+      now: () => now,
     });
   });
 
@@ -157,9 +160,82 @@ describe("createJoseVerifier", () => {
     expect(downloads).toEqual([JWKS_URLS.line]);
     expect(await env.JWKS_CACHE.get("jwks:line", "json")).toEqual({ keys: [lineKey.jwk] });
 
+    now += 60_000;
     const rotated = await keyPair("ES256", `line-${crypto.randomUUID()}`);
     published[JWKS_URLS.line] = { keys: [rotated.jwk] };
     await verifier.verify("line", await sign(rotated, lineClaims()));
     expect(downloads).toEqual([JWKS_URLS.line, JWKS_URLS.line]);
   });
+  it("downloads only once for many fake kids within the refresh cooldown", async () => {
+    for (let i = 0; i < 12; i++) {
+      const token = await sign({ ...lineKey, kid: `fake-${i}` }, lineClaims());
+      expect(await rejection(verifier.verify("line", token))).toMatchObject({
+        code: "ID_TOKEN_INVALID",
+      });
+    }
+    expect(downloads).toEqual([JWKS_URLS.line]);
+    now += 60_000;
+    await rejection(
+      verifier.verify("line", await sign({ ...lineKey, kid: "fake-later" }, lineClaims())),
+    );
+    expect(downloads).toEqual([JWKS_URLS.line, JWKS_URLS.line]);
+  });
+
+  it("downloads again right after a failed download, not after the cooldown", async () => {
+    published = {};
+    await rejection(verifier.verify("line", await sign(lineKey, lineClaims())));
+
+    published[JWKS_URLS.line] = { keys: [lineKey.jwk] };
+    expect(await verifier.verify("line", await sign(lineKey, lineClaims()))).toMatchObject({
+      sub: "U1234",
+    });
+    expect(downloads).toEqual([JWKS_URLS.line, JWKS_URLS.line]);
+  });
+
+  it("uses freshly downloaded keys when KV writes fail", async () => {
+    const put = vi.spyOn(env.JWKS_CACHE, "put").mockRejectedValue(new Error("KV unavailable"));
+    try {
+      expect(await verifier.verify("line", await sign(lineKey, lineClaims()))).toMatchObject({
+        sub: "U1234",
+      });
+      expect(await verifier.verify("line", await sign(lineKey, lineClaims()))).toMatchObject({
+        sub: "U1234",
+      });
+      expect(downloads).toHaveLength(1);
+    } finally {
+      put.mockRestore();
+    }
+  });
+});
+
+it("aborts a stalled JWKS download after five seconds", async () => {
+  // The real timeout would make this test wait five seconds; hand out a signal we fire ourselves.
+  const stall = new AbortController();
+  const asked: number[] = [];
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    asked.push(ms);
+    return stall.signal;
+  });
+  vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => {
+    const signal = init?.signal;
+    if (!signal) throw new Error("missing abort signal");
+    return new Promise<Response>((_resolve, reject) => {
+      signal.addEventListener(
+        "abort",
+        () => {
+          reject(signal.reason as Error);
+        },
+        { once: true },
+      );
+    });
+  });
+  try {
+    const download = fetchJwks(JWKS_URLS.line);
+    stall.abort(new DOMException("The operation timed out.", "TimeoutError"));
+    await expect(download).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(asked).toEqual([5_000]);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
 });

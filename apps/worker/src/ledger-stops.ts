@@ -81,7 +81,7 @@ export function stopOperation(
   if (!stopDayInTrip(day, trip.trip_start_date, trip.trip_end_date))
     throw invalid("dayDate", "STOP_DAY_OUTSIDE_TRIP");
   // A create lands on `day`, and so does a patch that changes the day; an edit that stays put does not.
-  if (op.action === "create" || day !== previous?.dayDate) {
+  if (day !== previous?.dayDate) {
     const count = sql
       .exec<{ n: number }>(
         "SELECT count(*) n FROM ledger_stops WHERE json_extract(data,'$.dayDate')=?",

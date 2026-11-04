@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
-import { waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { act, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
 import {
@@ -12,11 +12,20 @@ import {
   restoreCache,
   saveCache,
   setQueryRestored,
+  startCachePersistence,
 } from "./cache-persistence.js";
 import { getQueryRev, readWithRev, setQueryRev } from "./sync.js";
 
 class FakeStorage implements CacheStorage {
   private store = new Map<string, string>();
+
+  get length(): number {
+    return this.store.size;
+  }
+
+  key(index: number): string | null {
+    return [...this.store.keys()][index] ?? null;
+  }
 
   getItem(key: string): string | null {
     return this.store.get(key) ?? null;
@@ -42,6 +51,79 @@ describe("Web query cache persistence (Ticket 10)", () => {
   beforeEach(() => {
     client = new QueryClient();
     storage = new FakeStorage();
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("coalesces many query successes into one trailing cache write", async () => {
+    vi.useFakeTimers();
+    const writes = vi.spyOn(storage, "setItem");
+    const stop = startCachePersistence(client, "user-1", storage);
+    try {
+      for (let i = 0; i < 10; i++) client.setQueryData(["groups", i], { id: i });
+      expect(writes).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(500);
+      client.setQueryData(["groups", 10], { id: 10 });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(writes).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(writes).toHaveBeenCalledTimes(1);
+    } finally {
+      stop();
+    }
+  });
+
+  it("flushes a pending cache write on pagehide without a later duplicate", async () => {
+    vi.useFakeTimers();
+    const writes = vi.spyOn(storage, "setItem");
+    const stop = startCachePersistence(client, "user-1", storage);
+    try {
+      client.setQueryData(["groups", "g-1"], { name: "Before leaving" });
+      window.dispatchEvent(new Event("pagehide"));
+      expect(writes).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(writes).toHaveBeenCalledTimes(1);
+    } finally {
+      stop();
+    }
+  });
+
+  it("sign-out cancels pending cache writes after coalescing query successes", async () => {
+    const user = makeUser("Debounced cache");
+    let groupId = "";
+    const { api, router, queryClient } = renderApp({
+      cookieUser: user,
+      path: "/groups",
+      cacheStorage: storage,
+      seed: (groups) => {
+        groupId = groups.add(user, { name: "Debounced ledger" });
+      },
+    });
+    await screen.findByRole("list", { name: "我的群組" });
+    vi.useFakeTimers();
+    const writes = vi.spyOn(storage, "setItem");
+    act(() => {
+      for (let i = 0; i < 10; i++) queryClient.setQueryData(["cache-burst", i], i);
+    });
+    expect(writes).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(writes).toHaveBeenCalledTimes(1);
+    act(() => {
+      queryClient.setQueryData(["cache-burst", 11], 11);
+    });
+    api.expireAccessToken();
+    api.setCookieUser(null);
+    await act(async () => {
+      await router.navigate(`/groups/${groupId}`);
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    await vi.waitFor(() => {
+      expect(storage.getItem(getCacheKey(user.id))).toBeNull();
+    });
+    writes.mockClear();
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(writes).not.toHaveBeenCalled();
+    expect(storage.getItem(getCacheKey(user.id))).toBeNull();
   });
 
   it("the cache is restored per user and never shown to a different user", () => {
@@ -90,6 +172,35 @@ describe("Web query cache persistence (Ticket 10)", () => {
     expect(storage.getItem(getCacheKey("user-1"))).toBeNull();
   });
 
+  it("forced sign-out removes every persisted ledger cache", async () => {
+    const user = makeUser("Revoked session");
+    let groupId = "";
+    const { api, router } = renderApp({
+      cookieUser: user,
+      path: "/groups",
+      seed: (groups) => {
+        groupId = groups.add(user, { name: "Private ledger" });
+      },
+    });
+    await screen.findByRole("list", { name: "我的群組" });
+    await waitFor(() => {
+      expect(localStorage.getItem(getCacheKey(user.id))).not.toBeNull();
+    });
+    localStorage.setItem("split.queryCache.other.split.v0", "older private ledger");
+    localStorage.setItem("split.queryCache.other.split.v1", "another private ledger");
+    localStorage.setItem("split.locale", "zh-TW");
+    api.expireAccessToken();
+    api.setCookieUser(null);
+    await act(() => router.navigate(`/groups/${groupId}`));
+    await screen.findByRole("button", { name: "使用 Google 帳號登入" });
+    expect(
+      Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((key) =>
+        key?.startsWith("split.queryCache."),
+      ),
+    ).toEqual([]);
+    expect(localStorage.getItem("split.locale")).toBe("zh-TW");
+  });
+
   it("a restored amount shows the updating state and becomes solid only after confirmation", async () => {
     // Restore query
     client.setQueryData(["groups", "g-1", "balances"], { balances: [{ amount: 500 }] });
@@ -135,9 +246,7 @@ describe("Web query cache persistence (Ticket 10)", () => {
       ],
       pageParams: [undefined],
     });
-    client.setQueryData(["groups", "g-1", "members"], [
-      { id: "m-1", name: "小宇" },
-    ]);
+    client.setQueryData(["groups", "g-1", "members"], [{ id: "m-1", name: "小宇" }]);
 
     saveCache(client, "user-1", storage);
 

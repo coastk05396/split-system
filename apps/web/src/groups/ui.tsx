@@ -1,6 +1,7 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useBlocker } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
@@ -95,6 +96,81 @@ export function Loading() {
       </span>
       <span className="sr-only">{t("app.loading")}</span>
     </div>
+  );
+}
+
+/**
+ * Keeps the User on the page while its write waits (back button, links), so the answer still
+ * finds the page that will send them on. Call the returned function just before navigating on.
+ */
+export function useLeaveBlock(waiting: boolean): () => void {
+  const released = useRef(false);
+  const blocker = useBlocker(() => waiting && !released.current);
+  useEffect(() => {
+    if (waiting) released.current = false;
+  }, [waiting]);
+  useEffect(() => {
+    if (blocker.state === "blocked") blocker.reset();
+  }, [blocker]);
+  return () => {
+    released.current = true;
+  };
+}
+
+/** How long a create or join may wait before the User is offered a way out. */
+const PROGRESS_PATIENCE_MS = 20_000;
+
+/**
+ * A full-screen wait for a write that cannot show its result early: creating or joining a Group.
+ * A modal dialog, so focus stays in it and the page behind (and any dialog under it) is hidden
+ * from the keyboard and screen readers until the server answers.
+ */
+export function Progress({ message, onLeave }: { message: string; onLeave?: () => void }) {
+  // Where the keyboard was when the wait began; Radix has no trigger here to return it to.
+  const [opener] = useState(() => document.activeElement);
+  const [slow, setSlow] = useState(false);
+  const canLeave = onLeave !== undefined;
+  useEffect(() => {
+    if (!canLeave) return;
+    const timer = window.setTimeout(() => {
+      setSlow(true);
+    }, PROGRESS_PATIENCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [canLeave]);
+  return (
+    <Dialog.Root open={true}>
+      <Dialog.Portal>
+        <Dialog.Content
+          aria-describedby={undefined}
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            event.preventDefault();
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+          }}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-sprout-50/95 p-6 text-center outline-none"
+        >
+          <span aria-hidden="true" className="sprout-sway inline-flex">
+            <SproutMascot className="size-24" mood="happy" interactive={false} />
+          </span>
+          <Dialog.Title className="text-lg font-bold">{message}</Dialog.Title>
+          {slow && onLeave !== undefined && (
+            <>
+              <p className="max-w-xs text-sm text-ink-muted">{t("progress.slow")}</p>
+              <button type="button" onClick={onLeave} className={`${secondaryButton} px-5 py-3`}>
+                {t("progress.leave")}
+              </button>
+            </>
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -233,9 +309,7 @@ export function GroupAvatar({
           : ""
       } ${className}`}
     >
-      <span className={isEmoji ? "text-[1.15em] leading-none" : "leading-none"}>
-        {glyph}
-      </span>
+      <span className={isEmoji ? "text-[1.15em] leading-none" : "leading-none"}>{glyph}</span>
     </span>
   );
 }

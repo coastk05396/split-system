@@ -1,6 +1,6 @@
-import { MAX_GROUPS_PER_USER, settlementConfirmSchema, settlementInputSchema } from "@split/shared";
+import { MAX_GROUPS_PER_USER, settlementInputSchema } from "@split/shared";
 import { and, eq } from "drizzle-orm";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
 import { requireUser } from "../auth/require-user.js";
 import { createDb, type Db } from "../db/client.js";
@@ -11,10 +11,6 @@ import type { Bindings } from "../env.js";
 import { requireMember } from "../groups/membership.js";
 import { consumeRateLimit, rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey } from "../request-guards.js";
-
-function hasJsonBody(c: Context): boolean {
-  return c.req.header("Content-Type")?.includes("application/json") === true;
-}
 
 async function callLedger(
   env: Bindings,
@@ -63,12 +59,7 @@ async function resolveSettlementGroup(
     userReservations = await db
       .select({ groupId: groupReservations.groupId })
       .from(groupReservations)
-      .where(
-        and(
-          eq(groupReservations.userId, userId),
-          eq(groupReservations.status, "active"),
-        ),
-      );
+      .where(and(eq(groupReservations.userId, userId), eq(groupReservations.status, "active")));
   } catch {
     throw new ApiError("SERVICE_UNAVAILABLE");
   }
@@ -119,33 +110,15 @@ export function settlementRoutes(deps: AppDeps) {
         201,
       );
     })
-    .post("/settlements/:sid/confirm", signedIn, limited, async (c) => {
-      const db = createDb(c.env.DB);
-      const groupId = await resolveSettlementGroup(db, c.req.param("sid"), c.var.userId, c.env, deps.now());
-      const me = await requireMember(db, groupId, c.var.userId);
-      const body = hasJsonBody(c) ? await parseBody(c, settlementConfirmSchema) : {};
-      return callLedger(c.env, groupId, {
-        action: "confirm",
-        actorId: me.id,
-        now: deps.now(),
-        id: c.req.param("sid"),
-        ...body,
-      });
-    })
-    .post("/settlements/:sid/cancel", signedIn, limited, async (c) => {
-      const db = createDb(c.env.DB);
-      const groupId = await resolveSettlementGroup(db, c.req.param("sid"), c.var.userId, c.env, deps.now());
-      const me = await requireMember(db, groupId, c.var.userId);
-      return callLedger(c.env, groupId, {
-        action: "cancel",
-        actorId: me.id,
-        now: deps.now(),
-        id: c.req.param("sid"),
-      });
-    })
     .post("/settlements/:sid/undo", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
-      const groupId = await resolveSettlementGroup(db, c.req.param("sid"), c.var.userId, c.env, deps.now());
+      const groupId = await resolveSettlementGroup(
+        db,
+        c.req.param("sid"),
+        c.var.userId,
+        c.env,
+        deps.now(),
+      );
       const me = await requireMember(db, groupId, c.var.userId);
       return callLedger(c.env, groupId, {
         action: "undo",

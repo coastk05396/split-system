@@ -46,13 +46,8 @@ Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, ac
 
 After the gate is deployed, set `MAINTENANCE` with `pnpm --filter @split/worker exec wrangler secret put MAINTENANCE --env staging` (or `--env production`). Enter the secret interactively. API writes return 503 while the secret is set; reads and health remain available. For verification, send the secret in the `X-Maintenance-Bypass` header over HTTPS, keeping it out of logs and shell history. Remove the gate after verification with `pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env staging` (or `--env production`). Do not set or remove the production secret until the owner decides.
 
-## Release 1: Group ledger cutover checklist
+## Group ledger cutover: completed
 
-For the detailed step-by-step procedure and disaster recovery steps, see `docs/operations/group-ledger-migration.md`. Summary checklist:
-1. **Pre-cutover backup**: Export and verify full D1 backup outside the repository.
-2. **Deploy gate and snapshot first**: Apply additive D1 migrations, then upload the new Worker (`GROUP_LEDGER` DO binding, SQLite migration `tag: v1`), attach the `MAINTENANCE` secret to that version and deploy it. The old Worker has no gate or snapshot route, so the secret must not be set against it. Validate 503 on writes, 200 on reads.
-3. **Identity verification**: Query candidate ID for 「明天去哪玩」, verify fingerprint via `GET /api/v1/maintenance/migration/snapshot/:id` with bypass.
-4. **Hold the gate**: Keep it on through import and wipe.
-5. **Import & verify**: Run `POST /api/v1/maintenance/migration/import/:id` with bypass. Verify all members, zero-sum balances, expenses, settlements, stops, sessions, and auth.
-6. **Controlled wipe**: Run `POST /api/v1/maintenance/migration/wipe-excluded/:id` with bypass to remove non-retained groups while preserving all users, identities, and sessions. Re-verify retained group and auth.
-7. **Production sign-off & gate removal**: Verify health, live WebSocket, 404 on test sign-in, remove maintenance gate, monitor observability. Cutover is a one-way door once the maintenance gate is removed: before wipe, rollback is a Worker rollback with legacy D1 tables intact; after wipe or after gate removal, rollback requires restoring the pre-cutover D1 backup and losing writes made since (see `docs/operations/group-ledger-migration.md`).
+The Group ledger migration is finished, including the legacy D1 table removal. Group Durable Objects are authoritative; D1 holds read projections and account data. The snapshot, import, and controlled-wipe endpoints have been retired, so their former commands must not be run during releases.
+
+Continue using the release gate above for ordinary deployments. See `docs/operations/group-ledger-migration.md` for the completed migration status and current verification guidance.

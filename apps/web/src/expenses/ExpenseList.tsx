@@ -1,5 +1,4 @@
 import { type CurrencyCode, type Expense, formatAmount, type Member } from "@split/shared";
-import { useLocation } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { useMembers } from "../groups/api.js";
@@ -9,6 +8,13 @@ import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 import { useExpenses } from "./api.js";
+import {
+  type PendingSave,
+  removeSave,
+  useJustSaved,
+  usePendingDeletes,
+  usePendingSaves,
+} from "./pending-writes.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 
 export function memberPictures(
@@ -50,8 +56,10 @@ export function ExpenseList({
 }) {
   const auth = useAuth();
   const expenses = useExpenses(groupId);
+  const deleting = usePendingDeletes(groupId);
+  const saving = usePendingSaves(groupId);
   // Coming back from saving one: that row drops in and glows once.
-  const freshId = (useLocation().state as { newExpenseId?: string } | null)?.newExpenseId;
+  const freshId = useJustSaved(groupId);
   const members = useMembers(groupId);
   const nameOf = memberNames(members.data);
 
@@ -66,19 +74,31 @@ export function ExpenseList({
     return <LoadError error={expenses.error} onRetry={() => void expenses.refetch()} />;
   }
   if (expenses.isPending) return <Loading />;
-  const rows = expenses.data.pages.flatMap((p) => p.expenses);
+  // Totals stay on what the server has confirmed; only the rows hide while a delete is pending.
+  const confirmed = expenses.data.pages.flatMap((p) => p.expenses);
+  const rows = confirmed.filter((e) => !deleting.includes(e.id));
 
-  const totalSettlement = rows.reduce((sum, e) => sum + e.settlementAmount, 0);
+  const totalSettlement = confirmed.reduce((sum, e) => sum + e.settlementAmount, 0);
   const myShare = resolvedMyMemberId
-    ? rows.reduce((sum, e) => {
+    ? confirmed.reduce((sum, e) => {
         const split = e.splits.find((s) => s.memberId === resolvedMyMemberId);
         return sum + (split?.settlementAmount ?? 0);
       }, 0)
     : 0;
 
+  const editing = new Set(saving.flatMap((s) => (s.expenseId === null ? [] : [s.expenseId])));
   return (
     <section aria-label={t("expense.list")} className="flex flex-col gap-4">
-      {rows.length === 0 ? (
+      {saving.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {saving.map((s) => (
+            <li key={s.key}>
+              <PendingRow save={s} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {rows.length === 0 && saving.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
           <span className="sprout-greet inline-flex">
             <SproutMascot className="size-20" mood="happy" interactive={true} />
@@ -95,7 +115,7 @@ export function ExpenseList({
               })}
             </span>
           </div>
-          {groupByDate(rows).map((day) => (
+          {groupByDate(rows.filter((e) => !editing.has(e.id))).map((day) => (
             <section
               key={day.date}
               aria-label={dateHeading(day.date)}
@@ -139,6 +159,53 @@ export function ExpenseList({
         </button>
       )}
     </section>
+  );
+}
+
+/** A save the server has not answered: a muted row, with a retry when it failed. */
+export function PendingRow({ save }: { save: PendingSave }) {
+  const failed = save.status === "failed";
+  return (
+    <div
+      className={`${card} flex items-center gap-3 px-4 py-3 ${failed ? "border-red-300" : "opacity-70"}`}
+    >
+      <span
+        className={`flex size-11 shrink-0 items-center justify-center rounded-2xl border ${categoryTone(save.category).badge}`}
+      >
+        <CategoryIcon category={save.category} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-bold">{save.description}</span>
+        {failed ? (
+          <span role="alert" className="text-xs font-bold text-red-700">
+            {t("expense.saveFailed", { reason: save.error ?? "" })}
+          </span>
+        ) : (
+          <span className="text-xs text-ink-muted">{t("expense.saving")}</span>
+        )}
+      </span>
+      <span className="flex shrink-0 flex-col items-end">
+        <span className="font-bold text-sprout-700">
+          {formatAmount(save.amount, save.currency)}
+        </span>
+        {failed && (
+          <span className="flex gap-2 text-xs font-bold">
+            <button type="button" className="min-h-11 px-2" onClick={save.retry}>
+              {t("expense.saveRetry")}
+            </button>
+            <button
+              type="button"
+              className="min-h-11 px-2"
+              onClick={() => {
+                removeSave(save.key);
+              }}
+            >
+              {t("expense.saveDiscard")}
+            </button>
+          </span>
+        )}
+      </span>
+    </div>
   );
 }
 

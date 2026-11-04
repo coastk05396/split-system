@@ -1,11 +1,17 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, Plus, Trash2, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
 import { ExpenseSavedToast } from "../expenses/ExpenseSavedToast.js";
-import type { SavedShare } from "../expenses/expense-sharing.js";
+import { dismissDeleteFailure, useDeleteFailure } from "../expenses/delete-failure.js";
+import { clearJustSaved, useJustSaved } from "../expenses/pending-writes.js";
+import {
+  type SavedShare,
+  settlePendingShare,
+  watchPendingShare,
+} from "../expenses/expense-sharing.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
@@ -27,7 +33,7 @@ export function GroupPage() {
   const group = useGroup(id);
   if (group.isPending) return <Loading />;
   if (group.isError) return <LoadError error={group.error} onRetry={() => void group.refetch()} />;
-  return <GroupDetail group={group.data} />;
+  return <GroupDetail key={group.data.id} group={group.data} />;
 }
 
 function GroupDetail({ group }: { group: Group }) {
@@ -38,25 +44,55 @@ function GroupDetail({ group }: { group: Group }) {
   ];
   // `?tab=trip` or `?tab=settle` opens a tab directly
   const asked = useSearchParams()[0].get("tab") ?? "";
-  // The note after saving an Expense arrives in router state; keep it, then drop it from the
-  // history entry so a reload does not show it again. `newExpenseId` stays for the highlight.
-  const location = useLocation();
-  const navigate = useNavigate();
-  const arrived = location.state as { newExpenseId?: string; share?: SavedShare } | null;
-  const [saved] = useState(arrived?.share);
+  // The note after saving an Expense is prepared in the background; the store names the Expense
+  // (and drives the highlight). A reload finds nothing pending and shows no note.
+  const newExpenseId = useJustSaved(group.id);
+  useEffect(() => clearJustSaved, []);
+  const [saved, setSaved] = useState<{ expenseId: string; share: SavedShare }[]>([]);
   useEffect(() => {
-    if (arrived?.share === undefined) return;
-    void navigate(
-      { pathname: location.pathname, search: location.search },
-      { replace: true, state: { newExpenseId: arrived.newExpenseId } },
-    );
-  }, [arrived, location.pathname, location.search, navigate]);
+    if (newExpenseId === undefined) return;
+    const pending = watchPendingShare(newExpenseId);
+    if (pending === undefined) return;
+    // A result is shown whenever it arrives, even after a newer save or the hint's own expiry.
+    void pending
+      .then((share) => {
+        setSaved((all) =>
+          all.some((r) => r.expenseId === newExpenseId)
+            ? all
+            : [...all, { expenseId: newExpenseId, share }],
+        );
+      })
+      .catch(() => undefined)
+      // Settle either way, so an entry never outlives its page or a failed card build.
+      .finally(() => {
+        settlePendingShare(newExpenseId);
+      });
+  }, [newExpenseId]);
+  const first = saved[0];
+  const dropFirst = useCallback(() => {
+    setSaved((all) => all.slice(1));
+  }, []);
+  const deleteFailure = useDeleteFailure(group.id);
   const [activeTab, setActiveTab] = useState(
     tabs.some((tab) => tab.value === asked) ? asked : "expenses",
   );
   return (
     <div className="flex flex-col gap-3">
-      {saved !== undefined && <ExpenseSavedToast saved={saved} />}
+      {/* One note at a time; the next waits its turn, so none hides another. */}
+      {first !== undefined && (
+        <ExpenseSavedToast key={first.expenseId} saved={first.share} onDone={dropFirst} />
+      )}
+      {deleteFailure !== null && (
+        <p
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-2xl bg-peach p-3 font-bold"
+        >
+          <span>{deleteFailure}</span>
+          <button type="button" className="min-h-11 px-3" onClick={dismissDeleteFailure}>
+            {t("expense.deleteFailedDismiss")}
+          </button>
+        </p>
+      )}
       <ScreenHeader
         compact
         centered

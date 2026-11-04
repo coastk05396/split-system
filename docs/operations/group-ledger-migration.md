@@ -1,130 +1,19 @@
-# Retaining a Group during the Group ledger migration
+# Group ledger migration: completed
 
-This procedure is documented for Release 1. Do not run a production migration or delete data until the owner approves the actual deployment.
+The production Group ledger cutover and legacy D1 table removal are finished. Group Durable Objects now own members, balances, expenses, settlements, invites, and stops; D1 holds read projections and account data.
 
-## Release 1 Cutover Checklist
+The migration snapshot, import, and controlled-wipe endpoints have been retired. The internal import and initialisation handlers are also removed. Do not rerun the old cutover procedure during ordinary releases.
 
-### 1. Pre-cutover Backup
+## Current release verification
 
-- Export a complete D1 backup outside the repository:
-  ```bash
-  pnpm --filter @split/worker exec wrangler d1 export split-prod --remote --output=/tmp/backup-split-prod-$(date +%s).sql
-  ```
-- Verify backup integrity by testing restore in an isolated local or staging database. Keep the exported backup file outside the repository and protected.
+Follow `docs/RELEASE.md` for the release gate and maintenance controls. Verify:
 
-### 2. Deploy the Worker with the Gate and Snapshot, Then Enable the Gate
+- Health and authenticated Group, Member, Expense, Settlement, and Stop reads.
+- Zero-sum balances, account sign-in, and session refresh.
+- Live WebSocket updates, including catch-up after reconnecting.
+- The test sign-in route returns 404 in production.
+- Failed projection writes appear in Worker logs and retry successfully after recovery.
 
-The gate and the snapshot endpoint exist only in the new Worker. Setting `MAINTENANCE` on the old Worker blocks nothing, and the snapshot route answers 404 there. So the new Worker goes out first, with the gate secret attached to the same version so it is never served ungated:
+## Recovery
 
-- Apply additive D1 migrations (no table is dropped; the drop belongs to Release 2):
-  ```bash
-  pnpm --filter @split/worker exec wrangler d1 migrations apply DB --env production
-  ```
-- Upload the new Worker as a version (it carries the `GROUP_LEDGER` Durable Object binding and SQLite class migration `tag: v1`), attach the secret to that version, then deploy it:
-  ```bash
-  pnpm --filter @split/worker exec wrangler versions upload --env production
-  pnpm --filter @split/worker exec wrangler versions secret put MAINTENANCE --env production
-  pnpm --filter @split/worker exec wrangler versions deploy --env production
-  ```
-  Rehearse these three commands on staging first. If your Wrangler version lacks them, deploy and then run `wrangler secret put MAINTENANCE --env production` straight away, accepting a short window in which the new Worker is live and ungated.
-- Confirm that data-modifying requests receive HTTP 503 (`SERVICE_UNAVAILABLE`), while read requests continue to serve normally.
-- Provide the generated secret to authorized operators via the `X-Maintenance-Bypass` header over HTTPS.
-
-### 3. Verify Target Group & Snapshot
-
-Set helper shell variables for operator convenience:
-```bash
-export BASE_URL="https://split.rickchen.si"
-export MAINTENANCE_SECRET="<your-secret-entered-in-step-2>"
-```
-
-1. Look up the candidate IDs for the retained groups (「明天去哪玩」, 「YoYoYo」, 「Test」) in D1:
-   ```bash
-   pnpm --filter @split/worker exec wrangler d1 execute split-prod --remote \
-     --command "SELECT id, name, currency FROM groups WHERE name IN ('明天去哪玩', 'YoYoYo', 'Test');"
-   ```
-
-2. Capture and verify consistent pre-migration snapshots for each retained group:
-   ```bash
-   # For each retained group ID:
-   curl -s "${BASE_URL}/api/v1/maintenance/migration/snapshot/<group-id>" \
-     -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
-   ```
-   - The endpoint verifies that the ID matches a uniquely named retained group in the whitelist.
-   - Record the returned SHA-256 fingerprint from each response.
-   - The maintenance gate remains active throughout snapshot, import, and wipe.
-
-### 4. Idempotent Import & Retained-Group Verification
-
-1. Execute the migration import into each target group's Durable Object:
-   ```bash
-   # Run for each retained group ID:
-   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/import/<group-id>" \
-     -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
-   ```
-   - This populates each target Group's ledger DO, verifies the zero-sum balance invariant across members, registers D1 capacity reservations and active invites, and drains the D1 read-model projections (`group_directory`, `group_member_summary`, `personal_spending`).
-   - The operation is idempotent and safe to retry if interrupted.
-
-2. Verify the imported group details and zero-sum invariant:
-   - Check group details:
-     ```bash
-     curl -s "${BASE_URL}/api/v1/groups/<group-id>" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
-     ```
-   - Check members:
-     ```bash
-     curl -s "${BASE_URL}/api/v1/groups/<group-id>/members" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
-     ```
-   - Check zero-sum balance:
-     ```bash
-     curl -s "${BASE_URL}/api/v1/groups/<group-id>/balances" -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
-     ```
-   - Verify expenses, settlements, and stops return 200.
-
-### 5. Controlled Wipe of Excluded Groups
-
-Only after verifying all retained groups and with explicit owner approval:
-1. Execute controlled wipe using any verified retained group ID:
-   ```bash
-   curl -s -X POST "${BASE_URL}/api/v1/maintenance/migration/wipe-excluded/<any-retained-group-id>" \
-     -H "X-Maintenance-Bypass: ${MAINTENANCE_SECRET}"
-   ```
-2. The endpoint:
-   - Uniquely re-verifies that every retained group (`明天去哪玩`, `YoYoYo`, `Test`) currently in D1 has been imported into its ledger DO and is zero-sum balanced.
-   - Wipes any non-retained groups, members, invites, expenses, expense payers, expense splits, settlements, stops, and read-model rows in a single D1 transaction.
-   - Persists excluded group IDs in `migration_wipe_pending` to guarantee safe retries if any DO ledger deletion fails.
-   - Preserves all users, identities, sessions, settings, and all retained groups.
-3. Confirm that excluded groups return 404, while all retained groups remain accessible.
-
-### 6. Post-Cutover Verification & Gate Removal
-
-1. Verify system health:
-   ```bash
-   curl -s "${BASE_URL}/api/v1/health"
-   ```
-2. Verify live WebSocket connection (`split.v1` protocol and ping/pong).
-3. Verify test sign-in route returns 404:
-   ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" "${BASE_URL}/api/v1/auth/test-sign-in"
-   # Expected: 404
-   ```
-4. Remove the maintenance gate to restore normal user writes:
-   ```bash
-   pnpm --filter @split/worker exec wrangler secret delete MAINTENANCE --env production
-   ```
-5. Monitor production error logs and observability dashboard.
-
-## Rollback & Disaster Recovery
-
-1. **Before wipe:** Keep the maintenance gate enabled and roll back the Worker if required. Import may have changed legacy projections; restore the verified pre-cutover backup if the legacy state needs to be recovered exactly.
-2. **After wipe, before gate removal:** Keep the gate enabled. Restore the pre-cutover D1 backup before rolling back the Worker, because excluded groups have been deleted. If continuing the cutover instead, retry `wipe-excluded` with the same retained ID; the persisted pending list includes interrupted deletions, and an error reports `failedLedgers`.
-3. **After gate removal:** Rollback requires restoring the pre-cutover D1 backup and rolling back the Worker. Writes created since cutover will be lost; the ledger is authoritative and there is no reverse mirror.
-
-## Release 2 Follow-up & Known Edge Cases
-
-Completed after the production cutover:
-1. **D1 Legacy Table Drop**: migration `0008` drops `expenses`, `expense_payers`, `expense_splits`, `settlements`, `stops`, `members`, `groups` and `migration_wipe_pending`. Members, balances and settlement routing are served from the group ledger; the cutover snapshot and `wipe-excluded` routes are removed with the tables they read.
-2. **Reservation Concurrency Hardening**: `withReservation` releases a reservation only after a confirmed refusal, or once the ledger confirms the User is not seated. A network failure or 5xx keeps it, and a release removes only the row its own attempt stamped.
-3. **Signal & Projection Drainage Sequencing**: a `member-op` live signal goes out only after every D1 projection batch it dirtied has completed.
-4. **Multi-DO Account Deletion Compensation**: finalising records what it removed; a deletion that fails midway restores every finalised ledger (`restore`) before unfreezing.
-5. **Initial In-Flight Query Cancellation**: on the first socket connect, Group reads still loading their first answer are aborted (queries pass their abort signal to `fetch`) and replaced by the catch-up read.
-6. **Placeholder Ghost Member Cleanup**: dropping the legacy `members` table removes the legacy placeholder members from D1; placeholders now live only in the ledger.
+A D1 backup contains account data and read projections, not the authoritative Group ledgers. Restoring D1 alone does not roll back ledger writes. Plan recovery around both stores and obtain owner approval before restoring or deleting production data.

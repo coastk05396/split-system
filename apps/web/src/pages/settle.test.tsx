@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryObserver } from "@tanstack/react-query";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { FakeGroups, SeedGroup } from "../../test/fake-groups.js";
 import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
@@ -172,6 +173,82 @@ describe("Recording and confirming Settlements", () => {
     expect(api.groups.members(id())[0]?.balance).toBe(-200);
   });
 
+  it.each([
+    { trigger: "確認收款", label: "阿哲付給你", seed: owedToMe },
+    {
+      trigger: "代為確認",
+      label: "阿哲付給宜庭",
+      seed: {
+        name: "代為確認",
+        myBalance: 0,
+        role: "admin" as const,
+        others: [
+          { name: "宜庭", balance: 200 },
+          { name: "阿哲", balance: -200 },
+        ],
+      },
+    },
+  ])(
+    "uses a new key for an edited settlement retry ($trigger)",
+    async ({ trigger, label, seed }) => {
+      const { user, api, id } = await openSettle(seed);
+      await user.click((await row("要付給誰", label)).getByRole("button", { name: trigger }));
+      let dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+      const route = `POST /api/v1/groups/${id()}/settlements`;
+      api.failNext(route, "INTERNAL", 500);
+      await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+      expect(await screen.findByRole("alert")).toBeVisible();
+      await user.click((await row("要付給誰", label)).getByRole("button", { name: trigger }));
+      dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+      const amount = dialog.getByLabelText("結算金額（TWD）");
+      await user.clear(amount);
+      await user.type(amount, "150");
+      await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+      await waitFor(() => {
+        expect(api.groups.settlements.list(id())).toHaveLength(1);
+      });
+      const requests = api.requests.filter((r) => r.route === route);
+      expect(requests).toHaveLength(2);
+      expect(requests[0]?.headers.get("Idempotency-Key")).toBeTruthy();
+      expect(requests[1]?.headers.get("Idempotency-Key")).not.toBe(
+        requests[0]?.headers.get("Idempotency-Key"),
+      );
+      expect(api.groups.settlements.list(id())[0]?.amount).toBe(150);
+    },
+  );
+
+  it("refreshes Stats after recording a settlement once its projection becomes available", async () => {
+    const { user, api, id, queryClient } = await openSettle(owedToMe);
+    await user.click(
+      (await row("要付給誰", "阿哲付給你")).getByRole("button", { name: "確認收款" }),
+    );
+    const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+    let projected = false;
+    const key = ["stats", "spending", me.id];
+    const observer = new QueryObserver(queryClient, {
+      queryKey: key,
+      queryFn: () => Promise.resolve(projected ? 200 : 100),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await observer.refetch();
+      vi.useFakeTimers();
+      act(() => {
+        fireEvent.click(dialog.getByRole("button", { name: "確認已結清" }));
+      });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(api.groups.settlements.list(id())).toHaveLength(1);
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(queryClient.getQueryData(key)).toBe(100);
+      projected = true;
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(queryClient.getQueryData(key)).toBe(200);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
   it("lets the receiver confirm a partial payment; the rest stays a debt", async () => {
     const { user, api, id } = await openSettle(owedToMe);
 
@@ -267,6 +344,85 @@ describe("Recording and confirming Settlements", () => {
     expect(api.groups.members(id())[2]?.balance).toBe(-200);
   });
 
+  it("finishes undo after the server answers while refetches remain pending, without offering Undo again", async () => {
+    const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 2, receiver: 0, amount: 200 });
+    });
+    const button = (await row("結算紀錄", "阿哲付給你")).getByRole("button", { name: "撤銷" });
+    const releaseGroup = api.holdResponses(`GET /api/v1/groups/${id()}`);
+    const releaseHistory = api.holdResponses(`GET /api/v1/groups/${id()}/settlements`);
+    try {
+      await user.click(button);
+      await waitFor(() => {
+        expect(api.groups.settlements.list(id())[0]?.status).toBe("undone");
+      });
+      // The undone Settlement must not offer Undo again while the history is still stale.
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: "撤銷" })).not.toBeInTheDocument();
+      });
+    } finally {
+      releaseGroup();
+      releaseHistory();
+    }
+  });
+
+  it("moves the balances back and hides Undo before the server answers an undo", async () => {
+    const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 2, receiver: 0, amount: 200 });
+    });
+    expect(await screen.findByText("NT$ 100")).toBeVisible();
+    const release = api.holdResponses(
+      `POST /api/v1/settlements/${api.groups.settlements.list(id())[0]?.id}/undo`,
+    );
+    try {
+      await user.click((await row("結算紀錄", "阿哲付給你")).getByRole("button", { name: "撤銷" }));
+      await waitFor(() => {
+        const mine = within(screen.getByRole("list", { name: "大家的結餘" })).getAllByRole(
+          "listitem",
+        )[0];
+        expect(mine?.textContent).toMatch(/\+NT\$ 300/);
+      });
+      expect(screen.queryByRole("button", { name: "撤銷" })).not.toBeInTheDocument();
+    } finally {
+      release();
+    }
+  });
+
+  it("puts the balances and the Undo button back when an undo fails", async () => {
+    const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 2, receiver: 0, amount: 200 });
+    });
+    expect(await screen.findByText("NT$ 100")).toBeVisible();
+    api.failNext(`POST /api/v1/settlements/${api.groups.settlements.list(id())[0]?.id}/undo`);
+
+    await user.click((await row("結算紀錄", "阿哲付給你")).getByRole("button", { name: "撤銷" }));
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    const mine = within(screen.getByRole("list", { name: "大家的結餘" })).getAllByRole(
+      "listitem",
+    )[0];
+    expect(mine?.textContent).toMatch(/\+NT\$ 100/);
+    expect(screen.getByRole("button", { name: "撤銷" })).toBeVisible();
+  });
+
+  it("asks the server for the real balances again after an undo fails", async () => {
+    const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 2, receiver: 0, amount: 200 });
+    });
+    expect(await screen.findByText("NT$ 100")).toBeVisible();
+    const route = `GET /api/v1/groups/${id()}/balances`;
+    const asked = () => api.requests.filter((r) => r.route === route).length;
+    const before = asked();
+    api.failNext(`POST /api/v1/settlements/${api.groups.settlements.list(id())[0]?.id}/undo`);
+
+    await user.click((await row("結算紀錄", "阿哲付給你")).getByRole("button", { name: "撤銷" }));
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await waitFor(() => {
+      expect(asked()).toBeGreaterThan(before);
+    });
+  });
+
   it("uses warm clay tones for negative balances and outgoing payments", async () => {
     await openSettle({
       name: "室友",
@@ -276,10 +432,7 @@ describe("Recording and confirming Settlements", () => {
 
     const plannedRow = await row("要付給誰", "你付給宜庭");
     expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-terracotta-ink");
-    expect(plannedRow.getByText("你要付")).toHaveClass(
-      "bg-terracotta-soft",
-      "text-terracotta-ink",
-    );
+    expect(plannedRow.getByText("你要付")).toHaveClass("bg-terracotta-soft", "text-terracotta-ink");
     expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass("bg-sprout-600");
   });
 

@@ -112,12 +112,17 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
 
     async fetch(input, init) {
       const used = accessToken;
+      const asked = generation;
       const res = await send(input, init, used);
       if (res.status !== 401) return res;
+      // A sign-out since then means another account may hold the token now: never resend as them.
+      if (asked !== generation) return res;
       // Another call may already have refreshed while this one was in flight.
       if (accessToken !== null && accessToken !== used) return send(input, init, accessToken);
       const me = await refresh();
       if (me === null) {
+        // Every request still in flight from this account is void, as after a sign-out.
+        generation += 1;
         onSignedOut?.();
         return res;
       }

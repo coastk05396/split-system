@@ -17,7 +17,6 @@ import { parseBody, sameOriginWrites } from "../request-guards.js";
 import {
   createSession,
   deleteAccount,
-  endAllSessions,
   endSession,
   linkIdentity,
   loadMe,
@@ -112,11 +111,6 @@ export function authRoutes(deps: AppDeps) {
     .post("/auth/logout", async (c) => {
       const presented = getCookie(c, REFRESH_COOKIE);
       if (presented !== undefined) await endSession(createDb(c.env.DB), presented);
-      clearRefreshCookie(c);
-      return c.body(null, 204);
-    })
-    .post("/auth/logout-all", signedIn, async (c) => {
-      await endAllSessions(createDb(c.env.DB), c.var.userId);
       clearRefreshCookie(c);
       return c.body(null, 204);
     })

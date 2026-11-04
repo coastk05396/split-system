@@ -16,15 +16,22 @@ export interface AppDeps {
   lineReplyClient: (env: Bindings) => LineReplyClient;
 }
 
+const verifiers = new WeakMap<Bindings, IdentityVerifier>();
+
 export const productionDeps: AppDeps = {
-  verifier: (env) =>
-    createJoseVerifier({
+  verifier: (env) => {
+    const existing = verifiers.get(env);
+    if (existing !== undefined) return existing;
+    const verifier = createJoseVerifier({
       cache: env.JWKS_CACHE,
       fetchJwks,
       googleClientId: env.GOOGLE_CLIENT_ID,
       lineChannelId: env.LINE_LOGIN_CHANNEL_ID,
       now: Date.now,
-    }),
+    });
+    verifiers.set(env, verifier);
+    return verifier;
+  },
   now: Date.now,
   rateSource: productionRateSource(),
   lineReplyClient: (env) =>

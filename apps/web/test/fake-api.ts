@@ -19,6 +19,8 @@ export interface FakeApi {
   groups: FakeGroups;
   /** The next request to "METHOD /path" answers with this error (500 INTERNAL by default). */
   failNext(route: string, code?: string, status?: number): void;
+  /** Holds answers at the network boundary until the returned release is called. */
+  holdResponses(route: string): () => void;
   /** When set, `POST /auth/link/:provider` fails with this 409 code. */
   refuseLink: string | null;
   /** The next request to "METHOD /path" reaches the server, but its answer is lost (network error). */
@@ -68,6 +70,7 @@ export function createFakeApi(): FakeApi {
   const calls: string[] = [];
   const failing = new Map<string, { code: string; status: number }>();
   const dropping = new Set<string>();
+  const held = new Map<string, Promise<void>>();
   const requests: FakeApi["requests"] = [];
 
   function issue(user: Me): Response {
@@ -104,6 +107,19 @@ export function createFakeApi(): FakeApi {
     failNext(route, code = "INTERNAL", status = 500) {
       failing.set(route, { code, status });
     },
+    holdResponses(route) {
+      let release: () => void = () => undefined;
+      held.set(
+        route,
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      return () => {
+        held.delete(route);
+        release();
+      };
+    },
     testSignInEnabled: true,
     refuseLink: null,
     requests,
@@ -130,6 +146,7 @@ export function createFakeApi(): FakeApi {
         "http://localhost",
       );
       const route = `${(init?.method ?? "GET").toUpperCase()} ${url.pathname}`;
+      await held.get(route);
       // The server did the work; only its answer is lost on the way back.
       if (dropping.delete(route)) throw new TypeError("Failed to fetch");
       return response;
@@ -192,8 +209,6 @@ export function createFakeApi(): FakeApi {
         return new Response(null, { status: 204 });
       case "GET /api/v1/me":
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(authed);
-      case "POST /api/v1/auth/logout-all":
-        return authed === undefined ? error("UNAUTHORIZED", 401) : endAll();
       case "PATCH /api/v1/me": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const body = await readJson(init);

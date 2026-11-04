@@ -174,10 +174,6 @@ export async function endSession(db: Db, presented: string): Promise<void> {
     .where(and(eq(sessions.id, parsed.sessionId), eq(sessions.refreshTokenHash, parsed.hash)));
 }
 
-export async function endAllSessions(db: Db, userId: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.userId, userId));
-}
-
 /** Adds a second Identity to a signed-in User. Users are never merged. */
 export async function linkIdentity(
   db: Db,

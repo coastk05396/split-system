@@ -10,6 +10,8 @@ import {
   failureMessage,
   LoadError,
   Loading,
+  Progress,
+  useLeaveBlock,
   primaryButton,
   secondaryButton,
 } from "../groups/ui.js";
@@ -88,20 +90,32 @@ function JoinAtOnce({
 }) {
   const navigate = useNavigate();
   const join = useJoin(token);
+  const leave = useLeaveBlock(join.isPending);
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     join.mutate(null, {
-      onSuccess: () => void navigate(next, { replace: true, state: { joined: preview.groupName } }),
+      onSuccess: () => {
+        leave();
+        void navigate(next, { replace: true, state: { joined: preview.groupName } });
+      },
     });
-  }, [join, navigate, next, preview.groupName]);
+  }, [join, leave, navigate, next, preview.groupName]);
 
   if (join.isError) {
     const known = join.error instanceof ApiFailure ? INVITE_ERRORS[join.error.code] : undefined;
     return <InviteProblem message={known === undefined ? failureMessage(join.error) : t(known)} />;
   }
-  return <Loading />;
+  return (
+    <Progress
+      message={t("join.progress")}
+      onLeave={() => {
+        leave();
+        void navigate("/groups");
+      }}
+    />
+  );
 }
 
 function JoinForm({
@@ -115,21 +129,33 @@ function JoinForm({
 }) {
   const navigate = useNavigate();
   const join = useJoin(token);
+  const leave = useLeaveBlock(join.isPending);
   const [claiming, setClaiming] = useState<Placeholder | null>(null);
 
   const submit = (memberId: string | null) => {
     join.mutate(memberId, {
-      onSuccess: (result) =>
+      onSuccess: (result) => {
+        leave();
         void navigate(next ?? `/groups/${result.groupId}`, {
           replace: true,
           ...(next === null ? {} : { state: { joined: preview.groupName } }),
-        }),
+        });
+      },
     });
   };
   const hasPlaceholders = preview.placeholders.length > 0;
 
   return (
     <div className="flex max-w-xl flex-col gap-6">
+      {join.isPending && (
+        <Progress
+          message={t("join.progress")}
+          onLeave={() => {
+            leave();
+            void navigate("/groups");
+          }}
+        />
+      )}
       <section
         className={`${card} line-bubble-card flex flex-col items-center gap-3 p-6 text-center`}
       >
@@ -195,6 +221,7 @@ function JoinForm({
         placeholder={claiming}
         currency={preview.settlementCurrency}
         pending={join.isPending}
+        error={join.isError ? failureMessage(join.error) : null}
         onClose={() => {
           setClaiming(null);
         }}
@@ -220,6 +247,7 @@ function ClaimDialog(props: {
   placeholder: Placeholder | null;
   currency: CurrencyCode;
   pending: boolean;
+  error: string | null;
   onClose: () => void;
   onConfirm: (memberId: string) => void;
 }) {
@@ -249,6 +277,11 @@ function ClaimDialog(props: {
                   : t("join.typedBy", { name: p.addedBy })}
               </p>
               <p className="text-sm text-ink-muted">{t("join.noUndo")}</p>
+              {props.error !== null && (
+                <p role="alert" className="text-red-700">
+                  {props.error}
+                </p>
+              )}
               <div className="flex gap-3">
                 <Dialog.Close className={`${secondaryButton} flex-1 py-3`}>
                   {t("common.cancel")}

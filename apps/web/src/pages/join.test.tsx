@@ -1,4 +1,5 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import { QueryObserver } from "@tanstack/react-query";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -35,6 +36,45 @@ describe("join through an Invite", () => {
     expect(await screen.findByRole("tablist", { name: "群組分頁" })).toBeVisible();
     expect(router.state.location.pathname).toBe(`/groups/${id()}`);
     expect(api.groups.members(id()).map((m) => m.name)).toEqual(["ty", "宜庭", "小宇"]);
+  });
+
+  it("shows a full-screen joining message until the server answers", async () => {
+    const user = userEvent.setup();
+    const { api, router, id } = joining({ name: "Slow join" });
+    await screen.findByRole("heading", { name: "Slow join" });
+    const release = api.holdResponses("POST /api/v1/invites/tok-1/join");
+    try {
+      await user.click(screen.getByRole("button", { name: "加入群組" }));
+      expect(await screen.findByRole("dialog", { name: "加入群組中…" })).toBeVisible();
+      expect(screen.queryByRole("heading", { name: "Slow join" })).toBeNull();
+      expect(router.state.location.pathname).toBe("/join/tok-1");
+    } finally {
+      release();
+    }
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+    });
+  });
+
+  it("opens the joined Group without waiting for an active Group list refetch", async () => {
+    const user = userEvent.setup();
+    const { router, queryClient, id } = joining({ name: "Fast join" });
+    await screen.findByRole("heading", { name: "Fast join" });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: ["groups"],
+      initialData: [],
+      staleTime: Infinity,
+      queryFn: () => new Promise<never>(() => {}),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await user.click(screen.getByRole("button", { name: "加入群組" }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+      });
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("asks whether I am a Placeholder and claims it after confirming what I take on", async () => {

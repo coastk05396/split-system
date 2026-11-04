@@ -36,6 +36,7 @@ export interface ExpenseDraft {
    */
   conversion:
     | { source: "reference" }
+    | { source: "stored"; expense: Expense }
     | { source: "rate"; text: string }
     | { source: "converted"; text: string };
   date: string;
@@ -80,7 +81,7 @@ export function newExpenseDraft(options: {
 }
 
 /** A draft holding a saved Expense, for editing. */
-export function expenseDraftFrom(expense: Expense, settlementCurrency: CurrencyCode): ExpenseDraft {
+export function expenseDraftFrom(expense: Expense): ExpenseDraft {
   const currency = expense.originalCurrency;
   const [onlyPayer] = expense.payers;
   return {
@@ -88,9 +89,7 @@ export function expenseDraftFrom(expense: Expense, settlementCurrency: CurrencyC
     category: expense.category,
     currency,
     amountText: minorToText(expense.originalAmount, currency),
-    conversion: expense.isCustomRate
-      ? { source: "converted", text: minorToText(expense.settlementAmount, settlementCurrency) }
-      : { source: "reference" },
+    conversion: { source: "stored", expense },
     date: expense.expenseDate,
     time: expense.expenseTime ?? "",
     stopId: expense.stopId,
@@ -130,6 +129,19 @@ export function evaluateAmountText(text: string, currency: CurrencyCode): Amount
   return { kind: "ok", amountMinor: result.value, isExpression: /[+\-*/()]/.test(expression) };
 }
 
+/** The saved conversion remains authoritative while its amount, currency and date are unchanged. */
+export function storedExpense(draft: ExpenseDraft): Expense | undefined {
+  if (draft.conversion.source !== "stored") return undefined;
+  const expense = draft.conversion.expense;
+  const amount = evaluateAmountText(draft.amountText, draft.currency);
+  return draft.currency === expense.originalCurrency &&
+    draft.date === expense.expenseDate &&
+    amount.kind === "ok" &&
+    amount.amountMinor === expense.originalAmount
+    ? expense
+    : undefined;
+}
+
 export type ConversionState =
   | { kind: "same" }
   | { kind: "waiting" }
@@ -156,6 +168,17 @@ export function evaluateConversion(
 ): ConversionState {
   if (draft.currency === settlementCurrency) return { kind: "same" };
   const { conversion } = draft;
+  const saved = storedExpense(draft);
+  if (saved !== undefined)
+    return {
+      kind: "ok",
+      rateScaled: saved.fxRateScaled,
+      settlementAmount: saved.settlementAmount,
+      isCustomRate: saved.isCustomRate,
+      fxDate: saved.fxDate,
+      rateText: formatRate(saved.fxRateScaled),
+      convertedText: minorToText(saved.settlementAmount, settlementCurrency),
+    };
   const converting = (rateScaled: number, rateText: string, custom: boolean, fxDate: string) => {
     const converted =
       amountMinor === null
@@ -181,7 +204,10 @@ export function evaluateConversion(
     return converting(rate.value, conversion.text, true, draft.date);
   }
 
-  if (conversion.source === "reference") {
+  if (
+    conversion.source === "reference" ||
+    (conversion.source === "stored" && !conversion.expense.isCustomRate)
+  ) {
     if (reference === undefined) return { kind: "waiting" };
     return converting(
       reference.rateScaled,
@@ -192,13 +218,17 @@ export function evaluateConversion(
   }
 
   // A typed converted amount is the authority; the rate is derived from it.
-  const typed = parseAmount(conversion.text, settlementCurrency);
+  const text =
+    conversion.source === "stored"
+      ? minorToText(conversion.expense.settlementAmount, settlementCurrency)
+      : conversion.text;
+  const typed = parseAmount(text, settlementCurrency);
   const rate =
     amountMinor === null || !typed.ok
       ? null
       : deriveRateScaled(amountMinor, draft.currency, typed.value, settlementCurrency);
   if (rate === null || !rate.ok || !typed.ok) {
-    return { kind: "invalid", rateText: "", convertedText: conversion.text };
+    return { kind: "invalid", rateText: "", convertedText: text };
   }
   return {
     kind: "ok",
@@ -207,7 +237,7 @@ export function evaluateConversion(
     isCustomRate: true,
     fxDate: draft.date,
     rateText: formatRate(rate.value),
-    convertedText: conversion.text,
+    convertedText: text,
   };
 }
 

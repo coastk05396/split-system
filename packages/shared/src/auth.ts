@@ -8,7 +8,7 @@ export const PROVIDERS = ["google", "line"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 export const providerSchema = z.enum(PROVIDERS);
 
-/** Access tokens live for one hour; refresh tokens for 30 days, renewed at each rotation. */
+/** Access tokens live for one hour; rotating refresh tokens are bounded by the 15-day session cap. */
 export const ACCESS_TOKEN_TTL_SECONDS = 3600;
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600;
 /** A session ends this long after sign-in however often it rotates, so a stolen token cannot live on. */

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { clock } from "./auth-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 import {
   at,
@@ -60,6 +61,7 @@ describe("POST /groups/:id/members (Placeholder Members)", () => {
   it("counts toward the 30-Member cap", async () => {
     const { admin, group } = await groupWith("小宇");
     for (let i = 1; i < 30; i += 1) await addPlaceholder(admin, group.id, `朋友${String(i)}`);
+    clock.now += 60_000;
     const res = await send(admin, "POST", `/groups/${group.id}/members`, { name: "第31人" });
     expect(res.status).toBe(409);
     expect(await errorCode(res)).toBe("GROUP_FULL");

@@ -11,10 +11,15 @@ import {
 import { useMemo } from "react";
 import type { ClientRequestOptions } from "hono/client";
 import { createApiClient } from "../api/client.js";
-import { toApiFailure } from "../api/errors.js";
+import { ApiFailure, toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
-import { abortable, readWithRev } from "../groups/sync.js";
+import { failureMessage } from "../groups/ui.js";
+import { t } from "../i18n/messages.js";
+import { dismissDeleteFailure, reportDeleteFailure } from "./delete-failure.js";
+import { sameEdit } from "./edit-reconcile.js";
+import { currentEpoch, markDeleting, unmarkDeleting } from "./pending-writes.js";
+import { abortable, invalidateStats, readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Expense, Rate and Stop routes (SPEC §5.1). */
 
@@ -129,6 +134,7 @@ function useRefresh(groupId: string) {
   const client = useQueryClient();
   return () =>
     Promise.all([
+      invalidateStats(client),
       client.invalidateQueries({ queryKey: groupKeys.group(groupId) }),
       client.invalidateQueries({ queryKey: groupKeys.all, exact: true }),
     ]);
@@ -142,6 +148,24 @@ export function useSaveExpense(groupId: string) {
   const { api } = useSession();
   const refresh = useRefresh(groupId);
   const client = useQueryClient();
+  // A retry whose answer was lost meets EDIT_CONFLICT with its own edit already applied:
+  // that is a success, not a conflict (the server has no idempotency key for edits).
+  async function readEdit(input: ExpenseInput, expense: Expense): Promise<Expense> {
+    const param = { id: groupId, eid: expense.id };
+    try {
+      return await read<Expense>(
+        api.groups[":id"].expenses[":eid"].$patch(
+          { param },
+          jsonWith(input, { "If-Match": String(expense.updatedAt) }),
+        ),
+      );
+    } catch (error) {
+      if (!(error instanceof ApiFailure) || error.code !== "EDIT_CONFLICT") throw error;
+      const held = await read<Expense>(api.groups[":id"].expenses[":eid"].$get({ param }));
+      if (sameEdit(input, held)) return held;
+      throw error;
+    }
+  }
   return useMutation({
     mutationFn: (
       save:
@@ -155,13 +179,11 @@ export function useSaveExpense(groupId: string) {
               jsonWith(save.input, { "Idempotency-Key": save.idempotencyKey }),
             ),
           )
-        : read<Expense>(
-            api.groups[":id"].expenses[":eid"].$patch(
-              { param: { id: groupId, eid: save.expense.id } },
-              jsonWith(save.input, { "If-Match": String(save.expense.updatedAt) }),
-            ),
-          ),
-    onSuccess: (expense) => {
+        : readEdit(save.input, save.expense),
+    onMutate: () => ({ epoch: currentEpoch() }),
+    onSuccess: (expense, _save, context) => {
+      // Asked by an account that has since signed out: its answer belongs to nobody now.
+      if (context.epoch !== currentEpoch()) return;
       client.setQueryData(expenseKeys.one(groupId, expense.id), expense);
       client.setQueryData<InfiniteData<ExpensePage>>(expenseKeys.list(groupId), (data) => {
         if (!data) return data;
@@ -190,7 +212,20 @@ export function useDeleteExpense(groupId: string) {
       });
       if (!res.ok) throw await toApiFailure(res);
     },
-    onSuccess: async (_, expenseId) => {
+    // The row is hidden by the list while the delete is pending, so a refetch cannot bring it back.
+    onMutate: (expenseId) => {
+      dismissDeleteFailure();
+      markDeleting(groupId, expenseId);
+      return { epoch: currentEpoch() };
+    },
+    onError: (error, expenseId, context) => {
+      if (context?.epoch !== currentEpoch()) return;
+      unmarkDeleting(groupId, expenseId);
+      reportDeleteFailure(groupId, t("expense.deleteFailed", { reason: failureMessage(error) }));
+      void refresh();
+    },
+    onSuccess: (_, expenseId, context) => {
+      if (context.epoch !== currentEpoch()) return;
       client.removeQueries({ queryKey: expenseKeys.one(groupId, expenseId) });
       client.setQueryData<InfiniteData<ExpensePage>>(expenseKeys.list(groupId), (data) =>
         data === undefined
@@ -203,7 +238,8 @@ export function useDeleteExpense(groupId: string) {
               })),
             },
       );
-      await refresh();
+      unmarkDeleting(groupId, expenseId);
+      void refresh();
     },
   });
 }

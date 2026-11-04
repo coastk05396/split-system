@@ -22,13 +22,13 @@ Hono route list, auth middleware, error shape, pagination, idempotency header, a
 
 - **Style and typing:** a JSON API under `/api/v1` using Hono's typed client so the SPA and Worker share types. Request and response shapes are defined once as Zod schemas in a shared package; the Worker validates every request with them and the SPA reuses them. Requests carry the access token as a Bearer header.
 - **Routes:**
-  - **Sign-in and account:** `POST /auth/google`, `/auth/line`, `/auth/refresh`, `/auth/logout`, `/auth/logout-all`, `/auth/link/google`, `/auth/link/line`; `DELETE /auth/identities/:provider`; `GET /me`; `DELETE /me`.
+  - **Sign-in and account:** `POST /auth/google`, `/auth/line`, `/auth/refresh`, `/auth/logout`, `/auth/link/google`, `/auth/link/line`; `DELETE /auth/identities/:provider`; `GET /me`; `DELETE /me`.
   - **Groups:** `GET /groups`, `POST /groups`, `GET`, `PATCH` and `DELETE /groups/:id`.
   - **Members:** `GET /groups/:id/members`; `PATCH /groups/:id/members/:mid` (role); `DELETE /groups/:id/members/:mid` (remove); `POST /groups/:id/leave`.
   - **Invites:** `POST /groups/:id/invite` (create or regenerate); `GET /invites/:token` (group name preview); `POST /invites/:token/join`.
   - **Expenses:** `GET` and `POST /groups/:id/expenses`; `GET`, `PATCH` and `DELETE /groups/:id/expenses/:eid`.
   - **Balances:** `GET /groups/:id/balances`.
-  - **Settlements:** `GET` and `POST /groups/:id/settlements`; `POST /settlements/:sid/confirm`; `POST /settlements/:sid/cancel`; `POST /settlements/:sid/undo`.
+  - **Settlements:** `GET` and `POST /groups/:id/settlements`; `POST /settlements/:sid/undo`.
   - **Rates:** `GET /rates?date&base&quote`.
   - **Stops:** `GET /groups/:id/stops?day`; `POST /groups/:id/stops`; `PATCH` and `DELETE /groups/:id/stops/:sid`.
   - **LINE:** `POST /line/webhook` (outside the typed client, signature-checked).

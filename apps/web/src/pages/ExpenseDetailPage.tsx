@@ -1,9 +1,11 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type Expense, formatAmount, formatRate, type Group } from "@split/shared";
 import { Pencil, Share2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { useDeleteExpense, useExpense } from "../expenses/api.js";
+import { PendingRow } from "../expenses/ExpenseList.js";
+import { usePendingSaves } from "../expenses/pending-writes.js";
 import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
 import type { ExpenseCard } from "../expenses/expense-card.js";
 import { useExpenseSharing } from "../expenses/expense-sharing.js";
@@ -13,7 +15,6 @@ import { useGroup, useMembers } from "../groups/api.js";
 import {
   Avatar,
   card,
-  failureMessage,
   LoadError,
   Loading,
   primaryButton,
@@ -43,7 +44,24 @@ export function ExpenseDetailPage() {
   if (!group.isSuccess || !members.isSuccess || !expense.isSuccess) return <Loading />;
   const nameOf = memberNames(members.data);
   const pictureOf = memberPictures(members.data);
-  return <Detail group={group.data} expense={expense.data} nameOf={nameOf} pictureOf={pictureOf} />;
+  return (
+    <>
+      <PendingEdits groupId={id} expenseId={eid} />
+      <Detail group={group.data} expense={expense.data} nameOf={nameOf} pictureOf={pictureOf} />
+    </>
+  );
+}
+
+/** An edit still saving or rejected, with its retry: the screen it returns to must show it. */
+function PendingEdits({ groupId, expenseId }: { groupId: string; expenseId: string }) {
+  const edits = usePendingSaves(groupId).filter((s) => s.expenseId === expenseId);
+  return (
+    <>
+      {edits.map((save) => (
+        <PendingRow key={save.key} save={save} />
+      ))}
+    </>
+  );
 }
 
 /** The Group a person has just joined by opening this Expense, carried in the router state. */
@@ -217,9 +235,12 @@ function Detail({
 function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
   const remove = useDeleteExpense(group.id);
   const navigate = useNavigate();
+  // A second press in the same tick would send a second delete, which the server answers 404.
+  const asked = useRef(false);
   return (
     <Dialog.Root
       onOpenChange={() => {
+        asked.current = false;
         remove.reset();
       }}
     >
@@ -236,11 +257,6 @@ function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
           <Dialog.Description className="text-ink-muted">
             {t("expense.deleteBody")}
           </Dialog.Description>
-          {remove.isError && (
-            <p role="alert" className="rounded-2xl bg-peach p-3 font-bold">
-              {failureMessage(remove.error)}
-            </p>
-          )}
           <div className="flex gap-3">
             <Dialog.Close className={`${secondaryButton} flex-1 py-3`}>
               {t("common.cancel")}
@@ -248,11 +264,12 @@ function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
             <button
               type="button"
               className={`${primaryButton} flex-1 bg-red-700 py-3 hover:bg-red-700/90`}
-              disabled={remove.isPending}
               onClick={() => {
-                remove.mutate(expense.id, {
-                  onSuccess: () => void navigate(`/groups/${group.id}`),
-                });
+                if (asked.current) return;
+                asked.current = true;
+                // Leave at once; a refusal is reported on the Group page.
+                remove.mutate(expense.id);
+                void navigate(`/groups/${group.id}`);
               }}
             >
               {t("expense.deleteConfirm")}

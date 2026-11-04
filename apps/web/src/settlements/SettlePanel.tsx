@@ -577,7 +577,9 @@ function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
   return (
     <span aria-hidden="true" className="flex shrink-0 items-center">
       <span className="h-0.5 w-2 bg-sprout-200" />
-      <span className={`flex size-6 items-center justify-center rounded-full border shadow-2xs ${badge}`}>
+      <span
+        className={`flex size-6 items-center justify-center rounded-full border shadow-2xs ${badge}`}
+      >
         <ArrowRight className="size-3.5 transfer-arrow-pulse" />
       </span>
       <span className="h-0.5 w-2 bg-sprout-200" />
@@ -692,8 +694,8 @@ function PlannedRow({
   const pictureOf = useContext(PictureContext);
   const invite = useEnsureInvite(group.id);
   const record = useRecordSettlement(group.id);
-  // One key per suggested payment, reused if a lost answer makes the person tap again.
-  const key = useRef(crypto.randomUUID());
+  // Reuse a key only while retrying the same submitted content.
+  const key = useRef({ body: "", key: crypto.randomUUID() });
   const payer = rows.get(payment.fromMemberId);
   const receiver = rows.get(payment.toMemberId);
   if (payer === undefined || receiver === undefined) return null;
@@ -702,8 +704,15 @@ function PlannedRow({
     receiverMemberId: receiver.memberId,
     amount,
   });
+  const submission = (amount: number) => {
+    const body = input(amount);
+    const serialized = JSON.stringify(body);
+    if (key.current.body !== serialized)
+      key.current = { body: serialized, key: crypto.randomUUID() };
+    return { input: body, idempotencyKey: key.current.key };
+  };
   const saved = () => {
-    key.current = crypto.randomUUID();
+    key.current = { body: "", key: crypto.randomUUID() };
   };
   const iPay = group.me.memberId === payer.memberId;
   const iReceive = group.me.memberId === receiver.memberId;
@@ -783,8 +792,8 @@ function PlannedRow({
         currency={currency}
         updating={updating}
       />
-      {canConfirm(group.me, payer, receiver) && (
-        tone === "behalf" ? (
+      {canConfirm(group.me, payer, receiver) &&
+        (tone === "behalf" ? (
           <ConfirmSettlementDialog
             trigger={t(triggerLabel)}
             tone={tone}
@@ -797,7 +806,7 @@ function PlannedRow({
             }}
             submit={async (amount, options) => {
               try {
-                await record.mutateAsync({ input: input(amount), idempotencyKey: key.current });
+                await record.mutateAsync(submission(amount));
                 saved();
                 if (options?.notifyChat) {
                   void sendSettledNotice(
@@ -828,7 +837,7 @@ function PlannedRow({
               }}
               submit={async (amount, options) => {
                 try {
-                  await record.mutateAsync({ input: input(amount), idempotencyKey: key.current });
+                  await record.mutateAsync(submission(amount));
                   saved();
                   if (options?.notifyChat) {
                     void sendSettledNotice(
@@ -853,8 +862,7 @@ function PlannedRow({
               {t("settle.notifyPeer")}
             </button>
           </div>
-        )
-      )}
+        ))}
     </>
   );
 }

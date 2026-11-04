@@ -48,6 +48,35 @@ async function stopTitles(session: Session, groupId: string, query = ""): Promis
 }
 
 describe("POST and GET /groups/:id/stops", () => {
+  it("rate limits the 31st stop create in one minute", async () => {
+    const { admin, group } = await tripFor("Stop writer");
+    for (let i = 0; i < 30; i++) {
+      await addStop(admin, group.id, { title: `Stop ${i}` });
+    }
+    const response = await send(admin, "POST", `/groups/${group.id}/stops`, {
+      dayDate: "2026-07-01",
+      title: "One too many",
+      category: "景點",
+    });
+    expect(response.status).toBe(429);
+    expect(await errorCode(response)).toBe("RATE_LIMITED");
+    expect(response.headers.get("Retry-After")).toBeTruthy();
+    for (const [method, path] of [
+      ["PATCH", `/groups/${group.id}/stops/unknown`],
+      ["DELETE", `/groups/${group.id}/stops/unknown`],
+      ["PATCH", `/groups/${group.id}`],
+      ["DELETE", `/groups/${group.id}`],
+      ["POST", `/groups/${group.id}/members`],
+      ["PATCH", `/groups/${group.id}/members/unknown`],
+      ["DELETE", `/groups/${group.id}/members/unknown`],
+      ["POST", `/groups/${group.id}/invite`],
+      ["POST", `/groups/${group.id}/invite/ensure`],
+      ["POST", `/groups/${group.id}/leave`],
+    ] as const) {
+      expect((await send(admin, method, path, {})).status, `${method} ${path}`).toBe(429);
+    }
+  });
+
   it("adds a Stop and returns it with empty optional fields as null", async () => {
     const { admin, group } = await tripFor("小宇");
     const stop = await addStop(admin, group.id, { title: "赤崁樓", startTime: "10:00" });
@@ -111,7 +140,10 @@ describe("POST and GET /groups/:id/stops", () => {
 
   it("holds at most 50 Stops on one day", async () => {
     const { admin, group } = await tripFor("小宇");
-    for (let i = 0; i < 50; i += 1) await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    for (let i = 0; i < 50; i += 1) {
+      if (i === 25) clock.now += 60_000;
+      await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    }
     const res = await send(admin, "POST", `/groups/${group.id}/stops`, {
       dayDate: "2026-07-01",
       title: "第 51 站",
@@ -123,7 +155,10 @@ describe("POST and GET /groups/:id/stops", () => {
 
   it("refuses to move a Stop onto a day that already holds 50", async () => {
     const { admin, group } = await tripFor("小宇");
-    for (let i = 0; i < 50; i += 1) await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    for (let i = 0; i < 50; i += 1) {
+      if (i === 25) clock.now += 60_000;
+      await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    }
     const stray = await addStop(admin, group.id, { title: "隔天", dayDate: "2026-07-02" });
 
     const res = await send(
@@ -141,8 +176,10 @@ describe("POST and GET /groups/:id/stops", () => {
   it("still edits a Stop that is already on a full day", async () => {
     const { admin, group } = await tripFor("小宇");
     let last = await addStop(admin, group.id, { title: "站 0" });
-    for (let i = 1; i < 50; i += 1)
+    for (let i = 1; i < 50; i += 1) {
+      if (i === 25) clock.now += 60_000;
       last = await addStop(admin, group.id, { title: `站 ${String(i)}` });
+    }
     clock.now += 1000;
 
     const res = await send(

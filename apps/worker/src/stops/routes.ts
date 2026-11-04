@@ -1,6 +1,7 @@
 import { stopInputSchema, stopListQuerySchema, stopPatchSchema } from "@split/shared";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
+import { rateLimit } from "../rate-limit.js";
 import { requireUser } from "../auth/require-user.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
@@ -41,6 +42,7 @@ async function stopRequest(
 /** Any active Member can read and edit their Group's Trip Stops. */
 export function stopRoutes(deps: AppDeps) {
   const signedIn = requireUser(deps.now);
+  const writeLimit = rateLimit("expense_write", deps.now);
   return new Hono<AppEnv>()
     .get("/groups/:id/stops", signedIn, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
@@ -54,7 +56,7 @@ export function stopRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", result.rev);
       return c.json(result.value, 200);
     })
-    .post("/groups/:id/stops", signedIn, async (c) => {
+    .post("/groups/:id/stops", signedIn, writeLimit, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const input = await parseBody(c, stopInputSchema);
       const result = await stopRequest(c.env, me.groupId, {
@@ -66,7 +68,7 @@ export function stopRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", result.rev);
       return c.json(result.value, 201);
     })
-    .patch("/groups/:id/stops/:sid", signedIn, async (c) => {
+    .patch("/groups/:id/stops/:sid", signedIn, writeLimit, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const expected = requireIfMatch(c);
       const input = await parseBody(c, stopPatchSchema);
@@ -81,7 +83,7 @@ export function stopRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", result.rev);
       return c.json(result.value, 200);
     })
-    .delete("/groups/:id/stops/:sid", signedIn, async (c) => {
+    .delete("/groups/:id/stops/:sid", signedIn, writeLimit, async (c) => {
       const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const result = await stopRequest(c.env, me.groupId, {
         action: "delete",

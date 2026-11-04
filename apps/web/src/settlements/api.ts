@@ -1,5 +1,7 @@
 import type { Balances, Settlement, SettlementInput, SettlementPage } from "@split/shared";
 import {
+  type InfiniteData,
+  type QueryClient,
   type QueryFunctionContext,
   useInfiniteQuery,
   useMutation,
@@ -11,7 +13,7 @@ import type { ClientRequestOptions } from "hono/client";
 import { createApiClient } from "../api/client.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
-import { abortable, readWithRev } from "../groups/sync.js";
+import { abortable, invalidateStats, readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Balance and Settlement routes (SPEC §5.1). */
 
@@ -71,6 +73,7 @@ function useRefresh(groupId: string) {
   const client = useQueryClient();
   return () =>
     Promise.all([
+      invalidateStats(client),
       client.invalidateQueries({ queryKey: groupKeys.group(groupId) }),
       client.invalidateQueries({ queryKey: groupKeys.all, exact: true }),
     ]);
@@ -122,33 +125,75 @@ export function useRecordSettlement(groupId: string) {
   });
 }
 
-export type SettlementAction =
-  | { kind: "confirm"; settlementId: string; amount?: number }
-  | { kind: "cancel"; settlementId: string }
-  | { kind: "undo"; settlementId: string };
+function replaceSettlement(client: QueryClient, groupId: string, next: Settlement) {
+  client.setQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(groupId), (data) =>
+    data === undefined
+      ? data
+      : {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            settlements: page.settlements.map((s) => (s.id === next.id ? next : s)),
+          })),
+        },
+  );
+}
 
-/** Confirm (optionally at a lower amount), cancel or undo one Settlement. */
+export type SettlementAction = { kind: "undo"; settlementId: string };
+
+/** Undo one confirmed Settlement. */
 export function useSettlementAction(groupId: string) {
   const { api } = useSession();
+  const client = useQueryClient();
   const refresh = useRefresh(groupId);
   return useMutation({
     mutationFn: (action: SettlementAction) => {
       const param = { param: { sid: action.settlementId } };
-      const routes = api.settlements[":sid"];
-      switch (action.kind) {
-        case "confirm":
-          return read<Settlement>(
-            routes.confirm.$post(
-              param,
-              action.amount === undefined ? undefined : jsonWith({ amount: action.amount }),
-            ),
-          );
-        case "cancel":
-          return read<Settlement>(routes.cancel.$post(param));
-        case "undo":
-          return read<Settlement>(routes.undo.$post(param));
-      }
+      return read<Settlement>(api.settlements[":sid"].undo.$post(param));
     },
-    onSuccess: refresh,
+    // Undo is the reverse of recording: the payer's balance drops and the receiver's rises by the
+    // Settlement's amount. The row is marked undone at once, so it cannot be undone twice.
+    onMutate: async (action) => {
+      await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
+      await client.cancelQueries({ queryKey: settlementKeys.list(groupId) });
+      const previousBalances = client.getQueryData<Balances>(settlementKeys.balances(groupId));
+      const previousList = client.getQueryData<InfiniteData<SettlementPage>>(
+        settlementKeys.list(groupId),
+      );
+      const target = previousList?.pages
+        .flatMap((page) => page.settlements)
+        .find((s) => s.id === action.settlementId);
+      if (target?.status === "confirmed") {
+        if (previousBalances) {
+          client.setQueryData<Balances>(settlementKeys.balances(groupId), {
+            ...previousBalances,
+            balances: previousBalances.balances.map((b) => {
+              if (b.memberId === target.payerMemberId) {
+                return { ...b, balance: b.balance - target.amount };
+              }
+              if (b.memberId === target.receiverMemberId) {
+                return { ...b, balance: b.balance + target.amount };
+              }
+              return b;
+            }),
+          });
+        }
+        replaceSettlement(client, groupId, { ...target, status: "undone" });
+      }
+      return { previousBalances, previousList };
+    },
+    onError: (_err, _action, context) => {
+      if (context?.previousBalances) {
+        client.setQueryData(settlementKeys.balances(groupId), context.previousBalances);
+      }
+      if (context?.previousList) {
+        client.setQueryData(settlementKeys.list(groupId), context.previousList);
+      }
+      void refresh();
+    },
+    onSuccess: (undone) => {
+      replaceSettlement(client, groupId, undone);
+      void refresh();
+    },
   });
 }
