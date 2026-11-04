@@ -39,8 +39,6 @@ const zhTW = {
   "signIn.google": "使用 Google 登入",
   "signIn.lineAuto": "正在透過 LINE 登入…",
   "signIn.googleLoading": "正在載入 Google 登入…",
-  "signIn.dataSummary1": "我們取得你在 LINE 或 Google 的名稱與頭像，Google 另加登入信箱，",
-  "signIn.dataSummary2": "用來讓群組成員認出你；不會取得 LINE 的 Email，也不會取得密碼。",
   "signIn.consentBefore": "繼續即表示同意",
   "signIn.terms": "服務條款",
   "signIn.consentJoin": "與",

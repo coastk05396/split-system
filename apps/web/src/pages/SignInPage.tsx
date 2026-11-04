@@ -13,7 +13,7 @@ const TestSignInForm = lazy(() =>
   import("./TestSignInForm.js").then((m) => ({ default: m.TestSignInForm })),
 );
 
-/** Screen 1 (歡迎登入) with the decision 29 data summary above the consent line. */
+/** Screen 1 (歡迎登入): sign-in buttons, with the consent line below. */
 export function SignInPage() {
   const { line, google, testSignIn } = useDeps();
   const { state } = useAuth();
@@ -109,9 +109,7 @@ export function SignInPage() {
       )}
 
       <footer className="mt-8 text-center text-xs leading-relaxed text-ink-muted">
-        <p>{t("signIn.dataSummary1")}</p>
-        <p>{t("signIn.dataSummary2")}</p>
-        <p className="mt-3">
+        <p>
           {t("signIn.consentBefore")}
           <Link to="/terms" className="underline">
             {t("signIn.terms")}

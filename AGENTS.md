@@ -17,5 +17,5 @@
 ## Account display (Settings)
 
 - The Settings Profile card follows the latest sign-in (`signedInWith`); Google shows its verified email, LINE never has one. Rules W-9 in `docs/SPEC.md`; terms in `GLOSSARY.md` (Profile card, Linked account).
-- Showing a Google email is a deliberate exception to the old "never email" rule: keep `privacy.md` and `signIn.dataSummary1/2` (zh-TW and en) in step with `identities.email` whenever it changes.
+- Showing a Google email is a deliberate exception to the old "never email" rule: keep `privacy.md` in step with `identities.email` whenever it changes (the sign-in page no longer carries a data summary).
 - Migration `0011_identity_email.sql` deletes all existing Google links; do not apply it to a database unless the user has agreed.
