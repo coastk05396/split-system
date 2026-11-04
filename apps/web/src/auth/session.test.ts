@@ -336,3 +336,71 @@ describe("session refresh across tabs and sign-out", () => {
     expect(reloaded).toBeNull();
   });
 });
+
+describe("session switchToLine (a Google session inside LINE)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const SWITCH = "POST /api/v1/auth/switch-to-line";
+
+  /** A restored Google session whose User also has LINE linked. */
+  async function restoredGoogleSession() {
+    const api = createFakeApi();
+    const user = makeUser("小宇", "google");
+    api.setCookieUser({
+      ...user,
+      identities: [...user.identities, { provider: "line", email: null }],
+    });
+    const session = createSession({ fetch: api.fetch });
+    await session.restore();
+    return { api, session };
+  }
+
+  it("sends one switch however many times startup asks (React mounts twice in dev)", async () => {
+    stubWebLocks();
+    const { api, session } = await restoredGoogleSession();
+
+    const [a, b] = await Promise.all([
+      session.switchToLine("fake|l-1|小宇"),
+      session.switchToLine("fake|l-1|小宇"),
+    ]);
+
+    expect(a?.signedInWith).toBe("line");
+    expect(b).toEqual(a);
+    expect(api.calls.filter((call) => call === SWITCH)).toHaveLength(1);
+  });
+
+  it("does not let a switch still in flight at sign-out bring the token or the cookie back", async () => {
+    stubWebLocks();
+    const { api, session } = await restoredGoogleSession();
+    const release = api.holdResponses(SWITCH);
+    const pending = session.switchToLine("fake|l-1|小宇");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const leaving = session.signOut(); // behind the switch, so it revokes the cookie the switch set
+    release();
+    await Promise.all([pending, leaving]);
+
+    expect(await pending).toBeNull();
+    expect(session.getAccessToken()).toBeNull();
+    expect(await createSession({ fetch: api.fetch }).restore()).toBeNull();
+  });
+
+  it("waits for a refresh in another tab, so it never presents a cookie that was rotated", async () => {
+    stubWebLocks();
+    const { api, session } = await restoredGoogleSession();
+    const release = api.holdResponses("POST /api/v1/auth/refresh");
+    const otherTab = createSession({ fetch: api.fetch });
+    const refreshing = otherTab.restore();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const switching = session.switchToLine("fake|l-1|小宇");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.calls).not.toContain(SWITCH);
+
+    release();
+    await Promise.all([refreshing, switching]);
+    expect(api.calls).toContain(SWITCH);
+  });
+});

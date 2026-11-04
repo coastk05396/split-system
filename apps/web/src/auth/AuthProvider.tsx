@@ -98,17 +98,17 @@ export function AuthProvider({
     void line.prepare().catch(() => undefined);
     // Google refuses LINE's browser, so a Google session found inside LINE becomes a LINE one, but
     // only for a LINE Identity the User already has: never a new, empty account.
-    const keepLineInsideLine = async (user: Me): Promise<AuthState> => {
+    const keepLineInsideLine = async (user: Me): Promise<AuthState | null> => {
       const stay: AuthState = { status: "signedIn", user };
       if (user.signedInWith !== "google" || !line.isInClient()) return stay;
       try {
         const lineToken = await line.autoSignIn();
         if (lineToken === null) return stay;
-        return {
-          status: "signedIn",
-          user: await session.switchToLine(lineToken),
-          notice: "switchedToLine",
-        };
+        const switched = await session.switchToLine(lineToken);
+        // Null: the person signed out meanwhile, which has already set the state.
+        return switched === null
+          ? null
+          : { status: "signedIn", user: switched, notice: "switchedToLine" };
       } catch (error) {
         const refused = error instanceof ApiFailure && error.code === "LINE_NOT_LINKED";
         return refused ? { ...stay, notice: "lineNotLinked" } : stay;
@@ -118,7 +118,8 @@ export function AuthProvider({
       try {
         const restored = await session.restore();
         if (restored !== null) {
-          settle(await keepLineInsideLine(restored));
+          const next = await keepLineInsideLine(restored);
+          if (next !== null) settle(next);
           return;
         }
         const lineToken = await line.autoSignIn();

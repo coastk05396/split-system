@@ -477,7 +477,7 @@ const zhTW = {
     "Google 不能在 LINE 內建瀏覽器登入，所以已經幫你切換成 LINE 登入。你的帳號和資料都不變。",
   "lineOnly.notLinkedTitle": "這個帳號還沒連結 LINE",
   "lineOnly.notLinkedBody":
-    "Google 不能在 LINE 內建瀏覽器登入。請先到手機的瀏覽器用 Google 登入，在「設定」連結 LINE，之後在 LINE 裡就能使用同一個帳號。",
+    "Google 不能在 LINE 內建瀏覽器登入，而這個帳號只能用 Google 登入。請改用手機的瀏覽器（Chrome 或 Safari）開啟小芽分帳。",
   "lineOnly.ok": "知道了",
   "settings.deleteAccount": "刪除帳號",
   "settings.deleteTitle": "確定要刪除帳號嗎？",

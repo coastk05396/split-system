@@ -487,7 +487,7 @@ export const en: Record<MessageId, string> = {
     "Google cannot sign in inside LINE's built-in browser, so you were switched to LINE. Your account and data are unchanged.",
   "lineOnly.notLinkedTitle": "LINE is not linked to this account",
   "lineOnly.notLinkedBody":
-    "Google cannot sign in inside LINE's built-in browser. Sign in with Google in your phone's browser first and link LINE in \"Settings\"; then LINE opens this same account.",
+    "Google cannot sign in inside LINE's built-in browser, and this account only signs in with Google. Please open Sprout Split in your phone's browser (Chrome or Safari) instead.",
   "lineOnly.ok": "Got it",
   "settings.deleteAccount": "Delete account",
   "settings.deleteTitle": "Delete your account?",

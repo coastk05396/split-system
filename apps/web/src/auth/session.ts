@@ -16,8 +16,9 @@ export interface Session {
   /**
    * Inside LINE, swaps this Google session for a LINE one of the same User. Throws ApiFailure,
    * `LINE_NOT_LINKED` when the LINE Identity is not this User's (the Google session stays).
+   * One switch per page load however often it is asked for; null when a sign-out voided it.
    */
-  switchToLine(idToken: string): Promise<Me>;
+  switchToLine(idToken: string): Promise<Me | null>;
   /** Dev and browser-test sign-in; the route answers 404 unless the Worker enables it. */
   testSignIn(request: TestSignInRequest): Promise<Me>;
   /** Ends this device's session. */
@@ -91,8 +92,10 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     return baseFetch(input, { ...init, headers });
   }
 
-  // Calls that need the signed-in access token go through the session's own `fetch`.
-  const authed = createApiClient((input, init) => session.fetch(input, init));
+  // The switch holds the refresh lock, so it sends the access token itself: a 401 retry through
+  // `session.fetch` would ask for the same lock again.
+  const switchApi = createApiClient((input, init) => send(input, init, accessToken));
+  let switching: Promise<Me | null> | null = null;
 
   const session: Session = {
     getAccessToken() {
@@ -112,8 +115,22 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
       );
     },
 
-    async switchToLine(idToken) {
-      return accept(await authed.auth["switch-to-line"].$post(undefined, withJson({ idToken })));
+    switchToLine(idToken) {
+      const asked = generation;
+      // Behind refresh and logout under the same lock: the cookie it presents is the current one,
+      // and a logout queued after it revokes the cookie it sets.
+      switching ??= oneAtATime(async () => {
+        if (asked !== generation) return null;
+        const body = await readSession(
+          await switchApi.auth["switch-to-line"].$post(undefined, withJson({ idToken })),
+        );
+        if (asked !== generation) return null;
+        accessToken = body.accessToken;
+        return body.user;
+      }).finally(() => {
+        switching = null;
+      });
+      return switching;
     },
 
     async testSignIn(request) {
