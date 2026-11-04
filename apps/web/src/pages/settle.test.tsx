@@ -6,6 +6,7 @@ import { makeUser } from "../../test/fake-api.js";
 import type { FakeGroups, SeedGroup } from "../../test/fake-groups.js";
 import type { SettlementPage } from "@split/shared";
 import type { InfiniteData } from "@tanstack/react-query";
+import { handleGroupSignal } from "../groups/sync.js";
 import { settlementKeys } from "../settlements/api.js";
 import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
 
@@ -47,6 +48,47 @@ const rows = async () =>
   within(await plan())
     .getAllByRole("listitem")
     .map((li) => li.textContent);
+
+describe("When the other person confirms a payment", () => {
+  /** The payer's own screen records the payment; this client hears of it by the live signal. */
+  const heardOf = (
+    api: { groups: FakeGroups },
+    queryClient: Parameters<typeof handleGroupSignal>[0],
+    id: string,
+  ) => {
+    api.groups.addSettlement(id, { payer: 2, receiver: 0, amount: 200 }, 2);
+    return act(() => handleGroupSignal(queryClient, id, 9_999));
+  };
+
+  it("takes that payment off this screen's plan without a reload", async () => {
+    const { api, id, queryClient } = await openSettle(owedToMe);
+    expect(await rows()).toHaveLength(2);
+
+    await heardOf(api, queryClient, id());
+
+    await waitFor(async () => {
+      expect(await rows()).toEqual([expect.stringContaining("宜庭")]);
+    });
+  });
+
+  it("closes the open confirm dialog and records nothing a second time", async () => {
+    const { user, api, id, queryClient } = await openSettle(owedToMe);
+    await user.click(
+      (await row("要付給誰", "阿哲付給你")).getByRole("button", { name: "確認收款" }),
+    );
+    await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" });
+
+    await heardOf(api, queryClient, id());
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "這筆款項已付清嗎？" })).toBeNull();
+    });
+    expect(
+      api.requests.filter((r) => r.route === `POST /api/v1/groups/${id()}/settlements`),
+    ).toEqual([]);
+    expect(api.groups.settlements.list(id())).toHaveLength(1);
+  });
+});
 
 describe("Balances and the Payment plan", () => {
   it("makes the collapsed chart inert", async () => {
