@@ -11,16 +11,23 @@ import type {
 } from "../src/auth/identity-verifier.js";
 
 /**
- * A fake provider: an ID token is `fake|<sub>|<name>` and is accepted for either provider.
+ * A fake provider: an ID token is `fake|<sub>|<name>[|<email>]` and is accepted for either provider.
+ * Like the real one, only Google keeps the email.
  * The real verifier has its own tests with locally generated keys.
  */
 export const fakeVerifier: IdentityVerifier = {
   verify(provider: Provider, idToken: string): Promise<VerifiedIdentity> {
-    const [tag, sub, name] = idToken.split("|");
+    const [tag, sub, name, email] = idToken.split("|");
     if (tag !== "fake" || sub === undefined || name === undefined) {
       return Promise.reject(new ApiError("ID_TOKEN_INVALID"));
     }
-    return Promise.resolve({ provider, sub, displayName: name, pictureUrl: `https://pic/${sub}` });
+    return Promise.resolve({
+      provider,
+      sub,
+      displayName: name,
+      pictureUrl: `https://pic/${sub}`,
+      email: provider === "google" && email !== undefined ? email : null,
+    });
   },
 };
 
@@ -86,8 +93,14 @@ export interface Session {
   userId: string;
 }
 
-export async function signIn(provider: Provider, sub: string, name = "小宇"): Promise<Session> {
-  const res = await call(`/auth/${provider}`, json({ idToken: `fake|${sub}|${name}` }));
+export async function signIn(
+  provider: Provider,
+  sub: string,
+  name = "小宇",
+  email?: string,
+): Promise<Session> {
+  const token = `fake|${sub}|${name}${email === undefined ? "" : `|${email}`}`;
+  const res = await call(`/auth/${provider}`, json({ idToken: token }));
   if (res.status !== 200) throw new Error(`sign-in failed: ${res.status} ${await res.text()}`);
   const body = await res.json<{ accessToken: string; user: { id: string } }>();
   const refresh = refreshCookie(res);

@@ -41,6 +41,8 @@ export interface RenderedApp {
   api: FakeApi;
   router: ReturnType<typeof createMemoryRouter>;
   lineLogins: string[];
+  /** Addresses handed to the outside browser from inside LINE. */
+  lineExternalOpens: string[];
   /** Messages sent through the LINE share target picker. */
   lineShares: string[];
   /** How many times the app started LIFF on arrival. */
@@ -60,6 +62,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   dismissDeleteFailure();
   options.seed?.(api.groups);
   const lineLogins: string[] = [];
+  const lineExternalOpens: string[] = [];
   const lineShares: string[] = [];
   const linePrepares = { count: 0 };
   const lineShareMessages: LineMessage[] = [];
@@ -74,6 +77,10 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     autoSignIn: () => Promise.resolve(options.insideLine?.idToken ?? null),
     login: () => {
       lineLogins.push(window.location.href);
+      return Promise.resolve();
+    },
+    openExternal: (url) => {
+      lineExternalOpens.push(url);
       return Promise.resolve();
     },
     share: (text) => {
@@ -129,6 +136,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     router,
     queryClient,
     lineLogins,
+    lineExternalOpens,
     lineShares,
     linePrepares,
     lineShareMessages,

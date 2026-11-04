@@ -39,6 +39,8 @@ export const users = sqliteTable(
     id: text("id").primaryKey(),
     displayName: text("display_name").notNull(),
     pictureUrl: text("picture_url"),
+    /** The provider of the latest sign-in, whose name and picture the profile shows. */
+    lastProvider: text("last_provider", { enum: PROVIDERS }),
     preferredCurrency: currency("preferred_currency").notNull().default("TWD"),
     language: text("language", { enum: LANGUAGES }).notNull().default("zh-TW"),
     createdAt: integer("created_at").notNull(),
@@ -59,6 +61,8 @@ export const identities = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     provider: text("provider", { enum: PROVIDERS }).notNull(),
     providerSub: text("provider_sub").notNull(),
+    /** Only Google shares a verified email; LINE never does. */
+    email: text("email"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [
@@ -76,6 +80,16 @@ export const sessions = sqliteTable("sessions", {
   userAgent: text("user_agent"),
   expiresAt: integer("expires_at").notNull(),
   createdAt: integer("created_at").notNull(),
+});
+
+/** One-time code that lets a signed-in User attach a Google Identity from an outside browser. */
+export const linkCodes = sqliteTable("link_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at").notNull(),
 });
 
 /** Invite token lookup (retained). */

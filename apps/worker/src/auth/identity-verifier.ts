@@ -4,12 +4,13 @@ import { ApiError } from "../errors.js";
 
 export type { Provider } from "@split/shared";
 
-/** What the Worker keeps from a provider sign-in: never email, never the provider token. */
+/** What the Worker keeps from a provider sign-in: a Google email only when verified, never the provider token. */
 export interface VerifiedIdentity {
   provider: Provider;
   sub: string;
   displayName: string;
   pictureUrl: string | null;
+  email: string | null;
 }
 
 /** Checks a Google or LINE ID token; throws ApiError ID_TOKEN_INVALID when it does not verify. */
@@ -114,7 +115,7 @@ export function createJoseVerifier(options: JoseVerifierOptions): IdentityVerifi
           if (cached === null || !(error instanceof errors.JWKSNoMatchingKey)) throw error;
           result = await verifyWith(provider, idToken, await freshKeys(provider));
         }
-        const { sub, name, picture } = result.payload;
+        const { sub, name, picture, email, email_verified } = result.payload;
         if (typeof sub !== "string" || sub === "") throw new ApiError("ID_TOKEN_INVALID");
         return {
           provider,
@@ -122,6 +123,13 @@ export function createJoseVerifier(options: JoseVerifierOptions): IdentityVerifi
           displayName:
             typeof name === "string" && name.trim() !== "" ? name.trim() : FALLBACK_DISPLAY_NAME,
           pictureUrl: typeof picture === "string" && picture !== "" ? picture : null,
+          email:
+            provider === "google" &&
+            email_verified === true &&
+            typeof email === "string" &&
+            email !== ""
+              ? email
+              : null,
         };
       } catch (error) {
         if (error instanceof errors.JOSEError || error instanceof ApiError) {

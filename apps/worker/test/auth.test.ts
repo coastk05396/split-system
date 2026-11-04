@@ -24,7 +24,8 @@ describe("POST /auth/:provider", () => {
       pictureUrl: `https://pic/${sub}`,
       preferredCurrency: "TWD",
       language: "zh-TW",
-      identities: [{ provider: "google" }],
+      identities: [{ provider: "google", email: null }],
+      signedInWith: "google",
     });
   });
 
