@@ -15,10 +15,12 @@ export function LinkPage() {
   const { state, redeemLinkCode, signOut } = useAuth();
   const code = useSearchParams()[0].get("code") ?? "";
   const [done, setDone] = useState(false);
+  const [openFailed, setOpenFailed] = useState(false);
 
   if (state.status === "loading") return <Splash />;
   if (done && state.status === "signedIn") return <Navigate to="/settings" replace />;
-  const error = state.status === "signedOut" ? state.error : null;
+  const error =
+    (state.status === "signedOut" ? state.error : null) ?? (openFailed ? "INTERNAL" : null);
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-16 pb-8">
@@ -30,7 +32,24 @@ export function LinkPage() {
         </p>
       )}
       <div className="mt-8">
-        {state.status === "signedIn" && !done ? (
+        {line.isInClient() ? (
+          // Google cannot sign in inside LINE's browser, and logging out here would not help.
+          <>
+            <p>{t("link.inLine")}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setOpenFailed(false);
+                line.openExternal(window.location.href).catch(() => {
+                  setOpenFailed(true);
+                });
+              }}
+              className="press-pill mt-4 rounded-full bg-sprout-600 px-5 py-2 font-bold text-white"
+            >
+              {t("signIn.googleExternalOpen")}
+            </button>
+          </>
+        ) : state.status === "signedIn" && !done ? (
           // Switching Users under a live session is never done silently: log out first.
           <>
             <p>{t("link.signedIn")}</p>
@@ -42,8 +61,6 @@ export function LinkPage() {
               {t("link.signOut")}
             </button>
           </>
-        ) : line.isInClient() ? (
-          <p>{t("link.inLine")}</p>
         ) : (
           google.available && (
             <GoogleButton

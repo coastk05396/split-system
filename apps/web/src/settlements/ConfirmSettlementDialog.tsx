@@ -52,7 +52,10 @@ export function ConfirmSettlementDialog({
   const triggerClass =
     tone === "behalf"
       ? "press-pill self-end rounded-full border border-dashed border-ink-muted/45 bg-sprout-50/60 px-3 py-1 text-xs font-bold text-ink-muted hover:border-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-muted"
-      : "press-pill w-full rounded-full bg-sprout-600 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600";
+      : tone === "pay"
+        ? // The same warm tone as the "you pay" tag and the amount above it.
+          "press-pill w-full rounded-full bg-terracotta-soft px-4 py-2 text-sm font-bold text-terracotta-ink hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-terracotta"
+        : "press-pill w-full rounded-full bg-sprout-600 px-4 py-2 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600";
   return (
     <Dialog.Root
       open={open}

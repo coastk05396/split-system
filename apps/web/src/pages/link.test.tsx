@@ -43,11 +43,58 @@ describe("/link (finishing a Google link from the outside browser)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("這個連結已經失效");
   });
 
-  it("asks to leave LINE's own browser instead of showing Google's button", async () => {
-    renderApp({ path: "/link?code=code-1", insideLine: { idToken: null } });
+  it("asks to leave LINE's own browser instead of showing Google's button, and does it in one tap", async () => {
+    const user = userEvent.setup();
+    const { lineExternalOpens } = renderApp({
+      path: "/link?code=code-1",
+      insideLine: { idToken: null },
+    });
 
     expect(await screen.findByText(/請用外部瀏覽器/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "用瀏覽器開啟" }));
+    expect(lineExternalOpens).toEqual([window.location.href]);
+  });
+
+  it("inside LINE with a live session, offers the outside browser instead of the log-out wall", async () => {
+    const user = userEvent.setup();
+    const { lineExternalOpens } = renderApp({
+      path: "/link?code=code-1",
+      cookieUser: makeUser("甲", "line"),
+      insideLine: { idToken: null },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "用瀏覽器開啟" }));
+
+    expect(lineExternalOpens).toEqual([window.location.href]);
+    // Logging out here would not help: Google cannot sign in inside LINE's browser anyway.
+    expect(screen.queryByText(/請先登出/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "登出" })).toBeNull();
+  });
+
+  it("says so when LINE's outside browser cannot be opened from /link", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      path: "/link?code=code-1",
+      insideLine: { idToken: null },
+      openExternalFails: true,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "用瀏覽器開啟" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("小芽出了點狀況");
+  });
+
+  it("says so when LINE's outside browser cannot be opened from the sign-in explanation", async () => {
+    const user = userEvent.setup();
+    renderApp({ path: "/sign-in", insideLine: { idToken: null }, openExternalFails: true });
+
+    await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "用瀏覽器開啟" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("小芽出了點狀況");
   });
 
   it("sign-in inside LINE shows the Google button, which explains and offers the outside browser", async () => {

@@ -85,7 +85,9 @@ export function SignInPage() {
                     type="button"
                     onClick={() => {
                       setExplaining(false);
-                      void line.openExternal(window.location.href);
+                      line.openExternal(window.location.href).catch(() => {
+                        setLineError(true);
+                      });
                     }}
                     className="press-pill flex-1 rounded-full bg-sprout-600 py-3 font-bold text-white hover:bg-sprout-600/90"
                   >

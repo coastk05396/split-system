@@ -186,7 +186,7 @@ const row = async (list: string, text: string) => {
 };
 
 describe("Recording and confirming Settlements", () => {
-  it("lets the payer confirm payment with a green button: Balances move at once and the record can be undone", async () => {
+  it("lets the payer confirm payment with a warm clay button: Balances move at once and the record can be undone", async () => {
     const { user, api, id } = await openSettle({
       name: "室友",
       role: "member",
@@ -199,7 +199,7 @@ describe("Recording and confirming Settlements", () => {
     const payButton = (await row("要付給誰", "你付給宜庭")).getByRole("button", {
       name: "確認付款",
     });
-    expect(payButton).toHaveClass("bg-sprout-600");
+    expect(payButton).toHaveClass("bg-terracotta-soft", "text-terracotta-ink");
     await user.click(payButton);
 
     const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
@@ -681,7 +681,10 @@ describe("Recording and confirming Settlements", () => {
     const plannedRow = await row("要付給誰", "你付給宜庭");
     expect(plannedRow.getByText("NT$ 200")).toHaveClass("text-terracotta-ink");
     expect(plannedRow.getByText("你要付")).toHaveClass("bg-terracotta-soft", "text-terracotta-ink");
-    expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass("bg-sprout-600");
+    expect(plannedRow.getByRole("button", { name: "確認付款" })).toHaveClass(
+      "bg-terracotta-soft",
+      "text-terracotta-ink",
+    );
   });
 
   it("draws the full Group Payment plan matching Everyone's balance, sorting my rows first", async () => {

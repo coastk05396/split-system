@@ -19,6 +19,8 @@ export interface RenderAppOptions {
   cookieUser?: Me;
   /** Opened inside the LINE app, where LIFF hands over this ID token. */
   insideLine?: { idToken: string | null };
+  /** LINE's outside-browser call fails (LIFF cannot start or the native call throws). */
+  openExternalFails?: boolean;
   /** The app was opened from a LINE chat that the LIFF app may post into. */
   lineChat?: boolean;
   /** Make posting into the chat fail. */
@@ -80,6 +82,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
       return Promise.resolve();
     },
     openExternal: (url) => {
+      if (options.openExternalFails === true) return Promise.reject(new Error("LIFF failed"));
       lineExternalOpens.push(url);
       return Promise.resolve();
     },

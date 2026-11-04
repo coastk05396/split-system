@@ -119,6 +119,12 @@ describe("settings (screen 11)", () => {
     expect(screen.queryByRole("heading", { name: "我的設定" })).toBeNull();
   });
 
+  it("keeps Google's own button faintly visible: a fully transparent one ignores finger taps on Android", async () => {
+    renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
+
+    expect((await row("Google")).querySelector(".opacity-0")).toBeNull();
+  });
+
   it("saves the Preferred currency from a dropdown right under the profile", async () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
@@ -161,6 +167,20 @@ describe("settings (screen 11)", () => {
       expect(lineExternalOpens).toEqual([`${window.location.origin}/link?code=code-1`]);
     });
     expect(api.calls).toContain("POST /api/v1/auth/link-code");
+  });
+
+  it("inside LINE, says so when the outside browser cannot be opened", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      path: "/settings",
+      cookieUser: makeUser("小宇", "line"),
+      insideLine: { idToken: null },
+      openExternalFails: true,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "連接" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("小芽出了點狀況");
   });
 
   it("offers no link once both accounts are linked", async () => {
