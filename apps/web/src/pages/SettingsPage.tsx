@@ -1,7 +1,7 @@
 import { CURRENCY_CODES, LANGUAGES, type Me, type Provider } from "@split/shared";
 import { Check, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { createApiClient, withJson } from "../api/client.js";
 import { type ErrorCode, toApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
@@ -96,7 +96,15 @@ export function SettingsPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const current = useRef<Me | null>(null);
   // What was already linked when the page opened is shown still; only a new link pops in.
-  const justLinked = (useLocation().state as { linked?: string } | null)?.linked;
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Read once for this visit, then cleared from the history entry so Back or a reload stays still.
+  const [justLinked] = useState(() => (location.state as { linked?: string } | null)?.linked);
+  useEffect(() => {
+    if (justLinked !== undefined) {
+      void navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+  }, []); // once per visit
   const startedLinked = useRef(
     new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
   );

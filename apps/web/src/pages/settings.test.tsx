@@ -135,7 +135,7 @@ describe("settings (screen 11)", () => {
 
   it("links Google through Google's account chooser when outside LINE", async () => {
     const user = userEvent.setup();
-    renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
+    const { router } = renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
 
     expect(await row("Google")).not.toHaveTextContent("已連結");
     await user.click(await screen.findByRole("button", { name: "連接" }));
@@ -146,6 +146,8 @@ describe("settings (screen 11)", () => {
     });
     // The link just made gets its checkmark pop; a visit that finds it already linked does not.
     expect((await row("Google")).querySelector(".linked-pop")).not.toBeNull();
+    // The marker is spent: the history entry no longer carries it, so Back or a reload stays still.
+    expect(router.state.location.state).toBeNull();
   });
 
   it("shows an already linked account still, without the pop", async () => {
