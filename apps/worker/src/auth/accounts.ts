@@ -133,6 +133,15 @@ export async function signInIdentity(
   }
 }
 
+/** Whether this verified Identity is already one of the User's own (never creates anything). */
+export async function ownsIdentity(
+  db: Db,
+  userId: string,
+  identity: VerifiedIdentity,
+): Promise<boolean> {
+  return (await findIdentity(db, identity.provider, identity.sub))?.userId === userId;
+}
+
 async function findIdentity(db: Db, provider: Provider, sub: string) {
   const [row] = await db
     .select({ userId: identities.userId })

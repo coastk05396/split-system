@@ -18,6 +18,8 @@ export const ERROR_STATUS = {
   IDENTITY_LINKED_ELSEWHERE: 409,
   PROVIDER_ALREADY_LINKED: 409,
   LAST_IDENTITY: 409,
+  /** Switching a session to LINE with a LINE Identity that is not the signed-in User's. */
+  LINE_NOT_LINKED: 409,
   LAST_ADMIN: 409,
   GROUP_LIMIT_REACHED: 409,
   SETTLEMENT_CURRENCY_LOCKED: 409,

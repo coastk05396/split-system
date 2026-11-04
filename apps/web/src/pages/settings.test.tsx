@@ -219,6 +219,8 @@ describe("settings (screen 11)", () => {
       insideLine: { idToken: "fake|l-1|小宇" },
     });
 
+    // Inside LINE the notice about the missing LINE Identity comes first.
+    await userEvent.click(await screen.findByRole("button", { name: "知道了" }));
     expect(await row("Google")).toHaveTextContent("已連結");
     expect(await row("LINE")).toHaveTextContent("即將推出");
     expect(await row("LINE")).not.toHaveTextContent("已連結");

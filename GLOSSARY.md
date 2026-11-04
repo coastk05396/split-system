@@ -44,6 +44,10 @@ _Avoid_: Login, provider account
 One browser or device being signed in as a User, remembering which Identity it signed in with. Signing in elsewhere, by LINE or Google, never changes it, so both can be signed in at once.
 _Avoid_: Login (that is an Identity), account
 
+**LINE-only inside LINE**:
+Inside LINE's in-app browser only a LINE Session is allowed, because Google refuses that browser. A Google Session found there is swapped for a LINE one of the same User, never a new User, and the person is told.
+_Avoid_: Force login
+
 **Linked account**:
 An Identity attached to a User; Settings lists LINE and Google and shows which are linked. Only a Google one carries an email, shown on the Profile card.
 _Avoid_: Binding, connection

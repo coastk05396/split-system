@@ -21,6 +21,7 @@ import {
   deleteAccount,
   endSession,
   linkIdentity,
+  ownsIdentity,
   loadMe,
   redeemLinkCode,
   rotateSession,
@@ -58,8 +59,8 @@ function clearRefreshCookie(c: Context): void {
 export function authRoutes(deps: AppDeps) {
   const signedIn = requireUser(deps.now);
 
-  async function issueSession(
-    c: Context<AppEnv>,
+  async function issueSession<E extends AppEnv>(
+    c: Context<E>,
     userId: string,
     provider: Provider | null,
     refresh: RefreshToken,
@@ -112,6 +113,23 @@ export function authRoutes(deps: AppDeps) {
         throw new ApiError("UNAUTHORIZED");
       }
       return c.json(await issueSession(c, rotated.userId, rotated.provider, rotated.refresh), 200);
+    })
+    // Inside LINE a Google session is replaced by a LINE one, but only for a LINE Identity the
+    // User already has: `/auth/line` would make a new, empty User for an unknown one.
+    .post("/auth/switch-to-line", signedIn, async (c) => {
+      const identity = await verify(c, "line");
+      const db = createDb(c.env.DB);
+      if (!(await ownsIdentity(db, c.var.userId, identity))) throw new ApiError("LINE_NOT_LINKED");
+      const presented = getCookie(c, REFRESH_COOKIE);
+      if (presented !== undefined) await endSession(db, presented);
+      const refresh = await createSession(
+        db,
+        c.var.userId,
+        "line",
+        c.req.header("User-Agent"),
+        deps.now(),
+      );
+      return c.json(await issueSession(c, c.var.userId, "line", refresh), 200);
     })
     .post("/auth/logout", async (c) => {
       const presented = getCookie(c, REFRESH_COOKIE);

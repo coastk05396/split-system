@@ -13,6 +13,11 @@ export interface Session {
   signIn(provider: Provider, idToken: string): Promise<Me>;
   /** Spends a link code with a Google ID token: joins the code's User and signs in as them. */
   redeemLinkCode(code: string, idToken: string): Promise<Me>;
+  /**
+   * Inside LINE, swaps this Google session for a LINE one of the same User. Throws ApiFailure,
+   * `LINE_NOT_LINKED` when the LINE Identity is not this User's (the Google session stays).
+   */
+  switchToLine(idToken: string): Promise<Me>;
   /** Dev and browser-test sign-in; the route answers 404 unless the Worker enables it. */
   testSignIn(request: TestSignInRequest): Promise<Me>;
   /** Ends this device's session. */
@@ -86,7 +91,10 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     return baseFetch(input, { ...init, headers });
   }
 
-  return {
+  // Calls that need the signed-in access token go through the session's own `fetch`.
+  const authed = createApiClient((input, init) => session.fetch(input, init));
+
+  const session: Session = {
     getAccessToken() {
       return accessToken;
     },
@@ -102,6 +110,10 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
       return accept(
         await api.auth["link-code"].redeem.$post(undefined, withJson({ code, idToken })),
       );
+    },
+
+    async switchToLine(idToken) {
+      return accept(await authed.auth["switch-to-line"].$post(undefined, withJson({ idToken })));
     },
 
     async testSignIn(request) {
@@ -137,4 +149,5 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
       return send(input, init, accessToken);
     },
   };
+  return session;
 }

@@ -482,6 +482,13 @@ export const en: Record<MessageId, string> = {
   "link.body": "Sign in with Google to join the Sprout Split account you were using in LINE.",
   "link.inLine": "Please open this page in your phone's browser, not LINE's built-in browser.",
   "signIn.googleExternalOpen": "Open in browser",
+  "lineOnly.switchedTitle": "Signed in with LINE instead",
+  "lineOnly.switchedBody":
+    "Google cannot sign in inside LINE's built-in browser, so you were switched to LINE. Your account and data are unchanged.",
+  "lineOnly.notLinkedTitle": "LINE is not linked to this account",
+  "lineOnly.notLinkedBody":
+    "Google cannot sign in inside LINE's built-in browser. Sign in with Google in your phone's browser first and link LINE in \"Settings\"; then LINE opens this same account.",
+  "lineOnly.ok": "Got it",
   "settings.deleteAccount": "Delete account",
   "settings.deleteTitle": "Delete your account?",
   "settings.deleteBody":
@@ -538,6 +545,7 @@ export const enErrors: Record<ErrorCode, string> = {
   BALANCE_NOT_ZERO: "Something is still unsettled. Settle it first.",
   IDENTITY_LINKED_ELSEWHERE:
     "This Google account already signs in to another Sprout Split account and cannot be merged. Link a different Google account instead.",
+  LINE_NOT_LINKED: "LINE is not linked to this account.",
   LINK_CODE_INVALID: 'This link has expired. Go back to LINE and tap "Connect" again.',
   PROVIDER_ALREADY_LINKED: "You have already linked this kind of account.",
   LAST_IDENTITY: "You must keep at least one way to sign in.",

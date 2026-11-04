@@ -20,7 +20,10 @@ export type AuthState =
   | { status: "loading" }
   /** `byChoice`: the person signed out (or deleted the account) here, so the app returns to `/`. */
   | { status: "signedOut"; error: ErrorCode | null; byChoice?: true }
-  | { status: "signedIn"; user: Me };
+  | { status: "signedIn"; user: Me; notice?: AuthNotice };
+
+/** What the person must be told once, after a Google session inside LINE was dealt with. */
+export type AuthNotice = "switchedToLine" | "lineNotLinked";
 
 export interface Auth {
   state: AuthState;
@@ -29,6 +32,8 @@ export interface Auth {
   redeemLinkCode: (code: string, idToken: string) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Closes the notice shown after a Google session inside LINE was switched (or could not be). */
+  dismissNotice: () => void;
   /** Replaces the signed-in User after the server changed them (Identity link or unlink). */
   updateUser: (user: Me) => void;
 }
@@ -91,11 +96,29 @@ export function AuthProvider({
     // Started now, not after the session check: LIFF's own redirects must run on arrival, and a
     // person who is already signed in never gets as far as `autoSignIn`.
     void line.prepare().catch(() => undefined);
+    // Google refuses LINE's browser, so a Google session found inside LINE becomes a LINE one, but
+    // only for a LINE Identity the User already has: never a new, empty account.
+    const keepLineInsideLine = async (user: Me): Promise<AuthState> => {
+      const stay: AuthState = { status: "signedIn", user };
+      if (user.signedInWith !== "google" || !line.isInClient()) return stay;
+      try {
+        const lineToken = await line.autoSignIn();
+        if (lineToken === null) return stay;
+        return {
+          status: "signedIn",
+          user: await session.switchToLine(lineToken),
+          notice: "switchedToLine",
+        };
+      } catch (error) {
+        const refused = error instanceof ApiFailure && error.code === "LINE_NOT_LINKED";
+        return refused ? { ...stay, notice: "lineNotLinked" } : stay;
+      }
+    };
     void (async () => {
       try {
         const restored = await session.restore();
         if (restored !== null) {
-          settle({ status: "signedIn", user: restored });
+          settle(await keepLineInsideLine(restored));
           return;
         }
         const lineToken = await line.autoSignIn();
@@ -158,11 +181,14 @@ export function AuthProvider({
       redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
       testSignIn: (request) => enter(session.testSignIn(request)),
       signOut: leave,
+      dismissNotice() {
+        setState((current) =>
+          current.status === "signedIn" ? { status: "signedIn", user: current.user } : current,
+        );
+      },
       updateUser(user) {
         // Never brings back someone who signed out while a request was in flight.
-        setState((current) =>
-          current.status === "signedIn" ? { status: "signedIn", user } : current,
-        );
+        setState((current) => (current.status === "signedIn" ? { ...current, user } : current));
       },
     };
   }, [state, session, queryClient, storage]);

@@ -206,6 +206,17 @@ export function createFakeApi(): FakeApi {
         const provider = url.pathname.endsWith("line") ? "line" : "google";
         return issue(makeUser(name, provider));
       }
+      case "POST /api/v1/auth/switch-to-line": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const { idToken } = await readJson(init);
+        if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
+          return error("ID_TOKEN_INVALID", 401);
+        }
+        if (!authed.identities.some((identity) => identity.provider === "line")) {
+          return error("LINE_NOT_LINKED", 409);
+        }
+        return issue({ ...authed, signedInWith: "line" });
+      }
       case "POST /api/v1/auth/link-code": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const code = `code-${String(api.linkCodes.size + 1)}`;

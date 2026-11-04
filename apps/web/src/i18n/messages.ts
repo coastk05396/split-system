@@ -472,6 +472,13 @@ const zhTW = {
   "link.body": "用 Google 登入，就會連到你剛才在 LINE 裡的小芽帳號。",
   "link.inLine": "請用外部瀏覽器開啟這個頁面，不要用 LINE 內建瀏覽器。",
   "signIn.googleExternalOpen": "用瀏覽器開啟",
+  "lineOnly.switchedTitle": "已改用 LINE 登入",
+  "lineOnly.switchedBody":
+    "Google 不能在 LINE 內建瀏覽器登入，所以已經幫你切換成 LINE 登入。你的帳號和資料都不變。",
+  "lineOnly.notLinkedTitle": "這個帳號還沒連結 LINE",
+  "lineOnly.notLinkedBody":
+    "Google 不能在 LINE 內建瀏覽器登入。請先到手機的瀏覽器用 Google 登入，在「設定」連結 LINE，之後在 LINE 裡就能使用同一個帳號。",
+  "lineOnly.ok": "知道了",
   "settings.deleteAccount": "刪除帳號",
   "settings.deleteTitle": "確定要刪除帳號嗎？",
   "settings.deleteBody":
@@ -561,6 +568,7 @@ const zhErrors: Record<ErrorCode, string> = {
   BALANCE_NOT_ZERO: "還有款項沒結清，結清後才能進行。",
   IDENTITY_LINKED_ELSEWHERE:
     "這個 Google 已經是另一個小芽帳號的登入方式，無法合併。請改用別的 Google 帳號再連結一次。",
+  LINE_NOT_LINKED: "這個帳號還沒連結 LINE。",
   LINK_CODE_INVALID: "這個連結已經失效，請回到 LINE 重新按一次「連接」。",
   PROVIDER_ALREADY_LINKED: "你已經連結過這種帳號了。",
   LAST_IDENTITY: "至少要保留一種登入方式。",

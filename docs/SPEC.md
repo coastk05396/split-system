@@ -336,6 +336,7 @@ CREATE TABLE fx_rates (
   - 連結碼：128 位元以上隨機、5 分鐘有效、只能用一次、資料庫只存雜湊；每位使用者同時只有一個，再要一個就取代舊的。無效、過期、用過一律回 `LINK_CODE_INVALID`（422），不區分原因。
   - 先驗 Google ID token，再消耗連結碼；ID token 無效時連結碼保留可再用。連結碼消耗後若 Google 帳號已屬於別的使用者（`IDENTITY_LINKED_ELSEWHERE`）或使用者已有 Google（`PROVIDER_ALREADY_LINKED`），連結碼仍已作廢，需回 LINE 重新取得；任何失敗都不建立新使用者。
   - 登入頁在 LINE 內時只顯示 LINE 按鈕，不顯示 Google 按鈕，也沒有任何前往外部瀏覽器的提示框（Google 不允許在 LINE 內建瀏覽器登入）；不在 LINE 內時照常顯示兩種。要在 LINE 內加上 Google，走設定頁的連結碼流程。
+  - LINE 內只用 LINE：在 LINE 內建瀏覽器啟動時，若還原出來的 session 是 Google 登入，先取得 LINE 的 ID token，再呼叫 `POST /auth/switch-to-line`（需登入）。伺服器只在這個 LINE Identity 已是同一位 User 的才換發：結束原本的 Google session、建立 provider 為 `line` 的新 session 並回傳；LINE Identity 不存在或屬於別的 User 時回 `LINE_NOT_LINKED`（409），**不建立新使用者、也不登出原 session**。換成功時跳出提示視窗「已改用 LINE 登入」；`LINE_NOT_LINKED` 時維持 Google 登入，跳出「這個帳號還沒連結 LINE」，說明請先在手機瀏覽器用 Google 登入並在設定連結 LINE。其他錯誤（網路等）靜默維持原狀。提示視窗是警示對話框（`role="alertdialog"`）：Esc、點外面都不能關閉，只有「知道了」按鈕；每次發生都顯示；不在 LINE 內、或本來就是 LINE 登入時完全不出現。
   - 在外部瀏覽器綁定完成後，回到 LINE 內的設定頁（頁面重新變成可見）時，重新讀取 `GET /me`，只更新「登入與安全」的已連結清單；人物卡不變（仍是這個畫面這次登入的方式）。只在設定頁生效、不輪詢，沒有額外提示；讀取失敗就保持原樣，下次切回來再試。
   - 範圍：目前只支援 LINE 使用者連結 Google；從 Google 連結 LINE 尚未實作。過期連結碼由每日清理刪除（M-1）。
 
