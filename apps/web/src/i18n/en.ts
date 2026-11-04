@@ -210,6 +210,7 @@ export const en: Record<MessageId, string> = {
   "members.renameTitle": "Edit member name",
   "members.renameDescription": "Use this name until the member joins.",
   "members.renameLabel": "Member name",
+  "members.homeLink": "Back to Home",
   "members.addTrigger": "Add member",
 
   "invite.shareGroup": "Invite members",

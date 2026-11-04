@@ -57,7 +57,7 @@ export function NewGroupPage() {
       {
         onSuccess: (group) => {
           leave();
-          void navigate(`/groups/${group.id}/members`, { replace: true });
+          void navigate(`/groups/${group.id}/members`, { replace: true, state: { created: true } });
         },
       },
     );

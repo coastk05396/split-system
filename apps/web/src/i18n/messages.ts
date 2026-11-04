@@ -209,6 +209,7 @@ const zhTW = {
   "members.renameTitle": "修改成員名稱",
   "members.renameDescription": "加入前先用這個名稱記帳。",
   "members.renameLabel": "成員名稱",
+  "members.homeLink": "回到首頁",
   "members.addTrigger": "新增成員",
 
   "invite.shareGroup": "邀請成員",

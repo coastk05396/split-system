@@ -83,11 +83,29 @@ export function useInvitePreview(token: string) {
 export function useCreateGroup() {
   const api = useApi();
   const client = useQueryClient();
+  const { state } = useAuth();
+  const userId = state.status === "signedIn" ? state.user.id : null;
   return useMutation({
     mutationFn: (input: Partial<GroupInput> & Pick<GroupInput, "name">) =>
       read<Group>(api.groups.$post({}, withJson(input))),
     onSuccess: (group) => {
       client.setQueryData(groupKeys.group(group.id), group);
+      // A new Group has one Member, the creator, whom the server has just described.
+      const preview = group.memberPreview[0];
+      if (preview !== undefined && userId !== null) {
+        client.setQueryData<Member[]>(groupKeys.members(group.id), [
+          {
+            id: group.me.memberId,
+            userId,
+            displayName: preview.name,
+            pictureUrl: preview.pictureUrl,
+            role: group.me.role,
+            status: "active",
+            balance: group.me.balance,
+            isMe: true,
+          },
+        ]);
+      }
       void client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
     },
   });
@@ -100,7 +118,7 @@ export function useDeleteGroup(id: string) {
     mutationFn: () => send(api.groups[":id"].$delete({ param: { id } })),
     onSuccess: () => {
       client.removeQueries({ queryKey: groupKeys.group(id) });
-      return client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
+      void client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
     },
   });
 }

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -23,6 +23,28 @@ const rows = async () =>
   within(await screen.findByRole("list", { name: "群組成員" })).getAllByRole("listitem");
 
 describe("members", () => {
+  it("offers no way back to Home unless the Group was just created", async () => {
+    membersOf({ name: "台南", others: [{ name: "宜庭" }] });
+
+    expect(await screen.findByRole("heading", { name: "成員與邀請" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "回到首頁" })).toBeNull();
+  });
+
+  it("offers no way back to Home when the created marker is false", async () => {
+    const { router, id } = membersOf({ name: "台南", others: [] });
+    expect(await screen.findByRole("heading", { name: "成員與邀請" })).toBeVisible();
+    await router.navigate(`/groups/${id()}`);
+    await router.navigate(`/groups/${id()}/members`, { state: { created: false } });
+
+    await waitFor(() => {
+      expect(router.state.location.state).toEqual({ created: false });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole("link", { name: "回到首頁" })).toBeNull();
+  });
+
   it("lists Members with roles and Placeholders while hiding Former Members", async () => {
     membersOf({
       name: "台南",
