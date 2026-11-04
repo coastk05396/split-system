@@ -3,6 +3,8 @@ import {
   type InfiniteData,
   type QueryClient,
   type QueryFunctionContext,
+  type QueryKey,
+  hashKey,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -106,6 +108,27 @@ function shiftBalances(
 }
 
 /**
+ * Tells whether a read from the server has replaced the cached value under `key` since now. Such
+ * a value already holds the server's answer, so a rollback must leave it alone. Call `stop` once
+ * the write has settled.
+ */
+function watchReads(client: QueryClient, key: QueryKey) {
+  const hash = hashKey(key);
+  let replaced = false;
+  const stop = client.getQueryCache().subscribe((event) => {
+    if (
+      event.type === "updated" &&
+      event.action.type === "success" &&
+      !event.action.manual &&
+      event.query.queryHash === hash
+    ) {
+      replaced = true;
+    }
+  });
+  return { replaced: () => replaced, stop };
+}
+
+/**
  * Records a Settlement under the caller's `Idempotency-Key`. The ledger records it as confirmed.
  */
 export function useRecordSettlement(groupId: string) {
@@ -123,15 +146,17 @@ export function useRecordSettlement(groupId: string) {
     onMutate: async ({ input }) => {
       await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
       const shown = client.getQueryData<Balances>(settlementKeys.balances(groupId)) !== undefined;
+      const reads = watchReads(client, settlementKeys.balances(groupId));
       shiftBalances(client, groupId, input.payerMemberId, input.receiverMemberId, input.amount);
-      return { shown };
+      return { shown, reads };
     },
     onError: (_err, { input }, context) => {
-      if (context?.shown) {
+      if (context?.shown && !context.reads.replaced()) {
         shiftBalances(client, groupId, input.payerMemberId, input.receiverMemberId, -input.amount);
       }
     },
-    onSettled: () => {
+    onSettled: (_data, _err, _vars, context) => {
+      context?.reads.stop();
       void refresh();
     },
   });
@@ -173,24 +198,33 @@ export function useSettlementAction(groupId: string) {
         .flatMap((page) => page.settlements)
         .find((s) => s.id === action.settlementId);
       if (target?.status !== "confirmed") return { target: undefined };
+      const balanceReads = watchReads(client, settlementKeys.balances(groupId));
+      const listReads = watchReads(client, settlementKeys.list(groupId));
       shiftBalances(client, groupId, target.payerMemberId, target.receiverMemberId, -target.amount);
       replaceSettlement(client, groupId, { ...target, status: "undone" });
-      return { target };
+      return { target, balanceReads, listReads };
     },
-    // Only this undo is taken back: a payment confirmed while it waited stays in the Balances.
+    // Only this undo is taken back: a payment confirmed while it waited stays in the Balances, and
+    // whatever a read from the server has replaced since is left as the server said.
     onError: (_err, _action, context) => {
-      const target = context?.target;
-      if (target !== undefined) {
-        shiftBalances(
-          client,
-          groupId,
-          target.payerMemberId,
-          target.receiverMemberId,
-          target.amount,
-        );
-        replaceSettlement(client, groupId, target);
+      if (context?.target !== undefined) {
+        const { target, balanceReads, listReads } = context;
+        if (!balanceReads.replaced()) {
+          shiftBalances(
+            client,
+            groupId,
+            target.payerMemberId,
+            target.receiverMemberId,
+            target.amount,
+          );
+        }
+        if (!listReads.replaced()) replaceSettlement(client, groupId, target);
       }
       void refresh();
+    },
+    onSettled: (_data, _err, _vars, context) => {
+      context?.balanceReads?.stop();
+      context?.listReads?.stop();
     },
     onSuccess: (undone) => {
       replaceSettlement(client, groupId, undone);

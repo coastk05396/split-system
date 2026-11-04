@@ -475,6 +475,70 @@ describe("Recording and confirming Settlements", () => {
     }
   });
 
+  it.each([
+    {
+      name: "an undo",
+      seed: (groups: FakeGroups, gid: string) => {
+        groups.addSettlement(gid, { payer: 1, receiver: 0, amount: 100 });
+      },
+      start: async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.click(
+          (await row("結算紀錄", "宜庭付給你")).getByRole("button", { name: "撤銷" }),
+        );
+      },
+      route: (api: { groups: FakeGroups }, gid: string) =>
+        `POST /api/v1/settlements/${api.groups.settlements.list(gid)[0]?.id}/undo`,
+      balance: 200,
+    },
+    {
+      name: "a payment",
+      seed: undefined,
+      start: async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.click(
+          (await row("要付給誰", "阿哲付給你")).getByRole("button", { name: "確認收款" }),
+        );
+        const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+        await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+      },
+      route: (_api: { groups: FakeGroups }, gid: string) =>
+        `POST /api/v1/groups/${gid}/settlements`,
+      balance: 300,
+    },
+  ])(
+    "keeps the server's answer when $name is refused after a fresh read replaced the guess",
+    async ({ seed, start, route, balance }) => {
+      const { user, api, id, queryClient } = await openSettle(owedToMe, seed);
+      const write = route(api, id());
+      api.failNext(write);
+      const releaseWrite = api.holdResponses(write);
+      let releaseReads: (() => void)[] = [];
+      try {
+        await start(user);
+        // A read that lands while the write still waits (live update, reconnect, focus).
+        await queryClient.refetchQueries({ queryKey: settlementKeys.balances(id()) });
+        releaseReads = [
+          `GET /api/v1/groups/${id()}`,
+          `GET /api/v1/groups/${id()}/balances`,
+          `GET /api/v1/groups/${id()}/settlements`,
+        ].map((r) => api.holdResponses(r));
+        releaseWrite();
+        expect(await screen.findByRole("alert")).toBeVisible();
+
+        const mine = api.groups.members(id()).find((m) => m.userId === me.id);
+        const shown = queryClient
+          .getQueryData<{ balances: { memberId: string; balance: number }[] }>(
+            settlementKeys.balances(id()),
+          )
+          ?.balances.find((b) => b.memberId === mine?.id)?.balance;
+        expect(mine?.balance).toBe(balance);
+        expect(shown).toBe(balance);
+      } finally {
+        releaseWrite();
+        for (const release of releaseReads) release();
+      }
+    },
+  );
+
   it("asks the server for the real balances again after an undo fails", async () => {
     const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
       groups.addSettlement(gid, { payer: 2, receiver: 0, amount: 200 });
