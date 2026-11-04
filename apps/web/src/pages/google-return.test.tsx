@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import { errorMessage } from "../i18n/messages.js";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
@@ -25,6 +26,23 @@ describe("/google-return (Google's account chooser sends the page back)", () => 
     await screen.findByRole("heading", { level: 1, name: "我的設定" });
     const accounts = within(screen.getByRole("list", { name: "已連結的帳號" }));
     expect(accounts.getByText("Google").closest("li")).toHaveTextContent("已連結");
+  });
+
+  it("shows Google's screen, not a blank or a mascot, while the link is being made", async () => {
+    const { api } = renderApp({
+      path: "/google-return",
+      cookieUser: makeUser("小宇", "line"),
+      googleRedirectResult: { errand: { purpose: "link" }, idToken: TOKEN },
+    });
+    const release = api.holdResponses("POST /api/v1/auth/link/google");
+
+    expect(await screen.findByRole("status")).toHaveTextContent("正在連結…");
+    release();
+    await screen.findByRole("heading", { level: 1, name: "我的設定" });
+  });
+
+  it("says plainly that an account already owned by another User cannot be merged", () => {
+    expect(errorMessage("IDENTITY_LINKED_ELSEWHERE")).toContain("無法合併");
   });
 
   it("does not let a link code replace a live session: it goes back to the log-out wall", async () => {

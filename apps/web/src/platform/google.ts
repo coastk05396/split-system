@@ -15,7 +15,7 @@ export interface GoogleSignIn {
    * Leaves for Google's account chooser at once. With `once`, a second call for the same errand
    * does nothing, so a back-tap lands on the page's own button instead of looping.
    */
-  redirect(errand: GoogleErrand, options?: { once?: boolean }): void;
+  redirect(errand: GoogleErrand, options?: { once?: boolean }): boolean;
   /**
    * On return from `redirect`: the errand sent, and the ID token when Google gave one that is
    * ours (null when it refused or the token fails the nonce check). Null when the address holds
@@ -67,10 +67,10 @@ export function createGoogleSignIn(clientId: string | undefined): GoogleSignIn {
   return {
     available,
     redirect(errand, options) {
-      if (clientId === undefined || clientId === "") return;
+      if (clientId === undefined || clientId === "") return false;
       const state = encode(errand);
       if (options?.once === true) {
-        if (sessionStorage.getItem(ONCE_KEY) === state) return;
+        if (sessionStorage.getItem(ONCE_KEY) === state) return false;
         sessionStorage.setItem(ONCE_KEY, state);
       }
       const nonce = crypto.randomUUID();
@@ -87,6 +87,7 @@ export function createGoogleSignIn(clientId: string | undefined): GoogleSignIn {
       }).toString();
       // assign, not replace: Back from Google returns here, where `once` stops a second jump.
       window.location.assign(url.toString());
+      return true;
     },
     takeRedirectResult() {
       const params = new URLSearchParams(window.location.hash.slice(1));

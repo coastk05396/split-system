@@ -19,11 +19,16 @@ describe("/link (finishing a Google link from the outside browser)", () => {
     expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
   });
 
-  it("leaves a Google button on the page while Google holds it", async () => {
+  it("never paints the link page before leaving for Google: no flash of the button", async () => {
     const { googleRedirects } = renderApp({ path: "/link?code=code-1", google: "holds" });
 
-    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
-    expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
+    await waitFor(() => {
+      expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
+    });
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    // What shows instead is Google's own opening screen.
+    expect(screen.getByRole("status")).toHaveTextContent("前往 Google…");
   });
 
   it("after Google refuses, stops on the button, and the button still links with the same code", async () => {
@@ -62,8 +67,10 @@ describe("/link (finishing a Google link from the outside browser)", () => {
     expect(googleRedirects).toEqual([]);
 
     await user.click(screen.getByRole("button", { name: "登出" }));
-    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
-    expect(googleRedirects).toHaveLength(1);
+    // Logged out, the page goes straight to Google.
+    await waitFor(() => {
+      expect(googleRedirects).toHaveLength(1);
+    });
   });
 
   it("says so when the code is no longer valid", async () => {

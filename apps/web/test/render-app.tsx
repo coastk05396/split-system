@@ -120,14 +120,15 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     available: options.googleAvailable ?? true,
     redirect(errand, redirectOptions) {
       const key = JSON.stringify(errand);
-      if (redirectOptions?.once === true && onceKeys.has(key)) return;
+      if (redirectOptions?.once === true && onceKeys.has(key)) return false;
       if (redirectOptions?.once === true) onceKeys.add(key);
       googleRedirects.push(errand);
-      if (options.google === "holds") return;
+      if (options.google === "holds") return true;
       const refuse = options.google === "refuses" || (options.google === "refusesOnce" && !refused);
       refused ||= refuse;
       googleAnswer = { errand, idToken: refuse ? null : "fake|g-1|Google 小宇" };
       void router.navigate("/google-return");
+      return true;
     },
     takeRedirectResult() {
       const answer = googleAnswer;
