@@ -1,11 +1,10 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight, MessageCircle } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { safeNext } from "../app/routes.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
-import { GoogleButton, GoogleFace } from "../auth/GoogleButton.js";
+import { GoogleButton } from "../auth/GoogleButton.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 
@@ -19,7 +18,6 @@ export function SignInPage() {
   const { state } = useAuth();
   const [params] = useSearchParams();
   const [lineError, setLineError] = useState(false);
-  const [explaining, setExplaining] = useState(false);
   const insideLine = line.isInClient();
   const error = state.status === "signedOut" ? state.error : null;
 
@@ -56,49 +54,12 @@ export function SignInPage() {
           </span>
           <ArrowRight aria-hidden="true" className="size-5" />
         </button>
+        {/* Google refuses LINE's in-app browser: inside LINE, only LINE. */}
         {!insideLine && google.available && (
           <GoogleButton
             label={t("signIn.google")}
             errand={{ purpose: "signIn", next: safeNext(params.get("next")) }}
           />
-        )}
-        {insideLine && google.available && (
-          // Google refuses LINE's browser: the same button explains and offers the outside one.
-          <Dialog.Root open={explaining} onOpenChange={setExplaining}>
-            <Dialog.Trigger asChild>
-              <button type="button" className="press-pill block w-full rounded-full text-left">
-                <GoogleFace label={t("signIn.google")} />
-              </button>
-            </Dialog.Trigger>
-            <Dialog.Portal>
-              <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-              <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex flex-col gap-4 rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
-                <Dialog.Title className="text-lg font-bold">
-                  {t("signIn.googleExternalTitle")}
-                </Dialog.Title>
-                <Dialog.Description className="text-sm text-ink-muted">
-                  {t("signIn.googleExternalBody")}
-                </Dialog.Description>
-                <div className="flex gap-3">
-                  <Dialog.Close className="press-pill flex-1 rounded-full border border-sprout-200 py-3 font-bold hover:border-sprout-500">
-                    {t("signIn.googleExternalCancel")}
-                  </Dialog.Close>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setExplaining(false);
-                      line.openExternal(window.location.href).catch(() => {
-                        setLineError(true);
-                      });
-                    }}
-                    className="press-pill flex-1 rounded-full bg-sprout-600 py-3 font-bold text-white hover:bg-sprout-600/90"
-                  >
-                    {t("signIn.googleExternalOpen")}
-                  </button>
-                </div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
         )}
       </div>
 
