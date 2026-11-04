@@ -679,7 +679,8 @@
   }
   .press-card:active:not(:disabled),
   .press-pill:active:not(:disabled),
-  .press-icon:active:not(:disabled) {
+  .press-icon:active:not(:disabled),
+  .press-pill.press-deep:active:not(:disabled) {
     transform: none;
   }
 }

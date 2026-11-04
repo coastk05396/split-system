@@ -14,8 +14,12 @@ export interface GoogleSignIn {
    * `state`, so a back-tap or a refusal lands on the page's own button instead of looping.
    */
   redirect(state: string): void;
-  /** On return from `redirect`: the ID token and the `state` sent, clearing them from the address. */
-  takeRedirectResult(): { idToken: string; state: string } | null;
+  /**
+   * On return from `redirect`: the `state` sent, and the ID token when Google gave a valid one
+   * (null when it refused or the token is not ours). The token leaves the address; the state
+   * stays in it as `?code=`, so a reload or the page's own button still has it.
+   */
+  takeRedirectResult(): { idToken: string | null; state: string } | null;
 }
 
 /** The slice of `google.accounts.id` the app uses. */
@@ -65,6 +69,19 @@ function loadScript(): Promise<GoogleIdApi> {
   return loading;
 }
 
+/** The `nonce` claim of an ID token, or null when the token is not a readable JWT. */
+function nonceOf(idToken: string): string | null {
+  try {
+    const payload = idToken.split(".")[1] ?? "";
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      nonce?: unknown;
+    };
+    return typeof claims.nonce === "string" ? claims.nonce : null;
+  } catch {
+    return null;
+  }
+}
+
 const NONCE_KEY = "split.googleNonce";
 const STATE_KEY = "split.googleRedirectState";
 
@@ -108,23 +125,25 @@ export function createGoogleSignIn(clientId: string | undefined): GoogleSignIn {
         state,
         prompt: "select_account",
       }).toString();
-      window.location.replace(url.toString());
+      // assign, not replace: Back from Google returns to /link, where the guard stops a second jump.
+      window.location.assign(url.toString());
     },
     takeRedirectResult() {
       const params = new URLSearchParams(window.location.hash.slice(1));
-      const idToken = params.get("id_token");
       const state = params.get("state");
-      if (idToken === null || state === null) return null;
-      window.history.replaceState(null, "", window.location.pathname);
+      if (state === null) return null;
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}?code=${encodeURIComponent(state)}`,
+      );
+      const idToken = params.get("id_token");
       const nonce = sessionStorage.getItem(NONCE_KEY);
       sessionStorage.removeItem(NONCE_KEY);
-      // The ID token's own nonce claim must be the one we sent (a token we did not ask for fails).
-      const claim = (
-        JSON.parse(atob(idToken.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/") ?? "")) as {
-          nonce?: string;
-        }
-      ).nonce;
-      return nonce !== null && claim === nonce ? { idToken, state } : null;
+      return {
+        state,
+        idToken: idToken !== null && nonce !== null && nonceOf(idToken) === nonce ? idToken : null,
+      };
     },
   };
 }

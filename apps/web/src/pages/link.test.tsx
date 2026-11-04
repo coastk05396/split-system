@@ -41,6 +41,20 @@ describe("/link (finishing a Google link from the outside browser)", () => {
     expect(googleRedirects).toEqual([]);
   });
 
+  it("after Google refuses, keeps the code so the button still links", async () => {
+    const user = userEvent.setup();
+    const { api, googleRedirects } = renderApp({
+      path: "/link",
+      googleRedirectResult: { idToken: null, state: "code-1" },
+    });
+    api.linkCodes.set("code-1", makeUser("小宇", "line"));
+
+    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
+
+    await screen.findByRole("heading", { level: 1, name: "我的設定" });
+    expect(googleRedirects).toEqual([]);
+  });
+
   it("does not switch a signed-in browser to another User: it asks to log out first", async () => {
     const user = userEvent.setup();
     const { api } = renderApp({ path: "/link?code=code-1", cookieUser: makeUser("甲", "line") });

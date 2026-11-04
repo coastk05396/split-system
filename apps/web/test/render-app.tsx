@@ -30,7 +30,7 @@ export interface RenderAppOptions {
   /** Whether the Google button can load (a client ID is configured). */
   googleAvailable?: boolean;
   /** What Google's redirect brought back to the page, if anything. */
-  googleRedirectResult?: { idToken: string; state: string };
+  googleRedirectResult?: { idToken: string | null; state: string };
   testSignIn?: boolean;
   /** Seeds Groups before the app starts. */
   seed?: (groups: FakeGroups) => void;

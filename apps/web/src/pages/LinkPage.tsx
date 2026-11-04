@@ -13,22 +13,23 @@ import { Splash } from "../shell/Splash.js";
 export function LinkPage() {
   const { line, google } = useDeps();
   const { state, redeemLinkCode, signOut } = useAuth();
-  const code = useSearchParams()[0].get("code") ?? "";
+  const queryCode = useSearchParams()[0].get("code") ?? "";
   const [done, setDone] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
   // Read once: Google's redirect brings the ID token back in the address, which is cleared.
   const [returned] = useState(() => google.takeRedirectResult());
+  const code = queryCode !== "" ? queryCode : (returned?.state ?? "");
   const started = useRef(false);
   const waiting = state.status === "signedOut" && !line.isInClient() && google.available;
 
   useEffect(() => {
     if (!waiting || started.current) return;
     started.current = true;
-    if (returned !== null) {
+    if (returned?.idToken != null) {
       void redeemLinkCode(returned.state, returned.idToken).then(() => {
         setDone(true);
       });
-    } else if (code !== "") {
+    } else if (returned === null && code !== "") {
       google.redirect(code);
     }
   }, [waiting]);
