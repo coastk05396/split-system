@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { QueryObserver } from "@tanstack/react-query";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -38,6 +39,84 @@ describe("create Group", () => {
     });
   });
 
+  it("opens the created Group without waiting for an active Group list refetch", async () => {
+    const user = userEvent.setup();
+    const { router, queryClient } = renderApp({ path: "/groups/new", cookieUser: me });
+    await user.type(await screen.findByLabelText("群組名稱"), "Fast group");
+    const observer = new QueryObserver(queryClient, {
+      queryKey: ["groups"],
+      initialData: [],
+      staleTime: Infinity,
+      queryFn: () => new Promise<never>(() => {}),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toMatch(/^\/groups\/[^/]+\/members$/);
+      });
+      const id = router.state.location.pathname.split("/")[2];
+      expect(queryClient.getQueryData(["groups", id])).toMatchObject({ name: "Fast group" });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("shows a full-screen creating message until the server answers", async () => {
+    const user = userEvent.setup();
+    const { api, router } = renderApp({ path: "/groups/new", cookieUser: me });
+    await user.type(await screen.findByLabelText("群組名稱"), "Slow group");
+    const release = api.holdResponses("POST /api/v1/groups");
+    try {
+      await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
+      expect(await screen.findByRole("dialog", { name: "建立群組中…" })).toBeVisible();
+      expect(screen.queryByRole("textbox", { name: "群組名稱" })).toBeNull();
+      expect(router.state.location.pathname).toBe("/groups/new");
+    } finally {
+      release();
+    }
+    await waitFor(() => {
+      expect(router.state.location.pathname).toMatch(/^\/groups\/[^/]+\/members$/);
+    });
+  });
+
+  it("puts the keyboard back on the button after a slow refusal", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp({ path: "/groups/new", cookieUser: me });
+    await user.type(await screen.findByLabelText("群組名稱"), "室友");
+    api.failNext("POST /api/v1/groups", "GROUP_LIMIT_REACHED", 409);
+    const release = api.holdResponses("POST /api/v1/groups");
+    try {
+      await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
+      const waiting = await screen.findByRole("dialog", { name: "建立群組中…" });
+      expect(waiting).toContainElement(document.activeElement as HTMLElement);
+    } finally {
+      release();
+    }
+    expect(await screen.findByRole("alert")).toHaveTextContent("你最多只能加入 20 個群組。");
+    expect(screen.getByRole("button", { name: /建立群組，繼續/ })).toHaveFocus();
+  });
+
+  it("stays on the creating screen when the User tries to leave before the server answers", async () => {
+    const user = userEvent.setup();
+    const { api, router } = renderApp({ path: "/groups/new", cookieUser: me });
+    await user.type(await screen.findByLabelText("群組名稱"), "Slow group");
+    const release = api.holdResponses("POST /api/v1/groups");
+    try {
+      await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
+      expect(await screen.findByRole("dialog", { name: "建立群組中…" })).toBeVisible();
+      await act(async () => {
+        await router.navigate("/groups");
+      });
+      expect(router.state.location.pathname).toBe("/groups/new");
+    } finally {
+      release();
+    }
+    await waitFor(() => {
+      expect(router.state.location.pathname).toMatch(/^\/groups\/[^/]+\/members$/);
+    });
+  });
+
   it("defaults to a TWD Running Tab and says the Settlement currency locks", async () => {
     renderApp({ path: "/groups/new", cookieUser: me });
 
@@ -72,6 +151,8 @@ describe("create Group", () => {
     await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("你最多只能加入 20 個群組。");
+    // The wait is over: the keyboard is back on the button it pressed.
+    expect(screen.getByRole("button", { name: /建立群組，繼續/ })).toHaveFocus();
   });
 
   it("updates live avatar glyph and rolls color with the dice button", async () => {

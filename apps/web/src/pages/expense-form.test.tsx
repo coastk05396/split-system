@@ -1,8 +1,11 @@
-import { screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryObserver } from "@tanstack/react-query";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { SeedGroup } from "../../test/fake-groups.js";
+import { expenseKeys } from "../expenses/api.js";
+import { clearPendingWrites } from "../expenses/pending-writes.js";
 import { renderApp } from "../../test/render-app.js";
 
 // The Trip module is under maintenance in the app; these tests run it switched on.
@@ -34,6 +37,37 @@ function openForm(seed: Partial<SeedGroup> = {}) {
 const submit = () => screen.getByRole("button", { name: "新增支出" });
 
 describe("add Expense form", () => {
+  it("refreshes Stats after saving an expense once its projection becomes available", async () => {
+    const user = userEvent.setup();
+    const { queryClient, api, id } = openForm();
+    await user.type(await screen.findByLabelText("名稱"), "Stats dinner");
+    await user.type(screen.getByLabelText("金額"), "200");
+    let projected = false;
+    const key = ["stats", "spending", me.id];
+    const observer = new QueryObserver(queryClient, {
+      queryKey: key,
+      queryFn: () => Promise.resolve(projected ? 200 : 100),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await observer.refetch();
+      vi.useFakeTimers();
+      act(() => {
+        fireEvent.click(submit());
+      });
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(api.groups.expenses.list(id())).toHaveLength(1);
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(queryClient.getQueryData(key)).toBe(100);
+      projected = true;
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(queryClient.getQueryData(key)).toBe(200);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps metadata folded and lets amount shortcuts add to an expression", async () => {
     const user = userEvent.setup();
     openForm();
@@ -142,9 +176,100 @@ describe("add Expense form", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("小芽正在維護中");
   });
 
-  it("does not record the Expense twice when a submit is retried after a network error", async () => {
+  it("opens the Group at once and shows the Expense as saving until the server answers", async () => {
     const user = userEvent.setup();
     const { api, id, router } = openForm();
+    await user.type(await screen.findByLabelText("名稱"), "晚餐");
+    await user.type(screen.getByLabelText("金額"), "360");
+    const release = api.holdResponses(`POST /api/v1/groups/${id()}/expenses`);
+    try {
+      await user.click(submit());
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+      });
+      const list = within(await screen.findByRole("region", { name: "帳目" }));
+      const row = list.getByText("儲存中…").closest("div");
+      expect(row).toHaveTextContent("晚餐");
+      expect(row).toHaveTextContent("NT$ 360");
+    } finally {
+      release();
+    }
+    expect(await screen.findByRole("link", { name: /晚餐/ })).toHaveTextContent("NT$ 360");
+    expect(within(screen.getByRole("region", { name: "帳目" })).queryByText("儲存中…")).toBeNull();
+  });
+
+  it("ignores a save that is answered after the User signed out", async () => {
+    const user = userEvent.setup();
+    const { api, id, router, queryClient } = openForm();
+    await user.type(await screen.findByLabelText("名稱"), "晚餐");
+    await user.type(screen.getByLabelText("金額"), "360");
+    const release = api.holdResponses(`POST /api/v1/groups/${id()}/expenses`);
+    try {
+      await user.click(submit());
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+      });
+      // What signing out does to the transient stores.
+      act(() => {
+        clearPendingWrites();
+      });
+    } finally {
+      release();
+    }
+    await waitFor(() => {
+      expect(api.groups.expenses.list(id())).toHaveLength(1);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    // The Expense exists on the server, so the list may show it by its own fetch; what must not
+    // happen is this save's answer being applied: no "saved" note, no row stuck as saving, and
+    // no copy of the Expense written to the cache by the save itself.
+    expect(screen.queryByText(/已新增 ✓/)).toBeNull();
+    expect(within(screen.getByRole("region", { name: "帳目" })).queryByText("儲存中…")).toBeNull();
+    const [saved] = api.groups.expenses.list(id());
+    expect(queryClient.getQueryData(expenseKeys.one(id(), saved?.id ?? ""))).toBeUndefined();
+  });
+
+  it("keeps a failed save on the Group with its reason, and retries it with the same key", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openForm();
+    await user.type(await screen.findByLabelText("名稱"), "晚餐");
+    await user.type(screen.getByLabelText("金額"), "360");
+    const route = `POST /api/v1/groups/${id()}/expenses`;
+    api.failNext(route, "INTERNAL", 500);
+    await user.click(submit());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("沒有儲存成功");
+    expect(api.groups.expenses.list(id())).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "重試" }));
+
+    expect(await screen.findByRole("link", { name: /晚餐/ })).toHaveTextContent("NT$ 360");
+    const keys = api.requests
+      .filter((r) => r.route === route)
+      .map((r) => r.headers.get("Idempotency-Key"));
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    expect(api.groups.expenses.list(id())).toHaveLength(1);
+  });
+
+  it("lets a failed save be discarded", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openForm();
+    await user.type(await screen.findByLabelText("名稱"), "晚餐");
+    await user.type(screen.getByLabelText("金額"), "360");
+    api.failNext(`POST /api/v1/groups/${id()}/expenses`, "INTERNAL", 500);
+    await user.click(submit());
+    await user.click(await screen.findByRole("button", { name: "放棄" }));
+
+    expect(screen.queryByText("晚餐")).toBeNull();
+    expect(api.groups.expenses.list(id())).toHaveLength(0);
+  });
+
+  it("does not record the Expense twice when a retry follows a lost answer", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openForm();
 
     await user.type(await screen.findByLabelText("名稱"), "晚餐");
     await user.type(screen.getByLabelText("金額"), "360");
@@ -154,18 +279,15 @@ describe("add Expense form", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("網路連線不穩");
     expect(api.groups.expenses.list(id())).toHaveLength(1);
 
-    await user.click(submit());
+    await user.click(screen.getByRole("button", { name: "重試" }));
 
-    expect(await screen.findByRole("heading", { level: 1, name: "室友" })).toBeVisible();
-    expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+    expect(await screen.findByRole("link", { name: /晚餐/ })).toHaveTextContent("NT$ 360");
     expect(api.groups.expenses.list(id())).toHaveLength(1);
     const keys = api.requests
       .filter((r) => r.route === `POST /api/v1/groups/${id()}/expenses`)
       .map((r) => r.headers.get("Idempotency-Key"));
     expect(keys).toHaveLength(2);
-    expect(keys[0]).toBeTruthy();
     expect(keys[1]).toBe(keys[0]);
-    expect(await screen.findByRole("link", { name: /晚餐/ })).toHaveTextContent("NT$ 360");
   });
 
   it("converts a USD Expense at the reference rate, and a typed converted amount derives the rate", async () => {

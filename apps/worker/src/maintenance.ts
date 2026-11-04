@@ -1,12 +1,82 @@
-import { lt } from "drizzle-orm";
-import type { Db } from "./db/client.js";
-import { rateCounters, sessions } from "./db/schema.js";
+import { and, asc, eq, lt } from "drizzle-orm";
+import { createDb } from "./db/client.js";
+import { commitAccountCleanups } from "./auth/account-cleanup.js";
+import { productionDeps } from "./deps.js";
+import type { Bindings } from "./env.js";
+import { refreshRates } from "./rates/rates.js";
+import { groupReservations, rateCounters, sessions } from "./db/schema.js";
 import { RATE_COUNTER_RETENTION_MS } from "./rate-limit.js";
 
-/** Daily clean-up: lapsed sessions and old rate counters are never read again. */
-export async function purgeExpired(db: Db, now: number): Promise<void> {
-  await db.batch([
-    db.delete(sessions).where(lt(sessions.expiresAt, now)),
-    db.delete(rateCounters).where(lt(rateCounters.windowStart, now - RATE_COUNTER_RETENTION_MS)),
-  ]);
+/** Old pending reservations need an authoritative membership check before release. */
+const STALE_RESERVATION_MS = 24 * 60 * 60 * 1000;
+
+/** Purges expired records and releases only reservations the ledger confirms are unused. */
+export async function purgeExpired(env: Bindings, now: number): Promise<void> {
+  const db = createDb(env.DB);
+  try {
+    await db.batch([
+      db.delete(sessions).where(lt(sessions.expiresAt, now)),
+      db.delete(rateCounters).where(lt(rateCounters.windowStart, now - RATE_COUNTER_RETENTION_MS)),
+    ]);
+    const stale = await db
+      .select()
+      .from(groupReservations)
+      .where(
+        and(
+          eq(groupReservations.status, "pending"),
+          lt(groupReservations.createdAt, now - STALE_RESERVATION_MS),
+        ),
+      )
+      .orderBy(asc(groupReservations.createdAt))
+      .limit(100);
+    for (const reservation of stale) {
+      try {
+        const response = await env.GROUP_LEDGER.get(
+          env.GROUP_LEDGER.idFromName(reservation.groupId),
+        ).fetch("https://ledger.internal/member-check", {
+          headers: { "X-User-Id": reservation.userId },
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (response.status === 204) {
+          // Seated: settle the row ourselves so a delayed projection cannot crowd the next runs.
+          await db
+            .update(groupReservations)
+            .set({ status: "active" })
+            .where(
+              and(
+                eq(groupReservations.userId, reservation.userId),
+                eq(groupReservations.groupId, reservation.groupId),
+                eq(groupReservations.status, "pending"),
+              ),
+            );
+          continue;
+        }
+        if (response.status !== 404) continue;
+        await db
+          .delete(groupReservations)
+          .where(
+            and(
+              eq(groupReservations.userId, reservation.userId),
+              eq(groupReservations.groupId, reservation.groupId),
+              eq(groupReservations.status, "pending"),
+              eq(groupReservations.createdAt, reservation.createdAt),
+            ),
+          );
+      } catch {
+        // An uncertain membership keeps its reservation for the next daily check.
+      }
+    }
+  } catch (error) {
+    console.error(
+      JSON.stringify({ event: "expired_records_cleanup_failed", error: String(error) }),
+    );
+  }
+}
+
+/** Daily maintenance keeps account cleanup ahead of the reference-rate refresh. */
+export async function dailyMaintenance(env: Bindings, now: number): Promise<void> {
+  const db = createDb(env.DB);
+  await purgeExpired(env, now);
+  await commitAccountCleanups(env);
+  await refreshRates(db, productionDeps.rateSource, now);
 }

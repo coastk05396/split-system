@@ -9,14 +9,13 @@ import { ApiError, invalid } from "./errors.js";
 import { newSortableId } from "./ids.js";
 
 const commandSchema = z.object({
-  action: z.enum(["list", "create", "confirm", "cancel", "undo"]),
+  action: z.enum(["list", "create", "undo"]),
   actorId: z.string(),
   now: z.number().int(),
   cursor: z.string().optional(),
   id: z.string().optional(),
   key: z.string().optional(),
   input: z.unknown().optional(),
-  amount: z.number().int().optional(),
 });
 type Party = { id: string; role: string; status: string; net_balance: number };
 interface Row extends Record<string, SqlStorageValue> {
@@ -101,8 +100,6 @@ export function settlementOperation(
     const maxAmount = Math.max(0, Math.min(-payer.net_balance, receiver.net_balance));
     if (amount > maxAmount) throw new ApiError("SETTLEMENT_EXCEEDS_DEBT", { maxAmount });
   };
-  const canConfirm = (payer: Party, receiver: Party) =>
-    actor.id === payer.id || actor.id === receiver.id || actor.role === "admin";
   if (op.action === "create") {
     if (op.key === undefined) throw new ApiError("VALIDATION_FAILED");
     const storedKey = `${actor.id}:${op.key}`;
@@ -142,43 +139,19 @@ export function settlementOperation(
     .toArray()[0];
   if (existing === undefined) throw new ApiError("NOT_FOUND");
   const item = settlementSchema.parse(JSON.parse(existing.data) as unknown);
-  if (op.action === "confirm") {
-    if (item.status !== "pending") throw new ApiError("SETTLEMENT_NOT_PENDING");
-    const { payer, receiver } = parties(item.payerMemberId, item.receiverMemberId);
-    if (!canConfirm(payer, receiver)) throw new ApiError("FORBIDDEN");
-    if (op.amount !== undefined && (op.amount <= 0 || op.amount > item.amount))
-      throw invalid("amount", "AMOUNT_EXCEEDS_RECORDED_SETTLEMENT");
-    const paid = op.amount ?? item.amount;
-    withinDebt(payer, receiver, paid);
-    item.amount = paid;
-    item.status = "confirmed";
-    item.confirmedByMemberId = actor.id;
-    item.confirmedAt = op.now;
-    move(item, 1);
-  } else if (op.action === "cancel") {
-    if (item.status !== "pending") throw new ApiError("SETTLEMENT_NOT_PENDING");
-    if (
-      actor.id !== item.payerMemberId &&
-      actor.id !== item.createdByMemberId &&
-      actor.role !== "admin"
-    )
-      throw new ApiError("FORBIDDEN");
-    item.status = "cancelled";
-  } else {
-    if (item.status !== "confirmed") throw new ApiError("SETTLEMENT_NOT_CONFIRMED");
-    if (
-      actor.id !== item.payerMemberId &&
-      actor.id !== item.receiverMemberId &&
-      actor.id !== item.confirmedByMemberId &&
-      actor.role !== "admin"
-    )
-      throw new ApiError("FORBIDDEN");
-    parties(item.payerMemberId, item.receiverMemberId);
-    item.status = "undone";
-    item.undoneByMemberId = actor.id;
-    item.undoneAt = op.now;
-    move(item, -1);
-  }
+  if (item.status !== "confirmed") throw new ApiError("SETTLEMENT_NOT_CONFIRMED");
+  if (
+    actor.id !== item.payerMemberId &&
+    actor.id !== item.receiverMemberId &&
+    actor.id !== item.confirmedByMemberId &&
+    actor.role !== "admin"
+  )
+    throw new ApiError("FORBIDDEN");
+  parties(item.payerMemberId, item.receiverMemberId);
+  item.status = "undone";
+  item.undoneByMemberId = actor.id;
+  item.undoneAt = op.now;
+  move(item, -1);
   item.updatedAt = Math.max(op.now, item.updatedAt + 1);
   save(item, null);
   return { data: item, changed: true, id: item.id };

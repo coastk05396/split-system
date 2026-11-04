@@ -1,3 +1,5 @@
+import { announceSaved } from "../expenses/pending-writes.js";
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useExpenseSharing } from "../expenses/expense-sharing.js";
 import { memberNames } from "../expenses/ExpenseList.js";
@@ -19,6 +21,11 @@ export function NewExpensePage() {
   const group = useGroup(id);
   const members = useMembers(id);
   const expenses = useExpenses(id);
+  const warmInvite = sharing.warm;
+  useEffect(() => {
+    warmInvite();
+    // once per opened screen
+  }, []);
   if (group.isError) return <LoadError error={group.error} onRetry={() => void group.refetch()} />;
   if (members.isError) {
     return <LoadError error={members.error} onRetry={() => void members.refetch()} />;
@@ -38,14 +45,10 @@ export function NewExpensePage() {
         group={group.data}
         members={members.data}
         {...(startCurrency === undefined ? {} : { startCurrency })}
-        onSaved={async (saved, { sendToChat }) => {
-          const share = await sharing.prepare(
-            saved,
-            group.data,
-            memberNames(members.data),
-            sendToChat,
-          );
-          await navigate(`/groups/${id}`, { state: { newExpenseId: saved.id, share } });
+        onSaving={() => void navigate(`/groups/${id}`)}
+        onSaved={(saved, { sendToChat }) => {
+          sharing.prepareLater(saved, group.data, memberNames(members.data), sendToChat);
+          announceSaved(id, saved.id);
         }}
       />
     </div>

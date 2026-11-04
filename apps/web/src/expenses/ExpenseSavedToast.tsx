@@ -11,7 +11,14 @@ const LEAVE_MS = 180;
  * The note after saving an Expense: it fades after a few seconds, and Share opens the
  * share dialog without interrupting the next entry.
  */
-export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
+export function ExpenseSavedToast({
+  saved,
+  onDone,
+}: {
+  saved: SavedShare;
+  /** Called once the note has gone, so the next waiting one can take its place. */
+  onDone?: () => void;
+}) {
   const [visible, setVisible] = useState(true);
   const [leaving, setLeaving] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -44,6 +51,10 @@ export function ExpenseSavedToast({ saved }: { saved: SavedShare }) {
       window.clearTimeout(timer);
     };
   }, [leaving, held]);
+
+  useEffect(() => {
+    if (!visible) onDone?.();
+  }, [visible, onDone]);
 
   return (
     <>

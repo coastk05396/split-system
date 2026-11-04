@@ -26,7 +26,7 @@ The full list of changes is in [docs/design-changes.md](../../design-changes.md)
 
 - **Statistics:** v1 ships per-Group statistics only (month total, per-day bars, category breakdown, one query over that Group's Expenses); the 個人 tab is dropped.
 - **Navigation:** the bottom bar is 首頁, 群組, + (新增), 統計, 設定. The 'LINE Bot' tab goes; screen 8 becomes a "加入小芽官方帳號" card in 設定 that opens the add-friend link. Screen 16 stays as the Rich Menu artwork and is not an app screen.
-- **Settings:** remove 通知提醒 and the user-level 預設幣別 (defaults live on each Group). Keep 我的群組, 帳號與隱私 (linked accounts, 登出所有裝置, 刪除帳號) and 登入與安全.
+- **Settings:** remove 通知提醒 and the user-level 預設幣別 (defaults live on each Group). Keep 我的群組, 帳號與隱私 (linked accounts, 刪除帳號) and 登入與安全.
 - **Home total:** 目前淨收付 shows one amount per currency, never a summed figure; the subtitle is "你在 N 個群組有待結算款項".
 - **Web:** one responsive app. Desktop is the same routes with a sidebar and two columns, with no features of its own. The group page has the same three tabs everywhere: 帳目, 行程 (Trips only), 結算.
 - **Editing the designs:** this map does not edit `split.pen`; the list is the brief for a follow-up design pass.

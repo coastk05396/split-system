@@ -1,6 +1,10 @@
 import type { Balances, Settlement, SettlementInput, SettlementPage } from "@split/shared";
 import {
+  type InfiniteData,
+  type QueryClient,
   type QueryFunctionContext,
+  type QueryKey,
+  hashKey,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -11,7 +15,7 @@ import type { ClientRequestOptions } from "hono/client";
 import { createApiClient } from "../api/client.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { groupKeys } from "../groups/api.js";
-import { abortable, readWithRev } from "../groups/sync.js";
+import { abortable, invalidateStats, readWithRev } from "../groups/sync.js";
 
 /** TanStack Query hooks over the Worker's Balance and Settlement routes (SPEC §5.1). */
 
@@ -71,14 +75,65 @@ function useRefresh(groupId: string) {
   const client = useQueryClient();
   return () =>
     Promise.all([
+      invalidateStats(client),
       client.invalidateQueries({ queryKey: groupKeys.group(groupId) }),
       client.invalidateQueries({ queryKey: groupKeys.all, exact: true }),
     ]);
 }
 
 /**
- * Records a Settlement under the caller's `Idempotency-Key`. The Worker decides its status:
- * pending when the payer records it (我已付款), confirmed when the receiver or an Admin does.
+ * Moves the payer's Balance up and the receiver's down by `amount` (negative: the reverse) on
+ * whatever the cache holds now. A rollback does the reverse of one write instead of restoring an
+ * older snapshot, so a payment that finished in the meantime is kept.
+ */
+function shiftBalances(
+  client: QueryClient,
+  groupId: string,
+  payerMemberId: string,
+  receiverMemberId: string,
+  amount: number,
+) {
+  client.setQueryData<Balances>(settlementKeys.balances(groupId), (data) =>
+    data === undefined
+      ? data
+      : {
+          ...data,
+          balances: data.balances.map((b) => {
+            if (b.memberId === payerMemberId) return { ...b, balance: b.balance + amount };
+            if (b.memberId === receiverMemberId) return { ...b, balance: b.balance - amount };
+            return b;
+          }),
+        },
+  );
+}
+
+/**
+ * Tells whether a read from the server has replaced the cached value under `key` since now. Such
+ * a value already holds the server's answer, so a rollback must leave it alone. Call `stop` once
+ * the write has settled.
+ */
+function watchReads(client: QueryClient, key: QueryKey) {
+  const hash = hashKey(key);
+  let replaced = false;
+  const stop = client.getQueryCache().subscribe((event) => {
+    if (event.query.queryHash !== hash) return;
+    // A removed query (sign-out, cache clear) has nothing left to roll back, and no more events.
+    if (event.type === "removed") {
+      replaced = true;
+      stop();
+    } else if (
+      event.type === "updated" &&
+      event.action.type === "success" &&
+      !event.action.manual
+    ) {
+      replaced = true;
+    }
+  });
+  return { replaced: () => replaced, stop };
+}
+
+/**
+ * Records a Settlement under the caller's `Idempotency-Key`. The ledger records it as confirmed.
  */
 export function useRecordSettlement(groupId: string) {
   const { api } = useSession();
@@ -94,61 +149,102 @@ export function useRecordSettlement(groupId: string) {
       ),
     onMutate: async ({ input }) => {
       await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
-      const previousBalances = client.getQueryData<Balances>(settlementKeys.balances(groupId));
-      if (previousBalances) {
-        client.setQueryData<Balances>(settlementKeys.balances(groupId), {
-          ...previousBalances,
-          balances: previousBalances.balances.map((b) => {
-            if (b.memberId === input.payerMemberId) {
-              return { ...b, balance: b.balance + input.amount };
-            }
-            if (b.memberId === input.receiverMemberId) {
-              return { ...b, balance: b.balance - input.amount };
-            }
-            return b;
-          }),
-        });
-      }
-      return { previousBalances };
+      const shown = client.getQueryData<Balances>(settlementKeys.balances(groupId)) !== undefined;
+      const reads = watchReads(client, settlementKeys.balances(groupId));
+      shiftBalances(client, groupId, input.payerMemberId, input.receiverMemberId, input.amount);
+      return { shown, reads };
     },
-    onError: (_err, _vars, context) => {
-      if (context?.previousBalances) {
-        client.setQueryData(settlementKeys.balances(groupId), context.previousBalances);
+    onError: (_err, { input }, context) => {
+      if (context?.shown && !context.reads.replaced()) {
+        shiftBalances(client, groupId, input.payerMemberId, input.receiverMemberId, -input.amount);
       }
     },
-    onSettled: () => {
+    onSettled: (_data, _err, _vars, context) => {
+      context?.reads.stop();
       void refresh();
     },
   });
 }
 
-export type SettlementAction =
-  | { kind: "confirm"; settlementId: string; amount?: number }
-  | { kind: "cancel"; settlementId: string }
-  | { kind: "undo"; settlementId: string };
+function replaceSettlement(
+  client: QueryClient,
+  groupId: string,
+  next: Settlement,
+  onlyIf?: (current: Settlement) => boolean,
+) {
+  client.setQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(groupId), (data) =>
+    data === undefined
+      ? data
+      : {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            settlements: page.settlements.map((s) =>
+              s.id === next.id && (onlyIf === undefined || onlyIf(s)) ? next : s,
+            ),
+          })),
+        },
+  );
+}
 
-/** Confirm (optionally at a lower amount), cancel or undo one Settlement. */
+export type SettlementAction = { kind: "undo"; settlementId: string };
+
+/** Undo one confirmed Settlement. */
 export function useSettlementAction(groupId: string) {
   const { api } = useSession();
+  const client = useQueryClient();
   const refresh = useRefresh(groupId);
   return useMutation({
     mutationFn: (action: SettlementAction) => {
       const param = { param: { sid: action.settlementId } };
-      const routes = api.settlements[":sid"];
-      switch (action.kind) {
-        case "confirm":
-          return read<Settlement>(
-            routes.confirm.$post(
-              param,
-              action.amount === undefined ? undefined : jsonWith({ amount: action.amount }),
-            ),
-          );
-        case "cancel":
-          return read<Settlement>(routes.cancel.$post(param));
-        case "undo":
-          return read<Settlement>(routes.undo.$post(param));
-      }
+      return read<Settlement>(api.settlements[":sid"].undo.$post(param));
     },
-    onSuccess: refresh,
+    // Undo is the reverse of recording: the payer's balance drops and the receiver's rises by the
+    // Settlement's amount. The row is marked undone at once, so it cannot be undone twice.
+    onMutate: async (action) => {
+      await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
+      await client.cancelQueries({ queryKey: settlementKeys.list(groupId) });
+      const list = client.getQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(groupId));
+      const target = list?.pages
+        .flatMap((page) => page.settlements)
+        .find((s) => s.id === action.settlementId);
+      if (target?.status !== "confirmed") return { target: undefined };
+      const balanceReads = watchReads(client, settlementKeys.balances(groupId));
+      shiftBalances(client, groupId, target.payerMemberId, target.receiverMemberId, -target.amount);
+      replaceSettlement(client, groupId, { ...target, status: "undone" });
+      return { target, balanceReads };
+    },
+    // Only this undo is taken back: a payment confirmed while it waited stays in the Balances, and
+    // whatever a read from the server has replaced since is left as the server said.
+    onError: (_err, _action, context) => {
+      if (context?.target !== undefined) {
+        const { target, balanceReads } = context;
+        if (!balanceReads.replaced()) {
+          shiftBalances(
+            client,
+            groupId,
+            target.payerMemberId,
+            target.receiverMemberId,
+            target.amount,
+          );
+        }
+        // Only our own guess is put back: it is undone with no undo time yet, while the server's
+        // undo (read in meanwhile) carries one and must stay.
+        replaceSettlement(
+          client,
+          groupId,
+          target,
+          (current) => current.status === "undone" && current.undoneAt === null,
+        );
+      }
+      void refresh();
+    },
+    onSettled: (_data, _err, _vars, context) => {
+      context?.balanceReads?.stop();
+    },
+    onSuccess: (undone) => {
+      replaceSettlement(client, groupId, undone);
+      void refresh();
+    },
   });
 }

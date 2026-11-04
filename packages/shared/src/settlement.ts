@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { amountMinorSchema } from "./schemas.js";
 
 /** Settlements (SPEC §5; decisions 12, 15, 16, 23, 31). */
 
@@ -40,10 +39,3 @@ export const settlementPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type SettlementPage = z.infer<typeof settlementPageSchema>;
-
-/**
- * `POST /settlements/:sid/confirm` body, optional: the confirmer may lower a pending amount
- * to what was actually received (decision 12's partial payment); the rest stays a debt.
- */
-export const settlementConfirmSchema = z.object({ amount: amountMinorSchema.optional() });
-export type SettlementConfirm = z.infer<typeof settlementConfirmSchema>;

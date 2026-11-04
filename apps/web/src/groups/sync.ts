@@ -89,6 +89,29 @@ export async function readWithRev<T>(
   return (await res.json()) as T;
 }
 
+const statsRefreshTimers = new WeakMap<QueryClient, ReturnType<typeof setTimeout>>();
+
+export function cancelStatsInvalidation(client: QueryClient): void {
+  clearTimeout(statsRefreshTimers.get(client));
+  statsRefreshTimers.delete(client);
+}
+
+/**
+ * Stats read a delayed D1 projection, so recheck after its usual catch-up window.
+ * shortcut: delays over 3s need another refresh; use completion signals if frequent.
+ */
+export function invalidateStats(client: QueryClient): Promise<void> {
+  cancelStatsInvalidation(client);
+  statsRefreshTimers.set(
+    client,
+    setTimeout(() => {
+      statsRefreshTimers.delete(client);
+      void client.invalidateQueries({ queryKey: ["stats"] });
+    }, 3000),
+  );
+  return client.invalidateQueries({ queryKey: ["stats"] });
+}
+
 /**
  * Handles a "sync needed" signal with rev N:
  * Refetches every active Group query whose recorded rev is below N, leaving the rest alone.
@@ -105,7 +128,7 @@ export async function handleGroupSignal(
     },
   });
 
-  const toFetch: Promise<unknown>[] = [];
+  const toFetch: Promise<unknown>[] = [invalidateStats(client)];
   for (const query of activeQueries) {
     const recordedRev = getQueryRev(client, query.queryKey);
     if (recordedRev === undefined || recordedRev < rev) {
@@ -127,6 +150,7 @@ export function onGroupMutationSuccess(
   rev: number,
   options?: { updatedQueryKey?: QueryKey },
 ): void {
+  void invalidateStats(client);
   if (options?.updatedQueryKey) {
     setQueryRev(client, options.updatedQueryKey, rev);
   }
@@ -203,9 +227,15 @@ export class GroupLiveSync {
     void this.startConnection();
   }
 
+  private disposed(): boolean {
+    return this.isDisposed;
+  }
+
   private async startConnection(): Promise<void> {
     if (this.isDisposed) return;
     const token = await this.options.getAccessToken();
+    // Read through a method: the check above would make the compiler assume it still holds.
+    if (this.disposed()) return;
     if (!token) {
       this.scheduleReconnect();
       return;
@@ -413,7 +443,10 @@ export function useGroupLiveSync(groupId: string | undefined): void {
       const sync = new GroupLiveSync({
         groupId,
         queryClient: client,
-        getAccessToken: () => session.getAccessToken(),
+        getAccessToken: async () => {
+          const user = await session.restore().catch(() => null);
+          return user === null ? null : session.getAccessToken();
+        },
         WebSocket: deps.webSocket,
       });
       entry = { sync, count: 0 };

@@ -1,7 +1,11 @@
 import { QueryClient, type QueryKey, QueryObserver } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { renderApp } from "../../test/render-app.js";
+import { makeUser } from "../../test/fake-api.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   computeBackoffWait,
+  cancelStatsInvalidation,
   getQueryRev,
   GroupLiveSync,
   handleGroupSignal,
@@ -98,8 +102,196 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
   });
 
   afterEach(() => {
+    cancelStatsInvalidation(client);
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it("refreshes active Stats after a mutation once the projection catches up", async () => {
+    let projected = false;
+    const fetched: number[] = [];
+    const key = ["stats", "spending", "user-1", "2026-06", "2026-11"];
+    const observer = new QueryObserver(client, {
+      queryKey: key,
+      queryFn: () => {
+        const amount = projected ? 200 : 100;
+        fetched.push(amount);
+        return Promise.resolve(amount);
+      },
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await observer.refetch();
+      onGroupMutationSuccess(client, "g-1", 42);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(client.getQueryData(key)).toBe(100);
+      projected = true;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getQueryData(key)).toBe(200);
+      expect(fetched).toEqual([100, 100, 200]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("refreshes active Stats details after a live signal once the projection catches up", async () => {
+    let projected = false;
+    const fetched: number[] = [];
+    const key = ["stats", "expenses", "user-1", "2026-11", "food"];
+    const observer = new QueryObserver(client, {
+      queryKey: key,
+      queryFn: () => {
+        const amount = projected ? 200 : 100;
+        fetched.push(amount);
+        return Promise.resolve(amount);
+      },
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await observer.refetch();
+      await handleGroupSignal(client, "g-1", 42);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(client.getQueryData(key)).toBe(100);
+      projected = true;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.getQueryData(key)).toBe(200);
+      expect(fetched).toEqual([100, 100, 200]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("coalesces many mutations and live events into one delayed Stats refetch per client", async () => {
+    let fetches = 0;
+    const observer = new QueryObserver(client, {
+      queryKey: ["stats", "spending", "user-1"],
+      queryFn: () => Promise.resolve(++fetches),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await observer.refetch();
+      for (let i = 0; i < 10; i++) {
+        onGroupMutationSuccess(client, `g-${i}`, i);
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      await handleGroupSignal(client, "g-other", 42);
+      const immediate = fetches;
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(fetches).toBe(immediate);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetches).toBe(immediate + 1);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(fetches).toBe(immediate + 1);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it.each(["forced sign-out", "chosen sign-out", "unmount"] as const)(
+    "cancels pending Stats refreshes on %s",
+    async (ending) => {
+      vi.useRealTimers();
+      const user = makeUser(`Stats cleanup ${ending}`);
+      let groupId = "";
+      const { api, router, queryClient } = renderApp({
+        cookieUser: user,
+        path: "/settings",
+        seed: (groups) => {
+          groupId = groups.add(user, { name: "Stats cleanup" });
+        },
+      });
+      await screen.findByRole("button", { name: "登出" });
+      if (ending === "chosen sign-out") await import("../pages/LandingPage.js");
+      vi.useFakeTimers();
+      onGroupMutationSuccess(queryClient, groupId, 42);
+      await vi.advanceTimersByTimeAsync(0);
+      if (ending === "unmount") {
+        cleanup();
+      } else if (ending === "chosen sign-out") {
+        act(() => {
+          fireEvent.click(screen.getByRole("button", { name: "登出" }));
+        });
+        await act(() => vi.advanceTimersByTimeAsync(100));
+      } else {
+        api.expireAccessToken();
+        api.setCookieUser(null);
+        await act(async () => {
+          await router.navigate(`/groups/${groupId}`);
+          await vi.advanceTimersByTimeAsync(100);
+        });
+        await vi.waitFor(() => {
+          expect(router.state.location.pathname).toContain("/sign-in");
+        });
+      }
+      let fetches = 0;
+      const observer = new QueryObserver(queryClient, {
+        queryKey: ["stats", "spending", "next-session"],
+        queryFn: () => Promise.resolve(++fetches),
+      });
+      const unsubscribe = observer.subscribe(() => {});
+      try {
+        await observer.refetch();
+        expect(fetches).toBe(1);
+        await act(() => vi.advanceTimersByTimeAsync(3000));
+        expect(fetches).toBe(1);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
+  it("reconnects after expiry with a token from the session refresh path", async () => {
+    vi.useRealTimers();
+    const user = makeUser("Reconnect member");
+    let id = "";
+    const { api } = renderApp({
+      cookieUser: user,
+      webSocket: FakeWebSocket as unknown as typeof WebSocket,
+      seed: (groups) => {
+        id = groups.add(user, { name: "Reconnect ledger" });
+      },
+      pathFor: () => `/groups/${id}`,
+    });
+    await screen.findByRole("heading", { level: 1, name: "Reconnect ledger" });
+    await vi.waitFor(() => {
+      expect(FakeWebSocket.instances).toHaveLength(1);
+    });
+    const socket = getSocket();
+    await act(async () => {
+      await Promise.resolve();
+      socket.open();
+    });
+    const originalProtocols = socket.protocols;
+    const refreshes = api.calls.filter((call) => call === "POST /api/v1/auth/refresh").length;
+    vi.useFakeTimers();
+    api.expireAccessToken();
+    act(() => {
+      socket.close();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(getSocket(1).protocols).not.toEqual(originalProtocols);
+    expect(api.calls.filter((call) => call === "POST /api/v1/auth/refresh")).toHaveLength(
+      refreshes + 1,
+    );
+  });
+
+  it("does not open a socket after disconnecting during token refresh", async () => {
+    let refreshed: (token: string) => void = () => undefined;
+    const sync = new GroupLiveSync({
+      groupId: "g-1",
+      queryClient: client,
+      getAccessToken: () =>
+        new Promise<string>((resolve) => {
+          refreshed = resolve;
+        }),
+      WebSocket: FakeWebSocket as unknown as typeof WebSocket,
+    });
+    sync.connect();
+    sync.disconnect();
+    refreshed("fresh-token");
+    await Promise.resolve();
+    expect(FakeWebSocket.instances).toHaveLength(0);
   });
 
   describe("Connection and handshake", () => {

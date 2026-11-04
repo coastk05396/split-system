@@ -133,29 +133,6 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
       const receiver = member(row.receiverMemberId);
       if (payer === undefined || receiver === undefined) return error("NOT_FOUND", 404);
       switch (route) {
-        case "POST settlements/:/confirm": {
-          if (row.status !== "pending") return error("SETTLEMENT_NOT_PENDING", 409);
-          if (!canConfirm(me, payer, receiver)) return error("FORBIDDEN", 403);
-          const paid = typeof body.amount === "number" ? body.amount : row.amount;
-          const max = owed(payer, receiver);
-          if (paid > max) return error("SETTLEMENT_EXCEEDS_DEBT", 422, { maxAmount: max });
-          Object.assign(row, {
-            status: "confirmed",
-            amount: paid,
-            confirmedByMemberId: me.id,
-            confirmedAt: now,
-            updatedAt: now,
-          });
-          move(payer, receiver, paid);
-          return json(row);
-        }
-        case "POST settlements/:/cancel":
-          if (row.status !== "pending") return error("SETTLEMENT_NOT_PENDING", 409);
-          if (me.id !== payer.id && me.id !== row.createdByMemberId && me.role !== "admin") {
-            return error("FORBIDDEN", 403);
-          }
-          Object.assign(row, { status: "cancelled", updatedAt: now });
-          return json(row);
         case "POST settlements/:/undo":
           if (row.status !== "confirmed") return error("SETTLEMENT_NOT_CONFIRMED", 409);
           if (

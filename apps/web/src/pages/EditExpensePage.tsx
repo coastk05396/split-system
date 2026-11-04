@@ -44,7 +44,8 @@ export function EditExpensePage() {
         group={group.data}
         members={members.data}
         expense={expense.data}
-        onSaved={() => void navigate(back)}
+        onSaving={() => void navigate(back)}
+        onSaved={() => undefined}
       />
     </div>
   );

@@ -254,16 +254,18 @@ it("limits repeated live membership probes for unknown Groups", async () => {
 });
 
 it("signals a Member change only after every projection batch has reached D1", async () => {
-  const { send } = await import("./groups-harness.js");
+  const { send, inviteToken } = await import("./groups-harness.js");
   const { createExpense, twdExpense } = await import("./expenses-harness.js");
   const admin = await person("drain order");
   const group = await createGroup(admin);
+  const token = await inviteToken(admin, group.id);
+  const claimant = await person("drain claimant");
   const added = await send(admin, "POST", `/groups/${group.id}/members`, { name: "小明" });
   expect(added.status).toBe(201);
   const placeholder = await added.json<{ id: string }>();
-  // A Member operation re-projects every Expense, and one batch holds 25: 30 take two batches.
-  for (let i = 0; i < 30; i += 1)
-    await createExpense(admin, group.id, twdExpense(group.me.memberId, [group.me.memberId], 100));
+  // A claim re-projects this member's Expenses; 26 require two batches.
+  for (let i = 0; i < 26; i += 1)
+    await createExpense(admin, group.id, twdExpense(group.me.memberId, [placeholder.id], 100));
 
   const response = await call(`/groups/${group.id}/live`, {
     headers: { Upgrade: "websocket", Authorization: `Bearer ${admin.accessToken}` },
@@ -290,8 +292,8 @@ it("signals a Member change only after every projection batch has reached D1", a
     );
   });
   expect(
-    (await send(admin, "DELETE", `/groups/${group.id}/members/${placeholder.id}`)).status,
-  ).toBe(204);
+    (await send(claimant, "POST", `/invites/${token}/claim`, { memberId: placeholder.id })).status,
+  ).toBe(200);
 
   const { signalRev, revs } = await projected;
   expect(revs).toEqual([signalRev]);

@@ -67,10 +67,27 @@ export function createJoseVerifier(options: JoseVerifierOptions): IdentityVerifi
     },
   };
 
-  async function freshKeys(provider: Provider): Promise<JSONWebKeySet> {
-    const keys = await options.fetchJwks(rules[provider].jwksUrl);
-    await options.cache.put(cacheKey(provider), JSON.stringify(keys), {
-      expirationTtl: JWKS_CACHE_TTL_SECONDS,
+  const downloads = new Map<Provider, { at: number; keys: Promise<JSONWebKeySet> }>();
+
+  function freshKeys(provider: Provider): Promise<JSONWebKeySet> {
+    const previous = downloads.get(provider);
+    if (previous !== undefined && options.now() - previous.at < 60_000) return previous.keys;
+    const keys = (async () => {
+      const fetched = await options.fetchJwks(rules[provider].jwksUrl);
+      try {
+        await options.cache.put(cacheKey(provider), JSON.stringify(fetched), {
+          expirationTtl: JWKS_CACHE_TTL_SECONDS,
+        });
+      } catch {
+        // A cache outage must not discard valid provider keys.
+      }
+      return fetched;
+    })();
+    const entry = { at: options.now(), keys };
+    downloads.set(provider, entry);
+    // A failed download is not worth remembering: the next sign-in may try again at once.
+    keys.catch(() => {
+      if (downloads.get(provider) === entry) downloads.delete(provider);
     });
     return keys;
   }
@@ -122,7 +139,7 @@ function cacheKey(provider: Provider): string {
 
 /** The production key download. */
 export const fetchJwks: JwksFetcher = async (url) => {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
   if (!res.ok) throw new Error(`JWKS download failed: ${res.status}`);
   const body = await res.json<JSONWebKeySet>();
   if (!Array.isArray(body.keys)) throw new Error("JWKS download returned no keys");

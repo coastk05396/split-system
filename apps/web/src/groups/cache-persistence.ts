@@ -6,6 +6,8 @@ import { getQueryRev, setQueryRev } from "./sync.js";
 export const CACHE_VERSION = "split.v1";
 
 export interface CacheStorage {
+  readonly length: number;
+  key(index: number): string | null;
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
@@ -20,6 +22,8 @@ function getDefaultStorage(): CacheStorage {
     // In restricted iframe or disabled storage environments
   }
   return {
+    length: 0,
+    key: () => null,
     getItem: () => null,
     setItem: () => {},
     removeItem: () => {},
@@ -183,4 +187,41 @@ export function clearCache(
   version = CACHE_VERSION,
 ): void {
   storage.removeItem(getCacheKey(userId, version));
+}
+
+export function clearAllCaches(storage: CacheStorage = getDefaultStorage()): void {
+  try {
+    for (let i = storage.length - 1; i >= 0; i--) {
+      const key = storage.key(i);
+      if (key?.startsWith("split.queryCache.")) storage.removeItem(key);
+    }
+  } catch {
+    /* ignore disabled storage */
+  }
+}
+
+/** Coalesces successful reads; flush pending data before the page is hidden or persistence stops. */
+export function startCachePersistence(
+  client: QueryClient,
+  userId: string,
+  storage?: CacheStorage,
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    timer = undefined;
+    saveCache(client, userId, storage);
+  };
+  const unsubscribe = client.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.action.type !== "success") return;
+    clearTimeout(timer);
+    timer = setTimeout(flush, 1000);
+  });
+  window.addEventListener("pagehide", flush);
+  return () => {
+    unsubscribe();
+    window.removeEventListener("pagehide", flush);
+    flush();
+  };
 }

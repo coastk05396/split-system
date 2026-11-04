@@ -30,7 +30,12 @@ function tripOnly({ params }: { params: { id?: string } }) {
 
 /** Where to go after sign-in: only same-site paths, never another origin. */
 export function safeNext(next: string | null): string {
-  return next !== null && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  if (next === null || !next.startsWith("/") || next.startsWith("//")) return "/";
+  try {
+    return new URL(next, location.origin).origin === location.origin ? next : "/";
+  } catch {
+    return "/";
+  }
 }
 
 /** Signed in: the app. Signed out: the landing page at `/`, sign-in everywhere else. */

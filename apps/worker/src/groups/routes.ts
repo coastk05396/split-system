@@ -1,4 +1,4 @@
-import { reserveGroup } from "../auth/reservations.js";
+import { withReservation } from "../auth/reservations.js";
 import {
   claimInputSchema,
   groupInputSchema,
@@ -8,6 +8,7 @@ import {
 } from "@split/shared";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
+import { bearerToken } from "../auth/bearer-token.js";
 import { verifyAccessToken } from "../auth/tokens.js";
 import { ApiError } from "../errors.js";
 import { requireUser } from "../auth/require-user.js";
@@ -111,6 +112,7 @@ async function readLedgerGroup(env: Bindings, me: MemberRow) {
  */
 export function groupRoutes(deps: AppDeps) {
   const signedIn = requireUser(deps.now);
+  const writeLimit = rateLimit("expense_write", deps.now);
 
   return new Hono<AppEnv>()
     .get("/groups/:id/live", async (c) => {
@@ -118,8 +120,9 @@ export function groupRoutes(deps: AppDeps) {
         .split(",")
         .map((value) => value.trim());
       const protocol = offered[0] === "split.v1" ? offered[0] : undefined;
-      const bearer = /^Bearer (\S+)$/.exec(c.req.header("Authorization") ?? "");
-      const token = bearer?.[1] ?? (protocol === undefined ? undefined : offered[1]);
+      const token =
+        bearerToken(c.req.header("Authorization")) ??
+        (protocol === undefined ? undefined : offered[1]);
       const userId =
         token === undefined
           ? null
@@ -161,16 +164,27 @@ export function groupRoutes(deps: AppDeps) {
       const id = crypto.randomUUID();
       const memberId = crypto.randomUUID();
       const now = deps.now();
-      await reserveGroup(c.env.DB, c.var.userId, id, now);
-      const ledgerId = c.env.GROUP_LEDGER.idFromName(id);
-      const response = await c.env.GROUP_LEDGER.get(ledgerId).fetch(
-        "https://ledger.internal/create",
-        {
-          method: "POST",
-          body: JSON.stringify({ id, memberId, userId: c.var.userId, now, input }),
+      const stub = ledger(c.env, id);
+      await withReservation(
+        c.env.DB,
+        c.var.userId,
+        id,
+        now,
+        async () => {
+          const response = await stub.fetch("https://ledger.internal/create", {
+            method: "POST",
+            body: JSON.stringify({ id, memberId, userId: c.var.userId, now, input }),
+          });
+          if (!response.ok) throw new ApiError("INTERNAL");
+        },
+        async () => {
+          const response = await stub.fetch("https://ledger.internal/member-check", {
+            headers: { "X-User-Id": c.var.userId },
+          });
+          if (response.status !== 204 && response.status !== 404) throw new ApiError("INTERNAL");
+          return response.status === 204;
         },
       );
-      if (!response.ok) throw new ApiError("INTERNAL");
       c.header("X-Group-Rev", "0");
       return c.json(
         {
@@ -267,7 +281,7 @@ export function groupRoutes(deps: AppDeps) {
         200,
       );
     })
-    .patch("/groups/:id", signedIn, async (c) => {
+    .patch("/groups/:id", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       requireAdmin(me);
@@ -302,7 +316,7 @@ export function groupRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", String(updated.rev));
       return c.json(updated.group, 200);
     })
-    .delete("/groups/:id", signedIn, async (c) => {
+    .delete("/groups/:id", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       requireAdmin(me);
@@ -327,7 +341,7 @@ export function groupRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", String(rev));
       return c.json(members, 200);
     })
-    .post("/groups/:id/members", signedIn, async (c) => {
+    .post("/groups/:id/members", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const input = await parseBody(c, placeholderInputSchema);
@@ -335,7 +349,7 @@ export function groupRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", String(result.rev));
       return c.json(result.member, 201);
     })
-    .patch("/groups/:id/members/:mid", signedIn, async (c) => {
+    .patch("/groups/:id/members/:mid", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const patch = await parseBody(c, memberPatchSchema);
@@ -343,14 +357,14 @@ export function groupRoutes(deps: AppDeps) {
       c.header("X-Group-Rev", String(result.rev));
       return c.json(result.member, 200);
     })
-    .delete("/groups/:id/members/:mid", signedIn, async (c) => {
+    .delete("/groups/:id/members/:mid", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const result = await removeMember(db, me, c.req.param("mid"), c.env);
       c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
     })
-    .post("/groups/:id/leave", signedIn, async (c) => {
+    .post("/groups/:id/leave", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       const result = await leaveGroup(db, me, c.env);
@@ -362,7 +376,7 @@ export function groupRoutes(deps: AppDeps) {
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(await currentInvite(me, deps.now(), c.env), 200);
     })
-    .post("/groups/:id/invite", signedIn, async (c) => {
+    .post("/groups/:id/invite", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(
@@ -372,7 +386,7 @@ export function groupRoutes(deps: AppDeps) {
         201,
       );
     })
-    .post("/groups/:id/invite/ensure", signedIn, async (c) => {
+    .post("/groups/:id/invite/ensure", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       return c.json(

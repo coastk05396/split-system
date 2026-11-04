@@ -1,4 +1,5 @@
 import { newApi } from "./api.js";
+import { bearerToken } from "./auth/bearer-token.js";
 import { authRoutes } from "./auth/routes.js";
 import { verifyAccessToken } from "./auth/tokens.js";
 import { type AppDeps, productionDeps } from "./deps.js";
@@ -19,11 +20,11 @@ export function createApp(deps: AppDeps) {
       let preFetchedRev: number | undefined;
       if (c.req.method === "GET" || c.req.method === "HEAD") {
         const id = c.req.param("id");
-        const bearer = /^Bearer (\S+)$/.exec(c.req.header("Authorization") ?? "");
+        const token = bearerToken(c.req.header("Authorization"));
         const userId =
-          bearer?.[1] === undefined
+          token === undefined
             ? null
-            : await verifyAccessToken(bearer[1], c.env.SESSION_SIGNING_KEY, deps.now());
+            : await verifyAccessToken(token, c.env.SESSION_SIGNING_KEY, deps.now());
         const member =
           userId === null
             ? null

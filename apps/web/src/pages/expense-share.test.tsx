@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -27,10 +27,74 @@ async function recordDinner(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("sharing a new Expense", () => {
+  it("opens the Group while invite and chat delivery are pending, then shows a late chat failure", async () => {
+    const user = userEvent.setup();
+    let rejectChat: (reason: Error) => void = () => undefined;
+    let chatCalls = 0;
+    const { api, id, router } = openNewExpense({
+      insideLine: { idToken: null },
+      lineChat: true,
+      sendToChat: () => {
+        chatCalls++;
+        return new Promise<void>((_resolve, reject) => {
+          rejectChat = reject;
+        });
+      },
+    });
+    const releaseInvite = api.holdResponses(`POST /api/v1/groups/${id()}/invite/ensure`);
+    try {
+      await screen.findByRole("checkbox", { name: /LINE 對話框/ });
+      await recordDinner(user);
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+      });
+      expect(chatCalls).toBe(0);
+      expect(api.groups.expenses.list(id())).toHaveLength(1);
+      releaseInvite();
+      await waitFor(() => {
+        expect(chatCalls).toBe(1);
+      });
+      expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+      await act(async () => {
+        await Promise.resolve();
+        rejectChat(new Error("chat unavailable"));
+      });
+      expect(await screen.findByText(/沒能發送到對話框/)).toBeVisible();
+    } finally {
+      releaseInvite();
+    }
+  });
+
+  it("asks for the Invite once when saving before the warm-up has answered", async () => {
+    const user = userEvent.setup();
+    const { api, id, router } = openNewExpense();
+    const ensure = `POST /api/v1/groups/${id()}/invite/ensure`;
+    const asked = () => api.requests.filter((r) => r.route === ensure).length;
+    const release = api.holdResponses(ensure);
+    try {
+      await waitFor(() => {
+        expect(asked()).toBe(1);
+      });
+      await recordDinner(user);
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+      });
+      expect(asked()).toBe(1);
+    } finally {
+      release();
+    }
+  });
+
   it("offers an existing-Member link when an Invite cannot be prepared", async () => {
     const user = userEvent.setup();
     const { api, id } = openNewExpense();
-    api.failNext(`POST /api/v1/groups/${id()}/invite/ensure`);
+    const ensure = `POST /api/v1/groups/${id()}/invite/ensure`;
+    // Opening the screen already asks for the Invite once; fail that and the retry at save time.
+    api.failNext(ensure);
+    await waitFor(() => {
+      expect(api.requests.some((r) => r.route === ensure)).toBe(true);
+    });
+    api.failNext(ensure);
     await recordDinner(user);
     await user.click(await screen.findByRole("button", { name: "分享" }));
     const dialog = within(await screen.findByRole("dialog", { name: "分享這筆開銷" }));

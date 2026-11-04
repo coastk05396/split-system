@@ -122,7 +122,7 @@ pnpm e2e
 
 ### 1. 前後端系統架構圖 (System Architecture)
 
-展示 React SPA 前端、LINE LIFF、Cloudflare Workers 邊緣運算層、D1 關聯式資料庫及外部 OAuth 身分驗證的整合架構：
+展示 React SPA、LINE 平台（LIFF／Messaging API）、Cloudflare Worker（Hono API）、GroupLedger Durable Object（每個群組一個，群組帳務的權威與 `/live` WebSocket）、D1（帳號、Session 與讀取模型）、KV 金鑰快取及外部 API 之間的呼叫關係：
 
 ![前後端系統架構圖](docs/diagrams/architecture.svg)
 
@@ -132,7 +132,7 @@ pnpm e2e
 
 ### 2. LINE 登入流程時序圖 (LINE Authentication Sequence)
 
-展示使用者從點擊 LINE 登入、LIFF SDK 換取 OpenID Token、Cloudflare Worker 進行 JWKS 簽章驗證、寫入 D1 資料庫並建立 Session 的完整時序：
+展示 SPA 取得 LIFF ID token、Worker 以 KV 快取的 LINE 公鑰驗證簽章（快取失效才重新下載）、在 D1 建立或沿用 User／Identity 並新增 Session，最後回傳 access token 與 HttpOnly refresh cookie 的時序：
 
 ![LINE 登入流程時序圖](docs/diagrams/line-auth-sequence.svg)
 
@@ -142,7 +142,7 @@ pnpm e2e
 
 ### 3. D1 資料庫實體關聯圖 (Database Schema & ER)
 
-展示核心資料表（`users`、`identities`、`groups`、`members`、`expenses`）之欄位、SQL 型態、主鍵與外鍵級聯（Cascade）關聯：
+展示 D1 帳號子系統（`users`、`identities`、`sessions`、`rate_counters`）之欄位、SQL 型態、主鍵與以 `users.id` 為根的 `ON DELETE CASCADE` 外鍵；群組帳務資料存放在 GroupLedger Durable Object，不在 D1：
 
 ![D1 資料庫實體關聯圖](docs/diagrams/db-schema-er.svg)
 

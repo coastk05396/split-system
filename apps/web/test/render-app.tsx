@@ -1,3 +1,5 @@
+import { dismissDeleteFailure } from "../src/expenses/delete-failure.js";
+import { clearPendingWrites } from "../src/expenses/pending-writes.js";
 import type { Me } from "@split/shared";
 import { QueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
@@ -11,6 +13,7 @@ import { createFakeApi, type FakeApi } from "./fake-api.js";
 import type { FakeGroups } from "./fake-groups.js";
 
 export interface RenderAppOptions {
+  webSocket?: typeof WebSocket;
   path?: string;
   /** A User whose refresh cookie the browser already holds. */
   cookieUser?: Me;
@@ -20,6 +23,8 @@ export interface RenderAppOptions {
   lineChat?: boolean;
   /** Make posting into the chat fail. */
   lineChatFails?: boolean;
+  /** Override the external chat transport, for delayed answers. */
+  sendToChat?: LineSignIn["sendToChat"];
   /** Whether the Google button can load (a client ID is configured). */
   googleAvailable?: boolean;
   testSignIn?: boolean;
@@ -32,6 +37,7 @@ export interface RenderAppOptions {
 }
 
 export interface RenderedApp {
+  queryClient: QueryClient;
   api: FakeApi;
   router: ReturnType<typeof createMemoryRouter>;
   lineLogins: string[];
@@ -49,6 +55,9 @@ export interface RenderedApp {
 export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   const api = createFakeApi();
   api.setCookieUser(options.cookieUser ?? null);
+  // Pending writes live in module state; each test starts without the last one's.
+  clearPendingWrites();
+  dismissDeleteFailure();
   options.seed?.(api.groups);
   const lineLogins: string[] = [];
   const lineShares: string[] = [];
@@ -76,11 +85,13 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
       return Promise.resolve(true);
     },
     canSendToChat: () => Promise.resolve(options.lineChat === true),
-    sendToChat: (messages) => {
-      if (options.lineChatFails === true) return Promise.reject(new Error("chat send failed"));
-      lineChatMessages.push(...messages);
-      return Promise.resolve();
-    },
+    sendToChat:
+      options.sendToChat ??
+      ((messages) => {
+        if (options.lineChatFails === true) return Promise.reject(new Error("chat send failed"));
+        lineChatMessages.push(...messages);
+        return Promise.resolve();
+      }),
   };
   const google: GoogleSignIn = {
     available: options.googleAvailable ?? true,
@@ -103,16 +114,24 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     testSignIn: options.testSignIn ?? false,
     cacheStorage: options.cacheStorage,
   };
+  if (options.webSocket !== undefined) deps.webSocket = options.webSocket;
   const router = createMemoryRouter(routes, {
     initialEntries: [options.pathFor?.() ?? options.path ?? "/"],
   });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <AppProviders
-      deps={deps}
-      queryClient={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
+    <AppProviders deps={deps} queryClient={queryClient}>
       <RouterProvider router={router} />
     </AppProviders>,
   );
-  return { api, router, lineLogins, lineShares, linePrepares, lineShareMessages, lineChatMessages };
+  return {
+    api,
+    router,
+    queryClient,
+    lineLogins,
+    lineShares,
+    linePrepares,
+    lineShareMessages,
+    lineChatMessages,
+  };
 }

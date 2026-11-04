@@ -216,6 +216,66 @@ describe("session refresh across tabs and sign-out", () => {
     expect(b?.displayName).toBe("小宇");
   });
 
+  it("does not resend a refused request with another account's token after a sign-out", async () => {
+    const api = createFakeApi();
+    const sentWith: (string | null)[] = [];
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const session = createSession({
+      fetch: async (input, init) => {
+        if (!(input instanceof Request ? input.url : input.toString()).includes("/probe"))
+          return api.fetch(input, init);
+        sentWith.push(new Headers(init?.headers).get("Authorization"));
+        if (sentWith.length > 1) return new Response(null, { status: 200 });
+        await gate;
+        return new Response(null, { status: 401 });
+      },
+    });
+    await session.signIn("google", "fake|sub-1|小宇");
+    const pending = session.fetch("/probe");
+    await session.signOut();
+    await session.signIn("google", "fake|sub-2|阿哲");
+    release();
+
+    expect((await pending).status).toBe(401);
+    expect(sentWith).toHaveLength(1);
+  });
+
+  it("does not resend a refused request as another account after the refresh was refused", async () => {
+    const api = createFakeApi();
+    const sent: string[] = [];
+    let refuse = false;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const session = createSession({
+      fetch: async (input, init) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (refuse && url.includes("/auth/refresh")) return new Response(null, { status: 401 });
+        if (!url.includes("/probe")) return api.fetch(input, init);
+        sent.push(url);
+        if (url.includes("/probe-b")) return new Response(null, { status: 401 });
+        if (sent.filter((u) => u.includes("/probe-a")).length > 1)
+          return new Response(null, { status: 200 });
+        await gate;
+        return new Response(null, { status: 401 });
+      },
+    });
+    await session.signIn("google", "fake|sub-1|小宇");
+    const pending = session.fetch("/probe-a");
+    refuse = true;
+    await session.fetch("/probe-b");
+    refuse = false;
+    await session.signIn("google", "fake|sub-2|阿哲");
+    release();
+
+    expect((await pending).status).toBe(401);
+    expect(sent.filter((u) => u.includes("/probe-a"))).toHaveLength(1);
+  });
+
   it("does not let a refresh that lands after sign-out bring the token back", async () => {
     const server = rotatingServer();
     const release = server.holdRefresh();

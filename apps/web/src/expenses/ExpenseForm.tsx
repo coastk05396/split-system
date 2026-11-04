@@ -42,7 +42,9 @@ import {
   type ExpenseDraft,
   expenseDraftFrom,
   newExpenseDraft,
+  storedExpense,
 } from "./expense-draft.js";
+import { currentEpoch, removeSave, startSave, updateSave } from "./pending-writes.js";
 import { minorToText } from "./money.js";
 import { SplitEditor, type SplitMember } from "./SplitEditor.js";
 
@@ -59,6 +61,7 @@ export function ExpenseForm({
   members,
   expense,
   startCurrency,
+  onSaving,
   onSaved,
 }: {
   group: Group;
@@ -67,7 +70,9 @@ export function ExpenseForm({
   expense?: Expense;
   /** The currency a new Expense starts in; the Settlement currency when absent. */
   startCurrency?: CurrencyCode;
-  /** `sendToChat` says whether to post it into the LINE chat the app was opened from. */
+  /** Called as soon as the save is on its way, so the caller can leave this screen. */
+  onSaving: () => void;
+  /** Called when the server has stored it. `sendToChat` says whether to post it into the LINE chat the app was opened from. */
   onSaved: (expense: Expense, options: { sendToChat: boolean }) => void | Promise<void>;
 }) {
   const { line } = useDeps();
@@ -89,13 +94,11 @@ export function ExpenseForm({
           memberIds: order,
           now: new Date(),
         })
-      : expenseDraftFrom(expense, group.settlementCurrency),
+      : expenseDraftFrom(expense),
   );
   // Only a new Expense opened from a LINE chat can be posted back into that chat.
   const [chatAvailable, setChatAvailable] = useState(false);
   const [sendToChat, setSendToChat] = useState(true);
-  // Saved, but the caller is still finishing (posting to the chat): no second submit meanwhile.
-  const [finishing, setFinishing] = useState(false);
   useEffect(() => {
     if (expense !== undefined) return;
     let current = true;
@@ -106,9 +109,14 @@ export function ExpenseForm({
       current = false;
     };
   }, [expense, line]);
-  // One key for this form's create, kept across retries (decision 15).
-  const idempotencyKey = useRef(crypto.randomUUID());
-  const rate = useRate(draft.date, draft.currency, group.settlementCurrency);
+  // Reuse a key only while retrying the same submitted content.
+  const idempotencyKey = useRef({ body: "", key: crypto.randomUUID() });
+  const saved = storedExpense(draft);
+  const rate = useRate(
+    saved === undefined ? draft.date : "",
+    draft.currency,
+    group.settlementCurrency,
+  );
   const save = useSaveExpense(group.id);
   const evaluation = evaluateDraft(draft, {
     settlementCurrency: group.settlementCurrency,
@@ -122,22 +130,51 @@ export function ExpenseForm({
   const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = evaluation.input;
-    if (body === null || save.isPending || finishing) return;
-    save.mutate(
+    if (body === null || save.isPending) return;
+    const serialized = JSON.stringify(body);
+    if (idempotencyKey.current.body !== serialized)
+      idempotencyKey.current = { body: serialized, key: crypto.randomUUID() };
+    const request = (
       expense === undefined
-        ? { kind: "create", input: body, idempotencyKey: idempotencyKey.current }
-        : { kind: "edit", input: body, expense },
-      {
-        onSuccess: (saved) => {
-          setFinishing(true);
-          void Promise.resolve(onSaved(saved, { sendToChat: chatAvailable && sendToChat })).finally(
-            () => {
-              setFinishing(false);
-            },
-          );
+        ? { kind: "create", input: body, idempotencyKey: idempotencyKey.current.key }
+        : { kind: "edit", input: body, expense }
+    ) satisfies Parameters<typeof save.mutateAsync>[0];
+    const key = request.kind === "create" ? request.idempotencyKey : `edit-${crypto.randomUUID()}`;
+    const withChat = chatAvailable && sendToChat;
+    // The Group page shows the save as a row while it waits, and offers a retry if it fails.
+    // The retry sends the same request, so a lost answer cannot record the Expense twice.
+    const attempt = () => {
+      const asked = currentEpoch();
+      updateSave(key, { status: "saving", error: null });
+      save.mutateAsync(request).then(
+        (saved) => {
+          if (asked !== currentEpoch()) return;
+          removeSave(key);
+          void onSaved(saved, { sendToChat: withChat });
         },
-      },
-    );
+        (error: unknown) => {
+          if (asked !== currentEpoch()) return;
+          updateSave(key, {
+            status: "failed",
+            error: error instanceof ApiFailure ? failureMessage(error) : t("expense.networkError"),
+          });
+        },
+      );
+    };
+    startSave({
+      key,
+      groupId: group.id,
+      expenseId: expense?.id ?? null,
+      description: body.description,
+      category: body.category,
+      amount: body.originalAmount,
+      currency: body.originalCurrency,
+      status: "saving",
+      error: null,
+      retry: attempt,
+    });
+    attempt();
+    onSaving();
   };
 
   return (
@@ -190,7 +227,7 @@ export function ExpenseForm({
             rate={{
               loading: rate.isFetching,
               unavailable: rate.isError,
-              date: rate.data?.rateDate,
+              date: saved?.fxDate ?? rate.data?.rateDate,
               stale: rate.data?.stale === true,
             }}
             update={update}
@@ -304,13 +341,6 @@ export function ExpenseForm({
               )}
             </div>
           </details>
-          {save.isError && (
-            <p role="alert" className="rounded-2xl bg-peach p-4 font-bold">
-              {save.error instanceof ApiFailure
-                ? failureMessage(save.error)
-                : t("expense.networkError")}
-            </p>
-          )}
           {chatAvailable && (
             <label className="press-card flex cursor-pointer items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3 font-bold">
               <input
@@ -328,9 +358,9 @@ export function ExpenseForm({
           <button
             type="submit"
             className={`${primaryButton} justify-between`}
-            disabled={evaluation.input === null || save.isPending || finishing}
+            disabled={evaluation.input === null || save.isPending}
           >
-            {save.isPending || finishing
+            {save.isPending
               ? t("expense.saving")
               : t(expense === undefined ? "expense.submit" : "expense.save")}
             <ArrowRight aria-hidden="true" className="size-5" />
@@ -568,7 +598,11 @@ function ConversionFields({
         </label>
       </div>
       <div className="text-xs text-ink-muted">
-        {draft.conversion.source !== "reference" ? (
+        {(
+          conversion.kind === "ok"
+            ? conversion.isCustomRate
+            : draft.conversion.source === "rate" || draft.conversion.source === "converted"
+        ) ? (
           <p>{t("expense.rateCustom")}</p>
         ) : rate.loading ? (
           <p>{t("expense.rateLoading")}</p>

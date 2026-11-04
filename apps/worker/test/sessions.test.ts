@@ -100,7 +100,7 @@ describe("POST /auth/refresh", () => {
   });
 });
 
-describe("POST /auth/logout and /auth/logout-all", () => {
+describe("POST /auth/logout", () => {
   it("logout ends only this device's session", async () => {
     const sub = uniqueSub("out");
     const phone = await signIn("google", sub);
@@ -111,21 +111,6 @@ describe("POST /auth/logout and /auth/logout-all", () => {
     expect(res.headers.get("Set-Cookie")).toMatch(/refresh=;/);
     expect((await refresh(phone.refresh)).res.status).toBe(401);
     expect((await refresh(laptop.refresh)).res.status).toBe(200);
-  });
-
-  it("logout-all ends every session of the User", async () => {
-    const sub = uniqueSub("all");
-    const phone = await signIn("line", sub);
-    const laptop = await signIn("line", sub);
-
-    expect((await call("/auth/logout-all", { method: "POST" })).status).toBe(401);
-    const res = await call("/auth/logout-all", {
-      method: "POST",
-      headers: bearer(phone.accessToken),
-    });
-    expect(res.status).toBe(204);
-    expect((await refresh(phone.refresh)).res.status).toBe(401);
-    expect((await refresh(laptop.refresh)).res.status).toBe(401);
   });
 });
 

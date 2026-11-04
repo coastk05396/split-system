@@ -11,6 +11,8 @@ import {
   input,
   MaintenanceTag,
   primaryButton,
+  Progress,
+  useLeaveBlock,
   ScreenHeader,
 } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
@@ -30,6 +32,7 @@ export function NewGroupPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const create = useCreateGroup();
+  const leave = useLeaveBlock(create.isPending);
   const { state } = useAuth();
   const [name, setName] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -51,12 +54,26 @@ export function NewGroupPage() {
     event.preventDefault();
     create.mutate(
       { name: name.trim(), isTrip, settlementCurrency },
-      { onSuccess: (group) => void navigate(`/groups/${group.id}/members`, { replace: true }) },
+      {
+        onSuccess: (group) => {
+          leave();
+          void navigate(`/groups/${group.id}/members`, { replace: true });
+        },
+      },
     );
   }
 
   return (
     <form onSubmit={submit} className="flex max-w-xl flex-col gap-4">
+      {create.isPending && (
+        <Progress
+          message={t("create.progress")}
+          onLeave={() => {
+            leave();
+            void navigate("/groups");
+          }}
+        />
+      )}
       <ScreenHeader title={t("create.title")} back="/groups" compact={true} />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="group-name-input" className="font-bold">

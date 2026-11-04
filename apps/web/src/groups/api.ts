@@ -88,7 +88,7 @@ export function useCreateGroup() {
       read<Group>(api.groups.$post({}, withJson(input))),
     onSuccess: (group) => {
       client.setQueryData(groupKeys.group(group.id), group);
-      return client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
+      void client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
     },
   });
 }
@@ -295,6 +295,8 @@ export function useJoin(token: string) {
           ? api.invites[":token"].join.$post({ param: { token } })
           : api.invites[":token"].claim.$post({ param: { token } }, withJson({ memberId })),
       ),
-    onSuccess: () => client.invalidateQueries({ queryKey: groupKeys.all }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: groupKeys.all });
+    },
   });
 }
