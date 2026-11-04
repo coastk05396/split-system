@@ -31,7 +31,12 @@ const sessionEnd = (signedInAt: number, now: number): number =>
 const MAX_USER_AGENT_LENGTH = 200;
 
 /** The signed-in User as `GET /me` shows them, or null when the account is gone. */
-export async function loadMe(db: Db, userId: string): Promise<Me | null> {
+export async function loadMe(
+  db: Db,
+  userId: string,
+  /** What this session signed in with; null for older sessions, which fall back to the User's last. */
+  signedInWith: Provider | null,
+): Promise<Me | null> {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   if (user === undefined) return null;
   const linked = await db
@@ -46,7 +51,7 @@ export async function loadMe(db: Db, userId: string): Promise<Me | null> {
     preferredCurrency: user.preferredCurrency,
     language: user.language,
     identities: linked,
-    signedInWith: user.lastProvider ?? linked[0]?.provider ?? "line",
+    signedInWith: signedInWith ?? user.lastProvider ?? linked[0]?.provider ?? "line",
   };
 }
 
@@ -74,8 +79,7 @@ export async function signInIdentity(
 ): Promise<string> {
   const existing = await findIdentity(db, identity.provider, identity.sub);
   if (existing !== undefined) {
-    // Name and picture follow the User's first Identity (the Profile source); another
-    // provider's sign-in only becomes the latest one.
+    // Name and picture follow the User's first Identity (the Profile source).
     const [source] = await db
       .select({ provider: identities.provider })
       .from(identities)
@@ -87,7 +91,6 @@ export async function signInIdentity(
       .update(users)
       .set({
         ...(isSource ? { displayName: identity.displayName, pictureUrl: identity.pictureUrl } : {}),
-        lastProvider: identity.provider,
         updatedAt: now,
       })
       .where(eq(users.id, existing.userId));
@@ -108,7 +111,6 @@ export async function signInIdentity(
         id: userId,
         displayName: identity.displayName,
         pictureUrl: identity.pictureUrl,
-        lastProvider: identity.provider,
         createdAt: now,
         updatedAt: now,
       }),
@@ -143,6 +145,7 @@ async function findIdentity(db: Db, provider: Provider, sub: string) {
 export async function createSession(
   db: Db,
   userId: string,
+  provider: Provider,
   userAgent: string | undefined,
   now: number,
 ): Promise<RefreshToken> {
@@ -150,6 +153,7 @@ export async function createSession(
   await db.insert(sessions).values({
     id: refresh.sessionId,
     userId,
+    provider,
     refreshTokenHash: refresh.hash,
     userAgent: userAgent?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
     expiresAt: sessionEnd(now, now),
@@ -169,7 +173,7 @@ export async function rotateSession(
   db: Db,
   presented: string,
   now: number,
-): Promise<{ userId: string; refresh: RefreshToken } | null> {
+): Promise<{ userId: string; provider: Provider | null; refresh: RefreshToken } | null> {
   const parsed = await readRefreshToken(presented);
   if (parsed === null) return null;
   const [session] = await db.select().from(sessions).where(eq(sessions.id, parsed.sessionId));
@@ -188,12 +192,12 @@ export async function rotateSession(
         gt(sessions.createdAt, now - SESSION_MAX_AGE_MS),
       ),
     )
-    .returning({ userId: sessions.userId });
+    .returning({ userId: sessions.userId, provider: sessions.provider });
   if (rotated === undefined) {
     await db.delete(sessions).where(eq(sessions.id, session.id));
     return null;
   }
-  return { userId: rotated.userId, refresh };
+  return { userId: rotated.userId, provider: rotated.provider, refresh };
 }
 
 /** Ends the session a refresh token belongs to, if the token is still its current one. */

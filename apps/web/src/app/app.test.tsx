@@ -65,13 +65,11 @@ describe("app shell", () => {
     expect(screen.getByRole("link", { name: "隱私權政策" })).toHaveAttribute("href", "/privacy");
   });
 
-  it("inside LINE, Google's button explains the outside browser instead of leaving for Google", async () => {
-    const user = userEvent.setup();
+  it("inside LINE, sign-in offers only LINE", async () => {
     const { googleRedirects } = renderApp({ path: "/sign-in", insideLine: { idToken: null } });
 
-    await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
-
-    expect(await screen.findByText("請用外部瀏覽器登入 Google")).toBeVisible();
+    expect(await screen.findByRole("button", { name: "使用 LINE 快速登入" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
     expect(googleRedirects).toEqual([]);
   });
 

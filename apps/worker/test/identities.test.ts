@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearer, call, clock, json, signIn, uniqueSub } from "./auth-harness.js";
+import { bearer, call, clock, json, signIn, uniqueSub, withCookie } from "./auth-harness.js";
 
 function link(provider: string, accessToken: string, sub: string) {
   return call(`/auth/link/${provider}`, json({ idToken: `fake|${sub}|小宇` }, bearer(accessToken)));
@@ -94,30 +94,45 @@ describe("Profile source: the first Identity's name and picture stay", () => {
     return link(provider, accessToken, sub);
   }
 
-  it("keeps LINE's when Google is linked later and signs in", async () => {
+  it("keeps LINE's when Google is linked later and signs in, and the LINE session stays LINE", async () => {
+    const lineSub = uniqueSub("l");
+    const googleSub = uniqueSub("g");
+    const session = await signIn("line", lineSub, "LINE名");
+    await linkLater("google", session.accessToken, googleSub);
+    const google = await signIn("google", googleSub, "Google名");
+    expect(await meOf(session.accessToken)).toMatchObject({
+      displayName: "LINE名",
+      pictureUrl: `https://pic/${lineSub}`,
+      signedInWith: "line",
+    });
+    expect(await meOf(google.accessToken)).toMatchObject({ signedInWith: "google" });
+  });
+
+  it("keeps Google's when LINE is linked later and signs in, and the Google session stays Google", async () => {
+    const googleSub = uniqueSub("g");
+    const lineSub = uniqueSub("l");
+    const session = await signIn("google", googleSub, "Google名");
+    await linkLater("line", session.accessToken, lineSub);
+    const line = await signIn("line", lineSub, "LINE名");
+    expect(await meOf(session.accessToken)).toMatchObject({
+      displayName: "Google名",
+      pictureUrl: `https://pic/${googleSub}`,
+      signedInWith: "google",
+    });
+    expect(await meOf(line.accessToken)).toMatchObject({ signedInWith: "line" });
+  });
+
+  it("keeps a session's provider through a refresh, whoever signed in meanwhile", async () => {
     const lineSub = uniqueSub("l");
     const googleSub = uniqueSub("g");
     const session = await signIn("line", lineSub, "LINE名");
     await linkLater("google", session.accessToken, googleSub);
     await signIn("google", googleSub, "Google名");
-    expect(await meOf(session.accessToken)).toMatchObject({
-      displayName: "LINE名",
-      pictureUrl: `https://pic/${lineSub}`,
-      signedInWith: "google",
-    });
-  });
-
-  it("keeps Google's when LINE is linked later and signs in", async () => {
-    const googleSub = uniqueSub("g");
-    const lineSub = uniqueSub("l");
-    const session = await signIn("google", googleSub, "Google名");
-    await linkLater("line", session.accessToken, lineSub);
-    await signIn("line", lineSub, "LINE名");
-    expect(await meOf(session.accessToken)).toMatchObject({
-      displayName: "Google名",
-      pictureUrl: `https://pic/${googleSub}`,
-      signedInWith: "line",
-    });
+    const res = await call("/auth/refresh", withCookie(session.refresh));
+    expect(res.status).toBe(200);
+    const body = await res.json<{ accessToken: string; user: { signedInWith: string } }>();
+    expect(body.user.signedInWith).toBe("line");
+    expect(await meOf(body.accessToken)).toMatchObject({ signedInWith: "line" });
   });
 
   it("refreshes the name and picture when the source signs in again", async () => {
