@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+const segmenter = new Intl.Segmenter();
+
 /**
  * Text whose characters roll in when they change, like a taxi meter's digits. Nothing rolls on
  * the first draw, and a character that stays the same stays put: only an element that did not
@@ -8,7 +10,7 @@ import { useEffect, useRef } from "react";
  */
 export function Odometer({ text, className }: { text: string; className?: string }) {
   const previous = useRef<ReadonlySet<string> | null>(null);
-  const chars = Array.from(new Intl.Segmenter().segment(text), (part) => part.segment);
+  const chars = Array.from(segmenter.segment(text), (part) => part.segment);
   // Counted from the end, so a number that gains a digit keeps the digits it already had.
   const keys = chars.map((char, index) => `${String(chars.length - index)}-${char}`);
 
@@ -17,7 +19,7 @@ export function Odometer({ text, className }: { text: string; className?: string
   });
 
   return (
-    <span className={className} role="text" aria-label={text}>
+    <span className={className} role="img" aria-label={text}>
       {chars.map((char, index) => {
         const key = keys[index] ?? char;
         const rolls = previous.current !== null && !previous.current.has(key);

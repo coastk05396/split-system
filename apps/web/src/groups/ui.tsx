@@ -6,6 +6,8 @@ import { ApiFailure } from "../api/errors.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 
+const SEGMENTER = new Intl.Segmenter();
+
 /** The zh-TW message for a failed call; anything that is not an API answer reads as INTERNAL. */
 export function failureMessage(error: unknown): string {
   return errorMessage(error instanceof ApiFailure ? error.code : "INTERNAL");
@@ -204,7 +206,7 @@ export function Avatar({
       />
     );
   }
-  const first = new Intl.Segmenter().segment(name)[Symbol.iterator]().next();
+  const first = SEGMENTER.segment(name)[Symbol.iterator]().next();
   const initial = first.done === true ? "?" : first.value.segment.toUpperCase();
   return (
     <span
@@ -270,7 +272,7 @@ export function groupPalette(key: string) {
 export function groupGlyph(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "群";
-  const first = new Intl.Segmenter().segment(trimmed)[Symbol.iterator]().next();
+  const first = SEGMENTER.segment(trimmed)[Symbol.iterator]().next();
   return first.done === true ? "群" : first.value.segment.toUpperCase();
 }
 

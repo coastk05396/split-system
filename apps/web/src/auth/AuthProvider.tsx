@@ -114,15 +114,15 @@ export function AuthProvider({
   }, [session, line]);
 
   // Persist and restore cache for the signed-in user
+  const userId = state.status === "signedIn" ? state.user.id : null;
   useEffect(() => {
-    if (state.status !== "signedIn") return;
-    const userId = state.user.id;
+    if (userId === null) return;
     restoreCache(queryClient, userId, storage);
 
     const stop = startCachePersistence(queryClient, userId, storage);
     stopPersistence.current = stop;
     return stop;
-  }, [state.status, state.status === "signedIn" ? state.user.id : null, queryClient, storage]);
+  }, [userId, queryClient, storage]);
 
   const auth = useMemo<Auth>(() => {
     /** Forgets everything the current User had on this device, before another User takes over. */

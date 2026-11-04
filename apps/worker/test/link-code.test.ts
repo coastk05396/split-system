@@ -26,16 +26,18 @@ describe("link codes (Google linked from inside LINE)", () => {
     expect((await signIn("google", googleSub)).userId).toBe(line.userId);
   });
 
-  it("makes Google the latest sign-in: its name, picture and email now show on the profile", async () => {
+  it("makes Google the latest sign-in: its email shows, while LINE keeps the name and picture", async () => {
     const googleSub = uniqueSub("google");
-    const line = await signIn("line", uniqueSub("line"), "LINE名");
+    const lineSub = uniqueSub("line");
+    const line = await signIn("line", lineSub, "LINE名");
+    clock.now += 1000; // Google is linked later than LINE
     const res = await redeem(await issue(line.accessToken), googleSub, "Google名", "g@example.com");
     expect(await res.json()).toMatchObject({
       user: {
-        displayName: "Google名",
-        pictureUrl: `https://pic/${googleSub}`,
+        displayName: "LINE名",
+        pictureUrl: `https://pic/${lineSub}`,
         signedInWith: "google",
-        identities: [{ provider: "google", email: "g@example.com" }, { provider: "line" }],
+        identities: [{ provider: "line" }, { provider: "google", email: "g@example.com" }],
       },
     });
   });

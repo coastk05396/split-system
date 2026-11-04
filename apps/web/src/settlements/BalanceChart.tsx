@@ -47,19 +47,12 @@ export function BalanceChart({
         id="balance-chart"
         aria-expanded={isOpen}
         onClick={() => {
-          setIsOpen((prev) => {
-            const next = !prev;
-            if (next) {
-              setAnimKey((k) => k + 1);
-            }
-            return next;
-          });
+          if (!isOpen) setAnimKey((k) => k + 1);
+          setIsOpen(!isOpen);
         }}
         className="press-pill flex w-full items-center justify-between text-left select-none rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
       >
-        <h2 className="text-lg font-bold text-ink">
-          {t("settle.chartTitle")}
-        </h2>
+        <h2 className="text-lg font-bold text-ink">{t("settle.chartTitle")}</h2>
         <div className="flex items-center gap-2">
           {settled > 0 && (
             <span className="text-xs text-ink-muted">
@@ -77,11 +70,7 @@ export function BalanceChart({
         </div>
       </button>
 
-      <div
-        className="collapse-grid"
-        data-closing={!isOpen ? "true" : undefined}
-        inert={!isOpen}
-      >
+      <div className="collapse-grid" data-closing={!isOpen ? "true" : undefined} inert={!isOpen}>
         <div className="collapse-grid-inner pt-3">
           <ul key={animKey} aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
             {open.map((r, index) => {
@@ -116,7 +105,10 @@ export function BalanceChart({
                       className={`shrink-0 font-bold tabular-nums ${owed ? "text-sprout-600" : "text-terracotta-ink"}`}
                     />
                   </div>
-                  <div aria-hidden="true" className="mx-auto grid w-full max-w-[92%] grid-cols-2 px-1">
+                  <div
+                    aria-hidden="true"
+                    className="mx-auto grid w-full max-w-[92%] grid-cols-2 px-1"
+                  >
                     <div className="flex justify-end border-r-2 border-ink/30 pr-0.5">
                       {!owed && (
                         <div

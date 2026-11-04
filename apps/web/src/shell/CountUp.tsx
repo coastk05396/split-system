@@ -32,7 +32,9 @@ export function CountUp({
   const node = useRef<HTMLSpanElement>(null);
   const shown = useRef<number | null>(null);
   const formatRef = useRef(format);
-  formatRef.current = format;
+  useLayoutEffect(() => {
+    formatRef.current = format;
+  });
 
   useLayoutEffect(() => {
     const el = node.current;

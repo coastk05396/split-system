@@ -91,7 +91,7 @@ export function NewGroupPage() {
               <GroupAvatar
                 name={name}
                 paletteIndex={paletteIndex}
-                className="size-12 rounded-2xl text-lg shadow-2xs transition-all duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95"
+                className="size-12 rounded-2xl text-lg shadow-2xs transition-[scale] duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95"
                 interactive={false}
               />
             </button>

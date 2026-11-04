@@ -44,8 +44,12 @@ _Avoid_: Login, provider account
 An Identity attached to a User; Settings lists LINE and Google and shows which are linked. Only a Google one carries an email, shown on the Profile card.
 _Avoid_: Binding, connection
 
+**Profile source**:
+The User's first Identity; its name and picture are the ones shown everywhere, and only its sign-in refreshes them.
+_Avoid_: Main account, primary login
+
 **Profile card**:
-The card at the top of Settings showing who the User is for the latest sign-in: the LINE name and picture with a LINE tag, or the Google picture and email with a Google tag.
+The card at the top of Settings: the Profile source's name and picture (as in Groups), a tag for the latest sign-in (LINE or Google), and, after a Google sign-in, the Google email as a small line.
 _Avoid_: Header, avatar row
 
 **Link code**:

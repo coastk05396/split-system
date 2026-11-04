@@ -247,7 +247,7 @@ function HomeGroupRow({ group }: { group: Group }) {
   return (
     <PressableLink
       to={`/groups/${group.id}?tab=settle`}
-      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-[scale,border-color] duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
       <div className="flex min-w-0 items-center gap-3.5">
         <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
@@ -328,7 +328,7 @@ function StartCard(props: {
   return (
     <PressableLink
       to={props.to}
-      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_8px_16px_-6px_rgba(20,63,42,0.12)] active:scale-[0.96] transition-all duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
+      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_8px_16px_-6px_rgba(20,63,42,0.12)] active:scale-[0.96] transition-[scale,border-color,box-shadow] duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
     >
       {content}
     </PressableLink>
