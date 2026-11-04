@@ -116,11 +116,15 @@ function watchReads(client: QueryClient, key: QueryKey) {
   const hash = hashKey(key);
   let replaced = false;
   const stop = client.getQueryCache().subscribe((event) => {
-    if (
+    if (event.query.queryHash !== hash) return;
+    // A removed query (sign-out, cache clear) has nothing left to roll back, and no more events.
+    if (event.type === "removed") {
+      replaced = true;
+      stop();
+    } else if (
       event.type === "updated" &&
       event.action.type === "success" &&
-      !event.action.manual &&
-      event.query.queryHash === hash
+      !event.action.manual
     ) {
       replaced = true;
     }
@@ -162,7 +166,12 @@ export function useRecordSettlement(groupId: string) {
   });
 }
 
-function replaceSettlement(client: QueryClient, groupId: string, next: Settlement) {
+function replaceSettlement(
+  client: QueryClient,
+  groupId: string,
+  next: Settlement,
+  onlyIf?: Settlement["status"],
+) {
   client.setQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(groupId), (data) =>
     data === undefined
       ? data
@@ -170,7 +179,9 @@ function replaceSettlement(client: QueryClient, groupId: string, next: Settlemen
           ...data,
           pages: data.pages.map((page) => ({
             ...page,
-            settlements: page.settlements.map((s) => (s.id === next.id ? next : s)),
+            settlements: page.settlements.map((s) =>
+              s.id === next.id && (onlyIf === undefined || s.status === onlyIf) ? next : s,
+            ),
           })),
         },
   );
@@ -199,16 +210,15 @@ export function useSettlementAction(groupId: string) {
         .find((s) => s.id === action.settlementId);
       if (target?.status !== "confirmed") return { target: undefined };
       const balanceReads = watchReads(client, settlementKeys.balances(groupId));
-      const listReads = watchReads(client, settlementKeys.list(groupId));
       shiftBalances(client, groupId, target.payerMemberId, target.receiverMemberId, -target.amount);
       replaceSettlement(client, groupId, { ...target, status: "undone" });
-      return { target, balanceReads, listReads };
+      return { target, balanceReads };
     },
     // Only this undo is taken back: a payment confirmed while it waited stays in the Balances, and
     // whatever a read from the server has replaced since is left as the server said.
     onError: (_err, _action, context) => {
       if (context?.target !== undefined) {
-        const { target, balanceReads, listReads } = context;
+        const { target, balanceReads } = context;
         if (!balanceReads.replaced()) {
           shiftBalances(
             client,
@@ -218,13 +228,14 @@ export function useSettlementAction(groupId: string) {
             target.amount,
           );
         }
-        if (!listReads.replaced()) replaceSettlement(client, groupId, target);
+        // Only a row still shown as undone is put back: one a read already replaced has the
+        // server's version.
+        replaceSettlement(client, groupId, target, "undone");
       }
       void refresh();
     },
     onSettled: (_data, _err, _vars, context) => {
       context?.balanceReads?.stop();
-      context?.listReads?.stop();
     },
     onSuccess: (undone) => {
       replaceSettlement(client, groupId, undone);

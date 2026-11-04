@@ -4,6 +4,8 @@ import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { FakeGroups, SeedGroup } from "../../test/fake-groups.js";
+import type { SettlementPage } from "@split/shared";
+import type { InfiniteData } from "@tanstack/react-query";
 import { settlementKeys } from "../settlements/api.js";
 import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
 
@@ -538,6 +540,42 @@ describe("Recording and confirming Settlements", () => {
       }
     },
   );
+
+  it("puts a refused undo's row back even though older history was loaded meanwhile", async () => {
+    const { user, api, id, queryClient } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 1, receiver: 0, amount: 100 });
+    });
+    const settlementId = api.groups.settlements.list(id())[0]?.id;
+    const undo = `POST /api/v1/settlements/${settlementId}/undo`;
+    api.failNext(undo);
+    const releaseUndo = api.holdResponses(undo);
+    let releaseReads: (() => void)[] = [];
+    try {
+      await user.click((await row("結算紀錄", "宜庭付給你")).getByRole("button", { name: "撤銷" }));
+      // The fake serves one page, so give the cached first page a next cursor to load from.
+      queryClient.setQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(id()), (data) =>
+        data === undefined
+          ? data
+          : { ...data, pages: data.pages.map((page) => ({ ...page, nextCursor: "older" })) },
+      );
+      await user.click(await screen.findByRole("button", { name: "載入更多" }));
+      releaseReads = [
+        `GET /api/v1/groups/${id()}`,
+        `GET /api/v1/groups/${id()}/balances`,
+        `GET /api/v1/groups/${id()}/settlements`,
+      ].map((r) => api.holdResponses(r));
+      releaseUndo();
+      expect(await screen.findByRole("alert")).toBeVisible();
+
+      const shown = queryClient
+        .getQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(id()))
+        ?.pages[0]?.settlements.find((s) => s.id === settlementId)?.status;
+      expect(shown).toBe("confirmed");
+    } finally {
+      releaseUndo();
+      for (const release of releaseReads) release();
+    }
+  });
 
   it("asks the server for the real balances again after an undo fails", async () => {
     const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
