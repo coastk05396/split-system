@@ -4,6 +4,7 @@ import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { FakeGroups, SeedGroup } from "../../test/fake-groups.js";
+import { settlementKeys } from "../settlements/api.js";
 import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
 
 const me = makeUser("小宇");
@@ -403,6 +404,75 @@ describe("Recording and confirming Settlements", () => {
     )[0];
     expect(mine?.textContent).toMatch(/\+NT\$ 100/);
     expect(screen.getByRole("button", { name: "撤銷" })).toBeVisible();
+  });
+
+  it("keeps a payment confirmed while an undo was waiting when that undo is refused", async () => {
+    const { user, api, id, queryClient } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 1, receiver: 0, amount: 100 });
+    });
+    const undo = `POST /api/v1/settlements/${api.groups.settlements.list(id())[0]?.id}/undo`;
+    api.failNext(undo);
+    const releaseUndo = api.holdResponses(undo);
+    // No refetch may repair the screen: what is shown comes from the rollback alone.
+    const releaseReads = [
+      `GET /api/v1/groups/${id()}`,
+      `GET /api/v1/groups/${id()}/balances`,
+      `GET /api/v1/groups/${id()}/settlements`,
+    ].map((route) => api.holdResponses(route));
+    try {
+      await user.click((await row("結算紀錄", "宜庭付給你")).getByRole("button", { name: "撤銷" }));
+      await user.click(
+        (await row("要付給誰", "阿哲付給你")).getByRole("button", { name: "確認收款" }),
+      );
+      const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+      await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+      await waitFor(() => {
+        expect(api.groups.settlements.list(id())).toHaveLength(2);
+      });
+      releaseUndo();
+      expect(await screen.findByRole("alert")).toBeVisible();
+
+      const mine = api.groups.members(id()).find((m) => m.userId === me.id);
+      const shown = queryClient
+        .getQueryData<{ balances: { memberId: string; balance: number }[] }>(
+          settlementKeys.balances(id()),
+        )
+        ?.balances.find((b) => b.memberId === mine?.id)?.balance;
+      expect(mine?.balance).toBe(0);
+      expect(shown).toBe(mine?.balance);
+    } finally {
+      releaseUndo();
+      for (const release of releaseReads) release();
+    }
+  });
+
+  it("takes back only the refused payment from the Balances shown", async () => {
+    const { user, api, id, queryClient } = await openSettle(owedToMe);
+    api.failNext(`POST /api/v1/groups/${id()}/settlements`);
+    const releaseReads = [
+      `GET /api/v1/groups/${id()}`,
+      `GET /api/v1/groups/${id()}/balances`,
+      `GET /api/v1/groups/${id()}/settlements`,
+    ].map((route) => api.holdResponses(route));
+    try {
+      await user.click(
+        (await row("要付給誰", "阿哲付給你")).getByRole("button", { name: "確認收款" }),
+      );
+      const dialog = within(await screen.findByRole("dialog", { name: "這筆款項已付清嗎？" }));
+      await user.click(dialog.getByRole("button", { name: "確認已結清" }));
+      expect(await screen.findByRole("alert")).toBeVisible();
+
+      const mine = api.groups.members(id()).find((m) => m.userId === me.id);
+      const shown = queryClient
+        .getQueryData<{ balances: { memberId: string; balance: number }[] }>(
+          settlementKeys.balances(id()),
+        )
+        ?.balances.find((b) => b.memberId === mine?.id)?.balance;
+      expect(mine?.balance).toBe(300);
+      expect(shown).toBe(300);
+    } finally {
+      for (const release of releaseReads) release();
+    }
   });
 
   it("asks the server for the real balances again after an undo fails", async () => {

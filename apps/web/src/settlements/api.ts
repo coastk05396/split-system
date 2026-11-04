@@ -80,8 +80,33 @@ function useRefresh(groupId: string) {
 }
 
 /**
- * Records a Settlement under the caller's `Idempotency-Key`. The Worker decides its status:
- * pending when the payer records it (我已付款), confirmed when the receiver or an Admin does.
+ * Moves the payer's Balance up and the receiver's down by `amount` (negative: the reverse) on
+ * whatever the cache holds now. A rollback does the reverse of one write instead of restoring an
+ * older snapshot, so a payment that finished in the meantime is kept.
+ */
+function shiftBalances(
+  client: QueryClient,
+  groupId: string,
+  payerMemberId: string,
+  receiverMemberId: string,
+  amount: number,
+) {
+  client.setQueryData<Balances>(settlementKeys.balances(groupId), (data) =>
+    data === undefined
+      ? data
+      : {
+          ...data,
+          balances: data.balances.map((b) => {
+            if (b.memberId === payerMemberId) return { ...b, balance: b.balance + amount };
+            if (b.memberId === receiverMemberId) return { ...b, balance: b.balance - amount };
+            return b;
+          }),
+        },
+  );
+}
+
+/**
+ * Records a Settlement under the caller's `Idempotency-Key`. The ledger records it as confirmed.
  */
 export function useRecordSettlement(groupId: string) {
   const { api } = useSession();
@@ -97,26 +122,13 @@ export function useRecordSettlement(groupId: string) {
       ),
     onMutate: async ({ input }) => {
       await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
-      const previousBalances = client.getQueryData<Balances>(settlementKeys.balances(groupId));
-      if (previousBalances) {
-        client.setQueryData<Balances>(settlementKeys.balances(groupId), {
-          ...previousBalances,
-          balances: previousBalances.balances.map((b) => {
-            if (b.memberId === input.payerMemberId) {
-              return { ...b, balance: b.balance + input.amount };
-            }
-            if (b.memberId === input.receiverMemberId) {
-              return { ...b, balance: b.balance - input.amount };
-            }
-            return b;
-          }),
-        });
-      }
-      return { previousBalances };
+      const shown = client.getQueryData<Balances>(settlementKeys.balances(groupId)) !== undefined;
+      shiftBalances(client, groupId, input.payerMemberId, input.receiverMemberId, input.amount);
+      return { shown };
     },
-    onError: (_err, _vars, context) => {
-      if (context?.previousBalances) {
-        client.setQueryData(settlementKeys.balances(groupId), context.previousBalances);
+    onError: (_err, { input }, context) => {
+      if (context?.shown) {
+        shiftBalances(client, groupId, input.payerMemberId, input.receiverMemberId, -input.amount);
       }
     },
     onSettled: () => {
@@ -156,38 +168,27 @@ export function useSettlementAction(groupId: string) {
     onMutate: async (action) => {
       await client.cancelQueries({ queryKey: settlementKeys.balances(groupId) });
       await client.cancelQueries({ queryKey: settlementKeys.list(groupId) });
-      const previousBalances = client.getQueryData<Balances>(settlementKeys.balances(groupId));
-      const previousList = client.getQueryData<InfiniteData<SettlementPage>>(
-        settlementKeys.list(groupId),
-      );
-      const target = previousList?.pages
+      const list = client.getQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(groupId));
+      const target = list?.pages
         .flatMap((page) => page.settlements)
         .find((s) => s.id === action.settlementId);
-      if (target?.status === "confirmed") {
-        if (previousBalances) {
-          client.setQueryData<Balances>(settlementKeys.balances(groupId), {
-            ...previousBalances,
-            balances: previousBalances.balances.map((b) => {
-              if (b.memberId === target.payerMemberId) {
-                return { ...b, balance: b.balance - target.amount };
-              }
-              if (b.memberId === target.receiverMemberId) {
-                return { ...b, balance: b.balance + target.amount };
-              }
-              return b;
-            }),
-          });
-        }
-        replaceSettlement(client, groupId, { ...target, status: "undone" });
-      }
-      return { previousBalances, previousList };
+      if (target?.status !== "confirmed") return { target: undefined };
+      shiftBalances(client, groupId, target.payerMemberId, target.receiverMemberId, -target.amount);
+      replaceSettlement(client, groupId, { ...target, status: "undone" });
+      return { target };
     },
+    // Only this undo is taken back: a payment confirmed while it waited stays in the Balances.
     onError: (_err, _action, context) => {
-      if (context?.previousBalances) {
-        client.setQueryData(settlementKeys.balances(groupId), context.previousBalances);
-      }
-      if (context?.previousList) {
-        client.setQueryData(settlementKeys.list(groupId), context.previousList);
+      const target = context?.target;
+      if (target !== undefined) {
+        shiftBalances(
+          client,
+          groupId,
+          target.payerMemberId,
+          target.receiverMemberId,
+          target.amount,
+        );
+        replaceSettlement(client, groupId, target);
       }
       void refresh();
     },
