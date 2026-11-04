@@ -36,9 +36,6 @@ export const en: Record<MessageId, string> = {
   "signIn.google": "Sign in with Google",
   "signIn.lineAuto": "Signing in with LINE…",
   "signIn.googleLoading": "Loading Google sign-in…",
-  "signIn.dataSummary1":
-    "We get your LINE or Google name and picture, plus your Google sign-in email,",
-  "signIn.dataSummary2": "so group members can recognise you. No LINE email and no password.",
   "signIn.consentBefore": "By continuing you agree to the",
   "signIn.terms": "Terms of Service",
   "signIn.consentJoin": "and",

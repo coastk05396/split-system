@@ -54,14 +54,14 @@ describe("app shell", () => {
     expect(linePrepares.count).toBe(1);
   });
 
-  it("offers LINE and Google outside LINE, with the data summary and consent", async () => {
+  it("offers LINE and Google outside LINE, with the consent line and no data summary", async () => {
     const { lineLogins } = renderApp({ path: "/sign-in" });
 
     await userEvent.click(await screen.findByRole("button", { name: "使用 LINE 快速登入" }));
 
     expect(lineLogins).toHaveLength(1);
     expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
-    expect(screen.getByText(/名稱與頭像/)).toBeVisible();
+    expect(screen.queryByText(/名稱與頭像/)).toBeNull();
     expect(screen.getByRole("link", { name: "隱私權政策" })).toHaveAttribute("href", "/privacy");
   });
 
