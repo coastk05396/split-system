@@ -97,7 +97,7 @@ function ConfirmForm({
   submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
   onDone: () => void;
 }) {
-  const [text, setText] = useState(minorToText(target.suggested, currency));
+  const [text, setText] = useState(() => minorToText(target.suggested, currency));
   const [notifyChat, setNotifyChat] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);

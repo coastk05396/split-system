@@ -87,6 +87,27 @@ describe("Identity email (shown in Settings)", () => {
   });
 });
 
+describe("Profile name when both providers are linked", () => {
+  it("stays LINE's after a Google sign-in, while signedInWith follows the latest", async () => {
+    const lineSub = uniqueSub("l");
+    const googleSub = uniqueSub("g");
+    const session = await signIn("line", lineSub, "LINE名");
+    await link("google", session.accessToken, googleSub);
+    await signIn("google", googleSub, "Google名");
+    expect(await meOf(session.accessToken)).toMatchObject({
+      displayName: "LINE名",
+      signedInWith: "google",
+    });
+  });
+
+  it("is Google's for a User with no LINE Identity", async () => {
+    const sub = uniqueSub("g");
+    const session = await signIn("google", sub, "舊名");
+    await signIn("google", sub, "新名");
+    expect(await meOf(session.accessToken)).toMatchObject({ displayName: "新名" });
+  });
+});
+
 describe("DELETE /auth/identities/:provider", () => {
   it("refuses to unlink the last Identity", async () => {
     const session = await signIn("line", uniqueSub("only"));

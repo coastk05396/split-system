@@ -45,7 +45,7 @@ An Identity attached to a User; Settings lists LINE and Google and shows which a
 _Avoid_: Binding, connection
 
 **Profile card**:
-The card at the top of Settings showing who the User is for the latest sign-in: the LINE name and picture with a LINE tag, or the Google picture and email with a Google tag.
+The card at the top of Settings showing who the User is: the LINE name and picture (as in Groups) whenever LINE is linked, otherwise the Google picture and email; the tag (LINE or Google) follows the latest sign-in.
 _Avoid_: Header, avatar row
 
 **Link code**:

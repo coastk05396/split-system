@@ -62,7 +62,7 @@ export function SettlePanel({ group }: { group: Group }) {
   const action = useSettlementAction(group.id);
   // Whether there was anything to settle while this screen was open: only then is "all settled"
   // news worth a ring, rather than the calm state of a group that never owed anything.
-  const sawWork = useRef(false);
+  const [sawWork, setSawWork] = useState(false);
   const members = useMembers(group.id);
   const [shareNotice, setShareNotice] = useState<{ text: string; isError: boolean } | null>(null);
   const [toastNotice, setToastNotice] = useState<{ text: string; isError: boolean } | null>(null);
@@ -98,7 +98,7 @@ export function SettlePanel({ group }: { group: Group }) {
     ...planned.filter((p) => involvesMe(group, p)),
     ...planned.filter((p) => !involvesMe(group, p)),
   ];
-  if (mine !== 0 || orderedPlan.length > 0) sawWork.current = true;
+  if (!sawWork && (mine !== 0 || orderedPlan.length > 0)) setSawWork(true);
 
   return (
     <PictureContext value={memberPictures(members.data)}>
@@ -163,7 +163,7 @@ export function SettlePanel({ group }: { group: Group }) {
           )}
           {plan.status === "ready" &&
             (orderedPlan.length === 0 ? (
-              <SettledMessage celebrate={sawWork.current} />
+              <SettledMessage celebrate={sawWork} />
             ) : (
               <ul aria-label={t("settle.planTitle")} className="flex flex-col gap-2">
                 {orderedPlan.map((p) => (

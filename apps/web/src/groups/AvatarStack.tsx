@@ -21,18 +21,18 @@ export function AvatarStack({
   return (
     <span
       aria-hidden="true"
-      className="mt-1 flex items-center -space-x-2.5 transition-all duration-300 ease-(--ease-spring) group-hover:-space-x-1 group-active:space-x-1.5 motion-reduce:group-hover:-space-x-2.5 motion-reduce:group-active:-space-x-2.5 motion-reduce:transition-none"
+      className="mt-1 flex items-center -space-x-2.5 transition-[margin] duration-300 ease-(--ease-spring) group-hover:-space-x-1 group-active:space-x-1.5 motion-reduce:group-hover:-space-x-2.5 motion-reduce:group-active:-space-x-2.5 motion-reduce:transition-none"
     >
       {shown.map((m, i) => (
         <span
           key={`${m.name}-${String(i)}`}
-          className="rounded-full ring-2 ring-white transition-all duration-300 ease-(--ease-spring) group-active:scale-105 motion-reduce:transition-none motion-reduce:group-active:scale-100"
+          className="rounded-full ring-2 ring-white transition-[scale] duration-300 ease-(--ease-spring) group-active:scale-105 motion-reduce:transition-none motion-reduce:group-active:scale-100"
         >
           <Avatar name={m.name} pictureUrl={m.pictureUrl} className="size-7 text-xs" />
         </span>
       ))}
       {more > 0 && (
-        <span className="z-10 flex size-7 items-center justify-center rounded-full bg-sprout-150 text-xs font-bold text-sprout-700 ring-2 ring-white transition-all duration-300 ease-(--ease-spring) group-active:scale-105 motion-reduce:transition-none motion-reduce:group-active:scale-100">
+        <span className="z-10 flex size-7 items-center justify-center rounded-full bg-sprout-150 text-xs font-bold text-sprout-700 ring-2 ring-white transition-[scale] duration-300 ease-(--ease-spring) group-active:scale-105 motion-reduce:transition-none motion-reduce:group-active:scale-100">
           +{more}
         </span>
       )}

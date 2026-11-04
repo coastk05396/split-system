@@ -105,10 +105,12 @@ export function SettingsPage() {
       void navigate(location.pathname + location.search, { replace: true, state: null });
     }
   }, []); // once per visit
-  const startedLinked = useRef(
-    new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
+  const [startedLinked] = useState(
+    () => new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
   );
-  current.current = state.status === "signedIn" ? state.user : null;
+  useEffect(() => {
+    current.current = state.status === "signedIn" ? state.user : null;
+  });
   const isSignedIn = state.status === "signedIn";
 
   // A Google link finished in the outside browser shows up here when the person switches back.
@@ -147,8 +149,8 @@ export function SettingsPage() {
   const linked = new Set(user.identities.map((identity) => identity.provider));
   const profileProvider = user.signedInWith;
   const profileEmail = user.identities.find((i) => i.provider === profileProvider)?.email ?? null;
-  const profileName =
-    profileProvider === "google" && profileEmail !== null ? profileEmail : user.displayName;
+  const googleOnly = profileProvider === "google" && !linked.has("line");
+  const profileName = googleOnly && profileEmail !== null ? profileEmail : user.displayName;
 
   /** Runs one account call; on failure shows its zh-TW message. */
   async function run(call: () => Promise<Response>, onOk: (res: Response) => Promise<void>) {
@@ -177,7 +179,7 @@ export function SettingsPage() {
       <h1 className="text-3xl font-black">{t("settings.heading")}</h1>
 
       <div className={`${card} line-bubble-card group mt-6 flex items-center gap-3 p-3.5`}>
-        {profileProvider === "google" && user.pictureUrl === null ? (
+        {googleOnly && user.pictureUrl === null ? (
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-white ring-2 ring-sprout-200">
             <GmailMark />
           </span>
@@ -292,9 +294,7 @@ export function SettingsPage() {
                 {isLinked && (
                   <span
                     className={`ml-auto inline-flex items-center gap-1 rounded-full bg-sprout-150 px-2.5 py-1 text-sm font-bold text-sprout-700 ${
-                      startedLinked.current.has(provider) && provider !== justLinked
-                        ? ""
-                        : "linked-pop"
+                      startedLinked.has(provider) && provider !== justLinked ? "" : "linked-pop"
                     }`}
                   >
                     <Check aria-hidden="true" className="size-4" strokeWidth={3} />

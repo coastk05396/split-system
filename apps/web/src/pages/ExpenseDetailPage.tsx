@@ -109,10 +109,11 @@ function Detail({
               type="button"
               aria-label={t("expenseShare.action")}
               onClick={() => {
-                void share.prepare(expense, group, nameOf, false).then(({ card: prepared }) => {
+                void (async () => {
+                  const { card: prepared } = await share.prepare(expense, group, nameOf, false);
                   setShareCard(prepared);
                   setSharing(true);
-                });
+                })();
               }}
               className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-600 hover:bg-sprout-150"
             >

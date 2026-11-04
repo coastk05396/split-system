@@ -57,14 +57,21 @@ describe("settings (screen 11)", () => {
     expect(screen.queryByText("g@example.com")).toBeNull();
   });
 
-  it("shows the Google email with a Google tag on the profile card for a Google sign-in", async () => {
+  it("shows the Google email with a Google tag for a Google-only sign-in", async () => {
+    renderApp({ path: "/settings", cookieUser: makeUser("小宇", "google") });
+
+    expect(await screen.findByText("小宇@example.com")).toBeVisible();
+    expect(screen.queryByText("小宇")).toBeNull();
+  });
+
+  it("keeps LINE's name on the profile card after a Google sign-in when LINE is linked", async () => {
     renderApp({
       path: "/settings",
       cookieUser: { ...bothLinked("小宇"), signedInWith: "google" },
     });
 
-    expect(await screen.findByText("g@example.com")).toBeVisible();
-    expect(screen.queryByText("小宇")).toBeNull();
+    expect(await screen.findByText("小宇")).toBeVisible();
+    expect(screen.queryByText("g@example.com")).toBeNull();
   });
 
   it("picks up a Google link made in another browser when the page becomes visible again", async () => {

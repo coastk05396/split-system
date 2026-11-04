@@ -4,6 +4,8 @@ import { t } from "../i18n/messages.js";
 import { liffLink } from "../platform/liff-link.js";
 import type { LineMessage } from "../platform/line.js";
 
+const SEGMENTER = new Intl.Segmenter();
+
 export interface SettleCardLine {
   payer: string;
   receiver: string;
@@ -233,7 +235,8 @@ function avatarBox(name: string, pictureUrl?: string | null) {
       ],
     };
   }
-  const first = new Intl.Segmenter().segment(name.trim() || "?")[Symbol.iterator]().next();
+  const segments = SEGMENTER.segment(name.trim() || "?");
+  const first = segments[Symbol.iterator]().next();
   const initial = first.done === true ? "?" : first.value.segment.toUpperCase();
   return {
     type: "box" as const,

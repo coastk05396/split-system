@@ -72,25 +72,25 @@ function PolicyPage({ source }: { source: string }) {
           {t("legal.englishNotice")}
         </p>
       )}
-      {parsePolicy(source).map((block, index) => {
+      {parsePolicy(source).map((block) => {
         switch (block.kind) {
           case "h1":
             return (
-              <h1 key={index} className="mt-6 text-3xl font-black">
+              <h1 key={`h1-${block.text}`} className="mt-6 text-3xl font-black">
                 {block.text}
               </h1>
             );
           case "h2":
             return (
-              <h2 key={index} className="mt-8 text-lg font-bold">
+              <h2 key={`h2-${block.text}`} className="mt-8 text-lg font-bold">
                 {block.text}
               </h2>
             );
           case "ul":
             return (
-              <ul key={index} className="mt-3 list-disc space-y-1 pl-5">
-                {block.items.map((item, i) => (
-                  <li key={i}>
+              <ul key={`ul-${block.items.join()}`} className="mt-3 list-disc space-y-1 pl-5">
+                {block.items.map((item) => (
+                  <li key={item}>
                     <Inline text={item} />
                   </li>
                 ))}
@@ -98,7 +98,7 @@ function PolicyPage({ source }: { source: string }) {
             );
           case "p":
             return (
-              <p key={index} className="mt-3">
+              <p key={`p-${block.text}`} className="mt-3">
                 <Inline text={block.text} />
               </p>
             );

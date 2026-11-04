@@ -29,6 +29,14 @@ export function GoogleReturnPage() {
   const [failure, setFailure] = useState<ErrorCode | null>(null);
   const [after, setAfter] = useState<GoogleErrand | null>(null);
   const started = useRef(false);
+  // The arrival's answer is dropped if the page closed while it was on its way.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (state.status === "loading" || started.current) return;
@@ -57,19 +65,20 @@ export function GoogleReturnPage() {
             withJson({ idToken }),
           );
           if (!res.ok) {
-            setFailure((await toApiFailure(res)).code);
+            const code = (await toApiFailure(res)).code;
+            if (mounted.current) setFailure(code);
             return;
           }
           updateUser((await res.json()) as Me);
         } catch {
-          setFailure("INTERNAL");
+          if (mounted.current) setFailure("INTERNAL");
           return;
         }
       }
-      setAfter(errand);
+      if (mounted.current) setAfter(errand);
     })();
-    // Once per arrival: the token is single-use.
-  }, [state.status]);
+    // Once per arrival: the token is single-use (`started`).
+  }, [state, result, navigate, session, signIn, redeemLinkCode, updateUser]);
 
   // Sign-in and link-code leave the answer in the auth state: signed in goes on, an error goes
   // back to the page that shows it.

@@ -47,7 +47,7 @@ export function NewEntryPage() {
             >
               <PressableLink
                 to={`/groups/${g.id}/expenses/new`}
-                className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-all duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
+                className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-[scale,border-color] duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
                 <div className="flex min-w-0 items-center gap-3.5">
                   <GroupAvatar
@@ -78,10 +78,7 @@ export function NewEntryPage() {
         </ul>
       )}
       {groups.data.length > 0 && (
-        <Link
-          to="/groups/new?usage=tab"
-          className={`${primaryButton} justify-between`}
-        >
+        <Link to="/groups/new?usage=tab" className={`${primaryButton} justify-between`}>
           <span className="flex items-center gap-2">
             <Plus aria-hidden="true" className="size-5" />
             {t("groups.create")}
