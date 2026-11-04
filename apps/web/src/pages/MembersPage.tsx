@@ -3,7 +3,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { formatAmount, type Group, type Member } from "@split/shared";
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
 import {
   isUnsavedMember,
@@ -13,7 +13,15 @@ import {
   usePatchMember,
   useRemoveMember,
 } from "../groups/api.js";
-import { Avatar, card, failureMessage, LoadError, Loading, ScreenHeader } from "../groups/ui.js";
+import {
+  Avatar,
+  card,
+  failureMessage,
+  LoadError,
+  Loading,
+  ScreenHeader,
+  secondaryButton,
+} from "../groups/ui.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import { InviteSection } from "./InviteSection.js";
@@ -70,6 +78,9 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const seated = useMemo(() => members.filter((m) => m.status !== "former"), [members]);
   const rows = useLeavingRows(seated);
   const isAdmin = group.me.role === "admin";
+  // Set by the page that has just created this Group, so its creator can go on from here.
+  const state: unknown = useLocation().state;
+  const created = typeof state === "object" && state !== null && "created" in state;
   const add = useAddPlaceholder(group.id);
   const [blocked, setBlocked] = useState<string | null>(null);
   // Saved Member id -> the unsaved id its row began as, so the row is kept when the server answers.
@@ -145,6 +156,11 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
         ))}
       </ul>
       <InviteSection group={group} />
+      {created && (
+        <Link to="/" className={`${secondaryButton} py-3 text-center`}>
+          {t("members.homeLink")}
+        </Link>
+      )}
     </div>
   );
 }

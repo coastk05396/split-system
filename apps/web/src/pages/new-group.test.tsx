@@ -62,6 +62,23 @@ describe("create Group", () => {
     }
   });
 
+  it("shows the new Member list and a way back to Home before the Members are fetched", async () => {
+    const user = userEvent.setup();
+    const { api, router } = renderApp({ path: "/groups/new", cookieUser: me });
+    await user.type(await screen.findByLabelText("群組名稱"), "Quick start");
+    const release = api.holdResponses("GET /api/v1/groups/g-1/members");
+    try {
+      await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
+      expect(await screen.findByRole("heading", { name: "成員與邀請" })).toBeVisible();
+      expect(router.state.location.pathname).toBe("/groups/g-1/members");
+      expect(screen.getByText(/小宇/)).toBeVisible();
+      await user.click(screen.getByRole("link", { name: "回到首頁" }));
+      expect(router.state.location.pathname).toBe("/");
+    } finally {
+      release();
+    }
+  });
+
   it("shows a full-screen creating message until the server answers", async () => {
     const user = userEvent.setup();
     const { api, router } = renderApp({ path: "/groups/new", cookieUser: me });

@@ -1,4 +1,5 @@
-import { screen, within } from "@testing-library/react";
+import { QueryObserver } from "@tanstack/react-query";
+import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -135,6 +136,36 @@ describe("group detail", () => {
     expect(api.groups.exists(id)).toBe(false);
   });
 
+  it("leaves a deleted Group without waiting for an active Group list refetch", async () => {
+    const user = userEvent.setup();
+    let id = "";
+    const { router, queryClient } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "室友", myBalance: 0, others: [] });
+      },
+      pathFor: () => `/groups/${id}`,
+    });
+    const observer = new QueryObserver(queryClient, {
+      queryKey: ["groups"],
+      initialData: [],
+      staleTime: Infinity,
+      queryFn: () => new Promise<never>(() => {}),
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    try {
+      await user.click(await screen.findByRole("button", { name: "刪除群組" }));
+      const dialog = await screen.findByRole("dialog", { name: "刪除「室友」？" });
+      await user.type(within(dialog).getByLabelText("輸入 delete 以確認"), "delete");
+      await user.click(within(dialog).getByRole("button", { name: "永久刪除" }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/groups");
+      });
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it("says the Group is not found for someone outside it", async () => {
     renderApp({ cookieUser: me, path: "/groups/g-missing" });
 
@@ -156,7 +187,13 @@ describe("group detail", () => {
     });
 
     const tablist = await screen.findByRole("tablist", { name: "群組分頁" });
-    expect(tablist).toHaveClass("bg-sprout-100/70", "p-1", "rounded-2xl", "border", "border-sprout-200/60");
+    expect(tablist).toHaveClass(
+      "bg-sprout-100/70",
+      "p-1",
+      "rounded-2xl",
+      "border",
+      "border-sprout-200/60",
+    );
 
     // Active tab pill should not have bottom underline bar class
     const activeTab = within(tablist).getByRole("tab", { name: "帳目" });

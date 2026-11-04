@@ -23,6 +23,13 @@ const rows = async () =>
   within(await screen.findByRole("list", { name: "群組成員" })).getAllByRole("listitem");
 
 describe("members", () => {
+  it("offers no way back to Home unless the Group was just created", async () => {
+    membersOf({ name: "台南", others: [{ name: "宜庭" }] });
+
+    expect(await screen.findByRole("heading", { name: "成員與邀請" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "回到首頁" })).toBeNull();
+  });
+
   it("lists Members with roles and Placeholders while hiding Former Members", async () => {
     membersOf({
       name: "台南",
