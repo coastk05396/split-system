@@ -338,10 +338,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .google-ring,
-  .google-ring > * {
-    animation: none;
-  }
   .dialog-content[data-state="open"],
   .dialog-content[data-state="closed"] {
     animation-name: overlay-enter;
@@ -633,10 +629,14 @@
 /* The ring of the Google screen: Google's four colours, turning. Still for reduced motion. */
 .google-ring {
   background: conic-gradient(#4285f4, #ea4335, #fbbc05, #34a853, #4285f4);
-  animation: google-spin 1.1s linear infinite;
 }
-.google-ring > * {
-  animation: google-spin 1.1s linear infinite reverse;
+@media (prefers-reduced-motion: no-preference) {
+  .google-ring {
+    animation: google-spin 1.1s linear infinite;
+  }
+  .google-ring > * {
+    animation: google-spin 1.1s linear infinite reverse;
+  }
 }
 @keyframes google-spin {
   to {
