@@ -65,8 +65,7 @@ export async function updateSettings(
 
 /**
  * Signs a verified Identity in: the first sign-in creates the User with that one Identity;
- * later ones refresh the name and picture from the provider used most recently, except that
- * Google never replaces them once LINE is linked.
+ * later ones refresh the name and picture only when they come from the User's first Identity.
  */
 export async function signInIdentity(
   db: Db,
@@ -75,18 +74,19 @@ export async function signInIdentity(
 ): Promise<string> {
   const existing = await findIdentity(db, identity.provider, identity.sub);
   if (existing !== undefined) {
-    // A User with LINE linked keeps LINE's name and picture, so Settings and Groups agree.
-    const [line] = await db
-      .select({ id: identities.id })
+    // Name and picture follow the User's first Identity (the Profile source); another
+    // provider's sign-in only becomes the latest one.
+    const [source] = await db
+      .select({ provider: identities.provider })
       .from(identities)
-      .where(and(eq(identities.userId, existing.userId), eq(identities.provider, "line")));
-    const keepsLine = identity.provider !== "line" && line !== undefined;
+      .where(eq(identities.userId, existing.userId))
+      .orderBy(asc(identities.createdAt), asc(identities.provider))
+      .limit(1);
+    const isSource = source?.provider === identity.provider;
     await db
       .update(users)
       .set({
-        ...(keepsLine
-          ? {}
-          : { displayName: identity.displayName, pictureUrl: identity.pictureUrl }),
+        ...(isSource ? { displayName: identity.displayName, pictureUrl: identity.pictureUrl } : {}),
         lastProvider: identity.provider,
         updatedAt: now,
       })

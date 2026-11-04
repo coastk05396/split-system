@@ -57,18 +57,25 @@ describe("settings (screen 11)", () => {
     expect(screen.queryByText("g@example.com")).toBeNull();
   });
 
-  it("shows the Google email with a Google tag for a Google-only sign-in", async () => {
+  it("shows the name with the Google email as a small line for a Google sign-in", async () => {
     renderApp({ path: "/settings", cookieUser: makeUser("小宇", "google") });
 
-    expect(await screen.findByText("小宇@example.com")).toBeVisible();
-    expect(screen.queryByText("小宇")).toBeNull();
+    expect(await screen.findByText("小宇")).toBeVisible();
+    expect(screen.getByText("小宇@example.com")).toBeVisible();
   });
 
-  it("keeps LINE's name on the profile card after a Google sign-in when LINE is linked", async () => {
+  it("keeps the same name after a Google sign-in when both are linked", async () => {
     renderApp({
       path: "/settings",
       cookieUser: { ...bothLinked("小宇"), signedInWith: "google" },
     });
+
+    expect(await screen.findByText("小宇")).toBeVisible();
+    expect(screen.getByText("g@example.com")).toBeVisible();
+  });
+
+  it("shows no email line for a LINE sign-in", async () => {
+    renderApp({ path: "/settings", cookieUser: bothLinked("小宇") });
 
     expect(await screen.findByText("小宇")).toBeVisible();
     expect(screen.queryByText("g@example.com")).toBeNull();

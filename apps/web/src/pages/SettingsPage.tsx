@@ -149,8 +149,9 @@ export function SettingsPage() {
   const linked = new Set(user.identities.map((identity) => identity.provider));
   const profileProvider = user.signedInWith;
   const profileEmail = user.identities.find((i) => i.provider === profileProvider)?.email ?? null;
-  const googleOnly = profileProvider === "google" && !linked.has("line");
-  const profileName = googleOnly && profileEmail !== null ? profileEmail : user.displayName;
+  // Name and picture are the Profile source's (the first Identity), as in Groups; the latest
+  // sign-in only sets the tag and the small email line.
+  const sourceIsGoogle = user.identities[0]?.provider === "google";
 
   /** Runs one account call; on failure shows its zh-TW message. */
   async function run(call: () => Promise<Response>, onOk: (res: Response) => Promise<void>) {
@@ -179,7 +180,7 @@ export function SettingsPage() {
       <h1 className="text-3xl font-black">{t("settings.heading")}</h1>
 
       <div className={`${card} line-bubble-card group mt-6 flex items-center gap-3 p-3.5`}>
-        {googleOnly && user.pictureUrl === null ? (
+        {sourceIsGoogle && user.pictureUrl === null ? (
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-white ring-2 ring-sprout-200">
             <GmailMark />
           </span>
@@ -191,7 +192,12 @@ export function SettingsPage() {
           />
         )}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <p className="min-w-0 break-all text-lg font-bold">{profileName}</p>
+          <div className="min-w-0">
+            <p className="break-all text-lg font-bold">{user.displayName}</p>
+            {profileProvider === "google" && profileEmail !== null && (
+              <p className="break-all text-xs text-ink-muted">{profileEmail}</p>
+            )}
+          </div>
           <span
             aria-hidden="true"
             className={
