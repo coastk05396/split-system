@@ -472,6 +472,8 @@ export const en: Record<MessageId, string> = {
   "settings.unlinkShort": "Unlink",
   "settings.linkGoogle": "Connect",
   "settings.linkingGoogle": "Opening Google…",
+  "google.signingIn": "Signing in…",
+  "google.linking": "Linking…",
   "settings.comingSoon": "Coming soon",
   "link.signedIn":
     "You are already signed in. To link another account, log out first, then come back to this page.",
@@ -538,7 +540,8 @@ export const enErrors: Record<ErrorCode, string> = {
   EDIT_CONFLICT: "Someone just changed this. Please refresh.",
   GROUP_FULL: "This group already has 30 members.",
   BALANCE_NOT_ZERO: "Something is still unsettled. Settle it first.",
-  IDENTITY_LINKED_ELSEWHERE: "This account already belongs to another Sprout Split account.",
+  IDENTITY_LINKED_ELSEWHERE:
+    "This Google account already signs in to another Sprout Split account and cannot be merged. Link a different Google account instead.",
   LINK_CODE_INVALID: 'This link has expired. Go back to LINE and tap "Connect" again.',
   PROVIDER_ALREADY_LINKED: "You have already linked this kind of account.",
   LAST_IDENTITY: "You must keep at least one way to sign in.",

@@ -4,7 +4,7 @@ import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleButton } from "../auth/GoogleButton.js";
 import { errorMessage, t } from "../i18n/messages.js";
-import { Splash } from "../shell/Splash.js";
+import { GoogleTransition } from "../auth/GoogleTransition.js";
 
 /**
  * Where the one-time link code from LINE's Settings lands, in the phone's own browser: a Google
@@ -16,16 +16,33 @@ export function LinkPage() {
   const code = useSearchParams()[0].get("code") ?? "";
   const [openFailed, setOpenFailed] = useState(false);
   const started = useRef(false);
+  // The page stays unpainted until it is known that Google is not taking over: no flash.
+  const [settled, setSettled] = useState(false);
   const waiting = state.status === "signedOut" && !line.isInClient() && google.available;
 
   // Straight to Google's account chooser, once per code: Back or a refusal lands on the button.
   useEffect(() => {
     if (!waiting || started.current) return;
     started.current = true;
-    if (code !== "") google.redirect({ purpose: "linkCode", code }, { once: true });
+    if (code === "" || !google.redirect({ purpose: "linkCode", code }, { once: true })) {
+      setSettled(true);
+    }
   }, [waiting, code, google]);
 
-  if (state.status === "loading") return <Splash />;
+  // Back from Google can restore this page as it was, still waiting: show the button instead.
+  useEffect(() => {
+    const show = (event: PageTransitionEvent) => {
+      if (event.persisted) setSettled(true);
+    };
+    window.addEventListener("pageshow", show);
+    return () => {
+      window.removeEventListener("pageshow", show);
+    };
+  }, []);
+
+  if (state.status === "loading" || (waiting && !settled)) {
+    return <GoogleTransition>{t("settings.linkingGoogle")}</GoogleTransition>;
+  }
   const error =
     (state.status === "signedOut" ? state.error : null) ?? (openFailed ? "INTERNAL" : null);
 

@@ -7,7 +7,7 @@ import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import type { GoogleErrand } from "../platform/google.js";
-import { Splash } from "../shell/Splash.js";
+import { GoogleTransition } from "../auth/GoogleTransition.js";
 
 /** The page the errand started from: where a refusal or a failure puts the person back. */
 function origin(errand: GoogleErrand): string {
@@ -84,7 +84,12 @@ export function GoogleReturnPage() {
     } else void navigate(origin(after), { replace: true });
   }, [after, state.status, navigate]);
 
-  if (failure === null) return <Splash />;
+  if (failure === null) {
+    const signingIn = result?.errand.purpose === "signIn";
+    return (
+      <GoogleTransition>{t(signingIn ? "google.signingIn" : "google.linking")}</GoogleTransition>
+    );
+  }
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-16 pb-8">
       <p role="alert" className="rounded-2xl bg-peach px-4 py-3 text-sm">

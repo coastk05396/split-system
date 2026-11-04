@@ -463,6 +463,8 @@ const zhTW = {
   "settings.unlinkShort": "解除連結",
   "settings.linkGoogle": "連接",
   "settings.linkingGoogle": "前往 Google…",
+  "google.signingIn": "正在登入…",
+  "google.linking": "正在連結…",
   "settings.comingSoon": "即將推出",
   "link.signedIn": "你已經登入了。要連結另一個帳號，請先登出，再回到這個頁面。",
   "link.signOut": "登出",
@@ -561,7 +563,8 @@ const zhErrors: Record<ErrorCode, string> = {
   EDIT_CONFLICT: "這筆資料剛被其他人修改過，請重新整理。",
   GROUP_FULL: "這個群組已經滿 30 人了。",
   BALANCE_NOT_ZERO: "還有款項沒結清，結清後才能進行。",
-  IDENTITY_LINKED_ELSEWHERE: "這個帳號已經是另一個小芽帳號。",
+  IDENTITY_LINKED_ELSEWHERE:
+    "這個 Google 已經是另一個小芽帳號的登入方式，無法合併。請改用別的 Google 帳號再連結一次。",
   LINK_CODE_INVALID: "這個連結已經失效，請回到 LINE 重新按一次「連接」。",
   PROVIDER_ALREADY_LINKED: "你已經連結過這種帳號了。",
   LAST_IDENTITY: "至少要保留一種登入方式。",
