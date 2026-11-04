@@ -4,6 +4,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { SeedGroup } from "../../test/fake-groups.js";
+import { expenseKeys } from "../expenses/api.js";
 import { clearPendingWrites } from "../expenses/pending-writes.js";
 import { renderApp } from "../../test/render-app.js";
 
@@ -199,7 +200,7 @@ describe("add Expense form", () => {
 
   it("ignores a save that is answered after the User signed out", async () => {
     const user = userEvent.setup();
-    const { api, id, router } = openForm();
+    const { api, id, router, queryClient } = openForm();
     await user.type(await screen.findByLabelText("名稱"), "晚餐");
     await user.type(screen.getByLabelText("金額"), "360");
     const release = api.holdResponses(`POST /api/v1/groups/${id()}/expenses`);
@@ -221,8 +222,13 @@ describe("add Expense form", () => {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
+    // The Expense exists on the server, so the list may show it by its own fetch; what must not
+    // happen is this save's answer being applied: no "saved" note, no row stuck as saving, and
+    // no copy of the Expense written to the cache by the save itself.
     expect(screen.queryByText(/已新增 ✓/)).toBeNull();
-    expect(screen.queryByRole("link", { name: /晚餐/ })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "帳目" })).queryByText("儲存中…")).toBeNull();
+    const [saved] = api.groups.expenses.list(id());
+    expect(queryClient.getQueryData(expenseKeys.one(id(), saved?.id ?? ""))).toBeUndefined();
   });
 
   it("keeps a failed save on the Group with its reason, and retries it with the same key", async () => {
