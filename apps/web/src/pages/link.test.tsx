@@ -5,74 +5,65 @@ import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
 
 describe("/link (finishing a Google link from the outside browser)", () => {
-  it("signs in with Google, joins the User who asked for the code, and opens settings", async () => {
-    const user = userEvent.setup();
-    const { api } = renderApp({
+  it("goes to Google at once, comes back, joins the User who asked for the code, and opens settings", async () => {
+    const { api, googleRedirects } = renderApp({
       path: "/link?code=code-1",
       seed: () => undefined,
     });
     api.linkCodes.set("code-1", makeUser("小宇", "line"));
 
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
-
     await screen.findByRole("heading", { level: 1, name: "我的設定" });
     const accounts = within(screen.getByRole("list", { name: "已連結的帳號" }));
     expect(accounts.getByText("LINE")).toBeVisible();
     expect(accounts.getByText("Google")).toBeVisible();
+    expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
   });
 
-  it("goes straight to Google's account chooser, carrying the code", async () => {
-    const { googleRedirects } = renderApp({ path: "/link?code=code-1" });
+  it("leaves a Google button on the page while Google holds it", async () => {
+    const { googleRedirects } = renderApp({ path: "/link?code=code-1", google: "holds" });
 
-    await screen.findByRole("heading", { level: 1 });
-    await waitFor(() => {
-      expect(googleRedirects).toEqual(["code-1"]);
-    });
+    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
+    expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
   });
 
-  it("finishes the link when Google sends the ID token back", async () => {
-    const { api, googleRedirects } = renderApp({
-      path: "/link",
-      googleRedirectResult: { idToken: "fake|g-1|Google 小宇", state: "code-1" },
-    });
-    api.linkCodes.set("code-1", makeUser("小宇", "line"));
-
-    await screen.findByRole("heading", { level: 1, name: "我的設定" });
-    expect(googleRedirects).toEqual([]);
-  });
-
-  it("after Google refuses, keeps the code so the button still links", async () => {
+  it("after Google refuses, stops on the button, and the button still links with the same code", async () => {
     const user = userEvent.setup();
     const { api, googleRedirects } = renderApp({
-      path: "/link",
-      googleRedirectResult: { idToken: null, state: "code-1" },
+      path: "/link?code=code-1",
+      google: "refusesOnce",
     });
     api.linkCodes.set("code-1", makeUser("小宇", "line"));
 
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
+    // The page goes to Google and comes back refused; its button is re-found on each try, since
+    // the first one is replaced when the page is rebuilt.
+    await waitFor(async () => {
+      await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
+      expect(googleRedirects.length).toBeGreaterThanOrEqual(2);
+    });
 
     await screen.findByRole("heading", { level: 1, name: "我的設定" });
-    expect(googleRedirects).toEqual([]);
   });
 
   it("does not switch a signed-in browser to another User: it asks to log out first", async () => {
     const user = userEvent.setup();
-    const { api } = renderApp({ path: "/link?code=code-1", cookieUser: makeUser("甲", "line") });
+    const { api, googleRedirects } = renderApp({
+      path: "/link?code=code-1",
+      cookieUser: makeUser("甲", "line"),
+      google: "holds",
+    });
     api.linkCodes.set("code-1", makeUser("乙", "line"));
 
     expect(await screen.findByText(/請先登出/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
-    expect(api.calls).not.toContain("POST /api/v1/auth/link-code/redeem");
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
+    expect(googleRedirects).toEqual([]);
 
     await user.click(screen.getByRole("button", { name: "登出" }));
-    expect(await screen.findByRole("button", { name: "使用 Google 帳號登入" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
+    expect(googleRedirects).toHaveLength(1);
   });
 
   it("says so when the code is no longer valid", async () => {
-    const user = userEvent.setup();
     renderApp({ path: "/link?code=gone" });
-
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("這個連結已經失效");
   });

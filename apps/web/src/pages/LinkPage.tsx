@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleButton } from "../auth/GoogleButton.js";
@@ -12,30 +12,20 @@ import { Splash } from "../shell/Splash.js";
  */
 export function LinkPage() {
   const { line, google } = useDeps();
-  const { state, redeemLinkCode, signOut } = useAuth();
-  const queryCode = useSearchParams()[0].get("code") ?? "";
-  const [done, setDone] = useState(false);
+  const { state, signOut } = useAuth();
+  const code = useSearchParams()[0].get("code") ?? "";
   const [openFailed, setOpenFailed] = useState(false);
-  // Read once: Google's redirect brings the ID token back in the address, which is cleared.
-  const [returned] = useState(() => google.takeRedirectResult());
-  const code = queryCode !== "" ? queryCode : (returned?.state ?? "");
   const started = useRef(false);
   const waiting = state.status === "signedOut" && !line.isInClient() && google.available;
 
+  // Straight to Google's account chooser, once per code: Back or a refusal lands on the button.
   useEffect(() => {
     if (!waiting || started.current) return;
     started.current = true;
-    if (returned?.idToken != null) {
-      void redeemLinkCode(returned.state, returned.idToken).then(() => {
-        setDone(true);
-      });
-    } else if (returned === null && code !== "") {
-      google.redirect(code);
-    }
-  }, [waiting]);
+    if (code !== "") google.redirect({ purpose: "linkCode", code }, { once: true });
+  }, [waiting, code, google]);
 
   if (state.status === "loading") return <Splash />;
-  if (done && state.status === "signedIn") return <Navigate to="/settings" replace />;
   const error =
     (state.status === "signedOut" ? state.error : null) ?? (openFailed ? "INTERNAL" : null);
 
@@ -66,7 +56,7 @@ export function LinkPage() {
               {t("signIn.googleExternalOpen")}
             </button>
           </>
-        ) : state.status === "signedIn" && !done ? (
+        ) : state.status === "signedIn" ? (
           // Switching Users under a live session is never done silently: log out first.
           <>
             <p>{t("link.signedIn")}</p>
@@ -80,14 +70,7 @@ export function LinkPage() {
           </>
         ) : (
           google.available && (
-            <GoogleButton
-              label={t("signIn.google")}
-              onIdToken={(idToken) => {
-                void redeemLinkCode(code, idToken).then(() => {
-                  setDone(true);
-                });
-              }}
-            />
+            <GoogleButton label={t("signIn.google")} errand={{ purpose: "linkCode", code }} />
           )
         )}
       </div>

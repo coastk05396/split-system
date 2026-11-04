@@ -94,6 +94,12 @@ export const routes: RouteObject[] = [
     lazy: page(() => import("../pages/LinkPage.js"), "LinkPage"),
     ErrorBoundary: RouteError,
   },
+  // Where Google's account chooser sends the page back: signed out or in, so it is public.
+  {
+    path: "/google-return",
+    lazy: page(() => import("../pages/GoogleReturnPage.js"), "GoogleReturnPage"),
+    ErrorBoundary: RouteError,
+  },
   // Policy pages are public: linked from sign-in, readable signed in or out.
   {
     path: "/privacy",

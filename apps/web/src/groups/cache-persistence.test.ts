@@ -192,7 +192,7 @@ describe("Web query cache persistence (Ticket 10)", () => {
     api.expireAccessToken();
     api.setCookieUser(null);
     await act(() => router.navigate(`/groups/${groupId}`));
-    await screen.findByRole("button", { name: "使用 Google 帳號登入" });
+    await screen.findByRole("button", { name: "使用 Google 登入" });
     expect(
       Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((key) =>
         key?.startsWith("split.queryCache."),

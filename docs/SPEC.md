@@ -327,11 +327,10 @@ CREATE TABLE fx_rates (
   - 在 LINE 內、尚未連結 Google：「登入與安全」的 Google 那列右邊顯示「連接」按鈕，不顯示 Google 按鈕，也沒有額外的提示文字（按鈕本身就會前往外部瀏覽器）。按下後向伺服器要一個連結碼，用手機的外部瀏覽器開啟 `/link?code=…`。「開啟外部瀏覽器」在 LIFF（LINE app 內）用 `liff.openWindow({ url, external: true })`，因為 LINE 在 LIFF 裡不認 `openExternalBrowser` 網址參數；在沒有 LIFF 的 LINE 內建瀏覽器才改用該參數。在 LIFF 內若 LIFF 無法啟動或開啟失敗，顯示「小芽出了點狀況，請稍後再試。」，不會退回那個沒用的參數。設定頁、登入頁提示框、`/link` 頁三處都適用。
   - 不在 LINE 內、尚未連結 Google：直接顯示 Google 按鈕，成功後走 `POST /auth/link/google`。
   - 已連結 Google，或沒設定 Google 用戶端 ID：不顯示任何連結入口。
-  - `/link` 頁在外部瀏覽器、未登入時，一打開就直接前往 Google 的帳號選擇頁（不必再按一次 Google 按鈕）；連結碼隨 `state` 帶去、回來時取回，Google 回傳的 ID token 的 nonce 必須與送出的一致。每個連結碼只自動跳轉一次，按返回或 Google 拒絕後停在頁面上的 Google 按鈕。需在 Google Cloud 的授權重新導向 URI 加上 `https://split.rickchen.si/link`。
+  - `/link` 頁在外部瀏覽器、未登入時，一打開就直接前往 Google 的帳號選擇頁（不必再按一次 Google 按鈕）；連結碼隨 `state` 帶去、回來時取回。每個連結碼只自動跳轉一次，按返回或 Google 拒絕後停在頁面上的 Google 按鈕。（同一套整頁導向，回到 `/google-return`。）
   - `/link` 頁不需登入。在外部瀏覽器用 Google 登入後，Google 身分掛到發出連結碼的那位使用者，並以該使用者登入，成功後進設定頁。若在 LINE 內開 `/link`（不論有沒有登入），只顯示「請用外部瀏覽器開啟」說明與「用瀏覽器開啟」按鈕（開啟目前這一頁，連結碼不變），不顯示 Google 按鈕，也不顯示登出牆。
   - 在 `/link` 頁若這個瀏覽器（不在 LINE 內）已經登入：不顯示 Google 按鈕，改顯示「請先登出」與「登出」按鈕，登出後才能用連結碼，不會在登入狀態下直接切換成另一位使用者。
-  - 按鈕回饋：LINE 內的「連接」至少 44px 高、按下縮到 92%，等待時顯示轉圈圈與「前往 Google…」。Google 的真按鈕是 iframe，手指按下去的事件到不了頁面，所以做不出按住縮小：改用淡淡呼吸的光暈提示可點，並在點下後視窗失去焦點（焦點移進 Google 的 iframe）時，按鈕彈一下並顯示轉圈圈，焦點回來或拿到 token 就結束。所有動態遵守「減少動態效果」。
-  - Google 的真按鈕疊在我們自己畫的按鈕上，透明度用 0.01 而不是 0：Android Chrome 上完全透明（0）的 Google 按鈕收不到手指點擊（已在真機驗證），0.01 肉眼看不出來且點得動。
+  - Google 登入一律走整頁導向，不載入 Google 的腳本、不疊 Google 的官方按鈕（它是 iframe，按下的事件到不了頁面，做不出按壓回饋）：登入頁的「使用 Google 登入」與設定頁（不在 LINE 內）的「連接」是我們自己的按鈕，按下立刻縮到 92%（`press-deep`），並顯示轉圈圈與「前往 Google…」，然後整頁前往 Google 的帳號選擇頁。「連接」至少 44px 高。回到伺服器的固定網址是 `/google-return`（需在 Google Cloud 的授權重新導向 URI 登記 `https://split.rickchen.si/google-return`）；出發前把用途（登入＋登入後去哪、連結、完成連結碼）放進 `state`，回來後由這一頁照 `state` 完成：登入→進 `next`（只接受同站路徑）、連結→`POST /auth/link/google` 後進設定頁、連結碼→`/auth/link-code/redeem` 後進設定頁。`state` 與 ID token 都當外部輸入檢查：`state` 無法讀懂就回登入頁；ID token 的 nonce 必須是出發時存的那個，壞掉、缺 nonce、nonce 不符都當作沒拿到 token。使用者在 Google 取消或失敗，回到出發的那一頁（登入頁／設定頁／`/link?code=…`），不會卡在空白頁。所有動態遵守「減少動態效果」。
   - 連結碼：128 位元以上隨機、5 分鐘有效、只能用一次、資料庫只存雜湊；每位使用者同時只有一個，再要一個就取代舊的。無效、過期、用過一律回 `LINK_CODE_INVALID`（422），不區分原因。
   - 先驗 Google ID token，再消耗連結碼；ID token 無效時連結碼保留可再用。連結碼消耗後若 Google 帳號已屬於別的使用者（`IDENTITY_LINKED_ELSEWHERE`）或使用者已有 Google（`PROVIDER_ALREADY_LINKED`），連結碼仍已作廢，需回 LINE 重新取得；任何失敗都不建立新使用者。
   - 登入頁在 LINE 內且有設定 Google 時，Google 按鈕外觀與 LINE 外相同（白底「使用 Google 登入」）。按下去不啟動 Google 登入，而是跳出提示框：標題「請用外部瀏覽器登入 Google」，說明 Google 不允許在 LINE 內建瀏覽器登入，按鈕「取消」（關閉）與「用瀏覽器開啟」（依上方「開啟外部瀏覽器」規則，在手機瀏覽器開啟目前這一頁）。提示框用專案的 Radix 對話框：Tab 不會跑到背景、按 Esc 或「取消」關閉，關閉後焦點回到 Google 按鈕。不在 LINE 內時按鈕行為不變，不出現提示框。

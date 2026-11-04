@@ -32,7 +32,7 @@ describe("app shell", () => {
     const user = userEvent.setup();
     const { router } = renderApp({ path: "/groups" });
 
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
+    await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "我的群組" })).toBeVisible();
     expect(router.state.location.pathname).toBe("/groups");
@@ -60,16 +60,19 @@ describe("app shell", () => {
     await userEvent.click(await screen.findByRole("button", { name: "使用 LINE 快速登入" }));
 
     expect(lineLogins).toHaveLength(1);
-    expect(await screen.findByRole("button", { name: "使用 Google 帳號登入" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
     expect(screen.getByText(/名稱與頭像/)).toBeVisible();
     expect(screen.getByRole("link", { name: "隱私權政策" })).toHaveAttribute("href", "/privacy");
   });
 
-  it("hides the Google button inside LINE", async () => {
-    renderApp({ path: "/sign-in", insideLine: { idToken: null } });
+  it("inside LINE, Google's button explains the outside browser instead of leaving for Google", async () => {
+    const user = userEvent.setup();
+    const { googleRedirects } = renderApp({ path: "/sign-in", insideLine: { idToken: null } });
 
-    expect(await screen.findByRole("button", { name: "使用 LINE 快速登入" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
+    await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
+
+    expect(await screen.findByText("請用外部瀏覽器登入 Google")).toBeVisible();
+    expect(googleRedirects).toEqual([]);
   });
 
   it("explains a refused sign-in in zh-TW", async () => {

@@ -340,16 +340,7 @@ export function SettingsPage() {
                       <GoogleButton
                         compact
                         label={t("settings.linkGoogle")}
-                        onIdToken={(idToken) => {
-                          void run(
-                            () =>
-                              api.auth.link[":provider"].$post(
-                                { param: { provider: "google" } },
-                                withJson({ idToken }),
-                              ),
-                            acceptMe,
-                          );
-                        }}
+                        errand={{ purpose: "link" }}
                       />
                     )}
                   </span>

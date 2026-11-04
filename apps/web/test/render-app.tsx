@@ -7,7 +7,7 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { AppProviders, type AppDeps } from "../src/app/AppProviders.js";
 import { routes } from "../src/app/routes.js";
 import type { CacheStorage } from "../src/groups/cache-persistence.js";
-import type { GoogleSignIn } from "../src/platform/google.js";
+import type { GoogleErrand, GoogleSignIn } from "../src/platform/google.js";
 import type { LineMessage, LineSignIn } from "../src/platform/line.js";
 import { createFakeApi, type FakeApi } from "./fake-api.js";
 import type { FakeGroups } from "./fake-groups.js";
@@ -29,8 +29,10 @@ export interface RenderAppOptions {
   sendToChat?: LineSignIn["sendToChat"];
   /** Whether the Google button can load (a client ID is configured). */
   googleAvailable?: boolean;
-  /** What Google's redirect brought back to the page, if anything. */
-  googleRedirectResult?: { idToken: string | null; state: string };
+  /** What Google's redirect brought back to the page, if anything (for starting on /google-return). */
+  googleRedirectResult?: { errand: GoogleErrand; idToken: string | null };
+  /** How the fake Google answers a redirect: by default with a token at once. */
+  google?: "holds" | "refuses" | "refusesOnce";
   testSignIn?: boolean;
   /** Seeds Groups before the app starts. */
   seed?: (groups: FakeGroups) => void;
@@ -48,7 +50,7 @@ export interface RenderedApp {
   /** Addresses handed to the outside browser from inside LINE. */
   lineExternalOpens: string[];
   /** The `state` of each redirect to Google's account chooser. */
-  googleRedirects: string[];
+  googleRedirects: GoogleErrand[];
   /** Messages sent through the LINE share target picker. */
   lineShares: string[];
   /** How many times the app started LIFF on arrival. */
@@ -69,7 +71,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   options.seed?.(api.groups);
   const lineLogins: string[] = [];
   const lineExternalOpens: string[] = [];
-  const googleRedirects: string[] = [];
+  const googleRedirects: GoogleErrand[] = [];
   const lineShares: string[] = [];
   const linePrepares = { count: 0 };
   const lineShareMessages: LineMessage[] = [];
@@ -108,22 +110,30 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
         return Promise.resolve();
       }),
   };
+  // Stands in for the round trip to Google: a redirect lands on /google-return with an ID token,
+  // unless the test has Google hold the page ("holds") or refuse ("refuses").
+  let googleAnswer: { errand: GoogleErrand; idToken: string | null } | null =
+    options.googleRedirectResult ?? null;
+  const onceKeys = new Set<string>();
+  let refused = false;
   const google: GoogleSignIn = {
     available: options.googleAvailable ?? true,
-    renderButton(container, onIdToken) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = "使用 Google 帳號登入";
-      button.addEventListener("click", () => {
-        onIdToken("fake|g-1|Google 小宇");
-      });
-      container.append(button);
-      return Promise.resolve();
+    redirect(errand, redirectOptions) {
+      const key = JSON.stringify(errand);
+      if (redirectOptions?.once === true && onceKeys.has(key)) return;
+      if (redirectOptions?.once === true) onceKeys.add(key);
+      googleRedirects.push(errand);
+      if (options.google === "holds") return;
+      const refuse = options.google === "refuses" || (options.google === "refusesOnce" && !refused);
+      refused ||= refuse;
+      googleAnswer = { errand, idToken: refuse ? null : "fake|g-1|Google 小宇" };
+      void router.navigate("/google-return");
     },
-    redirect(state) {
-      googleRedirects.push(state);
+    takeRedirectResult() {
+      const answer = googleAnswer;
+      googleAnswer = null;
+      return answer;
     },
-    takeRedirectResult: () => options.googleRedirectResult ?? null,
   };
 
   const deps: AppDeps = {

@@ -205,7 +205,7 @@ describe("join through an Invite", () => {
     const user = userEvent.setup();
     const { router } = joining({ name: "台南" }, { signedIn: false });
 
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
+    await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
 
     expect(await screen.findByRole("button", { name: "加入群組" })).toBeVisible();
     expect(router.state.location.pathname).toBe("/join/tok-1");

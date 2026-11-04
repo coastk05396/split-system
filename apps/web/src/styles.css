@@ -614,24 +614,6 @@
   animation: link-ping 2s infinite;
 }
 
-/* Google's real button is an iframe over ours, so a press cannot shrink it. A soft breathing glow
-   says "tap here"; once the tap has moved focus to Google the face dips and springs back. */
-@keyframes google-glow {
-  50% {
-    box-shadow: 0 0 0 6px rgb(66 133 244 / 0.12);
-  }
-}
-.google-glow {
-  animation: google-glow 2.4s ease-in-out infinite;
-}
-@keyframes google-pop {
-  40% {
-    transform: scale(0.94);
-  }
-}
-.google-pop {
-  animation: google-pop 320ms var(--ease-spring);
-}
 /* The Linked mark pops in once, when a Google link has just been made. */
 @keyframes linked-pop {
   from {
@@ -661,8 +643,6 @@
   .sprout-sway,
   .invite-pulse,
   .link-ping,
-  .google-glow,
-  .google-pop,
   .linked-pop,
   .tab-panel[data-state="active"],
   .menu-content[data-state="open"],

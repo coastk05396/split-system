@@ -45,7 +45,7 @@ describe("settings (screen 11)", () => {
     expect(await row("LINE")).toHaveTextContent("已連結");
     // Google is listed with no "linked" mark, so it can be connected from the row.
     expect(await row("Google")).not.toHaveTextContent("已連結");
-    expect(screen.getByRole("button", { name: "使用 Google 帳號登入" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "連接" })).toBeVisible();
     // The only Identity cannot be unlinked.
     expect((await accounts()).queryByRole("button", { name: /解除連結/ })).toBeNull();
   });
@@ -119,12 +119,6 @@ describe("settings (screen 11)", () => {
     expect(screen.queryByRole("heading", { name: "我的設定" })).toBeNull();
   });
 
-  it("keeps Google's own button faintly visible: a fully transparent one ignores finger taps on Android", async () => {
-    renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
-
-    expect((await row("Google")).querySelector(".opacity-0")).toBeNull();
-  });
-
   it("saves the Preferred currency from a dropdown right under the profile", async () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
@@ -139,12 +133,12 @@ describe("settings (screen 11)", () => {
     expect(screen.getByRole("option", { name: "THB 泰銖" })).toBeVisible();
   });
 
-  it("links Google from Google's own button when outside LINE", async () => {
+  it("links Google through Google's account chooser when outside LINE", async () => {
     const user = userEvent.setup();
     renderApp({ path: "/settings", cookieUser: makeUser("小宇", "line") });
 
     expect(await row("Google")).not.toHaveTextContent("已連結");
-    await user.click(await screen.findByRole("button", { name: "使用 Google 帳號登入" }));
+    await user.click(await screen.findByRole("button", { name: "連接" }));
 
     expect(await row("Google")).toHaveTextContent("已連結");
   });
@@ -160,7 +154,7 @@ describe("settings (screen 11)", () => {
     expect(await screen.findByRole("button", { name: "連接" })).toBeVisible();
     // The button itself leaves for the outside browser; no extra hint line.
     expect(screen.queryByText(/請用外部瀏覽器/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "連接" }));
 
     await waitFor(() => {
@@ -188,7 +182,7 @@ describe("settings (screen 11)", () => {
 
     expect(await row("Google")).toHaveTextContent("已連結");
     expect(screen.queryByRole("button", { name: "連接" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
   });
 
   it("offers no LINE link to someone signed in with Google, even inside the LINE app", async () => {
