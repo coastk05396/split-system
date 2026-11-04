@@ -42,6 +42,11 @@ export function GoogleReturnPage() {
       void navigate(origin(errand), { replace: true });
       return;
     }
+    // A link code never replaces a live session (W-8): back to /link, whose log-out wall asks first.
+    if (errand.purpose === "linkCode" && state.status === "signedIn") {
+      void navigate(origin(errand), { replace: true });
+      return;
+    }
     void (async () => {
       if (errand.purpose === "signIn") await signIn("google", idToken);
       else if (errand.purpose === "linkCode") await redeemLinkCode(errand.code, idToken);
@@ -71,9 +76,11 @@ export function GoogleReturnPage() {
   useEffect(() => {
     if (after === null) return;
     const signedIn = state.status === "signedIn";
-    if (after.purpose === "link") void navigate("/settings", { replace: true });
+    // `linked` tells Settings which account was just joined, so its mark pops in once.
+    const linked = { state: { linked: "google" }, replace: true };
+    if (after.purpose === "link") void navigate("/settings", linked);
     else if (after.purpose === "linkCode") {
-      void navigate(signedIn ? "/settings" : origin(after), { replace: true });
+      void navigate(signedIn ? "/settings" : origin(after), signedIn ? linked : { replace: true });
     } else void navigate(origin(after), { replace: true });
   }, [after, state.status, navigate]);
 

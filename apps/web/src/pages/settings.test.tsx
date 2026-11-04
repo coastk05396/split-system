@@ -144,6 +144,14 @@ describe("settings (screen 11)", () => {
     await waitFor(async () => {
       expect(await row("Google")).toHaveTextContent("已連結");
     });
+    // The link just made gets its checkmark pop; a visit that finds it already linked does not.
+    expect((await row("Google")).querySelector(".linked-pop")).not.toBeNull();
+  });
+
+  it("shows an already linked account still, without the pop", async () => {
+    renderApp({ path: "/settings", cookieUser: bothLinked("小宇") });
+
+    expect((await row("Google")).querySelector(".linked-pop")).toBeNull();
   });
 
   it("inside LINE, opens the outside browser with a one-time link code instead of Google's button", async () => {

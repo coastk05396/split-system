@@ -1,7 +1,7 @@
 import { CURRENCY_CODES, LANGUAGES, type Me, type Provider } from "@split/shared";
 import { Check, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { createApiClient, withJson } from "../api/client.js";
 import { type ErrorCode, toApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
@@ -96,6 +96,7 @@ export function SettingsPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const current = useRef<Me | null>(null);
   // What was already linked when the page opened is shown still; only a new link pops in.
+  const justLinked = (useLocation().state as { linked?: string } | null)?.linked;
   const startedLinked = useRef(
     new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
   );
@@ -283,7 +284,9 @@ export function SettingsPage() {
                 {isLinked && (
                   <span
                     className={`ml-auto inline-flex items-center gap-1 rounded-full bg-sprout-150 px-2.5 py-1 text-sm font-bold text-sprout-700 ${
-                      startedLinked.current.has(provider) ? "" : "linked-pop"
+                      startedLinked.current.has(provider) && provider !== justLinked
+                        ? ""
+                        : "linked-pop"
                     }`}
                   >
                     <Check aria-hidden="true" className="size-4" strokeWidth={3} />

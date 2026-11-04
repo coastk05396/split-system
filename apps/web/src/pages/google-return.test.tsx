@@ -27,6 +27,18 @@ describe("/google-return (Google's account chooser sends the page back)", () => 
     expect(accounts.getByText("Google").closest("li")).toHaveTextContent("已連結");
   });
 
+  it("does not let a link code replace a live session: it goes back to the log-out wall", async () => {
+    const { api } = renderApp({
+      path: "/google-return",
+      cookieUser: makeUser("甲", "line"),
+      googleRedirectResult: { errand: { purpose: "linkCode", code: "code-1" }, idToken: TOKEN },
+    });
+    api.linkCodes.set("code-1", makeUser("乙", "line"));
+
+    expect(await screen.findByText(/請先登出/)).toBeVisible();
+    expect(api.calls).not.toContain("POST /api/v1/auth/link-code/redeem");
+  });
+
   it("puts a person who refused back on the page they started from", async () => {
     renderApp({
       path: "/google-return",

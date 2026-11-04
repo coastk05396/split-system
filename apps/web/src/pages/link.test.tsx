@@ -28,20 +28,24 @@ describe("/link (finishing a Google link from the outside browser)", () => {
 
   it("after Google refuses, stops on the button, and the button still links with the same code", async () => {
     const user = userEvent.setup();
-    const { api, googleRedirects } = renderApp({
+    const { api, googleRedirects, router } = renderApp({
       path: "/link?code=code-1",
       google: "refusesOnce",
     });
     api.linkCodes.set("code-1", makeUser("小宇", "line"));
+    const visited: string[] = [];
+    router.subscribe((next) => visited.push(next.location.pathname));
 
-    // The page goes to Google and comes back refused; its button is re-found on each try, since
-    // the first one is replaced when the page is rebuilt.
-    await waitFor(async () => {
-      await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
-      expect(googleRedirects.length).toBeGreaterThanOrEqual(2);
+    // The auto-redirect goes to Google and comes back refused: wait for that round trip to finish.
+    await waitFor(() => {
+      expect(visited.slice(-2)).toEqual(["/google-return", "/link"]);
     });
+    expect(googleRedirects).toHaveLength(1);
+
+    await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
 
     await screen.findByRole("heading", { level: 1, name: "我的設定" });
+    expect(googleRedirects).toHaveLength(2);
   });
 
   it("does not switch a signed-in browser to another User: it asks to log out first", async () => {
@@ -70,13 +74,14 @@ describe("/link (finishing a Google link from the outside browser)", () => {
 
   it("asks to leave LINE's own browser instead of showing Google's button, and does it in one tap", async () => {
     const user = userEvent.setup();
-    const { lineExternalOpens } = renderApp({
+    const { lineExternalOpens, googleRedirects } = renderApp({
       path: "/link?code=code-1",
       insideLine: { idToken: null },
     });
 
     expect(await screen.findByText(/請用外部瀏覽器/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
+    expect(googleRedirects).toEqual([]);
     await user.click(screen.getByRole("button", { name: "用瀏覽器開啟" }));
     expect(lineExternalOpens).toEqual([window.location.href]);
   });
@@ -124,13 +129,16 @@ describe("/link (finishing a Google link from the outside browser)", () => {
 
   it("sign-in inside LINE shows the Google button, which explains and offers the outside browser", async () => {
     const user = userEvent.setup();
-    const { lineExternalOpens } = renderApp({ path: "/sign-in", insideLine: { idToken: null } });
+    const { lineExternalOpens, googleRedirects } = renderApp({
+      path: "/sign-in",
+      insideLine: { idToken: null },
+    });
 
     await user.click(await screen.findByRole("button", { name: "使用 Google 登入" }));
     const dialog = within(await screen.findByRole("dialog"));
     expect(dialog.getByText("請用外部瀏覽器登入 Google")).toBeVisible();
     // Google's own sign-in is never started inside LINE's browser.
-    expect(screen.queryByRole("button", { name: "使用 Google 帳號登入" })).toBeNull();
+    expect(googleRedirects).toEqual([]);
     expect(lineExternalOpens).toEqual([]);
 
     await user.click(dialog.getByRole("button", { name: "用瀏覽器開啟" }));
