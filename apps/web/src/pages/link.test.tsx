@@ -149,7 +149,61 @@ describe("/link (finishing a Google link from the outside browser)", () => {
     expect(lineExternalOpens).toEqual([]);
 
     await user.click(dialog.getByRole("button", { name: "用瀏覽器開啟" }));
-    expect(lineExternalOpens).toEqual([window.location.href]);
+    // The outside browser is asked to go straight to Google: no second tap on the button there.
+    const handedOver = new URL(window.location.href);
+    handedOver.searchParams.set("google", "1");
+    expect(lineExternalOpens).toEqual([handedOver.toString()]);
+  });
+
+  it("opened from LINE with ?google=1, the sign-in page goes straight to Google, no button flash", async () => {
+    const { googleRedirects } = renderApp({ path: "/sign-in?google=1", google: "holds" });
+
+    await waitFor(() => {
+      expect(googleRedirects).toEqual([{ purpose: "signIn", next: "/" }]);
+    });
+    expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("前往 Google…");
+  });
+
+  it("carries the page to return to through Google", async () => {
+    const { googleRedirects } = renderApp({
+      path: "/sign-in?google=1&next=%2Fgroups",
+      google: "holds",
+    });
+
+    await waitFor(() => {
+      expect(googleRedirects).toEqual([{ purpose: "signIn", next: "/groups" }]);
+    });
+  });
+
+  it("after Google refuses, stops on the sign-in page with both buttons, and goes to Google only once", async () => {
+    const { googleRedirects, router } = renderApp({
+      path: "/sign-in?google=1",
+      google: "refusesOnce",
+    });
+    const visited: string[] = [];
+    router.subscribe((next) => visited.push(next.location.pathname));
+
+    await waitFor(() => {
+      expect(visited.slice(-2)).toEqual(["/google-return", "/sign-in"]);
+    });
+    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
+    expect(googleRedirects).toHaveLength(1);
+  });
+
+  it("does not jump to Google inside LINE, or when Google is not set up", async () => {
+    const inLine = renderApp({
+      path: "/sign-in?google=1",
+      insideLine: { idToken: null },
+    });
+    expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeVisible();
+    expect(inLine.googleRedirects).toEqual([]);
+  });
+
+  it("does not jump to Google when Google is not set up", async () => {
+    const { googleRedirects } = renderApp({ path: "/sign-in?google=1", googleAvailable: false });
+    expect(await screen.findByRole("button", { name: "使用 LINE 快速登入" })).toBeVisible();
+    expect(googleRedirects).toEqual([]);
   });
 
   it("closes the outside-browser explanation on cancel and returns focus to the Google button", async () => {
