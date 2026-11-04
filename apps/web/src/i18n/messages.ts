@@ -473,7 +473,7 @@ const zhTW = {
   "link.inLine": "請用外部瀏覽器開啟這個頁面，不要用 LINE 內建瀏覽器。",
   "signIn.googleExternalTitle": "請用外部瀏覽器登入 Google",
   "signIn.googleExternalBody":
-    "Google 不允許在 LINE 內建瀏覽器登入。按下「用瀏覽器開啟」，會在手機的瀏覽器打開這一頁，再選「使用 Google 登入」。",
+    "Google 不允許在 LINE 內建瀏覽器登入。按下「用瀏覽器開啟」，會在手機的瀏覽器直接前往 Google 的帳號選擇頁。",
   "signIn.googleExternalOpen": "用瀏覽器開啟",
   "signIn.googleExternalCancel": "取消",
   "settings.deleteAccount": "刪除帳號",
