@@ -8,6 +8,6 @@
 - Do not run `pnpm e2e` while `pnpm dev` is running; they use the same local ports.
 - Do not push to `main` or trigger CI without the user's approval.
 - Record user-visible behaviour and rules in `docs/SPEC.md` (with the requirement ids W-n / M-n) in the same change, so code review has a written spec to check against.
-- Code review must be done by a subagent or another agent, never by the agent that wrote the change. The reviewer runs `/code-review`, `/ponytail:ponytail-review` or `/ponytail:ponytail-audit` and checks the change against `docs/SPEC.md`. The author may fix findings but never signs off on their own change.
+- Code review must be done by a different agent in a fresh context, never by the agent that wrote the change. Run `/code-review origin/main`: Standards against this file, Spec against `docs/SPEC.md`. `/ponytail:ponytail-review` may add a bug and risk pass; `/ponytail:ponytail-audit` is a whole-repo check, not a diff review. The author may fix findings but never signs off on their own change.
 - Run `pnpm lint` as well as `pnpm typecheck` and `pnpm test`: CI runs lint, and it is not part of the other two.
 - Format only the files you changed (`prettier --write <files>`), never a whole folder: some files in the repo are not prettier-clean on purpose and must not be touched.
