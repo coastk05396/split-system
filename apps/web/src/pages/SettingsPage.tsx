@@ -1,5 +1,5 @@
 import { CURRENCY_CODES, LANGUAGES, type Me, type Provider } from "@split/shared";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { createApiClient, withJson } from "../api/client.js";
@@ -95,6 +95,10 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const current = useRef<Me | null>(null);
+  // What was already linked when the page opened is shown still; only a new link pops in.
+  const startedLinked = useRef(
+    new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
+  );
   current.current = state.status === "signedIn" ? state.user : null;
   const isSignedIn = state.status === "signedIn";
 
@@ -181,10 +185,11 @@ export function SettingsPage() {
             aria-hidden="true"
             className={
               profileProvider === "line"
-                ? "rounded-full bg-line px-2 py-0.5 text-[11px] font-bold tracking-wide text-sprout-900"
-                : "rounded-full border border-[#747775] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#1F1F1F]"
+                ? "inline-flex items-center gap-1 rounded-full bg-line px-2 py-0.5 text-[11px] font-bold tracking-wide text-sprout-900"
+                : "inline-flex items-center gap-1 rounded-full border border-[#747775] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#1F1F1F]"
             }
           >
+            {profileProvider === "google" && <GoogleG className="size-3" />}
             {PROVIDER_NAME[profileProvider]}
           </span>
         </div>
@@ -276,7 +281,12 @@ export function SettingsPage() {
                   {name}
                 </span>
                 {isLinked && (
-                  <span className="ml-auto font-semibold text-sprout-600">
+                  <span
+                    className={`ml-auto inline-flex items-center gap-1 rounded-full bg-sprout-150 px-2.5 py-1 text-sm font-bold text-sprout-700 ${
+                      startedLinked.current.has(provider) ? "" : "linked-pop"
+                    }`}
+                  >
+                    <Check aria-hidden="true" className="size-4" strokeWidth={3} />
                     {t("settings.linked")}
                   </span>
                 )}
@@ -316,9 +326,15 @@ export function SettingsPage() {
                             },
                           );
                         }}
-                        className="press-pill rounded-full bg-sprout-600 px-4 py-1.5 text-sm font-bold text-white"
+                        className="press-pill press-deep flex min-h-11 items-center gap-1.5 rounded-full bg-sprout-600 px-5 text-sm font-bold text-white active:bg-sprout-700"
                       >
-                        {t("settings.linkGoogle")}
+                        {busy && (
+                          <LoaderCircle
+                            aria-hidden="true"
+                            className="size-4 animate-spin motion-reduce:animate-none"
+                          />
+                        )}
+                        {busy ? t("settings.linkingGoogle") : t("settings.linkGoogle")}
                       </button>
                     ) : (
                       <GoogleButton

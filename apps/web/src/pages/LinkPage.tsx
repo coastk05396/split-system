@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
@@ -16,6 +16,22 @@ export function LinkPage() {
   const code = useSearchParams()[0].get("code") ?? "";
   const [done, setDone] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
+  // Read once: Google's redirect brings the ID token back in the address, which is cleared.
+  const [returned] = useState(() => google.takeRedirectResult());
+  const started = useRef(false);
+  const waiting = state.status === "signedOut" && !line.isInClient() && google.available;
+
+  useEffect(() => {
+    if (!waiting || started.current) return;
+    started.current = true;
+    if (returned !== null) {
+      void redeemLinkCode(returned.state, returned.idToken).then(() => {
+        setDone(true);
+      });
+    } else if (code !== "") {
+      google.redirect(code);
+    }
+  }, [waiting]);
 
   if (state.status === "loading") return <Splash />;
   if (done && state.status === "signedIn") return <Navigate to="/settings" replace />;

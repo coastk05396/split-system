@@ -9,6 +9,13 @@ export interface GoogleSignIn {
   readonly available: boolean;
   /** Draws Google's button into `container`; `onIdToken` receives the ID token. */
   renderButton(container: HTMLElement, onIdToken: (idToken: string) => void): Promise<void>;
+  /**
+   * Leaves for Google's account chooser at once; it returns to `/link`, carrying `state`. Once per
+   * `state`, so a back-tap or a refusal lands on the page's own button instead of looping.
+   */
+  redirect(state: string): void;
+  /** On return from `redirect`: the ID token and the `state` sent, clearing them from the address. */
+  takeRedirectResult(): { idToken: string; state: string } | null;
 }
 
 /** The slice of `google.accounts.id` the app uses. */
@@ -58,6 +65,9 @@ function loadScript(): Promise<GoogleIdApi> {
   return loading;
 }
 
+const NONCE_KEY = "split.googleNonce";
+const STATE_KEY = "split.googleRedirectState";
+
 export function createGoogleSignIn(clientId: string | undefined): GoogleSignIn {
   const available = clientId !== undefined && clientId !== "";
   return {
@@ -81,6 +91,40 @@ export function createGoogleSignIn(clientId: string | undefined): GoogleSignIn {
         locale: getLocale() === "en" ? "en" : "zh-TW",
         width: Math.min(container.clientWidth || 350, 400),
       });
+    },
+    redirect(state) {
+      if (clientId === undefined || clientId === "") return;
+      if (sessionStorage.getItem(STATE_KEY) === state) return;
+      sessionStorage.setItem(STATE_KEY, state);
+      const nonce = crypto.randomUUID();
+      sessionStorage.setItem(NONCE_KEY, nonce);
+      const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      url.search = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: `${window.location.origin}/link`,
+        response_type: "id_token",
+        scope: "openid email profile",
+        nonce,
+        state,
+        prompt: "select_account",
+      }).toString();
+      window.location.replace(url.toString());
+    },
+    takeRedirectResult() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const idToken = params.get("id_token");
+      const state = params.get("state");
+      if (idToken === null || state === null) return null;
+      window.history.replaceState(null, "", window.location.pathname);
+      const nonce = sessionStorage.getItem(NONCE_KEY);
+      sessionStorage.removeItem(NONCE_KEY);
+      // The ID token's own nonce claim must be the one we sent (a token we did not ask for fails).
+      const claim = (
+        JSON.parse(atob(idToken.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/") ?? "")) as {
+          nonce?: string;
+        }
+      ).nonce;
+      return nonce !== null && claim === nonce ? { idToken, state } : null;
     },
   };
 }

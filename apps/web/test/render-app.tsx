@@ -29,6 +29,8 @@ export interface RenderAppOptions {
   sendToChat?: LineSignIn["sendToChat"];
   /** Whether the Google button can load (a client ID is configured). */
   googleAvailable?: boolean;
+  /** What Google's redirect brought back to the page, if anything. */
+  googleRedirectResult?: { idToken: string; state: string };
   testSignIn?: boolean;
   /** Seeds Groups before the app starts. */
   seed?: (groups: FakeGroups) => void;
@@ -45,6 +47,8 @@ export interface RenderedApp {
   lineLogins: string[];
   /** Addresses handed to the outside browser from inside LINE. */
   lineExternalOpens: string[];
+  /** The `state` of each redirect to Google's account chooser. */
+  googleRedirects: string[];
   /** Messages sent through the LINE share target picker. */
   lineShares: string[];
   /** How many times the app started LIFF on arrival. */
@@ -65,6 +69,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   options.seed?.(api.groups);
   const lineLogins: string[] = [];
   const lineExternalOpens: string[] = [];
+  const googleRedirects: string[] = [];
   const lineShares: string[] = [];
   const linePrepares = { count: 0 };
   const lineShareMessages: LineMessage[] = [];
@@ -115,6 +120,10 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
       container.append(button);
       return Promise.resolve();
     },
+    redirect(state) {
+      googleRedirects.push(state);
+    },
+    takeRedirectResult: () => options.googleRedirectResult ?? null,
   };
 
   const deps: AppDeps = {
@@ -140,6 +149,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     queryClient,
     lineLogins,
     lineExternalOpens,
+    googleRedirects,
     lineShares,
     linePrepares,
     lineShareMessages,

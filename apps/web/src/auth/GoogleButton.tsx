@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
 
@@ -30,7 +30,16 @@ export function GoogleG({ className = "size-5" }: { className?: string }) {
 }
 
 /** The look shared by every Google entry, laid out like the LINE button above it. */
-export function GoogleFace({ label, dim = false }: { label: ReactNode; dim?: boolean }) {
+export function GoogleFace({
+  label,
+  dim = false,
+  waiting = false,
+}: {
+  label: ReactNode;
+  dim?: boolean;
+  /** Google's account chooser is opening: the arrow gives way to a spinner. */
+  waiting?: boolean;
+}) {
   return (
     <span
       className={`flex h-14 w-full items-center justify-between rounded-full border border-[#747775] bg-white px-[23px] text-base font-medium text-[#1F1F1F] transition-opacity ${
@@ -41,7 +50,17 @@ export function GoogleFace({ label, dim = false }: { label: ReactNode; dim?: boo
         <GoogleG />
         {label}
       </span>
-      <ArrowRight aria-hidden="true" className="size-5" />
+      {waiting ? (
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-5 animate-spin motion-reduce:animate-none"
+        />
+      ) : (
+        <ArrowRight
+          aria-hidden="true"
+          className="size-5 transition-transform duration-300 ease-(--ease-spring) group-hover:translate-x-1 motion-reduce:transition-none"
+        />
+      )}
     </span>
   );
 }
@@ -64,6 +83,24 @@ export function GoogleButton({
   const container = useRef<HTMLDivElement>(null);
   const callback = useRef(onIdToken);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [waiting, setWaiting] = useState(false);
+
+  // Google's button is an iframe: the tap never reaches this page, but focus moves into it and the
+  // window blurs. That is the only sign the chooser is opening; focus coming back ends the wait.
+  useEffect(() => {
+    const onBlur = () => {
+      if (container.current?.contains(document.activeElement) === true) setWaiting(true);
+    };
+    const onFocus = () => {
+      setWaiting(false);
+    };
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   useEffect(() => {
     callback.current = onIdToken;
@@ -75,7 +112,9 @@ export function GoogleButton({
     let active = true;
     google
       .renderButton(element, (idToken) => {
-        if (active) callback.current(idToken);
+        if (!active) return;
+        setWaiting(false);
+        callback.current(idToken);
       })
       .then(() => {
         if (active) setStatus("ready");
@@ -95,12 +134,24 @@ export function GoogleButton({
   if (status === "failed") return null;
   if (compact) {
     return (
-      <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2">
+      <div
+        data-google-button=""
+        aria-busy={waiting}
+        className={`relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2 ${
+          waiting ? "google-pop" : status === "ready" ? "google-glow" : ""
+        }`}
+      >
         <span
-          className={`block rounded-full bg-sprout-600 px-4 py-1.5 text-sm font-bold text-white ${
+          className={`flex min-h-11 items-center gap-1.5 rounded-full bg-sprout-600 px-5 text-sm font-bold text-white ${
             status === "loading" ? "opacity-60" : ""
           }`}
         >
+          {waiting && (
+            <LoaderCircle
+              aria-hidden="true"
+              className="size-4 animate-spin motion-reduce:animate-none"
+            />
+          )}
           {label}
         </span>
         <div ref={container} className="absolute inset-0 overflow-hidden opacity-[0.01]" />
@@ -108,8 +159,14 @@ export function GoogleButton({
     );
   }
   return (
-    <div className="relative h-14 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2">
-      <GoogleFace label={label} dim={status === "loading"} />
+    <div
+      data-google-button=""
+      aria-busy={waiting}
+      className={`rise group relative h-14 rounded-full focus-within:ring-2 focus-within:ring-sprout-500 focus-within:ring-offset-2 ${
+        waiting ? "google-pop" : status === "ready" ? "google-glow" : ""
+      }`}
+    >
+      <GoogleFace label={label} dim={status === "loading"} waiting={waiting} />
       <div className="absolute inset-0 overflow-hidden opacity-[0.01]">
         <div
           ref={container}

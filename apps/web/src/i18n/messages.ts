@@ -464,6 +464,7 @@ const zhTW = {
   "settings.unlink": "解除連結 {provider}",
   "settings.unlinkShort": "解除連結",
   "settings.linkGoogle": "連接",
+  "settings.linkingGoogle": "前往 Google…",
   "settings.comingSoon": "即將推出",
   "link.signedIn": "你已經登入了。要連結另一個帳號，請先登出，再回到這個頁面。",
   "link.signOut": "登出",

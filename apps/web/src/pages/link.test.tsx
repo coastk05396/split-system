@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
@@ -19,6 +19,26 @@ describe("/link (finishing a Google link from the outside browser)", () => {
     const accounts = within(screen.getByRole("list", { name: "已連結的帳號" }));
     expect(accounts.getByText("LINE")).toBeVisible();
     expect(accounts.getByText("Google")).toBeVisible();
+  });
+
+  it("goes straight to Google's account chooser, carrying the code", async () => {
+    const { googleRedirects } = renderApp({ path: "/link?code=code-1" });
+
+    await screen.findByRole("heading", { level: 1 });
+    await waitFor(() => {
+      expect(googleRedirects).toEqual(["code-1"]);
+    });
+  });
+
+  it("finishes the link when Google sends the ID token back", async () => {
+    const { api, googleRedirects } = renderApp({
+      path: "/link",
+      googleRedirectResult: { idToken: "fake|g-1|Google 小宇", state: "code-1" },
+    });
+    api.linkCodes.set("code-1", makeUser("小宇", "line"));
+
+    await screen.findByRole("heading", { level: 1, name: "我的設定" });
+    expect(googleRedirects).toEqual([]);
   });
 
   it("does not switch a signed-in browser to another User: it asks to log out first", async () => {
