@@ -170,7 +170,7 @@ function replaceSettlement(
   client: QueryClient,
   groupId: string,
   next: Settlement,
-  onlyIf?: Settlement["status"],
+  onlyIf?: (current: Settlement) => boolean,
 ) {
   client.setQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(groupId), (data) =>
     data === undefined
@@ -180,7 +180,7 @@ function replaceSettlement(
           pages: data.pages.map((page) => ({
             ...page,
             settlements: page.settlements.map((s) =>
-              s.id === next.id && (onlyIf === undefined || s.status === onlyIf) ? next : s,
+              s.id === next.id && (onlyIf === undefined || onlyIf(s)) ? next : s,
             ),
           })),
         },
@@ -228,9 +228,14 @@ export function useSettlementAction(groupId: string) {
             target.amount,
           );
         }
-        // Only a row still shown as undone is put back: one a read already replaced has the
-        // server's version.
-        replaceSettlement(client, groupId, target, "undone");
+        // Only our own guess is put back: it is undone with no undo time yet, while the server's
+        // undo (read in meanwhile) carries one and must stay.
+        replaceSettlement(
+          client,
+          groupId,
+          target,
+          (current) => current.status === "undone" && current.undoneAt === null,
+        );
       }
       void refresh();
     },

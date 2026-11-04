@@ -577,6 +577,40 @@ describe("Recording and confirming Settlements", () => {
     }
   });
 
+  it("keeps the server's undone row when the undo's answer is lost after a fresh read", async () => {
+    const { user, api, id, queryClient } = await openSettle(owedToMe, (groups, gid) => {
+      groups.addSettlement(gid, { payer: 1, receiver: 0, amount: 100 });
+    });
+    const settlementId = api.groups.settlements.list(id())[0]?.id;
+    const undo = `POST /api/v1/settlements/${settlementId}/undo`;
+    api.dropNextResponse(undo);
+    const releaseUndo = api.holdResponses(undo);
+    let releaseReads: (() => void)[] = [];
+    try {
+      await user.click((await row("結算紀錄", "宜庭付給你")).getByRole("button", { name: "撤銷" }));
+      // The server has done the undo; a read brings its answer in while ours is still on the way.
+      await waitFor(() => {
+        expect(api.groups.settlements.list(id())[0]?.status).toBe("undone");
+      });
+      await queryClient.refetchQueries({ queryKey: settlementKeys.list(id()) });
+      releaseReads = [
+        `GET /api/v1/groups/${id()}`,
+        `GET /api/v1/groups/${id()}/balances`,
+        `GET /api/v1/groups/${id()}/settlements`,
+      ].map((r) => api.holdResponses(r));
+      releaseUndo();
+      expect(await screen.findByRole("alert")).toBeVisible();
+
+      const shown = queryClient
+        .getQueryData<InfiniteData<SettlementPage>>(settlementKeys.list(id()))
+        ?.pages[0]?.settlements.find((s) => s.id === settlementId)?.status;
+      expect(shown).toBe("undone");
+    } finally {
+      releaseUndo();
+      for (const release of releaseReads) release();
+    }
+  });
+
   it("asks the server for the real balances again after an undo fails", async () => {
     const { user, api, id } = await openSettle(owedToMe, (groups, gid) => {
       groups.addSettlement(gid, { payer: 2, receiver: 0, amount: 200 });
