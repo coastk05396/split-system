@@ -6,7 +6,7 @@ import { createApiClient, withJson } from "../api/client.js";
 import { type ErrorCode, toApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
-import { GoogleButton, GoogleG } from "../auth/GoogleButton.js";
+import { GOOGLE_PILL, GoogleButton, GoogleG } from "../auth/GoogleButton.js";
 import { Avatar } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
 
@@ -326,13 +326,15 @@ export function SettingsPage() {
                             },
                           );
                         }}
-                        className="press-pill press-deep flex min-h-11 items-center gap-1.5 rounded-full bg-sprout-600 px-5 text-sm font-bold text-white active:bg-sprout-700"
+                        className={GOOGLE_PILL}
                       >
-                        {busy && (
+                        {busy ? (
                           <LoaderCircle
                             aria-hidden="true"
                             className="size-4 animate-spin motion-reduce:animate-none"
                           />
+                        ) : (
+                          <GoogleG className="size-4" />
                         )}
                         {busy ? t("settings.linkingGoogle") : t("settings.linkGoogle")}
                       </button>

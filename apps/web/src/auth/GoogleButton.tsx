@@ -38,7 +38,7 @@ export function GoogleFace({
   waiting?: boolean;
 }) {
   return (
-    <span className="flex h-14 w-full items-center justify-between rounded-full border border-[#747775] bg-white px-[23px] text-base font-medium text-[#1F1F1F]">
+    <span className="google-face flex h-14 w-full items-center justify-between rounded-full px-[22px] text-base font-medium text-[#1F1F1F]">
       <span className="flex items-center gap-2">
         <GoogleG />
         {label}
@@ -57,6 +57,10 @@ export function GoogleFace({
     </span>
   );
 }
+
+/** A Google entry that is a row's action: the same face as the full-width button, in a pill. */
+export const GOOGLE_PILL =
+  "press-pill press-deep google-face flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-5 text-sm font-bold text-[#1F1F1F]";
 
 /**
  * Our own button, so a press shrinks it at once. It sends the page to Google's account chooser;
@@ -93,18 +97,14 @@ export function GoogleButton({
   };
   if (compact) {
     return (
-      <button
-        type="button"
-        disabled={going}
-        aria-busy={going}
-        onClick={go}
-        className="press-pill press-deep flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-sprout-600 px-5 text-sm font-bold text-white active:bg-sprout-700"
-      >
-        {going && (
+      <button type="button" disabled={going} aria-busy={going} onClick={go} className={GOOGLE_PILL}>
+        {going ? (
           <LoaderCircle
             aria-hidden="true"
             className="size-4 animate-spin motion-reduce:animate-none"
           />
+        ) : (
+          <GoogleG className="size-4" />
         )}
         {shown}
       </button>

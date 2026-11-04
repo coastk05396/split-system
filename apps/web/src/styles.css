@@ -614,6 +614,18 @@
   animation: link-ping 2s infinite;
 }
 
+/* Every Google entry: a white face (Google's G needs white), ringed in Google's four colours, with
+   a soft blue glow and a specular top edge, the way the LINE button is lit. */
+.google-face {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(110deg, #4285f4 0%, #ea4335 36%, #fbbc05 66%, #34a853 100%) border-box;
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 6px 14px -8px rgb(66 133 244 / 0.55);
+}
+
 /* The Linked mark pops in once, when a Google link has just been made. */
 @keyframes linked-pop {
   from {

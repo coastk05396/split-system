@@ -140,7 +140,10 @@ describe("settings (screen 11)", () => {
     expect(await row("Google")).not.toHaveTextContent("已連結");
     await user.click(await screen.findByRole("button", { name: "連接" }));
 
-    expect(await row("Google")).toHaveTextContent("已連結");
+    // The page goes to Google and comes back; until then the old page is still showing.
+    await waitFor(async () => {
+      expect(await row("Google")).toHaveTextContent("已連結");
+    });
   });
 
   it("inside LINE, opens the outside browser with a one-time link code instead of Google's button", async () => {
