@@ -88,6 +88,12 @@ export const routes: RouteObject[] = [
     ErrorBoundary: RouteError,
   },
   { path: "/sign-in", Component: SignInRoute, ErrorBoundary: RouteError },
+  // Opened in the phone's own browser from LINE, so it must work signed out.
+  {
+    path: "/link",
+    lazy: page(() => import("../pages/LinkPage.js"), "LinkPage"),
+    ErrorBoundary: RouteError,
+  },
   // Policy pages are public: linked from sign-in, readable signed in or out.
   {
     path: "/privacy",

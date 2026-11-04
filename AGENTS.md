@@ -8,6 +8,12 @@
 - Do not run `pnpm e2e` while `pnpm dev` is running; they use the same local ports.
 - Do not push to `main` or trigger CI without the user's approval.
 - Record user-visible behaviour and rules in `docs/SPEC.md` (with the requirement ids W-n / M-n) in the same change, so code review has a written spec to check against.
-- Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. Run `/code-review origin/main docs/SPEC.md`; optional extras: `/ponytail:ponytail-review` (diff), `/ponytail:ponytail-audit` (whole repo). The author fixes findings and never signs off on their own change.
+- Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. Run `/code-review origin/main docs/SPEC.md` in Claude Code; in Codex use the "Code Review" skill (type `$code-review` and pick it) with the same arguments, `origin/main docs/SPEC.md`. When dispatching a reviewer through Orca orchestration, name that skill in the task text. Optional extras: `/ponytail:ponytail-review` (diff), `/ponytail:ponytail-audit` (whole repo). The author fixes findings and never signs off on their own change.
 - Run `pnpm lint` as well as `pnpm typecheck` and `pnpm test`: CI runs lint, and it is not part of the other two.
 - Format only the files you changed (`prettier --write <files>`), never a whole folder: some files in the repo are not prettier-clean on purpose and must not be touched.
+
+## Account display (Settings)
+
+- The Settings Profile card follows the latest sign-in (`signedInWith`); Google shows its verified email, LINE never has one. Rules W-9 in `docs/SPEC.md`; terms in `GLOSSARY.md` (Profile card, Linked account).
+- Showing a Google email is a deliberate exception to the old "never email" rule: keep `privacy.md` and `signIn.dataSummary1/2` (zh-TW and en) in step with `identities.email` whenever it changes.
+- Migration `0011_identity_email.sql` deletes all existing Google links; do not apply it to a database unless the user has agreed.

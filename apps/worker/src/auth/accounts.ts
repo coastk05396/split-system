@@ -1,6 +1,7 @@
 import {
   type MePatch,
   type Me,
+  LINK_CODE_TTL_MS,
   type Provider,
   REFRESH_TOKEN_TTL_SECONDS,
   SESSION_MAX_AGE_SECONDS,
@@ -8,12 +9,18 @@ import {
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
-import { identities, sessions, users } from "../db/schema.js";
+import { identities, linkCodes, sessions, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { commitAccountCleanups } from "./account-cleanup.js";
 import type { Bindings } from "../env.js";
 import type { VerifiedIdentity } from "./identity-verifier.js";
-import { newRefreshToken, readRefreshToken, type RefreshToken } from "./tokens.js";
+import {
+  base64url,
+  hashSecret,
+  newRefreshToken,
+  readRefreshToken,
+  type RefreshToken,
+} from "./tokens.js";
 
 const REFRESH_TTL_MS = REFRESH_TOKEN_TTL_SECONDS * 1000;
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_SECONDS * 1000;
@@ -28,7 +35,7 @@ export async function loadMe(db: Db, userId: string): Promise<Me | null> {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   if (user === undefined) return null;
   const linked = await db
-    .select({ provider: identities.provider })
+    .select({ provider: identities.provider, email: identities.email })
     .from(identities)
     .where(eq(identities.userId, userId))
     .orderBy(asc(identities.createdAt), asc(identities.provider));
@@ -39,6 +46,7 @@ export async function loadMe(db: Db, userId: string): Promise<Me | null> {
     preferredCurrency: user.preferredCurrency,
     language: user.language,
     identities: linked,
+    signedInWith: user.lastProvider ?? linked[0]?.provider ?? "line",
   };
 }
 
@@ -68,8 +76,21 @@ export async function signInIdentity(
   if (existing !== undefined) {
     await db
       .update(users)
-      .set({ displayName: identity.displayName, pictureUrl: identity.pictureUrl, updatedAt: now })
+      .set({
+        displayName: identity.displayName,
+        pictureUrl: identity.pictureUrl,
+        lastProvider: identity.provider,
+        updatedAt: now,
+      })
       .where(eq(users.id, existing.userId));
+    if (identity.email !== null) {
+      await db
+        .update(identities)
+        .set({ email: identity.email })
+        .where(
+          and(eq(identities.provider, identity.provider), eq(identities.providerSub, identity.sub)),
+        );
+    }
     return existing.userId;
   }
   const userId = crypto.randomUUID();
@@ -79,6 +100,7 @@ export async function signInIdentity(
         id: userId,
         displayName: identity.displayName,
         pictureUrl: identity.pictureUrl,
+        lastProvider: identity.provider,
         createdAt: now,
         updatedAt: now,
       }),
@@ -87,6 +109,7 @@ export async function signInIdentity(
         userId,
         provider: identity.provider,
         providerSub: identity.sub,
+        email: identity.email,
         createdAt: now,
       }),
     ]);
@@ -197,12 +220,44 @@ export async function linkIdentity(
       userId,
       provider: identity.provider,
       providerSub: identity.sub,
+      email: identity.email,
       createdAt: now,
     });
   } catch (error) {
     if (isConstraintError(error, "UNIQUE")) throw new ApiError("IDENTITY_LINKED_ELSEWHERE");
     throw error;
   }
+}
+
+/** Issues the User's one link code (replacing any earlier one); only its hash is stored. */
+export async function createLinkCode(db: Db, userId: string, now: number): Promise<string> {
+  const code = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const values = { codeHash: await hashSecret(code), userId, expiresAt: now + LINK_CODE_TTL_MS };
+  await db
+    .insert(linkCodes)
+    .values(values)
+    .onConflictDoUpdate({ target: linkCodes.userId, set: values });
+  return code;
+}
+
+/**
+ * Spends a link code and attaches the verified Identity to its User; returns that User.
+ * The code is spent even when linking then fails, so a retry needs a fresh code.
+ */
+export async function redeemLinkCode(
+  db: Db,
+  code: string,
+  identity: VerifiedIdentity,
+  now: number,
+): Promise<string> {
+  const [spent] = await db
+    .delete(linkCodes)
+    .where(and(eq(linkCodes.codeHash, await hashSecret(code)), gt(linkCodes.expiresAt, now)))
+    .returning({ userId: linkCodes.userId });
+  if (spent === undefined) throw new ApiError("LINK_CODE_INVALID");
+  await linkIdentity(db, spent.userId, identity, now);
+  // The redeeming Google sign-in is the User's latest, so the profile follows it.
+  return signInIdentity(db, identity, now);
 }
 
 /** Removes one Identity, refusing when it is the User's last; checked in the same statement. */

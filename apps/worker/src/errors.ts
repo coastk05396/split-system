@@ -33,6 +33,8 @@ export const ERROR_STATUS = {
   /** Undo of a Settlement that is not confirmed. */
   SETTLEMENT_NOT_CONFIRMED: 409,
   INVITE_EXPIRED: 422,
+  /** A link code that is unknown, expired or already used. */
+  LINK_CODE_INVALID: 422,
   EXPENSE_AMOUNT_INVALID: 422,
   /** More than the payer still owes the receiver; details `{ maxAmount }`. */
   SETTLEMENT_EXCEEDS_DEBT: 422,

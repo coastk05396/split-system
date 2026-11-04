@@ -26,6 +26,7 @@ export interface Auth {
   state: AuthState;
   session: Session;
   signIn: (provider: Provider, idToken: string) => Promise<void>;
+  redeemLinkCode: (code: string, idToken: string) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
   signOut: () => Promise<void>;
   /** Replaces the signed-in User after the server changed them (Identity link or unlink). */
@@ -124,6 +125,25 @@ export function AuthProvider({
   }, [state.status, state.status === "signedIn" ? state.user.id : null, queryClient, storage]);
 
   const auth = useMemo<Auth>(() => {
+    /** Forgets everything the current User had on this device, before another User takes over. */
+    function dropLocalUser() {
+      cancelStatsInvalidation(queryClient);
+      stopPersistence.current?.();
+      voidMutationsInFlight(queryClient);
+      if (state.status === "signedIn") {
+        clearCache(state.user.id, storage);
+      }
+      queryClient.clear();
+      dismissDeleteFailure();
+      clearPendingWrites();
+    }
+
+    async function leave() {
+      dropLocalUser();
+      await session.signOut();
+      setState({ status: "signedOut", error: null, byChoice: true });
+    }
+
     async function enter(attempt: Promise<Me>) {
       try {
         setState({ status: "signedIn", user: await attempt });
@@ -135,22 +155,14 @@ export function AuthProvider({
       state,
       session,
       signIn: (provider, idToken) => enter(session.signIn(provider, idToken)),
+      redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
       testSignIn: (request) => enter(session.testSignIn(request)),
-      async signOut() {
-        cancelStatsInvalidation(queryClient);
-        stopPersistence.current?.();
-        voidMutationsInFlight(queryClient);
-        if (state.status === "signedIn") {
-          clearCache(state.user.id, storage);
-        }
-        queryClient.clear();
-        dismissDeleteFailure();
-        clearPendingWrites();
-        await session.signOut();
-        setState({ status: "signedOut", error: null, byChoice: true });
-      },
+      signOut: leave,
       updateUser(user) {
-        setState({ status: "signedIn", user });
+        // Never brings back someone who signed out while a request was in flight.
+        setState((current) =>
+          current.status === "signedIn" ? { status: "signedIn", user } : current,
+        );
       },
     };
   }, [state, session, queryClient, storage]);

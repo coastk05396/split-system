@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from "drizzle-orm";
 import { Hono } from "hono";
 import { routePath } from "hono/route";
 import type { Bindings } from "./env.js";
@@ -11,6 +12,18 @@ export interface AppEnv {
 }
 
 /**
+ * What an unexpected error leaves in the log. A failed query's message repeats its bound values
+ * (emails, names), so only the driver's own message is kept for those.
+ */
+export function errorLogLine(error: Error): string {
+  if (error instanceof DrizzleQueryError) {
+    const cause = error.cause instanceof Error ? error.cause.message : "";
+    return `DrizzleQueryError: ${cause}`;
+  }
+  return error.stack ?? error.name;
+}
+
+/**
  * A Hono app under `/api/v1` with request-ID logging, the shared error shape and the
  * JSON 404. Logs carry the route pattern, never the real path, headers or body.
  */
@@ -20,7 +33,7 @@ export function newApi() {
       const apiError = error instanceof ApiError ? error : new ApiError("INTERNAL");
       if (!(error instanceof ApiError)) {
         console.error(
-          JSON.stringify({ requestId: c.get("requestId"), stack: error.stack ?? error.name }),
+          JSON.stringify({ requestId: c.get("requestId"), stack: errorLogLine(error) }),
         );
       }
       c.set("errorCode", apiError.code);

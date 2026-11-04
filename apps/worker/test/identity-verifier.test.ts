@@ -94,7 +94,7 @@ describe("createJoseVerifier", () => {
     });
   });
 
-  it("accepts a LIFF ES256 token and keeps only sub, name and picture", async () => {
+  it("accepts a LIFF ES256 token and keeps only sub, name and picture (never its email)", async () => {
     const identity = await verifier.verify(
       "line",
       await sign(lineKey, lineClaims({ email: "x@y.z" })),
@@ -104,6 +104,30 @@ describe("createJoseVerifier", () => {
       sub: "U1234",
       displayName: "小宇",
       pictureUrl: "https://profile.line-scdn.net/abc",
+      email: null,
+    });
+  });
+
+  it("keeps a Google email only when Google says it is verified", async () => {
+    const claims = { iss: "https://accounts.google.com", aud: GOOGLE_CLIENT, exp: NOW_S + 60 };
+    const verified = await sign(googleKey, {
+      ...claims,
+      sub: "g-1",
+      email: "rick@example.com",
+      email_verified: true,
+    });
+    expect(await verifier.verify("google", verified)).toMatchObject({ email: "rick@example.com" });
+    const unverified = await sign(googleKey, {
+      ...claims,
+      sub: "g-2",
+      email: "who@example.com",
+      email_verified: false,
+    });
+    expect(await verifier.verify("google", unverified)).toMatchObject({ email: null });
+    expect(
+      await verifier.verify("google", await sign(googleKey, { ...claims, sub: "g-3" })),
+    ).toMatchObject({
+      email: null,
     });
   });
 

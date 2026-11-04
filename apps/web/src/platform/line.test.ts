@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLineSignIn, LineShareUnavailableError } from "./line.js";
+import { createLineSignIn, externalBrowserUrl, LineShareUnavailableError } from "./line.js";
 
 const liff = vi.hoisted(() => ({
   init: vi.fn(),
@@ -250,5 +250,16 @@ describe("posting into the current LINE chat", () => {
 
     await createLineSignIn("liff-id").share("hi");
     expect(liff.closeWindow).toHaveBeenCalledOnce();
+  });
+});
+
+describe("externalBrowserUrl", () => {
+  it("asks LINE to open the page in the phone's own browser", () => {
+    expect(externalBrowserUrl("https://split.example/link?code=abc")).toBe(
+      "https://split.example/link?code=abc&openExternalBrowser=1",
+    );
+    expect(externalBrowserUrl("https://split.example/link")).toBe(
+      "https://split.example/link?openExternalBrowser=1",
+    );
   });
 });

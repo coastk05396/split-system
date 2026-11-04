@@ -18,6 +18,15 @@ export const SESSION_MAX_AGE_SECONDS = 15 * 24 * 3600;
 export const idTokenRequestSchema = z.object({ idToken: z.string().min(1).max(8192) });
 export type IdTokenRequest = z.infer<typeof idTokenRequestSchema>;
 
+/** `POST /auth/link-code/redeem`: the one-time code plus the Google ID token. */
+export const redeemLinkCodeRequestSchema = z.object({
+  code: z.string().min(1).max(128),
+  idToken: z.string().min(1).max(8192),
+});
+
+/** How long a link code lives. */
+export const LINK_CODE_TTL_MS = 5 * 60 * 1000;
+
 /** Dev-only `POST /auth/test-sign-in`, present only when the test flag is set. */
 export const testSignInRequestSchema = z.object({
   provider: providerSchema,
@@ -36,7 +45,9 @@ export const meSchema = z.object({
   preferredCurrency: currencyCodeSchema,
   /** The language the whole app shows in, kept with the account so every device agrees. */
   language: languageSchema,
-  identities: z.array(z.object({ provider: providerSchema })),
+  identities: z.array(z.object({ provider: providerSchema, email: z.string().nullable() })),
+  /** The provider of the latest sign-in; the profile card shows that one. */
+  signedInWith: providerSchema,
 });
 export type Me = z.infer<typeof meSchema>;
 

@@ -31,7 +31,10 @@ describe("language", () => {
       cookieUser: {
         ...me,
         language: "en",
-        identities: [{ provider: "google" }, { provider: "line" }],
+        identities: [
+          { provider: "google", email: null },
+          { provider: "line", email: null },
+        ],
       },
     });
 

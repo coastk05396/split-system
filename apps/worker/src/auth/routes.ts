@@ -3,6 +3,7 @@ import {
   idTokenRequestSchema,
   mePatchSchema,
   providerSchema,
+  redeemLinkCodeRequestSchema,
   SESSION_MAX_AGE_SECONDS,
   type SessionResponse,
   testSignInRequestSchema,
@@ -15,11 +16,13 @@ import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { parseBody, sameOriginWrites } from "../request-guards.js";
 import {
+  createLinkCode,
   createSession,
   deleteAccount,
   endSession,
   linkIdentity,
   loadMe,
+  redeemLinkCode,
   rotateSession,
   updateSettings,
   signInIdentity,
@@ -94,7 +97,7 @@ export function authRoutes(deps: AppDeps) {
       // Dev and browser-test shortcut (SPEC §7.3): absent unless the flag is exactly "1".
       if (c.env.TEST_SIGN_IN !== "1") throw new ApiError("NOT_FOUND");
       const body = await parseBody(c, testSignInRequestSchema);
-      return signIn(c, { ...body, pictureUrl: null });
+      return signIn(c, { ...body, pictureUrl: null, email: null });
     })
     .post("/auth/refresh", async (c) => {
       const presented = getCookie(c, REFRESH_COOKIE);
@@ -120,6 +123,21 @@ export function authRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       await linkIdentity(db, c.var.userId, identity, deps.now());
       return c.json(await requireMe(db, c.var.userId), 200);
+    })
+    // From LINE's in-app browser, where Google refuses to sign in: the signed-in User gets a code
+    // to open in an outside browser, whose Google sign-in then joins this same User.
+    .post("/auth/link-code", signedIn, async (c) => {
+      const code = await createLinkCode(createDb(c.env.DB), c.var.userId, deps.now());
+      return c.json({ code }, 200);
+    })
+    .post("/auth/link-code/redeem", async (c) => {
+      const { code, idToken } = await parseBody(c, redeemLinkCodeRequestSchema);
+      const identity = await deps.verifier(c.env).verify("google", idToken);
+      const db = createDb(c.env.DB);
+      const now = deps.now();
+      const userId = await redeemLinkCode(db, code, identity, now);
+      const refresh = await createSession(db, userId, c.req.header("User-Agent"), now);
+      return c.json(await issueSession(c, userId, refresh), 200);
     })
     .delete("/auth/identities/:provider", signedIn, async (c) => {
       const provider = readProvider(c.req.param("provider"));

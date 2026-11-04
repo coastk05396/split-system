@@ -40,6 +40,18 @@ _Avoid_: Account, member (when meaning the person outside a Group)
 One way a User proves who they are, such as a Google sign-in or a LINE sign-in.
 _Avoid_: Login, provider account
 
+**Linked account**:
+An Identity attached to a User; Settings lists LINE and Google and shows which are linked. Only a Google one carries an email, shown on the Profile card.
+_Avoid_: Binding, connection
+
+**Profile card**:
+The card at the top of Settings showing who the User is for the latest sign-in: the LINE name and picture with a LINE tag, or the Google picture and email with a Google tag.
+_Avoid_: Header, avatar row
+
+**Link code**:
+A short-lived, single-use code a signed-in User gets inside LINE so that a Google sign-in in an outside browser joins that same User instead of creating a new one.
+_Avoid_: Pairing code, invite code (an Invite brings someone into a Group)
+
 **Member**:
 A User's place inside one Group.
 _Avoid_: Participant, attendee

@@ -11,6 +11,8 @@ export interface Session {
   restore(): Promise<Me | null>;
   /** Exchanges a Google or LINE ID token for a session. Throws ApiFailure. */
   signIn(provider: Provider, idToken: string): Promise<Me>;
+  /** Spends a link code with a Google ID token: joins the code's User and signs in as them. */
+  redeemLinkCode(code: string, idToken: string): Promise<Me>;
   /** Dev and browser-test sign-in; the route answers 404 unless the Worker enables it. */
   testSignIn(request: TestSignInRequest): Promise<Me>;
   /** Ends this device's session. */
@@ -94,6 +96,12 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     async signIn(provider, idToken) {
       const route = provider === "google" ? api.auth.google : api.auth.line;
       return accept(await route.$post(undefined, withJson({ idToken })));
+    },
+
+    async redeemLinkCode(code, idToken) {
+      return accept(
+        await api.auth["link-code"].redeem.$post(undefined, withJson({ code, idToken })),
+      );
     },
 
     async testSignIn(request) {

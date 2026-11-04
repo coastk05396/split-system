@@ -65,12 +65,12 @@ export async function readRefreshToken(
   return { sessionId: match[1], hash: await hashSecret(match[2]) };
 }
 
-async function hashSecret(secret: string): Promise<string> {
+export async function hashSecret(secret: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function base64url(bytes: Uint8Array): string {
+export function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")

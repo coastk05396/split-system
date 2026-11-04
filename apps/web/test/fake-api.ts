@@ -9,6 +9,8 @@ export interface FakeApi {
   fetch: typeof fetch;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
+  /** Changes the User on the server only, as another device would; this device is not told. */
+  changeUserOnServer(user: Me): void;
   /** Pretend the browser holds a valid refresh cookie for this User. */
   setCookieUser(user: Me | null): void;
   /** Make the current access token stale so the next authed call gets a 401. */
@@ -23,6 +25,8 @@ export interface FakeApi {
   holdResponses(route: string): () => void;
   /** When set, `POST /auth/link/:provider` fails with this 409 code. */
   refuseLink: string | null;
+  /** Link codes the server has issued, with the User each one belongs to. */
+  linkCodes: Map<string, Me>;
   /** The next request to "METHOD /path" reaches the server, but its answer is lost (network error). */
   dropNextResponse(route: string): void;
   /** Every request seen, with its headers and body text. */
@@ -48,7 +52,8 @@ export function makeUser(displayName: string, provider: "google" | "line" = "goo
     pictureUrl: null,
     preferredCurrency: "TWD",
     language: "zh-TW",
-    identities: [{ provider }],
+    identities: [{ provider, email: provider === "google" ? `${displayName}@example.com` : null }],
+    signedInWith: provider,
   };
 }
 
@@ -122,6 +127,7 @@ export function createFakeApi(): FakeApi {
     },
     testSignInEnabled: true,
     refuseLink: null,
+    linkCodes: new Map(),
     requests,
     spendingStats: [],
     spendingDetails: [],
@@ -132,6 +138,9 @@ export function createFakeApi(): FakeApi {
     ]),
     dropNextResponse(route) {
       dropping.add(route);
+    },
+    changeUserOnServer(user) {
+      update(user);
     },
     setCookieUser(user) {
       cookieUser = user;
@@ -197,6 +206,29 @@ export function createFakeApi(): FakeApi {
         const provider = url.pathname.endsWith("line") ? "line" : "google";
         return issue(makeUser(name, provider));
       }
+      case "POST /api/v1/auth/link-code": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const code = `code-${String(api.linkCodes.size + 1)}`;
+        api.linkCodes.set(code, authed);
+        return json({ code });
+      }
+      case "POST /api/v1/auth/link-code/redeem": {
+        const { code, idToken } = await readJson(init);
+        if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
+          return error("ID_TOKEN_INVALID", 401);
+        }
+        const owner = typeof code === "string" ? api.linkCodes.get(code) : undefined;
+        if (owner === undefined) return error("LINK_CODE_INVALID", 422);
+        api.linkCodes.delete(String(code));
+        const linked = {
+          ...owner,
+          identities: [
+            ...owner.identities,
+            { provider: "google" as const, email: "linked@example.com" },
+          ],
+        };
+        return issue(linked);
+      }
       case "POST /api/v1/auth/test-sign-in": {
         if (!api.testSignInEnabled) return error("NOT_FOUND", 404);
         const body = await readJson(init);
@@ -257,7 +289,13 @@ export function createFakeApi(): FakeApi {
         return error("ID_TOKEN_INVALID", 401);
       }
       if (api.refuseLink !== null) return error(api.refuseLink, 409);
-      return update({ ...authed, identities: [...others, { provider }] });
+      return update({
+        ...authed,
+        identities: [
+          ...others,
+          { provider, email: provider === "google" ? "linked@example.com" : null },
+        ],
+      });
     }
     const body = method === "GET" || method === "DELETE" ? {} : await readJson(init);
     return (

@@ -19,6 +19,8 @@ export interface LineSignIn {
   autoSignIn(): Promise<string | null>;
   /** Outside LINE: send the browser to LINE Login (email or QR), returning here. */
   login(): Promise<void>;
+  /** Inside LINE: open `url` in the phone's own browser (Google refuses LINE's in-app one). */
+  openExternal(url: string): Promise<void>;
   /**
    * Inside LINE: send a text message through the share target picker (decision 10).
    * Resolves true when sent, false when the person closed the picker. The LINE window closes
@@ -118,6 +120,13 @@ async function initLiffWithoutAndroidPrompt(
   }
 }
 
+/** The same page with the parameter that makes LINE hand it to the phone's own browser. */
+export function externalBrowserUrl(url: string): string {
+  const next = new URL(url);
+  next.searchParams.set("openExternalBrowser", "1");
+  return next.toString();
+}
+
 export function createLineSignIn(liffId: string | undefined): LineSignIn {
   let liffReady: Promise<(typeof import("@line/liff"))["default"]> | null = null;
 
@@ -200,6 +209,12 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       // app signs in by itself, and LIFF does not allow logging in or out there.
       if (!liff.isInClient() && liff.isLoggedIn()) liff.logout();
       liff.login({ redirectUri: window.location.href });
+    },
+
+    // Works without a LIFF ID: LINE opens any URL carrying this parameter in the outside browser.
+    openExternal(url) {
+      window.location.assign(externalBrowserUrl(url));
+      return Promise.resolve();
     },
 
     share: (text, options) => shareMessages([{ type: "text", text }], options),

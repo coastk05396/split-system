@@ -5,6 +5,10 @@ function link(provider: string, accessToken: string, sub: string) {
   return call(`/auth/link/${provider}`, json({ idToken: `fake|${sub}|小宇` }, bearer(accessToken)));
 }
 
+function meOf(accessToken: string) {
+  return call("/me", { headers: bearer(accessToken) }).then((res) => res.json());
+}
+
 function unlink(provider: string, accessToken: string) {
   return call(`/auth/identities/${provider}`, { method: "DELETE", headers: bearer(accessToken) });
 }
@@ -39,6 +43,47 @@ describe("POST /auth/link/:provider", () => {
 
   it("requires a signed-in User", async () => {
     expect((await call("/auth/link/line", json({ idToken: "fake|x|y" }))).status).toBe(401);
+  });
+});
+
+describe("Identity email (shown in Settings)", () => {
+  it("keeps a Google email, never a LINE one", async () => {
+    const session = await signIn("google", uniqueSub("g"), "小宇", "rick@example.com");
+    await link("line", session.accessToken, uniqueSub("l")).then((res) => res.json());
+    expect(await meOf(session.accessToken)).toMatchObject({
+      identities: [{ provider: "google", email: "rick@example.com" }, { provider: "line" }],
+    });
+    expect(await meOf(session.accessToken)).toMatchObject({
+      identities: [{ provider: "google" }, { provider: "line", email: null }],
+      signedInWith: "google",
+    });
+  });
+
+  it("stores the email of a Google account linked later", async () => {
+    const session = await signIn("line", uniqueSub("l"));
+    const res = await call(
+      "/auth/link/google",
+      json(
+        { idToken: `fake|${uniqueSub("g")}|小宇|late@example.com` },
+        bearer(session.accessToken),
+      ),
+    );
+    expect(await res.json()).toMatchObject({
+      identities: [{ provider: "google", email: "late@example.com" }, { provider: "line" }],
+    });
+  });
+
+  it("refreshes the email at the next sign-in, and keeps it when a token lacks one", async () => {
+    const sub = uniqueSub("g");
+    const first = await signIn("google", sub, "小宇", "old@example.com");
+    await signIn("google", sub, "小宇", "new@example.com");
+    expect(await meOf(first.accessToken)).toMatchObject({
+      identities: [{ provider: "google", email: "new@example.com" }],
+    });
+    await signIn("google", sub, "小宇");
+    expect(await meOf(first.accessToken)).toMatchObject({
+      identities: [{ provider: "google", email: "new@example.com" }],
+    });
   });
 });
 
