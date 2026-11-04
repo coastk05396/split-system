@@ -7,6 +7,8 @@
 - No new test needed for: deleting dead code, pure refactors, docs/comments, styling-only changes. Existing tests must still pass.
 - Do not run `pnpm e2e` while `pnpm dev` is running; they use the same local ports.
 - Do not push to `main` or trigger CI without the user's approval.
+- Staging domain: `https://split-stag.rickchen.si` (Cloudflare tunnel `split-stag` to the local `pnpm dev`; Vite `allowedHosts` must list it). Google's authorized redirect URI there is `https://split-stag.rickchen.si/google-return`.
+- A docs-only change needs no CI run: put `[skip ci]` in its commit message.
 - Record user-visible behaviour and rules in `docs/SPEC.md` (with the requirement ids W-n / M-n) in the same change, so code review has a written spec to check against.
 - Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. Run `/code-review origin/main docs/SPEC.md` in Claude Code; in Codex use the "Code Review" skill (type `$code-review` and pick it) with the same arguments, `origin/main docs/SPEC.md`. When dispatching a reviewer through Orca orchestration, name that skill in the task text. Optional extras: `/ponytail:ponytail-review` (diff), `/ponytail:ponytail-audit` (whole repo). The author fixes findings and never signs off on their own change.
 - Run `pnpm lint` as well as `pnpm typecheck` and `pnpm test`: CI runs lint, and it is not part of the other two.

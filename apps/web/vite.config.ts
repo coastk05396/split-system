@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     // `cloudflared tunnel --url` hands out a random *.trycloudflare.com name (see AGENTS.md).
-    allowedHosts: [".trycloudflare.com"],
+    allowedHosts: ["split-stag.rickchen.si"],
     proxy: {
       "/api": {
         target: "http://localhost:8787",
