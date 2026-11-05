@@ -7,9 +7,7 @@
 ## Run and check
 
 - Start the local app with `pnpm dev`. Open the web UI at `http://localhost:5173`.
-- Before you finish a change run `pnpm typecheck`, `pnpm test` and `pnpm lint`. CI runs lint, and it is not part of the other two.
 - Run `pnpm e2e` only for full-flow or critical UI/sync changes, and not while `pnpm dev` is running; they use the same local ports.
-- Format the files you changed with `prettier --write <files>`. A pre-commit hook also formats staged files.
 
 ## Tests
 
