@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate, type NavigateFunction } from "react-router";
 import { ApiFailure, type ErrorCode } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
@@ -74,7 +74,7 @@ export function createGoogleErrand(
       };
     },
     start: async (errand: GoogleErrand) => {
-      change("leaving", snapshot.error);
+      change("leaving");
       try {
         if (!line.isInClient()) {
           // An explicit tap keeps its spinner until departure or a bfcache restore.
@@ -91,7 +91,7 @@ export function createGoogleErrand(
           target = url.toString();
         }
         await line.openExternal(target);
-        change("ready", snapshot.error);
+        change("ready");
       } catch (error) {
         change("ready", error instanceof ApiFailure ? error.code : "INTERNAL");
       }
@@ -150,7 +150,8 @@ export function useGoogleErrand(arrival: Arrival = null) {
   const navigate = useNavigate();
   const current = useRef(auth);
   const mounted = useRef(true);
-  useEffect(() => {
+  // A layout effect, so the before-paint resume below reads this render's auth.
+  useLayoutEffect(() => {
     current.current = auth;
   });
   const [errand] = useState(() =>
@@ -168,7 +169,8 @@ export function useGoogleErrand(arrival: Arrival = null) {
       window.removeEventListener("pageshow", show);
     };
   }, [errand]);
-  useEffect(() => {
+  // Before paint: when the session check lands after the page, the page must not flash (W-8).
+  useLayoutEffect(() => {
     if (arrival === "return") void errand.finish(() => mounted.current);
     else if (arrival !== "settings") errand.resume(arrival);
   }, [arrival, auth.state.status, errand]);

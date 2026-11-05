@@ -37,10 +37,7 @@ export function LinkPage() {
             <p>{t("link.inLine")}</p>
             <button
               type="button"
-              onClick={() => {
-                errand.clearError();
-                void errand.start({ purpose: "linkCode", code });
-              }}
+              onClick={() => void errand.start({ purpose: "linkCode", code })}
               className="press-pill mt-4 rounded-full bg-sprout-600 px-5 py-2 font-bold text-white"
             >
               {t("signIn.googleExternalOpen")}
