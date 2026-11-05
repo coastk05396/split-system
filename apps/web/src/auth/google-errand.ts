@@ -174,7 +174,7 @@ export function useGoogleErrand(arrival: Arrival = null) {
     if (arrival === "return") void errand.finish(() => mounted.current);
     else if (arrival !== "settings") errand.resume(arrival);
   }, [arrival, auth.state.status, errand]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (arrival !== "settings" || auth.state.status !== "signedIn") return;
     const controller = new AbortController();
     const visible = () => {
