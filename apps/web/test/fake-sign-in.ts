@@ -1,5 +1,9 @@
 import type { GoogleErrand, GoogleSignIn } from "../src/platform/google.js";
-import type { LineMessage, LineSignIn } from "../src/platform/line.js";
+import {
+  LineShareUnavailableError,
+  type LineMessage,
+  type LineSignIn,
+} from "../src/platform/line.js";
 import type { RenderAppOptions } from "./render-app.js";
 
 /** The same browser ports for page tests and the Google errand seam. */
@@ -14,6 +18,13 @@ export function createFakeSignIn(
   const linePrepares = { count: 0 };
   const lineShareMessages: LineMessage[] = [];
   const lineChatMessages: LineMessage[] = [];
+
+  function pickerResult(): Promise<boolean> {
+    if (options.linePicker === "unavailable")
+      return Promise.reject(new LineShareUnavailableError());
+    if (options.linePicker === "fails") return Promise.reject(new Error("picker failed"));
+    return Promise.resolve(options.linePicker !== "cancelled");
+  }
 
   const line: LineSignIn = {
     isInClient: () => options.insideLine !== undefined,
@@ -33,11 +44,11 @@ export function createFakeSignIn(
     },
     share: (text) => {
       lineShares.push(text);
-      return Promise.resolve(true);
+      return pickerResult();
     },
     shareMessages: (messages) => {
       lineShareMessages.push(...messages);
-      return Promise.resolve(true);
+      return pickerResult();
     },
     canSendToChat: () => Promise.resolve(options.lineChat === true),
     sendToChat:

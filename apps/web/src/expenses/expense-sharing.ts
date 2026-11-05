@@ -1,8 +1,5 @@
-import type { Expense, Group, Invite } from "@split/shared";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
-import { useDeps } from "../app/AppProviders.js";
-import { groupKeys, useEnsureInvite } from "../groups/api.js";
+import type { Expense, Group } from "@split/shared";
+import { useLineShare } from "../platform/line-share.js";
 import type { ShareContent } from "../groups/ShareButtons.js";
 import { t } from "../i18n/messages.js";
 import {
@@ -31,33 +28,19 @@ export const settlePendingShare = (expenseId: string) => pendingShares.delete(ex
 
 /** Prepare one Expense for sharing; a missing Invite never prevents sharing with existing Members. */
 export function useExpenseSharing(groupId: string) {
-  const invite = useEnsureInvite(groupId);
-  const client = useQueryClient();
-  const { line } = useDeps();
-  // One ensure request at a time: the warm-up and a quick save would otherwise each send one.
-  const asking = useRef<Promise<Invite | null> | null>(null);
-  function ensureInvite(): Promise<Invite | null> {
-    asking.current ??= invite
-      .mutateAsync()
-      .catch(() => null)
-      .finally(() => {
-        asking.current = null;
-      });
-    return asking.current;
-  }
+  const sharing = useLineShare();
   async function prepare(
     expense: Expense,
     group: Group,
     nameOf: (memberId: string) => string,
     sendToChat: boolean,
   ): Promise<SavedShare> {
-    const cached = client.getQueryData<Invite>(groupKeys.invite(groupId));
-    const link = cached ?? (await ensureInvite());
-    const card = buildExpenseCard(expense, group, nameOf, link?.token ?? null);
+    const token = await sharing.inviteToken(groupId, { cached: true });
+    const card = buildExpenseCard(expense, group, nameOf, token);
     let chat: ChatSendResult = "none";
     if (sendToChat) {
-      chat = await line
-        .sendToChat([expenseFlexMessage(card)])
+      chat = await sharing
+        .post([expenseFlexMessage(card)])
         .then((): ChatSendResult => "sent")
         .catch((): ChatSendResult => "failed");
     }
@@ -65,9 +48,7 @@ export function useExpenseSharing(groupId: string) {
   }
   /** Best effort: have the Invite ready before the card is built. */
   function warm() {
-    if (client.getQueryData<Invite>(groupKeys.invite(groupId)) === undefined) {
-      void ensureInvite();
-    }
+    void sharing.inviteToken(groupId, { cached: true });
   }
   /** Prepare in the background; the Group page shows the result once it arrives. */
   function prepareLater(...args: Parameters<typeof prepare>) {

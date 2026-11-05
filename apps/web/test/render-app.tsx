@@ -24,6 +24,8 @@ export interface RenderAppOptions {
   openExternalFails?: boolean;
   /** The app was opened from a LINE chat that the LIFF app may post into. */
   lineChat?: boolean;
+  /** The picker can be unavailable, fail, or be cancelled instead of succeeding. */
+  linePicker?: "unavailable" | "fails" | "cancelled";
   /** Make posting into the chat fail. */
   lineChatFails?: boolean;
   /** Override the external chat transport, for delayed answers. */
