@@ -13,6 +13,10 @@ export interface Session {
   signIn(provider: Provider, idToken: string): Promise<Me>;
   /** Spends a link code with a Google ID token: joins the code's User and signs in as them. */
   redeemLinkCode(code: string, idToken: string): Promise<Me>;
+  link(provider: Provider, idToken: string): Promise<Me>;
+  unlink(provider: Provider): Promise<Me>;
+  createLinkCode(): Promise<string>;
+  getMe(): Promise<Me>;
   /** Dev and browser-test sign-in; the route answers 404 unless the Worker enables it. */
   testSignIn(request: TestSignInRequest): Promise<Me>;
   /** Ends this device's session. */
@@ -86,7 +90,14 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     return baseFetch(input, { ...init, headers });
   }
 
-  return {
+  // These calls need the session's refresh-and-retry fetch, just like other signed-in calls.
+  const authenticated = createApiClient((input, init) => session.fetch(input, init));
+  async function readUser(res: Response): Promise<Me> {
+    if (!res.ok) throw await toApiFailure(res);
+    return (await res.json()) as Me;
+  }
+
+  const session: Session = {
     getAccessToken() {
       return accessToken;
     },
@@ -103,6 +114,29 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
         await api.auth["link-code"].redeem.$post(undefined, withJson({ code, idToken })),
       );
     },
+
+    async link(provider, idToken) {
+      return readUser(
+        await authenticated.auth.link[":provider"].$post(
+          { param: { provider } },
+          withJson({ idToken }),
+        ),
+      );
+    },
+
+    async unlink(provider) {
+      return readUser(
+        await authenticated.auth.identities[":provider"].$delete({ param: { provider } }),
+      );
+    },
+
+    async createLinkCode() {
+      const res: Response = await authenticated.auth["link-code"].$post();
+      if (!res.ok) throw await toApiFailure(res);
+      return ((await res.json()) as { code: string }).code;
+    },
+
+    getMe: async () => readUser(await authenticated.me.$get()),
 
     async testSignIn(request) {
       return accept(await api.auth["test-sign-in"].$post(undefined, withJson(request)));
@@ -137,4 +171,5 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
       return send(input, init, accessToken);
     },
   };
+  return session;
 }

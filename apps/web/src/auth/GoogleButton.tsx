@@ -1,6 +1,6 @@
 import { ArrowRight, LoaderCircle } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { useDeps } from "../app/AppProviders.js";
+import { type ReactNode } from "react";
+import { useGoogleErrand } from "./google-errand.js";
 import { t } from "../i18n/messages.js";
 import type { GoogleErrand } from "../platform/google.js";
 
@@ -76,24 +76,11 @@ export function GoogleButton({
   /** A small pill (a row's action) instead of the full-width button. */
   compact?: boolean;
 }) {
-  const { google } = useDeps();
-  const [going, setGoing] = useState(false);
-
-  // Back from Google can restore this page as it was left, spinner and all.
-  useEffect(() => {
-    const reset = (event: PageTransitionEvent) => {
-      if (event.persisted) setGoing(false);
-    };
-    window.addEventListener("pageshow", reset);
-    return () => {
-      window.removeEventListener("pageshow", reset);
-    };
-  }, []);
-
+  const googleErrand = useGoogleErrand();
+  const going = googleErrand.phase === "leaving";
   const shown = going ? t("settings.linkingGoogle") : label;
   const go = () => {
-    setGoing(true);
-    google.redirect(errand);
+    void googleErrand.start(errand);
   };
   if (compact) {
     return (

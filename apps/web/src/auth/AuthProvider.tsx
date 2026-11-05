@@ -25,8 +25,12 @@ export type AuthState =
 export interface Auth {
   state: AuthState;
   session: Session;
-  signIn: (provider: Provider, idToken: string) => Promise<void>;
-  redeemLinkCode: (code: string, idToken: string) => Promise<void>;
+  signIn: (provider: Provider, idToken: string) => Promise<boolean>;
+  redeemLinkCode: (code: string, idToken: string) => Promise<boolean>;
+  link: (provider: Provider, idToken: string) => Promise<void>;
+  unlink: (provider: Provider) => Promise<void>;
+  createLinkCode: () => Promise<string>;
+  refreshIdentities: (signal: AbortSignal) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
   signOut: () => Promise<void>;
   /** Replaces the signed-in User after the server changed them (Identity link or unlink). */
@@ -147,23 +151,50 @@ export function AuthProvider({
     async function enter(attempt: Promise<Me>) {
       try {
         setState({ status: "signedIn", user: await attempt });
+        return true;
       } catch (error) {
         setState({ status: "signedOut", error: failureCode(error) });
+        return false;
       }
+    }
+    function updateUser(user: Me) {
+      // Never brings back someone who signed out while a request was in flight.
+      setState((current) =>
+        current.status === "signedIn" ? { status: "signedIn", user } : current,
+      );
     }
     return {
       state,
       session,
       signIn: (provider, idToken) => enter(session.signIn(provider, idToken)),
       redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
-      testSignIn: (request) => enter(session.testSignIn(request)),
-      signOut: leave,
-      updateUser(user) {
-        // Never brings back someone who signed out while a request was in flight.
-        setState((current) =>
-          current.status === "signedIn" ? { status: "signedIn", user } : current,
-        );
+      link: async (provider, idToken) => {
+        updateUser(await session.link(provider, idToken));
       },
+      unlink: async (provider) => {
+        updateUser(await session.unlink(provider));
+      },
+      createLinkCode: () => session.createLinkCode(),
+      async refreshIdentities(signal) {
+        if (state.status !== "signedIn") return;
+        const before = state.user.identities;
+        try {
+          const { identities } = await session.getMe();
+          if (signal.aborted) return;
+          setState((current) =>
+            current.status === "signedIn" && current.user.identities === before
+              ? { status: "signedIn", user: { ...current.user, identities } }
+              : current,
+          );
+        } catch {
+          // Offline or signed out meanwhile: the next switch back tries again.
+        }
+      },
+      testSignIn: async (request) => {
+        await enter(session.testSignIn(request));
+      },
+      signOut: leave,
+      updateUser,
     };
   }, [state, session, queryClient, storage]);
 
