@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
+import type { MemberRole } from "./groups.js";
 import { canConfirmSettlement, canUndoSettlement, maxPayable } from "./settlement.js";
 
+type PermissionRow = {
+  memberId: string;
+  role: MemberRole;
+  confirm: boolean;
+  undo: boolean;
+  confirmedByMemberId: string | null;
+};
+
 describe("Settlement rules", () => {
-  it.each([
+  it.each<PermissionRow>([
     {
       memberId: "payer",
       role: "member",
@@ -45,17 +54,20 @@ describe("Settlement rules", () => {
       undo: false,
       confirmedByMemberId: null,
     },
-  ])("permission: $memberId ($role)", ({ memberId, role, confirm, undo, confirmedByMemberId }) => {
-    const actor = { memberId, role };
-    expect(canConfirmSettlement(actor, "payer", "receiver")).toBe(confirm);
-    expect(
-      canUndoSettlement(actor, {
-        payerMemberId: "payer",
-        receiverMemberId: "receiver",
-        confirmedByMemberId,
-      }),
-    ).toBe(undo);
-  });
+  ])(
+    "permission: $memberId ($role), confirmed by $confirmedByMemberId",
+    ({ memberId, role, confirm, undo, confirmedByMemberId }) => {
+      const actor = { memberId, role };
+      expect(canConfirmSettlement(actor, "payer", "receiver")).toBe(confirm);
+      expect(
+        canUndoSettlement(actor, {
+          payerMemberId: "payer",
+          receiverMemberId: "receiver",
+          confirmedByMemberId,
+        }),
+      ).toBe(undo);
+    },
+  );
   it.each([
     [-100, 60, 60],
     [-40, 100, 40],

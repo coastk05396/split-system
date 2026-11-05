@@ -2,6 +2,7 @@ import {
   canConfirmSettlement,
   canUndoSettlement,
   maxPayable,
+  type MemberRole,
   type Settlement,
 } from "@split/shared";
 
@@ -14,7 +15,7 @@ export interface SettlementGroup {
     id: string;
     name: string;
     status: string;
-    role: string;
+    role: MemberRole;
     balance: number;
   }[];
 }

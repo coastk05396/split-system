@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MemberRole } from "./groups.js";
 
 /** Settlements (SPEC §5; decisions 12, 15, 16, 23, 31). */
 
@@ -39,7 +40,7 @@ export const settlementPageSchema = z.object({
 });
 export type SettlementPage = z.infer<typeof settlementPageSchema>;
 
-type SettlementActor = { memberId: string; role: string };
+type SettlementActor = { memberId: string; role: MemberRole };
 
 /** The payer, receiver, or an Admin may confirm a Settlement. */
 export function canConfirmSettlement(

@@ -2,6 +2,7 @@ import {
   canConfirmSettlement,
   canUndoSettlement,
   maxPayable,
+  type MemberRole,
   settlementInputSchema,
   settlementSchema,
   SETTLEMENT_PAGE_SIZE,
@@ -20,7 +21,7 @@ const commandSchema = z.object({
   key: z.string().optional(),
   input: z.unknown().optional(),
 });
-type Party = { id: string; role: string; status: string; net_balance: number };
+type Party = { id: string; role: MemberRole; status: string; net_balance: number };
 interface Row extends Record<string, SqlStorageValue> {
   data: string;
 }
