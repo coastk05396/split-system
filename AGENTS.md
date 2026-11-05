@@ -36,7 +36,7 @@
 
 ### Issue tracker
 
-Local markdown under the gitignored `.scratch/<feature>/` (spec plus one file per ticket). See `docs/agents/issue-tracker.md`.
+Local markdown under the gitignored `.scratch/<feature>/`: a working spec plus one file per ticket. User-visible rules still go in `docs/SPEC.md`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
