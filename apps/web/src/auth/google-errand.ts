@@ -147,6 +147,8 @@ export function createGoogleErrand(
 export function useGoogleErrand(arrival: Arrival = null) {
   const { google, line } = useDeps();
   const auth = useAuth();
+  // Must stay above the layout effects below: React Router silently drops navigate() calls made
+  // before its own layout effect has run, and finish() navigates from one.
   const navigate = useNavigate();
   const current = useRef(auth);
   const mounted = useRef(true);
