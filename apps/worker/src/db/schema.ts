@@ -184,7 +184,9 @@ export const groupReservations = sqliteTable(
   {
     userId: text("user_id").notNull(),
     groupId: text("group_id").notNull(),
-    status: text("status", { enum: ["pending", "active"] }).notNull().default("pending"),
+    status: text("status", { enum: ["pending", "active"] })
+      .notNull()
+      .default("pending"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.groupId] })],

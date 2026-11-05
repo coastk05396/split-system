@@ -4,10 +4,7 @@ import type { SVGProps } from "react";
  * Cute Quick Receipt Icon: Chubby mini receipt notepad with scalloped wavy bottom edge
  * and a cute sprout golden seal stamp.
  */
-export function CuteQuickReceiptIcon({
-  className = "size-8",
-  ...props
-}: SVGProps<SVGSVGElement>) {
+export function CuteQuickReceiptIcon({ className = "size-8", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 32 32" fill="none" className={className} {...props}>
       <defs>
@@ -54,10 +51,7 @@ export function CuteQuickReceiptIcon({
 /**
  * Cute Trip Plane Icon: Chubby cartoon airplane climbing towards adventure with soft fluffy clouds.
  */
-export function CuteTripPlaneIcon({
-  className = "size-8",
-  ...props
-}: SVGProps<SVGSVGElement>) {
+export function CuteTripPlaneIcon({ className = "size-8", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 32 32" fill="none" className={className} {...props}>
       <defs>

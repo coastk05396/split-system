@@ -181,8 +181,10 @@ it("revokes an old Invite even while its D1 lookup update is failing", async () 
   const stranger = await person("invite-outage-stranger");
   const group = await createGroup(admin);
   const old = await inviteToken(admin, group.id);
-  await env.DB.prepare(`CREATE TRIGGER test_fail_invite_delete BEFORE DELETE ON invites
-    BEGIN SELECT RAISE(ABORT, 'injected D1 outage'); END`).run();
+  await env.DB.prepare(
+    `CREATE TRIGGER test_fail_invite_delete BEFORE DELETE ON invites
+    BEGIN SELECT RAISE(ABORT, 'injected D1 outage'); END`,
+  ).run();
   try {
     expect((await send(admin, "POST", `/groups/${group.id}/invite`)).status).toBe(201);
     expect((await send(stranger, "POST", `/invites/${old}/join`)).status).toBe(404);

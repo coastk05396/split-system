@@ -19,10 +19,7 @@ describe("＋ new entry", () => {
 
     expect(await screen.findByRole("heading", { name: "記在哪個群組？" })).toBeVisible();
     const roomieLink = screen.getByRole("link", { name: /室友/ });
-    expect(roomieLink).toHaveAttribute(
-      "href",
-      `/groups/${first}/expenses/new`,
-    );
+    expect(roomieLink).toHaveAttribute("href", `/groups/${first}/expenses/new`);
     expect(roomieLink).toHaveTextContent("1 位");
     expect(roomieLink).not.toHaveTextContent("快速分帳");
     expect(roomieLink).not.toHaveTextContent(/人/);
