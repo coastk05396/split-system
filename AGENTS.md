@@ -25,12 +25,13 @@
 ## Staging
 
 - Domain: `https://split-stag.rickchen.si` (Cloudflare tunnel `split-stag` to the local `pnpm dev`; Vite `allowedHosts` must list it).
-- Google's authorized redirect URI there is `https://split-stag.rickchen.si/google-return`.
+- Google's authorized redirect URI there is `/google-return` on that domain.
 
 ## Spec and review
 
-- Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.- Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. The author fixes findings and never signs off on their own change.
+- Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.
+- Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. The author fixes findings and never signs off on their own change.
   - Claude Code: run `/code-review origin/main docs/SPEC.md`.
-  - Codex: use the "Code Review" skill (type `$code-review` and pick it) with the same arguments, `origin/main docs/SPEC.md`.
+  - Codex: use the "Code Review" skill (type `$code-review` and pick it) with the same arguments.
   - Orca orchestration: name that skill in the task text.
   - Optional extras: `/ponytail:ponytail-review` (diff), `/ponytail:ponytail-audit` (whole repo).
