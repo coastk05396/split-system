@@ -85,6 +85,28 @@ describe("sharing a new Expense", () => {
     }
   });
 
+  it("shares an in-flight warm-up with the Invite dialog after navigating to Members", async () => {
+    const user = userEvent.setup();
+    const { api, id, router } = openNewExpense();
+    const ensure = `POST /api/v1/groups/${id()}/invite/ensure`;
+    const asked = () => api.requests.filter((request) => request.route === ensure).length;
+    const release = api.holdResponses(ensure);
+    try {
+      await waitFor(() => {
+        expect(asked()).toBe(1);
+      });
+      await act(async () => {
+        await router.navigate(`/groups/${id()}/members`);
+      });
+      await user.click(await screen.findByRole("button", { name: "邀請成員" }));
+      expect(asked()).toBe(1);
+      release();
+      expect(await screen.findByRole("img", { name: /QR Code/ })).toBeVisible();
+    } finally {
+      release();
+    }
+  });
+
   it("offers an existing-Member link when an Invite cannot be prepared", async () => {
     const user = userEvent.setup();
     const { api, id } = openNewExpense();

@@ -1,5 +1,5 @@
 import type { Invite } from "@split/shared";
-import { groupKeys, read, useApi } from "../groups/api.js";
+import { ensureInvite, groupKeys, useApi } from "../groups/api.js";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
@@ -36,15 +36,7 @@ export function createLineShare({
           ? client.getQueryData<Invite>(groupKeys.invite(groupId))
           : undefined;
       try {
-        const invite =
-          cached ??
-          (await client.query<Invite>({
-            queryKey: groupKeys.invite(groupId),
-            queryFn: () =>
-              read<Invite>(api.groups[":id"].invite.ensure.$post({ param: { id: groupId } })),
-            staleTime: 0,
-            retry: false,
-          }));
+        const invite = cached ?? (await ensureInvite(api, client, groupId));
         return invite.token;
       } catch {
         return null;
