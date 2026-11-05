@@ -1,11 +1,12 @@
 import { CURRENCY_CODES, LANGUAGES, type Me, type Provider } from "@split/shared";
 import { Check, ChevronRight, LoaderCircle } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { createApiClient, withJson } from "../api/client.js";
-import { type ErrorCode, toApiFailure } from "../api/errors.js";
+import { ApiFailure, type ErrorCode, toApiFailure } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
+import { useGoogleErrand } from "../auth/google-errand.js";
 import { GOOGLE_PILL, GoogleButton, GoogleG } from "../auth/GoogleButton.js";
 import { Avatar } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
@@ -89,12 +90,13 @@ const pickerSelect = "absolute inset-0 size-full cursor-pointer opacity-0";
  * unlink), the policy links, 登出 and 刪除帳號. No hint text, no 登出所有裝置.
  */
 export function SettingsPage() {
-  const { state, session, signOut, updateUser } = useAuth();
+  const { state, session, signOut, updateUser, unlink } = useAuth();
   const { line, google } = useDeps();
   const [error, setError] = useState<ErrorCode | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const current = useRef<Me | null>(null);
+  const googleErrand = useGoogleErrand("settings");
+  const busy = working || googleErrand.phase === "leaving";
   // What was already linked when the page opened is shown still; only a new link pops in.
   const location = useLocation();
   const navigate = useNavigate();
@@ -108,41 +110,6 @@ export function SettingsPage() {
   const [startedLinked] = useState(
     () => new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
   );
-  useEffect(() => {
-    current.current = state.status === "signedIn" ? state.user : null;
-  });
-  const isSignedIn = state.status === "signedIn";
-
-  // A Google link finished in the outside browser shows up here when the person switches back.
-  useEffect(() => {
-    if (!isSignedIn) return;
-    let active = true;
-    const refresh = async () => {
-      if (document.visibilityState !== "visible") return;
-      // An answer is stale if the linked accounts changed (unlink) or the page closed meanwhile.
-      const before = current.current?.identities;
-      try {
-        const res: Response = await createApiClient(session.fetch).me.$get();
-        if (!res.ok) return;
-        const identities = ((await res.json()) as Me).identities;
-        const user = current.current;
-        if (!active || user === null || user.identities !== before) return;
-        // Only the linked accounts: this screen's profile card stays that of this sign-in.
-        updateUser({ ...user, identities });
-      } catch {
-        // Offline or signed out meanwhile: the next switch back tries again.
-      }
-    };
-    const onVisible = () => {
-      void refresh();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      active = false;
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [isSignedIn, session, updateUser]);
-
   if (state.status !== "signedIn") return null;
   const user = state.user;
   const api = createApiClient(session.fetch);
@@ -156,6 +123,7 @@ export function SettingsPage() {
   /** Runs one account call; on failure shows its zh-TW message. */
   async function run(call: () => Promise<Response>, onOk: (res: Response) => Promise<void>) {
     setError(null);
+    googleErrand.clearError();
     setBusy(true);
     try {
       const res = await call();
@@ -163,6 +131,19 @@ export function SettingsPage() {
       else setError((await toApiFailure(res)).code);
     } catch {
       setError("INTERNAL");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runAuth(call: () => Promise<void>) {
+    setError(null);
+    googleErrand.clearError();
+    setBusy(true);
+    try {
+      await call();
+    } catch (error) {
+      setError(error instanceof ApiFailure ? error.code : "INTERNAL");
     } finally {
       setBusy(false);
     }
@@ -240,9 +221,9 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      {error !== null && (
+      {(error ?? googleErrand.error) !== null && (
         <p role="alert" className="mt-6 rounded-2xl bg-peach px-4 py-3 text-sm">
-          {errorMessage(error)}
+          {errorMessage(error ?? googleErrand.error ?? "INTERNAL")}
         </p>
       )}
 
@@ -313,10 +294,7 @@ export function SettingsPage() {
                     disabled={busy}
                     aria-label={t("settings.unlink", { provider: name })}
                     onClick={() => {
-                      void run(
-                        () => api.auth.identities[":provider"].$delete({ param: { provider } }),
-                        acceptMe,
-                      );
+                      void runAuth(() => unlink(provider));
                     }}
                     className="press-pill rounded-full border border-sprout-200 px-2 py-0.5 text-xs text-ink-muted hover:border-sprout-500"
                   >
@@ -333,15 +311,9 @@ export function SettingsPage() {
                         type="button"
                         disabled={busy}
                         onClick={() => {
-                          void run(
-                            () => api.auth["link-code"].$post(),
-                            async (res) => {
-                              const { code } = (await res.json()) as { code: string };
-                              await line.openExternal(
-                                `${window.location.origin}/link?code=${code}`,
-                              );
-                            },
-                          );
+                          setError(null);
+                          googleErrand.clearError();
+                          void googleErrand.start({ purpose: "link" });
                         }}
                         className={GOOGLE_PILL}
                       >
