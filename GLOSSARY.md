@@ -60,6 +60,10 @@ _Avoid_: Header, avatar row
 A short-lived, single-use code a signed-in User gets inside LINE so that a Google sign-in in an outside browser joins that same User instead of creating a new one.
 _Avoid_: Pairing code, invite code (an Invite brings someone into a Group)
 
+**Google errand**:
+One trip to Google and back, to sign in, to link Google to the signed-in User, or to use a Link code. Inside LINE, which Google refuses, it begins by opening the phone's outside browser.
+_Avoid_: Google flow, OAuth redirect, Google login (that is the Identity)
+
 **Member**:
 A User's place inside one Group.
 _Avoid_: Participant, attendee
