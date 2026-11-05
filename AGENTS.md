@@ -31,3 +31,17 @@
 - Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.
 - Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. The author fixes findings and never signs off on their own change.
 - Review arguments: `origin/main docs/SPEC.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown under the gitignored `.scratch/<feature>/`: a working spec plus one file per ticket. User-visible rules still go in `docs/SPEC.md`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), kept in each ticket's `status:`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
