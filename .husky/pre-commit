@@ -1,2 +1,3 @@
+command -v gitleaks >/dev/null 2>&1 && gitleaks protect --staged --no-banner
 pnpm exec lint-staged
 pnpm typecheck
