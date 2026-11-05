@@ -1,4 +1,10 @@
-import type { Settlement } from "@split/shared";
+import {
+  canConfirmSettlement,
+  canUndoSettlement,
+  maxPayable,
+  type MemberRole,
+  type Settlement,
+} from "@split/shared";
 
 /** The Worker's Balance and Settlement routes over in-memory rows (tickets 06 and 07 contract). */
 
@@ -9,7 +15,7 @@ export interface SettlementGroup {
     id: string;
     name: string;
     status: string;
-    role: string;
+    role: MemberRole;
     balance: number;
   }[];
 }
@@ -52,10 +58,6 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
     return list;
   };
 
-  const owed = (payer: Caller, receiver: Caller) =>
-    Math.max(0, Math.min(-payer.balance, receiver.balance));
-  const canConfirm = (me: Caller, payer: Caller, receiver: Caller) =>
-    me.id === payer.id || me.id === receiver.id || me.role === "admin";
   const move = (payer: Caller, receiver: Caller, amount: number) => {
     payer.balance += amount;
     receiver.balance -= amount;
@@ -100,10 +102,10 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
           ) {
             return error("VALIDATION_FAILED", 400);
           }
-          if (!canConfirm(me, payer, receiver)) {
+          if (!canConfirmSettlement({ memberId: me.id, role: me.role }, payer.id, receiver.id)) {
             return error("FORBIDDEN", 403);
           }
-          const max = owed(payer, receiver);
+          const max = maxPayable(payer.balance, receiver.balance);
           if (amount > max) return error("SETTLEMENT_EXCEEDS_DEBT", 422, { maxAmount: max });
           const row: Settlement = {
             id: nextId("st"),
@@ -135,12 +137,7 @@ export function createFakeSettlements(nextId: (prefix: string) => string): FakeS
       switch (route) {
         case "POST settlements/:/undo":
           if (row.status !== "confirmed") return error("SETTLEMENT_NOT_CONFIRMED", 409);
-          if (
-            me.id !== payer.id &&
-            me.id !== receiver.id &&
-            me.id !== row.confirmedByMemberId &&
-            me.role !== "admin"
-          ) {
+          if (!canUndoSettlement({ memberId: me.id, role: me.role }, row)) {
             return error("FORBIDDEN", 403);
           }
           Object.assign(row, { status: "undone", undoneByMemberId: me.id, undoneAt: now });

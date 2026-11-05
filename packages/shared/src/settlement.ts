@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MemberRole } from "./groups.js";
 
 /** Settlements (SPEC §5; decisions 12, 15, 16, 23, 31). */
 
@@ -6,9 +7,8 @@ import { z } from "zod";
 export const SETTLEMENT_PAGE_SIZE = 50;
 
 /**
- * `pending`: the payer said 我已付款, no Balance moved. `confirmed`: the receiver or an Admin
- * confirmed it and Balances moved. `cancelled`: withdrawn while pending. `undone`: a confirmed
- * Settlement reversed, kept in the history as 已撤銷.
+ * New Settlements are `confirmed` by the payer, receiver or an Admin; `undone` keeps their
+ * reversal in history. `pending` and `cancelled` remain readable for legacy rows and clients.
  */
 export const SETTLEMENT_STATUSES = ["pending", "confirmed", "cancelled", "undone"] as const;
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
@@ -39,3 +39,36 @@ export const settlementPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type SettlementPage = z.infer<typeof settlementPageSchema>;
+
+type SettlementActor = { memberId: string; role: MemberRole };
+
+/** The payer, receiver, or an Admin may confirm a Settlement. */
+export function canConfirmSettlement(
+  actor: SettlementActor,
+  payerMemberId: string,
+  receiverMemberId: string,
+): boolean {
+  return (
+    actor.memberId === payerMemberId ||
+    actor.memberId === receiverMemberId ||
+    actor.role === "admin"
+  );
+}
+
+/** Status and active-Member validation stay at the operation boundary. */
+export function canUndoSettlement(
+  actor: SettlementActor,
+  settlement: Pick<Settlement, "payerMemberId" | "receiverMemberId" | "confirmedByMemberId">,
+): boolean {
+  return (
+    actor.memberId === settlement.payerMemberId ||
+    actor.memberId === settlement.receiverMemberId ||
+    actor.memberId === settlement.confirmedByMemberId ||
+    actor.role === "admin"
+  );
+}
+
+/** Integer minor units: neither the payer nor receiver may cross a zero Balance. */
+export function maxPayable(payerBalance: number, receiverBalance: number): number {
+  return Math.max(0, Math.min(-payerBalance, receiverBalance));
+}

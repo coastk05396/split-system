@@ -2,7 +2,8 @@ import { Check, Copy, MessageCircle, Send } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
 import { t } from "../i18n/messages.js";
-import { LineShareUnavailableError, type LineMessage } from "../platform/line.js";
+import { type LineMessage } from "../platform/line.js";
+import { lineShareLink, useLineShare } from "../platform/line-share.js";
 import { failureMessage } from "./ui.js";
 
 /** What one share dialog sends, in each of the ways a person can send it. */
@@ -19,11 +20,6 @@ export interface ShareContent {
   copyText: string;
   copyLabel: string;
   copiedNotice: string;
-}
-
-/** LINE's own share link: it sends text, never a card. */
-function lineShareLink(text: string): string {
-  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
 }
 
 const brandButton =
@@ -47,6 +43,7 @@ export function ShareButtons({
 }) {
   const { line } = useDeps();
   const insideLine = line.isInClient();
+  const sharing = useLineShare();
   const [notice, setNotice] = useState("");
   const [justCopied, setJustCopied] = useState(false);
 
@@ -62,17 +59,9 @@ export function ShareButtons({
 
   async function share() {
     try {
-      const sent =
-        content.lineMessages === undefined
-          ? await line.share(content.text, { stayOpen: invite })
-          : await line.shareMessages(content.lineMessages, { stayOpen: invite });
+      const sent = await sharing.share(content, invite ? "invite" : "expense");
       if (sent) setNotice(t("invite.shared"));
-    } catch (error) {
-      if (error instanceof LineShareUnavailableError) {
-        // No picker here (an ordinary web page inside LINE): LINE's own link still sends the text.
-        window.location.assign(lineShareLink(content.text));
-        return;
-      }
+    } catch {
       setNotice(failureMessage(null));
     }
   }

@@ -1,8 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type CurrencyCode, formatAmount, parseAmount } from "@split/shared";
 import { ArrowRight, HandCoins } from "lucide-react";
-import { type CSSProperties, type ReactNode, type SubmitEvent, useEffect, useState } from "react";
-import { useDeps } from "../app/AppProviders.js";
+import { type CSSProperties, type ReactNode, type SubmitEvent, useState } from "react";
+import { useLineShare } from "../platform/line-share.js";
 import { minorToText } from "../expenses/money.js";
 import { card, failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
@@ -35,17 +35,7 @@ export function ConfirmSettlementDialog({
   /** Sends the confirmed amount; resolves once saved, rejects with the API failure. */
   submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
 }) {
-  const { line } = useDeps();
-  const [chatAvailable, setChatAvailable] = useState(false);
-  useEffect(() => {
-    let current = true;
-    void line.canSendToChat().then((available) => {
-      if (current) setChatAvailable(available);
-    });
-    return () => {
-      current = false;
-    };
-  }, [line]);
+  const { chatAvailable } = useLineShare(true);
 
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);

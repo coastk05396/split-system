@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
+import { useGoogleErrand } from "../auth/google-errand.js";
 import { GoogleButton } from "../auth/GoogleButton.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { GoogleTransition } from "../auth/GoogleTransition.js";
@@ -14,37 +14,12 @@ export function LinkPage() {
   const { line, google } = useDeps();
   const { state, signOut } = useAuth();
   const code = useSearchParams()[0].get("code") ?? "";
-  const [openFailed, setOpenFailed] = useState(false);
-  const started = useRef(false);
-  // The page stays unpainted until it is known that Google is not taking over: no flash.
-  const [settled, setSettled] = useState(false);
-  const waiting = state.status === "signedOut" && !line.isInClient() && google.available;
+  const errand = useGoogleErrand({ purpose: "linkCode", code });
 
-  // Straight to Google's account chooser, once per code: Back or a refusal lands on the button.
-  useEffect(() => {
-    if (!waiting || started.current) return;
-    started.current = true;
-    if (code === "" || !google.redirect({ purpose: "linkCode", code }, { once: true })) {
-      setSettled(true);
-    }
-  }, [waiting, code, google]);
-
-  // Back from Google can restore this page as it was, still waiting: show the button instead.
-  useEffect(() => {
-    const show = (event: PageTransitionEvent) => {
-      if (event.persisted) setSettled(true);
-    };
-    window.addEventListener("pageshow", show);
-    return () => {
-      window.removeEventListener("pageshow", show);
-    };
-  }, []);
-
-  if (state.status === "loading" || (waiting && !settled)) {
+  if (state.status === "loading" || (!line.isInClient() && errand.phase === "leaving")) {
     return <GoogleTransition>{t("settings.linkingGoogle")}</GoogleTransition>;
   }
-  const error =
-    (state.status === "signedOut" ? state.error : null) ?? (openFailed ? "INTERNAL" : null);
+  const error = (state.status === "signedOut" ? state.error : null) ?? errand.error;
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-16 pb-8">
@@ -62,12 +37,7 @@ export function LinkPage() {
             <p>{t("link.inLine")}</p>
             <button
               type="button"
-              onClick={() => {
-                setOpenFailed(false);
-                line.openExternal(window.location.href).catch(() => {
-                  setOpenFailed(true);
-                });
-              }}
+              onClick={() => void errand.start({ purpose: "linkCode", code })}
               className="press-pill mt-4 rounded-full bg-sprout-600 px-5 py-2 font-bold text-white"
             >
               {t("signIn.googleExternalOpen")}

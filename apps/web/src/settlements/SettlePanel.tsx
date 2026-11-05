@@ -8,7 +8,6 @@ import {
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ArrowRight, ChevronDown, MessageCircle, Send } from "lucide-react";
-import { useDeps } from "../app/AppProviders.js";
 import {
   AvatarTip,
   card,
@@ -20,9 +19,9 @@ import {
 import { type MessageId, t } from "../i18n/messages.js";
 import { dateHeading, memberPictures } from "../expenses/ExpenseList.js";
 import { localName } from "../i18n/format.js";
-import { useEnsureInvite, useMembers } from "../groups/api.js";
+import { useMembers } from "../groups/api.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
-import { LineShareUnavailableError } from "../platform/line.js";
+import { useLineShare } from "../platform/line-share.js";
 import { CountUp } from "../shell/CountUp.js";
 import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
@@ -221,10 +220,6 @@ export function SettlePanel({ group }: { group: Group }) {
   );
 }
 
-function lineShareLink(text: string): string {
-  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
-}
-
 function SettleNotifyActions({
   group,
   payments,
@@ -238,20 +233,15 @@ function SettleNotifyActions({
   nameOf: (id: string) => string;
   onNotice: (text: string, isError?: boolean) => void;
 }) {
-  const { line } = useDeps();
-  const invite = useEnsureInvite(group.id);
+  const sharing = useLineShare();
   const [busy, setBusy] = useState(false);
-  async function prepareCard() {
-    const link = await invite.mutateAsync().catch(() => null);
-    return buildSettleCard(payments, group, currency, nameOf, link?.token ?? null);
-  }
+  const prepare = () => paymentPlanShare(sharing, payments, group, currency, nameOf);
 
   async function sendToChat() {
     if (busy) return;
     setBusy(true);
     try {
-      const card = await prepareCard();
-      await line.sendToChat([settleFlexMessage(card)]);
+      await sharing.post((await prepare()).lineMessages);
       onNotice(t("settleShare.sentToChat"));
     } catch (error) {
       onNotice(failureMessage(error), true);
@@ -263,16 +253,10 @@ function SettleNotifyActions({
   async function shareLine() {
     if (busy) return;
     setBusy(true);
-    let card: ReturnType<typeof buildSettleCard> | null = null;
     try {
-      card = await prepareCard();
-      const sent = await line.shareMessages([settleFlexMessage(card)], { stayOpen: true });
+      const sent = await sharing.share(await prepare(), "settlement");
       if (sent) onNotice(t("settleShare.sharedLine"));
     } catch (error) {
-      if (card !== null && error instanceof LineShareUnavailableError) {
-        window.location.assign(lineShareLink(settleText(card)));
-        return;
-      }
       onNotice(failureMessage(error), true);
     } finally {
       setBusy(false);
@@ -539,6 +523,24 @@ function SettlementHistory({
   );
 }
 
+/** The Payment plan card for `payments` as LINE content, with the Group's Invite when one is had. */
+async function paymentPlanShare(
+  sharing: Pick<ReturnType<typeof useLineShare>, "inviteToken">,
+  payments: readonly PlannedPayment[],
+  group: Group,
+  currency: CurrencyCode,
+  nameOf: (id: string) => string,
+) {
+  const card = buildSettleCard(
+    payments,
+    group,
+    currency,
+    nameOf,
+    await sharing.inviteToken(group.id),
+  );
+  return { lineMessages: [settleFlexMessage(card)], text: settleText(card) };
+}
+
 function involvesMe(group: Group, p: PlannedPayment): boolean {
   return p.fromMemberId === group.me.memberId || p.toMemberId === group.me.memberId;
 }
@@ -690,9 +692,8 @@ function PlannedRow({
   updating?: boolean | undefined;
   onToast?: (text: string, isError?: boolean) => void;
 }) {
-  const { line } = useDeps();
+  const sharing = useLineShare();
   const pictureOf = useContext(PictureContext);
-  const invite = useEnsureInvite(group.id);
   const record = useRecordSettlement(group.id);
   // Reuse a key only while retrying the same submitted content.
   const key = useRef({ body: "", key: crypto.randomUUID() });
@@ -725,24 +726,15 @@ function PlannedRow({
 
   async function notifyPeer() {
     try {
-      const link = await invite.mutateAsync().catch(() => null);
-      const card = buildSettleCard(
+      const content = await paymentPlanShare(
+        sharing,
         [payment],
         group,
         currency,
         (id) => rows.get(id)?.displayName ?? "?",
-        link?.token ?? null,
       );
-      try {
-        const sent = await line.shareMessages([settleFlexMessage(card)], { stayOpen: true });
-        if (sent) onToast?.(t("settleShare.sharedLine"));
-      } catch (error) {
-        if (error instanceof LineShareUnavailableError) {
-          window.location.assign(lineShareLink(settleText(card)));
-          return;
-        }
-        throw error;
-      }
+      const sent = await sharing.share(content, "settlement");
+      if (sent) onToast?.(t("settleShare.sharedLine"));
     } catch (err: unknown) {
       onToast?.(failureMessage(err), true);
     }
@@ -756,7 +748,7 @@ function PlannedRow({
     receiverPictureUrl?: string | null,
   ) {
     try {
-      const link = await invite.mutateAsync().catch(() => null);
+      const token = await sharing.inviteToken(group.id);
       const card = buildSettledCard(
         {
           payer: payerName,
@@ -767,10 +759,10 @@ function PlannedRow({
         },
         group,
         currency,
-        link?.token ?? null,
+        token,
       );
       try {
-        await line.sendToChat([settledFlexMessage(card)]);
+        await sharing.post([settledFlexMessage(card)]);
       } catch {
         // Outside LINE there is no chat to send to.
       }

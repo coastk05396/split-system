@@ -19,6 +19,7 @@
 - Never push to `main` without the user's approval: a push to `main` deploys production.
 - Opening a pull request into `main` runs CI. That is allowed.
 - A docs-only change needs no CI run: put `[skip ci]` in its commit message.
+- One piece of work, one pull request: when it spans several branches (parallel workers, stacked refactors), combine them on one branch and open a single PR. GitHub only looks at the newest commit for `[skip ci]`, so when the PR holds code, keep `[skip ci]` off its newest commit.
 
 ## Staging
 

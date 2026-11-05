@@ -1,4 +1,8 @@
 import {
+  canConfirmSettlement,
+  canUndoSettlement,
+  maxPayable,
+  type MemberRole,
   settlementInputSchema,
   settlementSchema,
   SETTLEMENT_PAGE_SIZE,
@@ -17,7 +21,7 @@ const commandSchema = z.object({
   key: z.string().optional(),
   input: z.unknown().optional(),
 });
-type Party = { id: string; role: string; status: string; net_balance: number };
+type Party = { id: string; role: MemberRole; status: string; net_balance: number };
 interface Row extends Record<string, SqlStorageValue> {
   data: string;
 }
@@ -96,10 +100,6 @@ export function settlementOperation(
       throw new ApiError("MEMBER_NOT_ACTIVE");
     return { payer, receiver };
   };
-  const withinDebt = (payer: Party, receiver: Party, amount: number) => {
-    const maxAmount = Math.max(0, Math.min(-payer.net_balance, receiver.net_balance));
-    if (amount > maxAmount) throw new ApiError("SETTLEMENT_EXCEEDS_DEBT", { maxAmount });
-  };
   if (op.action === "create") {
     if (op.key === undefined) throw new ApiError("VALIDATION_FAILED");
     const storedKey = `${actor.id}:${op.key}`;
@@ -112,9 +112,16 @@ export function settlementOperation(
     if (!result.success) throw new ApiError("VALIDATION_FAILED");
     const input = result.data,
       found = parties(input.payerMemberId, input.receiverMemberId);
-    if (actor.id !== found.payer.id && actor.id !== found.receiver.id && actor.role !== "admin")
+    if (
+      !canConfirmSettlement(
+        { memberId: actor.id, role: actor.role },
+        found.payer.id,
+        found.receiver.id,
+      )
+    )
       throw new ApiError("FORBIDDEN");
-    withinDebt(found.payer, found.receiver, input.amount);
+    const maxAmount = maxPayable(found.payer.net_balance, found.receiver.net_balance);
+    if (input.amount > maxAmount) throw new ApiError("SETTLEMENT_EXCEEDS_DEBT", { maxAmount });
     const group = sql.exec<{ id: string }>("SELECT id FROM ledger_group WHERE deleted=0").one();
     const item: Settlement = {
       id: newSortableId(op.now),
@@ -140,12 +147,7 @@ export function settlementOperation(
   if (existing === undefined) throw new ApiError("NOT_FOUND");
   const item = settlementSchema.parse(JSON.parse(existing.data) as unknown);
   if (item.status !== "confirmed") throw new ApiError("SETTLEMENT_NOT_CONFIRMED");
-  if (
-    actor.id !== item.payerMemberId &&
-    actor.id !== item.receiverMemberId &&
-    actor.id !== item.confirmedByMemberId &&
-    actor.role !== "admin"
-  )
+  if (!canUndoSettlement({ memberId: actor.id, role: actor.role }, item))
     throw new ApiError("FORBIDDEN");
   parties(item.payerMemberId, item.receiverMemberId);
   item.status = "undone";

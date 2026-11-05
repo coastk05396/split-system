@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { ApiFailure } from "../api/errors.js";
-import { useDeps } from "../app/AppProviders.js";
+import { useLineShare } from "../platform/line-share.js";
 import { hapticTick } from "../shell/haptics.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
@@ -75,7 +75,8 @@ export function ExpenseForm({
   /** Called when the server has stored it. `sendToChat` says whether to post it into the LINE chat the app was opened from. */
   onSaved: (expense: Expense, options: { sendToChat: boolean }) => void | Promise<void>;
 }) {
-  const { line } = useDeps();
+  // Only a new Expense opened from a LINE chat can be posted back into that chat.
+  const { chatAvailable } = useLineShare(expense === undefined);
   const selectable: SplitMember[] = members
     .filter((m) => m.status !== "former")
     .map((m) => ({
@@ -96,19 +97,7 @@ export function ExpenseForm({
         })
       : expenseDraftFrom(expense),
   );
-  // Only a new Expense opened from a LINE chat can be posted back into that chat.
-  const [chatAvailable, setChatAvailable] = useState(false);
   const [sendToChat, setSendToChat] = useState(true);
-  useEffect(() => {
-    if (expense !== undefined) return;
-    let current = true;
-    void line.canSendToChat().then((available) => {
-      if (current) setChatAvailable(available);
-    });
-    return () => {
-      current = false;
-    };
-  }, [expense, line]);
   // Reuse a key only while retrying the same submitted content.
   const idempotencyKey = useRef({ body: "", key: crypto.randomUUID() });
   const saved = storedExpense(draft);

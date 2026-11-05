@@ -1,11 +1,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight, MessageCircle } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { safeNext } from "../app/routes.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleButton, GoogleFace } from "../auth/GoogleButton.js";
+import { useGoogleErrand } from "../auth/google-errand.js";
 import { GoogleTransition } from "../auth/GoogleTransition.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
@@ -24,29 +25,10 @@ export function SignInPage() {
   const insideLine = line.isInClient();
   const error = state.status === "signedOut" ? state.error : null;
 
-  // Handed over from LINE's dialog: the outside browser goes straight to Google, once, as `/link`
-  // does. Back from Google or a refusal lands here again with the buttons.
   const next = safeNext(params.get("next"));
-  const [settled, setSettled] = useState(false);
-  const started = useRef(false);
-  const goingToGoogle = params.get("google") === "1" && !insideLine && google.available;
-  useEffect(() => {
-    if (!goingToGoogle || started.current) return;
-    started.current = true;
-    if (!google.redirect({ purpose: "signIn", next }, { once: true })) setSettled(true);
-  }, [goingToGoogle, google, next]);
-  // Back from Google can restore this page as it was, still waiting: show the buttons instead.
-  useEffect(() => {
-    const show = (event: PageTransitionEvent) => {
-      if (event.persisted) setSettled(true);
-    };
-    window.addEventListener("pageshow", show);
-    return () => {
-      window.removeEventListener("pageshow", show);
-    };
-  }, []);
+  const errand = useGoogleErrand(params.get("google") === "1" ? { purpose: "signIn", next } : null);
 
-  if (goingToGoogle && !settled) {
+  if (!insideLine && errand.phase === "leaving") {
     return <GoogleTransition>{t("settings.linkingGoogle")}</GoogleTransition>;
   }
 
@@ -60,9 +42,9 @@ export function SignInPage() {
       </h1>
       <p className="mt-3 text-ink-muted">{t("signIn.body")}</p>
 
-      {(error !== null || lineError) && (
+      {(error !== null || lineError || errand.error !== null) && (
         <p role="alert" className="mt-6 rounded-2xl bg-peach px-4 py-3 text-sm">
-          {errorMessage(error ?? "INTERNAL")}
+          {errorMessage(error ?? errand.error ?? "INTERNAL")}
         </p>
       )}
 
@@ -71,6 +53,7 @@ export function SignInPage() {
           type="button"
           onClick={() => {
             setLineError(false);
+            errand.clearError();
             line.login().catch(() => {
               setLineError(true);
             });
@@ -111,12 +94,7 @@ export function SignInPage() {
                     type="button"
                     onClick={() => {
                       setExplaining(false);
-                      // `google=1`: the outside browser goes straight to Google, no second tap.
-                      const target = new URL(window.location.href);
-                      target.searchParams.set("google", "1");
-                      line.openExternal(target.toString()).catch(() => {
-                        setLineError(true);
-                      });
+                      void errand.start({ purpose: "signIn", next });
                     }}
                     className="press-pill flex-1 rounded-full bg-sprout-600 py-3 font-bold text-white hover:bg-sprout-600/90"
                   >
