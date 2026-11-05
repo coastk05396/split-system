@@ -58,13 +58,23 @@ function recentMonths(now: Date): string[] {
   });
 }
 
+// One formatter per language: building one is the slow part, and the language can change at runtime.
+const monthFormats = new Map<string, Intl.DateTimeFormat>();
+
+function monthFormat(locale: "en" | "zh-TW"): Intl.DateTimeFormat {
+  let format = monthFormats.get(locale);
+  if (format === undefined) {
+    format = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric", timeZone: "UTC" });
+    monthFormats.set(locale, format);
+  }
+  return format;
+}
+
 function monthLabel(month: string): string {
   const [year, m] = month.split("-").map(Number);
-  return new Intl.DateTimeFormat(getLocale() === "en" ? "en" : "zh-TW", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year ?? 0, (m ?? 1) - 1, 1)));
+  return monthFormat(getLocale() === "en" ? "en" : "zh-TW").format(
+    new Date(Date.UTC(year ?? 0, (m ?? 1) - 1, 1)),
+  );
 }
 
 function CategoryExpenses({ month, category }: { month: string; category: string }) {
