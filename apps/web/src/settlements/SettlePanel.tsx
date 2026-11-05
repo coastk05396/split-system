@@ -235,17 +235,13 @@ function SettleNotifyActions({
 }) {
   const sharing = useLineShare();
   const [busy, setBusy] = useState(false);
-  async function prepareCard() {
-    const token = await sharing.inviteToken(group.id);
-    return buildSettleCard(payments, group, currency, nameOf, token);
-  }
+  const prepare = () => paymentPlanShare(sharing, payments, group, currency, nameOf);
 
   async function sendToChat() {
     if (busy) return;
     setBusy(true);
     try {
-      const card = await prepareCard();
-      await sharing.post([settleFlexMessage(card)]);
+      await sharing.post((await prepare()).lineMessages);
       onNotice(t("settleShare.sentToChat"));
     } catch (error) {
       onNotice(failureMessage(error), true);
@@ -258,11 +254,7 @@ function SettleNotifyActions({
     if (busy) return;
     setBusy(true);
     try {
-      const card = await prepareCard();
-      const sent = await sharing.share(
-        { lineMessages: [settleFlexMessage(card)], text: settleText(card) },
-        "settlement",
-      );
+      const sent = await sharing.share(await prepare(), "settlement");
       if (sent) onNotice(t("settleShare.sharedLine"));
     } catch (error) {
       onNotice(failureMessage(error), true);
@@ -531,6 +523,24 @@ function SettlementHistory({
   );
 }
 
+/** The Payment plan card for `payments` as LINE content, with the Group's Invite when one is had. */
+async function paymentPlanShare(
+  sharing: Pick<ReturnType<typeof useLineShare>, "inviteToken">,
+  payments: readonly PlannedPayment[],
+  group: Group,
+  currency: CurrencyCode,
+  nameOf: (id: string) => string,
+) {
+  const card = buildSettleCard(
+    payments,
+    group,
+    currency,
+    nameOf,
+    await sharing.inviteToken(group.id),
+  );
+  return { lineMessages: [settleFlexMessage(card)], text: settleText(card) };
+}
+
 function involvesMe(group: Group, p: PlannedPayment): boolean {
   return p.fromMemberId === group.me.memberId || p.toMemberId === group.me.memberId;
 }
@@ -716,18 +726,14 @@ function PlannedRow({
 
   async function notifyPeer() {
     try {
-      const token = await sharing.inviteToken(group.id);
-      const card = buildSettleCard(
+      const content = await paymentPlanShare(
+        sharing,
         [payment],
         group,
         currency,
         (id) => rows.get(id)?.displayName ?? "?",
-        token,
       );
-      const sent = await sharing.share(
-        { lineMessages: [settleFlexMessage(card)], text: settleText(card) },
-        "settlement",
-      );
+      const sent = await sharing.share(content, "settlement");
       if (sent) onToast?.(t("settleShare.sharedLine"));
     } catch (err: unknown) {
       onToast?.(failureMessage(err), true);
