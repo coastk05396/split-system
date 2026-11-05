@@ -165,7 +165,6 @@ describe("home", () => {
     expect(card).not.toHaveClass("p-6");
   });
 
-
   it("shows the total in the Preferred currency, with a tag that opens settings", async () => {
     renderApp({
       cookieUser: { ...me, preferredCurrency: "USD" },

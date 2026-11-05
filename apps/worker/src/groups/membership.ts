@@ -30,12 +30,7 @@ export async function requireMember(db: Db, groupId: string, userId: string): Pr
       netBalance: groupMemberSummary.netBalance,
     })
     .from(groupMemberSummary)
-    .where(
-      and(
-        eq(groupMemberSummary.groupId, groupId),
-        eq(groupMemberSummary.userId, userId),
-      ),
-    );
+    .where(and(eq(groupMemberSummary.groupId, groupId), eq(groupMemberSummary.userId, userId)));
   if (me === undefined) throw new ApiError("NOT_FOUND");
   return {
     id: me.memberId,

@@ -35,9 +35,11 @@ describe("hapticTick", () => {
   });
 
   it("safely handles exceptions thrown by navigator.vibrate without throwing", () => {
-    setVibrate(vi.fn().mockImplementation(() => {
-      throw new Error("SecurityError: vibrate blocked by policy");
-    }));
+    setVibrate(
+      vi.fn().mockImplementation(() => {
+        throw new Error("SecurityError: vibrate blocked by policy");
+      }),
+    );
 
     expect(() => hapticTick(15)).not.toThrow();
     expect(hapticTick(15)).toBe(false);

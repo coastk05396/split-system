@@ -60,10 +60,7 @@ export function expenseOperation(
   const actor = systemBypass
     ? undefined
     : sql
-        .exec<Member>(
-          "SELECT id,status,role FROM ledger_members WHERE id=?",
-          op.actorMemberId,
-        )
+        .exec<Member>("SELECT id,status,role FROM ledger_members WHERE id=?", op.actorMemberId)
         .toArray()[0];
   if (!systemBypass && actor?.status !== "active") throw new ApiError("FORBIDDEN");
   const get = (id: string): Expense => {

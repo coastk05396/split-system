@@ -67,7 +67,12 @@ export function authRoutes(deps: AppDeps) {
     const me = await loadMe(createDb(c.env.DB), userId, provider);
     if (me === null) throw new ApiError("UNAUTHORIZED");
     setRefreshCookie(c, refresh);
-    const accessToken = await signAccessToken(userId, c.env.SESSION_SIGNING_KEY, deps.now(), provider);
+    const accessToken = await signAccessToken(
+      userId,
+      c.env.SESSION_SIGNING_KEY,
+      deps.now(),
+      provider,
+    );
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, user: me };
   }
 
@@ -91,76 +96,81 @@ export function authRoutes(deps: AppDeps) {
     return parsed.data;
   }
 
-  return new Hono<AppEnv>()
-    .use("/auth/*", sameOriginWrites)
-    .post("/auth/google", async (c) => signIn(c, await verify(c, "google")))
-    .post("/auth/line", async (c) => signIn(c, await verify(c, "line")))
-    .post("/auth/test-sign-in", async (c) => {
-      // Dev and browser-test shortcut (SPEC §7.3): absent unless the flag is exactly "1".
-      if (c.env.TEST_SIGN_IN !== "1") throw new ApiError("NOT_FOUND");
-      const body = await parseBody(c, testSignInRequestSchema);
-      return signIn(c, { ...body, pictureUrl: null, email: null });
-    })
-    .post("/auth/refresh", async (c) => {
-      const presented = getCookie(c, REFRESH_COOKIE);
-      const rotated =
-        presented === undefined
-          ? null
-          : await rotateSession(createDb(c.env.DB), presented, deps.now());
-      if (rotated === null) {
+  return (
+    new Hono<AppEnv>()
+      .use("/auth/*", sameOriginWrites)
+      .post("/auth/google", async (c) => signIn(c, await verify(c, "google")))
+      .post("/auth/line", async (c) => signIn(c, await verify(c, "line")))
+      .post("/auth/test-sign-in", async (c) => {
+        // Dev and browser-test shortcut (SPEC §7.3): absent unless the flag is exactly "1".
+        if (c.env.TEST_SIGN_IN !== "1") throw new ApiError("NOT_FOUND");
+        const body = await parseBody(c, testSignInRequestSchema);
+        return signIn(c, { ...body, pictureUrl: null, email: null });
+      })
+      .post("/auth/refresh", async (c) => {
+        const presented = getCookie(c, REFRESH_COOKIE);
+        const rotated =
+          presented === undefined
+            ? null
+            : await rotateSession(createDb(c.env.DB), presented, deps.now());
+        if (rotated === null) {
+          clearRefreshCookie(c);
+          throw new ApiError("UNAUTHORIZED");
+        }
+        return c.json(
+          await issueSession(c, rotated.userId, rotated.provider, rotated.refresh),
+          200,
+        );
+      })
+      .post("/auth/logout", async (c) => {
+        const presented = getCookie(c, REFRESH_COOKIE);
+        if (presented !== undefined) await endSession(createDb(c.env.DB), presented);
         clearRefreshCookie(c);
-        throw new ApiError("UNAUTHORIZED");
-      }
-      return c.json(await issueSession(c, rotated.userId, rotated.provider, rotated.refresh), 200);
-    })
-    .post("/auth/logout", async (c) => {
-      const presented = getCookie(c, REFRESH_COOKIE);
-      if (presented !== undefined) await endSession(createDb(c.env.DB), presented);
-      clearRefreshCookie(c);
-      return c.body(null, 204);
-    })
-    .post("/auth/link/:provider", signedIn, async (c) => {
-      const provider = readProvider(c.req.param("provider"));
-      const identity = await verify(c, provider);
-      const db = createDb(c.env.DB);
-      await linkIdentity(db, c.var.userId, identity, deps.now());
-      return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
-    })
-    // From LINE's in-app browser, where Google refuses to sign in: the signed-in User gets a code
-    // to open in an outside browser, whose Google sign-in then joins this same User.
-    .post("/auth/link-code", signedIn, async (c) => {
-      const code = await createLinkCode(createDb(c.env.DB), c.var.userId, deps.now());
-      return c.json({ code }, 200);
-    })
-    .post("/auth/link-code/redeem", async (c) => {
-      const { code, idToken } = await parseBody(c, redeemLinkCodeRequestSchema);
-      const identity = await deps.verifier(c.env).verify("google", idToken);
-      const db = createDb(c.env.DB);
-      const now = deps.now();
-      const userId = await redeemLinkCode(db, code, identity, now);
-      const refresh = await createSession(db, userId, "google", c.req.header("User-Agent"), now);
-      return c.json(await issueSession(c, userId, "google", refresh), 200);
-    })
-    .delete("/auth/identities/:provider", signedIn, async (c) => {
-      const provider = readProvider(c.req.param("provider"));
-      const db = createDb(c.env.DB);
-      await unlinkIdentity(db, c.var.userId, provider);
-      return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
-    })
-    .get("/me", signedIn, async (c) =>
-      c.json(await requireMe(createDb(c.env.DB), c.var.userId, c.var.signedInWith), 200),
-    )
-    .patch("/me", signedIn, async (c) => {
-      const patch = await parseBody(c, mePatchSchema);
-      const db = createDb(c.env.DB);
-      await updateSettings(db, c.var.userId, patch, deps.now());
-      return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
-    })
-    .delete("/me", signedIn, async (c) => {
-      await deleteAccount(c.env, c.var.userId, deps.now);
-      clearRefreshCookie(c);
-      return c.body(null, 204);
-    });
+        return c.body(null, 204);
+      })
+      .post("/auth/link/:provider", signedIn, async (c) => {
+        const provider = readProvider(c.req.param("provider"));
+        const identity = await verify(c, provider);
+        const db = createDb(c.env.DB);
+        await linkIdentity(db, c.var.userId, identity, deps.now());
+        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+      })
+      // From LINE's in-app browser, where Google refuses to sign in: the signed-in User gets a code
+      // to open in an outside browser, whose Google sign-in then joins this same User.
+      .post("/auth/link-code", signedIn, async (c) => {
+        const code = await createLinkCode(createDb(c.env.DB), c.var.userId, deps.now());
+        return c.json({ code }, 200);
+      })
+      .post("/auth/link-code/redeem", async (c) => {
+        const { code, idToken } = await parseBody(c, redeemLinkCodeRequestSchema);
+        const identity = await deps.verifier(c.env).verify("google", idToken);
+        const db = createDb(c.env.DB);
+        const now = deps.now();
+        const userId = await redeemLinkCode(db, code, identity, now);
+        const refresh = await createSession(db, userId, "google", c.req.header("User-Agent"), now);
+        return c.json(await issueSession(c, userId, "google", refresh), 200);
+      })
+      .delete("/auth/identities/:provider", signedIn, async (c) => {
+        const provider = readProvider(c.req.param("provider"));
+        const db = createDb(c.env.DB);
+        await unlinkIdentity(db, c.var.userId, provider);
+        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+      })
+      .get("/me", signedIn, async (c) =>
+        c.json(await requireMe(createDb(c.env.DB), c.var.userId, c.var.signedInWith), 200),
+      )
+      .patch("/me", signedIn, async (c) => {
+        const patch = await parseBody(c, mePatchSchema);
+        const db = createDb(c.env.DB);
+        await updateSettings(db, c.var.userId, patch, deps.now());
+        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+      })
+      .delete("/me", signedIn, async (c) => {
+        await deleteAccount(c.env, c.var.userId, deps.now);
+        clearRefreshCookie(c);
+        return c.body(null, 204);
+      })
+  );
 }
 
 /** A valid access token can outlive its account by up to an hour; treat that as signed out. */
