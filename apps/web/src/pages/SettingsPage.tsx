@@ -93,7 +93,7 @@ export function SettingsPage() {
   const { state, session, signOut, updateUser, unlink } = useAuth();
   const { line, google } = useDeps();
   const [error, setError] = useState<ErrorCode | null>(null);
-  const [working, setBusy] = useState(false);
+  const [working, setWorking] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const googleErrand = useGoogleErrand("settings");
   const busy = working || googleErrand.phase === "leaving";
@@ -124,7 +124,7 @@ export function SettingsPage() {
   async function run(call: () => Promise<Response>, onOk: (res: Response) => Promise<void>) {
     setError(null);
     googleErrand.clearError();
-    setBusy(true);
+    setWorking(true);
     try {
       const res = await call();
       if (res.ok) await onOk(res);
@@ -132,20 +132,20 @@ export function SettingsPage() {
     } catch {
       setError("INTERNAL");
     } finally {
-      setBusy(false);
+      setWorking(false);
     }
   }
 
   async function runAuth(call: () => Promise<void>) {
     setError(null);
     googleErrand.clearError();
-    setBusy(true);
+    setWorking(true);
     try {
       await call();
     } catch (error) {
       setError(error instanceof ApiFailure ? error.code : "INTERNAL");
     } finally {
-      setBusy(false);
+      setWorking(false);
     }
   }
 
@@ -312,7 +312,6 @@ export function SettingsPage() {
                         disabled={busy}
                         onClick={() => {
                           setError(null);
-                          googleErrand.clearError();
                           void googleErrand.start({ purpose: "link" });
                         }}
                         className={GOOGLE_PILL}

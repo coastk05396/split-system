@@ -4,6 +4,23 @@ import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
 
+/**
+ * Whether the page's heading was ever in the document when the browser could paint. Observer
+ * callbacks run as microtasks after React's synchronous work (render, layout effects and their
+ * re-renders), before any paint, so a commit replaced before paint is not counted.
+ */
+function watchPaintedHeading(): () => boolean {
+  let painted = false;
+  const seen = new MutationObserver(() => {
+    if (document.querySelector("h1") !== null) painted = true;
+  });
+  seen.observe(document.body, { childList: true, subtree: true });
+  return () => {
+    seen.disconnect();
+    return painted;
+  };
+}
+
 describe("/link (finishing a Google link from the outside browser)", () => {
   it("goes to Google at once, comes back, joins the User who asked for the code, and opens settings", async () => {
     const { api, googleRedirects } = renderApp({
@@ -20,15 +37,35 @@ describe("/link (finishing a Google link from the outside browser)", () => {
   });
 
   it("never paints the link page before leaving for Google: no flash of the button", async () => {
+    const painted = watchPaintedHeading();
     const { googleRedirects } = renderApp({ path: "/link?code=code-1", google: "holds" });
 
     await waitFor(() => {
       expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
     });
+    expect(painted()).toBe(false);
     expect(screen.queryByRole("button", { name: "使用 Google 登入" })).toBeNull();
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
     // What shows instead is Google's own opening screen.
     expect(screen.getByRole("status")).toHaveTextContent("前往 Google…");
+  });
+
+  it("does not flash the link page when the session check answers after the page has loaded", async () => {
+    const { api, googleRedirects } = renderApp({ path: "/link?code=code-1", google: "holds" });
+    const release = api.holdResponses("POST /api/v1/auth/refresh");
+    // The page is up (its own code loaded) while the session is still being checked.
+    await waitFor(() => {
+      expect(api.calls).toContain("POST /api/v1/auth/refresh");
+    });
+    expect(await screen.findByRole("status")).toBeVisible();
+    const painted = watchPaintedHeading();
+
+    release();
+
+    await waitFor(() => {
+      expect(googleRedirects).toEqual([{ purpose: "linkCode", code: "code-1" }]);
+    });
+    expect(painted()).toBe(false);
   });
 
   it("after Google refuses, stops on the button, and the button still links with the same code", async () => {

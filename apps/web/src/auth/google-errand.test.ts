@@ -104,6 +104,16 @@ describe("Google errand", () => {
     expect(errand.getSnapshot()).toMatchObject({ phase: "ready", error: "INTERNAL" });
   });
 
+  it("clears the last attempt's error when a new errand starts", async () => {
+    const { errand, auth } = setup({ insideLine: { idToken: null } });
+    auth.createLinkCode.mockRejectedValueOnce(new ApiFailure("UNAUTHORIZED", 401));
+    await errand.start({ purpose: "link" });
+    const started = errand.start({ purpose: "link" });
+    expect(errand.getSnapshot()).toMatchObject({ phase: "leaving", error: null });
+    await started;
+    expect(errand.getSnapshot()).toMatchObject({ phase: "ready", error: null });
+  });
+
   it("keeps a link-code API failure and never opens the browser", async () => {
     const { errand, auth, lineExternalOpens } = setup({ insideLine: { idToken: null } });
     auth.createLinkCode.mockRejectedValue(new ApiFailure("UNAUTHORIZED", 401));
