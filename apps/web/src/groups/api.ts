@@ -12,9 +12,10 @@ import {
   useQuery,
   useQueryClient,
   type QueryFunctionContext,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { createApiClient, withJson } from "../api/client.js";
+import { createApiClient, withJson, type ApiClient } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { abortable, readWithRev, useGroupLiveSync } from "./sync.js";
@@ -291,15 +292,20 @@ export function useRemoveMember(id: string) {
   });
 }
 
+/** One acquisition at a time per Group, shared by share warm-ups and the Invite dialog. */
+export function ensureInvite(api: ApiClient, client: QueryClient, id: string): Promise<Invite> {
+  return client.query<Invite>({
+    queryKey: groupKeys.invite(id),
+    queryFn: () => read<Invite>(api.groups[":id"].invite.ensure.$post({ param: { id } })),
+    staleTime: 0,
+    retry: false,
+  });
+}
+
 export function useEnsureInvite(id: string) {
   const api = useApi();
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: () => read<Invite>(api.groups[":id"].invite.ensure.$post({ param: { id } })),
-    onSuccess: (invite) => {
-      client.setQueryData(groupKeys.invite(id), invite);
-    },
-  });
+  return useMutation({ mutationFn: () => ensureInvite(api, client, id) });
 }
 
 /** Join as a new Member, or with `memberId` by claiming that Placeholder Member. */
