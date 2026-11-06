@@ -100,6 +100,30 @@ describe("session", () => {
     expect((await session.fetch("/api/v1/me")).status).toBe(401);
     expect(await session.restore()).toBeNull();
   });
+
+  it("updates the User's settings through PATCH /api/v1/me", async () => {
+    const api = createFakeApi();
+    const session = createSession({ fetch: api.fetch });
+    await session.signIn("google", "fake|sub-1|小宇");
+
+    const updated = await session.updateMe({ preferredCurrency: "USD", language: "en" });
+
+    expect(updated).toMatchObject({ preferredCurrency: "USD", language: "en" });
+    expect(api.calls).toContain("PATCH /api/v1/me");
+  });
+
+  it("deletes the account and forgets the access token without calling logout", async () => {
+    const api = createFakeApi();
+    const session = createSession({ fetch: api.fetch });
+    await session.signIn("google", "fake|sub-1|小宇");
+
+    await session.deleteAccount();
+
+    expect(api.calls).toContain("DELETE /api/v1/me");
+    expect(api.calls).not.toContain("POST /api/v1/auth/logout");
+    expect(session.getAccessToken()).toBeNull();
+    expect((await session.fetch("/api/v1/me")).status).toBe(401);
+  });
 });
 
 /**

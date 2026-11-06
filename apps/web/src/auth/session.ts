@@ -1,4 +1,4 @@
-import type { Me, Provider, TestSignInRequest } from "@split/shared";
+import type { Me, MePatch, Provider, TestSignInRequest } from "@split/shared";
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 
@@ -17,6 +17,8 @@ export interface Session {
   unlink(provider: Provider): Promise<Me>;
   createLinkCode(): Promise<string>;
   getMe(): Promise<Me>;
+  updateMe(patch: MePatch): Promise<Me>;
+  deleteAccount(): Promise<void>;
   /** Dev and browser-test sign-in; the route answers 404 unless the Worker enables it. */
   testSignIn(request: TestSignInRequest): Promise<Me>;
   /** Ends this device's session. */
@@ -137,6 +139,15 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     },
 
     getMe: async () => readUser(await authenticated.me.$get()),
+
+    updateMe: async (patch) => readUser(await authenticated.me.$patch(undefined, withJson(patch))),
+
+    async deleteAccount() {
+      const res: Response = await authenticated.me.$delete();
+      if (!res.ok) throw await toApiFailure(res);
+      generation += 1;
+      accessToken = null;
+    },
 
     async testSignIn(request) {
       return accept(await api.auth["test-sign-in"].$post(undefined, withJson(request)));

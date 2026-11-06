@@ -1,4 +1,4 @@
-import type { Me, Provider, TestSignInRequest } from "@split/shared";
+import type { Me, MePatch, Provider, TestSignInRequest } from "@split/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -41,8 +41,8 @@ export interface Auth {
   refreshIdentities: (signal: AbortSignal) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
   signOut: () => Promise<void>;
-  /** Replaces the signed-in User after the server changed them (Identity link or unlink). */
-  updateUser: (user: Me) => void;
+  updateMe: (patch: MePatch) => Promise<Me>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<Auth | null>(null);
@@ -158,7 +158,7 @@ export function AuthProvider({
         return false;
       }
     }
-    function updateUser(user: Me) {
+    function syncUser(user: Me) {
       // Never brings back someone who signed out while a request was in flight.
       setState((current) =>
         current.status === "signedIn" ? { status: "signedIn", user } : current,
@@ -170,10 +170,10 @@ export function AuthProvider({
       signIn: (provider, idToken) => enter(session.signIn(provider, idToken)),
       redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
       link: async (provider, idToken) => {
-        updateUser(await session.link(provider, idToken));
+        syncUser(await session.link(provider, idToken));
       },
       unlink: async (provider) => {
-        updateUser(await session.unlink(provider));
+        syncUser(await session.unlink(provider));
       },
       createLinkCode: () => session.createLinkCode(),
       async refreshIdentities(signal) {
@@ -195,7 +195,16 @@ export function AuthProvider({
         await enter(session.testSignIn(request));
       },
       signOut: leave,
-      updateUser,
+      updateMe: async (patch) => {
+        const user = await session.updateMe(patch);
+        syncUser(user);
+        return user;
+      },
+      deleteAccount: async () => {
+        await session.deleteAccount();
+        forgetUser(state.status === "signedIn" ? state.user.id : null);
+        setState({ status: "signedOut", error: null, byChoice: true });
+      },
     };
   }, [state, session, forgetUser]);
 
