@@ -189,9 +189,9 @@ export function expenseShareContent(
   inviteToken: string | null = null,
 ): ShareContent & { lineMessages: [LineMessage] } {
   const card =
-    "groupName" in cardOrExpense
-      ? cardOrExpense
-      : buildExpenseCard(cardOrExpense, group!, nameOf!, inviteToken);
+    "groupName" in cardOrExpense || group === undefined || nameOf === undefined
+      ? (cardOrExpense as ExpenseCard)
+      : buildExpenseCard(cardOrExpense, group, nameOf, inviteToken);
   const text = expenseText(card);
   return {
     text,

@@ -62,7 +62,7 @@ describe("inviteFlexMessage", () => {
       copiedNotice: "已複製邀請連結",
     });
     expect(content.lineMessages).toHaveLength(1);
-    expect(content.lineMessages?.[0]).toMatchObject({
+    expect(content.lineMessages[0]).toMatchObject({
       type: "flex",
       altText: "邀請你加入「台南小旅行」一起分帳",
     });

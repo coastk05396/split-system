@@ -149,9 +149,9 @@ describe("PATCH /groups/:id/members/:mid", () => {
           return new Proxy(stub, {
             get(targetStub, prop) {
               if (prop === "members") {
-                return (...args: unknown[]) => {
+                return (...args: Parameters<typeof targetStub.members>) => {
                   membersRpcCalls += 1;
-                  return Reflect.apply(targetStub.members, targetStub, args);
+                  return targetStub.members(...args);
                 };
               }
               const value: unknown = Reflect.get(targetStub, prop, targetStub);

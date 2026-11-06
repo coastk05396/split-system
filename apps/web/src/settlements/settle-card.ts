@@ -154,9 +154,12 @@ export function settleShareContent(
   inviteToken: string | null = null,
 ): LineShareContent & { lineMessages: [LineMessage] } {
   const card =
-    "groupName" in cardOrPayments
-      ? cardOrPayments
-      : buildSettleCard(cardOrPayments, group!, currency!, nameOf!, inviteToken);
+    "groupName" in cardOrPayments ||
+    group === undefined ||
+    currency === undefined ||
+    nameOf === undefined
+      ? (cardOrPayments as SettleCard)
+      : buildSettleCard(cardOrPayments, group, currency, nameOf, inviteToken);
   return {
     text: settleText(card),
     lineMessages: [settleFlexMessage(card)],
