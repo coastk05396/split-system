@@ -1,15 +1,9 @@
 import type { Expense, Group } from "@split/shared";
 import { useLineShare } from "../platform/line-share.js";
-import type { ShareContent } from "../groups/ShareButtons.js";
-import { t } from "../i18n/messages.js";
 import { currentEpoch, rememberShare } from "./writes.js";
-import {
-  buildExpenseCard,
-  type ExpenseCard,
-  expenseFlexMessage,
-  expenseText,
-  expenseTextWithoutLink,
-} from "./expense-card.js";
+import { buildExpenseCard, type ExpenseCard, expenseShareContent } from "./expense-card.js";
+
+export { expenseShareContent };
 
 export type ChatSendResult = "none" | "sent" | "failed";
 export interface SavedShare {
@@ -33,7 +27,7 @@ export function useExpenseSharing(groupId: string) {
     let chat: ChatSendResult = "none";
     if (sendToChat) {
       chat = await sharing
-        .post([expenseFlexMessage(card)])
+        .post(expenseShareContent(card).lineMessages)
         .then((): ChatSendResult => "sent")
         .catch((): ChatSendResult => "failed");
     }
@@ -48,19 +42,4 @@ export function useExpenseSharing(groupId: string) {
     rememberShare(groupId, args[0].id, prepare(...args));
   }
   return { prepare, prepareLater, warm };
-}
-
-/** Every sharing adapter receives the same Expense text, link, and LINE card. */
-export function expenseShareContent(card: ExpenseCard): ShareContent {
-  const text = expenseText(card);
-  return {
-    text,
-    url: card.url,
-    title: card.title,
-    telegramText: expenseTextWithoutLink(card),
-    lineMessages: [expenseFlexMessage(card)],
-    copyText: text,
-    copyLabel: t("expenseShare.copy"),
-    copiedNotice: t("expenseShare.copied"),
-  };
 }

@@ -7,8 +7,7 @@ import { useEnsureInvite } from "../groups/api.js";
 import { ShareButtons } from "../groups/ShareButtons.js";
 import { failureMessage, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
-import { liffLink } from "../platform/liff-link.js";
-import { inviteFlexMessage } from "../groups/invite-card.js";
+import { inviteShareContent } from "../groups/invite-card.js";
 
 /** Share actions at the end of the combined Members and Invite page. */
 export function InviteSection({ group }: { group: Group }) {
@@ -16,10 +15,7 @@ export function InviteSection({ group }: { group: Group }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const current = ensure.data ?? null;
-  const url = current === null ? null : `${window.location.origin}/join/${current.token}`;
-  // What goes into LINE carries the LIFF address, so opening it there can use the share picker.
-  const lineUrl = url === null ? "" : liffLink(url);
-  const message = url === null ? "" : t("invite.shareMessage", { name: group.name, url: lineUrl });
+  const share = current === null ? null : inviteShareContent(group, current.token);
 
   return (
     <section
@@ -58,7 +54,7 @@ export function InviteSection({ group }: { group: Group }) {
         {t("invite.shareGroup")}
         <ArrowUpRight aria-hidden="true" className="size-5" />
       </button>
-      {url !== null && (
+      {share !== null && (
         <Dialog.Root open={open} onOpenChange={setOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
@@ -87,7 +83,7 @@ export function InviteSection({ group }: { group: Group }) {
               </div>
               <div className="mt-6 flex justify-center rounded-2xl border border-sprout-200 bg-white p-4">
                 <QRCodeSVG
-                  value={url}
+                  value={share.url}
                   size={240}
                   level="M"
                   marginSize={4}
@@ -99,19 +95,7 @@ export function InviteSection({ group }: { group: Group }) {
               <p className="mt-3 text-center text-sm font-semibold text-sprout-900">{group.name}</p>
               <p className="mt-1 text-center text-xs text-ink-muted">{t("invite.qrHint")}</p>
               <div className="mt-6">
-                <ShareButtons
-                  invite
-                  content={{
-                    text: message,
-                    url,
-                    title: group.name,
-                    telegramText: t("invite.shareTelegramText", { name: group.name }),
-                    lineMessages: [inviteFlexMessage({ groupName: group.name, url: lineUrl })],
-                    copyText: message,
-                    copyLabel: t("invite.copy"),
-                    copiedNotice: t("invite.copied"),
-                  }}
-                />
+                <ShareButtons invite content={share} />
               </div>
             </Dialog.Content>
           </Dialog.Portal>

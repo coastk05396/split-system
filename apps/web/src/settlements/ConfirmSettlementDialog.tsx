@@ -1,9 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { type CurrencyCode, formatAmount, parseAmount } from "@split/shared";
+import { type CurrencyCode, formatAmount, minorToDecimal, parseAmount } from "@split/shared";
 import { ArrowRight, HandCoins } from "lucide-react";
 import { type CSSProperties, type ReactNode, type SubmitEvent, useState } from "react";
 import { useLineShare } from "../platform/line-share.js";
-import { minorToText } from "../expenses/money.js";
 import { card, failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { useKeyboardInset } from "../shell/keyboard.js";
@@ -87,7 +86,7 @@ function ConfirmForm({
   submit: (amount: number, options?: { notifyChat?: boolean }) => Promise<unknown>;
   onDone: () => void;
 }) {
-  const [text, setText] = useState(() => minorToText(target.suggested, currency));
+  const [text, setText] = useState(() => minorToDecimal(target.suggested, currency));
   const [notifyChat, setNotifyChat] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);

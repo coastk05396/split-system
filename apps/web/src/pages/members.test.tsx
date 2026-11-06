@@ -131,15 +131,72 @@ describe("members", () => {
 
   it("lets a plain Member rename and remove a Placeholder", async () => {
     const user = userEvent.setup();
-    membersOf({ name: "台南", role: "member", others: [{ name: "成員1", status: "placeholder" }] });
+    const { api, id } = membersOf({
+      name: "台南",
+      role: "member",
+      others: [
+        { name: "宜庭", role: "admin" },
+        { name: "成員1", status: "placeholder" },
+      ],
+    });
     await user.click(await screen.findByRole("button", { name: "修改 成員1 的名稱" }));
     await user.clear(screen.getByLabelText("成員名稱"));
     await user.type(screen.getByLabelText("成員名稱"), "小明");
     await user.click(screen.getByRole("button", { name: "儲存" }));
     await waitFor(async () => {
-      expect((await rows())[1]).toHaveTextContent("小明（未加入）");
+      expect((await rows())[2]).toHaveTextContent("小明（未加入）");
     });
-    expect(screen.getByRole("button", { name: "移除 小明" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "移除 小明" }));
+    await user.click(await screen.findByRole("button", { name: "移除" }));
+    await waitFor(() => {
+      expect(screen.queryByText("小明")).toBeNull();
+    });
+    expect(api.groups.members(id()).find((m) => m.name === "小明")).toBeUndefined();
+  });
+
+  it("retains a removed Placeholder with Expense history as a Former Member (已移除的成員)", async () => {
+    const user = userEvent.setup();
+    let groupId = "";
+    let placeholderId = "";
+    const { api } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groupId = groups.add(me, {
+          name: "台南",
+          role: "member",
+          others: [
+            { name: "宜庭", role: "admin" },
+            { name: "成員1", status: "placeholder" },
+          ],
+        });
+        placeholderId = groups.members(groupId)[2]?.id ?? "";
+        groups.addExpense(groupId, {
+          description: "咖啡",
+          category: "餐飲",
+          originalAmount: 100,
+          originalCurrency: "TWD",
+          fxRateScaled: 1_000_000,
+          fxDate: "2026-06-13",
+          isCustomRate: false,
+          settlementAmount: 100,
+          payers: [{ memberId: placeholderId, amountMinor: 100 }],
+          split: { method: "equal", participants: [placeholderId] },
+          expenseDate: "2026-06-13",
+        });
+      },
+      pathFor: () => `/groups/${groupId}/members`,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "移除 成員1" }));
+    await user.click(await screen.findByRole("button", { name: "移除" }));
+    await waitFor(() => {
+      expect(screen.queryByText("成員1")).toBeNull();
+    });
+    expect(api.groups.members(groupId).find((m) => m.id === placeholderId)).toMatchObject({
+      id: placeholderId,
+      status: "former",
+      name: "已移除的成員",
+    });
   });
 
   it("gives a plain Member no controls on others", async () => {

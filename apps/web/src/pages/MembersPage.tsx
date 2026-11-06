@@ -1,6 +1,14 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { formatAmount, type Group, type Member } from "@split/shared";
+import {
+  canChangeMemberRole,
+  canEditPlaceholderName,
+  canRemoveMember,
+  formatAmount,
+  nextPlaceholderName,
+  type Group,
+  type Member,
+} from "@split/shared";
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
@@ -77,7 +85,7 @@ function useLeavingRows(seated: Member[]): { member: Member; leaving: boolean }[
 function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const seated = useMemo(() => members.filter((m) => m.status !== "former"), [members]);
   const rows = useLeavingRows(seated);
-  const isAdmin = group.me.role === "admin";
+  const me = { id: group.me.memberId, role: group.me.role };
   // Set by the page that has just created this Group, so its creator can go on from here.
   const state: unknown = useLocation().state;
   const created =
@@ -88,11 +96,9 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
   const [rowKeys, setRowKeys] = useState<Record<string, string>>({});
 
   function addMember() {
-    const names = new Set(members.map((member) => member.displayName));
-    let number = 1;
-    while (names.has(`成員${number}`)) number++;
+    const nextName = nextPlaceholderName(members.map((member) => member.displayName));
     setBlocked(null);
-    add.mutate(`成員${number}`, {
+    add.mutate(nextName, {
       onSuccess: (member, _name, context) => {
         const tempId = context?.tempId;
         if (tempId !== undefined) setRowKeys((keys) => ({ ...keys, [member.id]: tempId }));
@@ -150,8 +156,10 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
             </span>
             {!leaving &&
               !isUnsavedMember(m) &&
-              (m.status === "placeholder" || (isAdmin && !m.isMe)) && (
-                <MemberControls group={group} member={m} isAdmin={isAdmin} onBlocked={setBlocked} />
+              (canEditPlaceholderName(m) ||
+                canChangeMemberRole(me, m, { allowSelf: false }) ||
+                (!m.isMe && canRemoveMember(me, m))) && (
+                <MemberControls group={group} member={m} onBlocked={setBlocked} />
               )}
           </li>
         ))}
@@ -169,14 +177,13 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
 function MemberControls({
   group,
   member,
-  isAdmin,
   onBlocked,
 }: {
   group: Group;
   member: Member;
-  isAdmin: boolean;
   onBlocked: (message: string | null) => void;
 }) {
+  const me = { id: group.me.memberId, role: group.me.role };
   const patch = usePatchMember(group.id);
   const remove = useRemoveMember(group.id);
   const [confirming, setConfirming] = useState<"promote" | "remove" | null>(null);
@@ -204,7 +211,7 @@ function MemberControls({
 
   return (
     <div className="flex items-center gap-1">
-      {member.status === "active" && (
+      {canChangeMemberRole(me, member, { allowSelf: false }) && (
         <Menu.Root>
           <Menu.Trigger
             aria-label={t("members.role", { name })}
@@ -238,7 +245,7 @@ function MemberControls({
           </Menu.Portal>
         </Menu.Root>
       )}
-      {member.status === "placeholder" && (
+      {canEditPlaceholderName(member) && (
         <button
           type="button"
           ref={renameTriggerRef}
@@ -321,7 +328,7 @@ function MemberControls({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      {(isAdmin || member.status === "placeholder") && (
+      {canRemoveMember(me, member) && (
         <button
           type="button"
           aria-label={t("members.removeAria", { name })}

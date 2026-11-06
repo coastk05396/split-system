@@ -4,10 +4,9 @@ import {
   type Expense,
   EXPENSE_PAGE_SIZE,
   expenseInputSchema,
-  type Stop,
 } from "@split/shared";
 
-/** The Worker's Expense and Stop routes over in-memory rows (tickets 06 and 08 contract). */
+/** The Worker's Expense routes over in-memory rows (tickets 06 and 08 contract). */
 
 export interface ExpenseGroup {
   id: string;
@@ -21,8 +20,6 @@ export interface FakeExpenses {
   list(groupId: string): readonly Expense[];
   /** Seeds existing Expenses onto a Group. */
   seed(groupId: string, items: readonly Expense[]): void;
-  /** Seeds a Stop on a Trip; returns its id. */
-  addStop(groupId: string, stop: { dayDate: string; title: string; startTime?: string }): string;
   handle(
     route: string,
     parts: readonly string[],
@@ -48,7 +45,6 @@ function error(code: string, status: number): Response {
 export function createFakeExpenses(nextId: (prefix: string) => string): FakeExpenses {
   const byGroup = new Map<string, Expense[]>();
   const keys = new Map<string, string>();
-  const stops = new Map<string, Stop[]>();
   const rows = (groupId: string) => {
     const list = byGroup.get(groupId) ?? [];
     byGroup.set(groupId, list);
@@ -107,31 +103,10 @@ export function createFakeExpenses(nextId: (prefix: string) => string): FakeExpe
       rows(groupId).push(...items);
     },
 
-    addStop(groupId, stop) {
-      const id = nextId("s");
-      const list = stops.get(groupId) ?? [];
-      list.push({
-        id,
-        dayDate: stop.dayDate,
-        startTime: stop.startTime ?? null,
-        endTime: null,
-        title: stop.title,
-        category: "景點",
-        locationName: null,
-        notes: null,
-        createdAt: 0,
-        updatedAt: 0,
-      });
-      stops.set(groupId, list);
-      return id;
-    },
-
     handle(route, parts, body, { headers, query }, g, me, now) {
       const list = rows(g.id);
       const find = () => list.find((e) => e.id === parts[3]);
       switch (route) {
-        case "GET groups/:/stops":
-          return json((stops.get(g.id) ?? []).filter((s) => s.dayDate === query.get("day")));
         case "GET groups/:/expenses": {
           const newestFirst = [...list].reverse();
           const cursor = query.get("cursor");

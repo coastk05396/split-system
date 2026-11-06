@@ -2,8 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { ShareButtons } from "../groups/ShareButtons.js";
 import { t } from "../i18n/messages.js";
-import type { ExpenseCard } from "./expense-card.js";
-import { expenseShareContent } from "./expense-sharing.js";
+import { type ExpenseCard, expenseShareContent } from "./expense-card.js";
 
 /** A small copy of the LINE card, so a person sees what the others will get. */
 function CardPreview({ card }: { card: ExpenseCard }) {

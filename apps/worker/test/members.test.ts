@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { bearer, call } from "./auth-harness.js";
 import { at, errorCode, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
 
@@ -129,6 +130,77 @@ describe("PATCH /groups/:id/members/:mid", () => {
       },
     );
     expect(res.status).toBe(404);
+  });
+
+  it("adds and patches a Member in a single ledger member() round-trip without listing all Members", async () => {
+    const { admin, group } = await groupWith("小宇", "阿明");
+    const realNamespace = env.GROUP_LEDGER;
+    let membersRpcCalls = 0;
+    const proxyNamespace = new Proxy(realNamespace, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: Parameters<typeof targetNamespace.get>[0]) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "members") {
+                return (...args: Parameters<typeof targetStub.members>) => {
+                  membersRpcCalls += 1;
+                  return targetStub.members(...args);
+                };
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const added = await call(
+      `/groups/${group.id}/members`,
+      {
+        method: "POST",
+        headers: { ...bearer(admin.accessToken), "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "成員1" }),
+      },
+      { GROUP_LEDGER: proxyNamespace },
+    );
+    expect(added.status).toBe(201);
+    const placeholder = await added.json<{ id: string; displayName: string }>();
+    expect(placeholder.displayName).toBe("成員1");
+
+    const renamed = await call(
+      `/groups/${group.id}/members/${placeholder.id}`,
+      {
+        method: "PATCH",
+        headers: { ...bearer(admin.accessToken), "Content-Type": "application/json" },
+        body: JSON.stringify({ placeholderName: "小華" }),
+      },
+      { GROUP_LEDGER: proxyNamespace },
+    );
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toMatchObject({ id: placeholder.id, displayName: "小華" });
+    expect(membersRpcCalls).toBe(0);
+  });
+
+  it("blocks a Placeholder Member from duplicating a joined User's name even before group_member_summary catches up", async () => {
+    const { admin, group, others } = await groupWith("小宇", "阿明");
+    const ming = at(others, 0);
+    await env.DB.prepare("DELETE FROM group_member_summary WHERE group_id=? AND user_id=?")
+      .bind(group.id, ming.userId)
+      .run();
+
+    const duplicateAdd = await send(admin, "POST", `/groups/${group.id}/members`, { name: "阿明" });
+    expect(duplicateAdd.status).toBe(409);
+    expect(await errorCode(duplicateAdd)).toBe("PLACEHOLDER_NAME_TAKEN");
   });
 });
 

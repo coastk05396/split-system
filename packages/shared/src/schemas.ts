@@ -113,8 +113,32 @@ export const settlementInputSchema = z
 
 export type SettlementInput = z.infer<typeof settlementInputSchema>;
 
-const daysBetween = (start: string, end: string): number =>
-  (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
+const DAY_MS = 86_400_000;
+
+/** Days in a Trip's date range, both ends included. */
+export function tripLength(start: string, end: string): number {
+  return (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY_MS + 1;
+}
+
+/** Every YYYY-MM-DD calendar date from `start` to `end`, both ends included. */
+export function daysBetween(start: string, end: string): string[] {
+  const days: string[] = [];
+  for (
+    let at = Date.parse(`${start}T00:00:00Z`), last = Date.parse(`${end}T00:00:00Z`);
+    at <= last;
+    at += DAY_MS
+  ) {
+    days.push(new Date(at).toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+/** A Trip runs forward and lasts at most 31 days; either date may still be unset. */
+export function tripDatesValid(start: string | null, end: string | null): boolean {
+  if (start === null || end === null) return true;
+  const days = tripLength(start, end);
+  return days >= 1 && days <= MAX_TRIP_DAYS;
+}
 
 export const groupInputSchema = z
   .object({
@@ -128,9 +152,7 @@ export const groupInputSchema = z
   })
   .superRefine((group, ctx) => {
     const { tripStartDate: start, tripEndDate: end } = group;
-    if (start === undefined || end === undefined) return;
-    const days = daysBetween(start, end) + 1;
-    if (days < 1 || days > MAX_TRIP_DAYS) {
+    if (!tripDatesValid(start ?? null, end ?? null)) {
       ctx.addIssue({ code: "custom", message: "TRIP_DATES_INVALID", path: ["tripEndDate"] });
     }
   });

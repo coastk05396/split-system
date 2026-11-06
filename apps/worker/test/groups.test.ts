@@ -20,7 +20,7 @@ import {
 const db = createDb(env.DB);
 
 describe("a Group's member preview", () => {
-  it("lists the first six seated Members in joining order, for the card's avatars", async () => {
+  it("lists the first four seated Members in joining order on both the list and single-Group reads", async () => {
     const { admin, group } = await groupWith("小宇", "甲", "乙", "丙", "丁", "戊", "己");
     const list = await (
       await send(admin, "GET", "/groups")
@@ -28,7 +28,13 @@ describe("a Group's member preview", () => {
     const mine = list.find((g) => g.id === group.id);
 
     expect(mine?.memberCount).toBe(7);
-    expect(mine?.memberPreview.map((m) => m.name)).toEqual(["小宇", "甲", "乙", "丙", "丁", "戊"]);
+    expect(mine?.memberPreview.map((m) => m.name)).toEqual(["小宇", "甲", "乙", "丙"]);
+
+    const detail = await (
+      await send(admin, "GET", `/groups/${group.id}`)
+    ).json<{ memberCount: number; memberPreview: { name: string }[] }>();
+    expect(detail.memberCount).toBe(7);
+    expect(detail.memberPreview.map((m) => m.name)).toEqual(["小宇", "甲", "乙", "丙"]);
   });
 });
 

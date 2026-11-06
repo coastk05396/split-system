@@ -1,6 +1,24 @@
 import type { CurrencyCode, Expense, ExpensePage, Rate, Stop } from "@split/shared";
 import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
-import { abortable, expenseKeys, readWithRev as read, useGroupData } from "../groups/data.js";
+import { useAuth } from "../auth/AuthProvider.js";
+import {
+  abortable,
+  expenseKeys,
+  readWithRev as read,
+  statsKeys,
+  useGroupData,
+} from "../groups/data.js";
+import type { SpendingRow } from "../pages/spending-conversion.js";
+
+export interface CategoryExpense {
+  id: string;
+  groupId: string;
+  groupName: string;
+  description: string;
+  date: string;
+  currency: CurrencyCode;
+  amount: number;
+}
 
 /** TanStack Query hooks over the Worker's Expense, Rate and Stop routes (SPEC §5.1). */
 
@@ -80,5 +98,39 @@ export function useStops(groupId: string, day: string, enabled: boolean) {
     enabled: enabled && day !== "",
     queryFn: () =>
       read<Stop[]>(fetch(path(`/api/v1/groups/${encodeURIComponent(groupId)}/stops`, { day }))),
+  });
+}
+
+/** Monthly personal spending shares across active Groups (SPEC §5.1). */
+export function usePersonalSpending(from: string, to: string) {
+  const { state } = useAuth();
+  const { fetch } = useGroupData();
+  const userId = state.status === "signedIn" ? state.user.id : null;
+  return useQuery({
+    queryKey: statsKeys.spending(userId, from, to),
+    staleTime: 0,
+    queryFn: (ctx) =>
+      read<SpendingRow[]>(fetch(path("/api/v1/stats/spending", { from, to }), abortable(ctx)), ctx),
+  });
+}
+
+/** Personal spending shares for one month and category, paginated (SPEC §5.1). */
+export function useCategoryExpenses(month: string, category: string) {
+  const { state } = useAuth();
+  const { fetch } = useGroupData();
+  const userId = state.status === "signedIn" ? state.user.id : null;
+  return useInfiniteQuery({
+    queryKey: statsKeys.expenses(userId, month, category),
+    staleTime: 0,
+    initialPageParam: undefined as string | undefined,
+    queryFn: (ctx) =>
+      read<{ items: CategoryExpense[]; nextCursor: string | null }>(
+        fetch(
+          path("/api/v1/stats/expenses", { month, category, cursor: ctx.pageParam }),
+          abortable(ctx),
+        ),
+        ctx,
+      ),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
 }

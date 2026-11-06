@@ -9,11 +9,8 @@ import type {
   MemberStatus,
   PlaceholderInput,
   Settlement,
-  SettlementInput,
   SettlementPage,
   Stop,
-  StopInput,
-  StopPatch,
 } from "@split/shared";
 import type { ErrorCode } from "./errors.js";
 
@@ -87,14 +84,14 @@ export type MemberOperation = { now: number } & (
       actorMemberId: string;
       targetMemberId: string;
       input: PlaceholderInput;
-      names?: Record<string, string>;
+      names?: Record<string, string> | undefined;
     }
   | {
       action: "patch";
       actorMemberId: string;
       targetMemberId: string;
       input: MemberPatch;
-      names?: Record<string, string>;
+      names?: Record<string, string> | undefined;
     }
   | { action: "leave" | "remove"; actorMemberId: string; targetMemberId: string }
   | { action: "join"; userId: string; targetMemberId: string; inviteToken: string }
@@ -106,6 +103,7 @@ export interface MemberOutcome {
   /** False when a join found the User already seated. */
   changed: boolean;
   closeUserId?: string | null;
+  member?: LedgerMember | undefined;
 }
 
 export type { ExpenseOperation } from "./ledger-expenses.js";
@@ -118,10 +116,10 @@ export interface ExpenseValues {
   delete: null;
 }
 
-export type SettlementOperation =
-  | { action: "list"; actorId: string; now: number; cursor?: string | undefined }
-  | { action: "create"; actorId: string; now: number; key: string; input: SettlementInput }
-  | { action: "undo"; actorId: string; now: number; id: string };
+export type {
+  SettlementCommand,
+  SettlementCommand as SettlementOperation,
+} from "./ledger-settlements.js";
 
 export interface SettlementValues {
   list: SettlementPage;
@@ -129,18 +127,7 @@ export interface SettlementValues {
   undo: Settlement;
 }
 
-export type StopOperation =
-  | { action: "list"; actorId: string; day?: string | undefined }
-  | { action: "create"; actorId: string; input: StopInput; now: number }
-  | {
-      action: "patch";
-      actorId: string;
-      id: string;
-      input: StopPatch;
-      expected: number;
-      now: number;
-    }
-  | { action: "delete"; actorId: string; id: string };
+export type { StopOperation } from "./ledger-stops.js";
 
 export interface StopValues {
   list: Stop[];

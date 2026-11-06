@@ -135,13 +135,14 @@ describe("settings (screen 11)", () => {
 
   it("saves the Preferred currency from a dropdown right under the profile", async () => {
     const user = userEvent.setup();
-    renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
+    const { api } = renderApp({ path: "/settings", cookieUser: makeUser("小宇") });
 
     const select = await screen.findByRole("combobox", { name: "偏好幣別" });
     expect(select).toHaveValue("TWD");
     await user.selectOptions(select, "USD");
 
     expect(await screen.findByRole("combobox", { name: "偏好幣別" })).toHaveValue("USD");
+    expect(api.calls).toContain("PATCH /api/v1/me");
     expect(screen.getByRole("option", { name: "USD 美元" })).toBeVisible();
     expect(screen.getByRole("option", { name: "JPY 日元" })).toBeVisible();
     expect(screen.getByRole("option", { name: "THB 泰銖" })).toBeVisible();
@@ -265,6 +266,7 @@ describe("settings (screen 11)", () => {
 
     expect(await landingHeading()).toBeVisible();
     expect(api.calls).toContain("DELETE /api/v1/me");
+    expect(api.calls).not.toContain("POST /api/v1/auth/logout");
   });
 
   it("links to the privacy policy and terms", async () => {

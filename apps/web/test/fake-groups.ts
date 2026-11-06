@@ -1,15 +1,24 @@
 import {
+  canChangeMemberRole,
+  canEditPlaceholderName,
+  canRemoveMember,
   type CurrencyCode,
   type Expense,
   type Group,
   INVITE_TTL_MS,
   type Invite,
   type InvitePreview,
+  isLastAdmin,
+  MAX_MEMBER_PREVIEW,
   type Me,
   type Member,
+  memberRemovalDisposition,
   type MemberRole,
   type MemberStatus,
+  REMOVED_PLACEHOLDER_NAME,
   type Stop,
+  stopDayInTrip,
+  tripDatesValid,
 } from "@split/shared";
 import { createFakeExpenses, type FakeExpenses } from "./fake-expenses.js";
 import { createFakeSettlements, type FakeSettlements } from "./fake-settlements.js";
@@ -40,7 +49,6 @@ interface FakeGroup {
   trip: FakeTrip;
   updatedAt: number;
   stops: Stop[];
-  expenses: Expense[];
 }
 
 interface FakeTrip {
@@ -152,8 +160,7 @@ function sortedStops(stops: readonly Stop[]): Stop[] {
 }
 
 function dayInTrip(g: FakeGroup, day: string): boolean {
-  const { tripStartDate: start, tripEndDate: end } = g.trip;
-  return (start === null || day >= start) && (end === null || day <= end);
+  return stopDayInTrip(day, g.trip.tripStartDate, g.trip.tripEndDate);
 }
 
 function seedExpense(
@@ -215,7 +222,7 @@ export function createFakeGroups(): FakeGroups {
       settlementCurrencyLocked: g.locked,
       memberCount: seated(g).length,
       memberPreview: seated(g)
-        .slice(0, 6)
+        .slice(0, MAX_MEMBER_PREVIEW)
         .map((m) => ({ name: displayName(m), pictureUrl: null })),
       createdAt: 0,
       updatedAt: g.updatedAt,
@@ -244,25 +251,6 @@ export function createFakeGroups(): FakeGroups {
   }
 
   const expenses = createFakeExpenses(nextId);
-  expenses.addStop = (groupId, stop) => {
-    const g = groups.get(groupId);
-    seq += 1;
-    const id = `s-${String(seq)}`;
-    const s: Stop = {
-      id,
-      dayDate: stop.dayDate,
-      startTime: stop.startTime ?? null,
-      endTime: null,
-      title: stop.title,
-      category: "景點",
-      locationName: null,
-      notes: null,
-      createdAt: fake.now + seq,
-      updatedAt: fake.now + seq,
-    };
-    if (g) g.stops.push(s);
-    return id;
-  };
 
   const fake: FakeGroups = {
     now: 1_700_000_000_000,
@@ -342,7 +330,6 @@ export function createFakeGroups(): FakeGroups {
         },
         updatedAt: fake.now,
         stops,
-        expenses,
         name: seed.name,
         settlementCurrency: seed.settlementCurrency ?? "TWD",
         isTrip: seed.isTrip ?? false,
@@ -519,12 +506,10 @@ export function createFakeGroups(): FakeGroups {
         case "PATCH groups/:": {
           if (!isAdmin) return error("FORBIDDEN", 403);
           if (headers.get("If-Match") !== String(g.updatedAt)) return error("EDIT_CONFLICT", 409);
-          const start = "tripStartDate" in body ? body.tripStartDate : g.trip.tripStartDate;
-          const end = "tripEndDate" in body ? body.tripEndDate : g.trip.tripEndDate;
-          if (typeof start === "string" && typeof end === "string") {
-            const days = (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1;
-            if (days < 1 || days > 31) return error("VALIDATION_FAILED", 400);
-          }
+          const start =
+            "tripStartDate" in body ? textOrNull(body.tripStartDate) : g.trip.tripStartDate;
+          const end = "tripEndDate" in body ? textOrNull(body.tripEndDate) : g.trip.tripEndDate;
+          if (!tripDatesValid(start, end)) return error("VALIDATION_FAILED", 400);
           for (const key of Object.keys(g.trip) as (keyof FakeTrip)[]) {
             if (key in body) g.trip[key] = textOrNull(body[key]);
           }
@@ -579,7 +564,6 @@ export function createFakeGroups(): FakeGroups {
           if (g.stops.length === before) return error("NOT_FOUND", 404);
           for (const e of fake.expenses.list(g.id))
             if (e.stopId === parts[3]) (e as { stopId: string | null }).stopId = null;
-          for (const e of g.expenses) if (e.stopId === parts[3]) e.stopId = null;
           return new Response(null, { status: 204 });
         }
         case "DELETE groups/:":
@@ -613,7 +597,7 @@ export function createFakeGroups(): FakeGroups {
           if (target === undefined) return error("NOT_FOUND", 404);
           if ("nickname" in body) return error("VALIDATION_FAILED", 400);
           if (typeof body.placeholderName === "string") {
-            if (target.status !== "placeholder") return error("MEMBER_NOT_ACTIVE", 409);
+            if (!canEditPlaceholderName(target)) return error("MEMBER_NOT_ACTIVE", 409);
             const name = body.placeholderName.trim();
             if (!name || name.length > 50) return error("VALIDATION_FAILED", 400);
             if (g.members.some((m) => m !== target && m.status !== "former" && m.name === name))
@@ -621,24 +605,50 @@ export function createFakeGroups(): FakeGroups {
             target.name = name;
           }
           if (body.role === "admin" || body.role === "member") {
-            if (!isAdmin) return error("FORBIDDEN", 403);
-            const admins = g.members.filter((m) => m.status === "active" && m.role === "admin");
-            if (body.role === "member" && target.role === "admin" && admins.length === 1) {
+            if (!canChangeMemberRole(me, target)) {
+              return error(
+                isAdmin && target.status !== "active" ? "MEMBER_NOT_ACTIVE" : "FORBIDDEN",
+                isAdmin && target.status !== "active" ? 409 : 403,
+              );
+            }
+            if (body.role === "member" && isLastAdmin(g.members, target.id)) {
               return error("LAST_ADMIN", 409);
             }
             target.role = body.role;
           }
           return json(toMember(target, me));
         }
+        case "POST groups/:/leave":
         case "DELETE groups/:/members/:": {
-          if (!isAdmin) return error("FORBIDDEN", 403);
-          const target = g.members.find((m) => m.id === parts[3]);
+          const target =
+            route === "POST groups/:/leave" ? me : g.members.find((m) => m.id === parts[3]);
           if (target === undefined) return error("NOT_FOUND", 404);
+          if (!canRemoveMember(me, target)) {
+            return error(
+              target.status === "former" && isAdmin ? "MEMBER_NOT_ACTIVE" : "FORBIDDEN",
+              target.status === "former" && isAdmin ? 409 : 403,
+            );
+          }
           if (target.balance !== 0) return error("BALANCE_NOT_ZERO", 409);
-          if (target.status === "placeholder") {
+          if (isLastAdmin(g.members, target.id)) return error("LAST_ADMIN", 409);
+          const hasHistory =
+            target.expenseCount > 0 ||
+            fake.expenses
+              .list(g.id)
+              .some(
+                (e) =>
+                  e.payers.some((p) => p.memberId === target.id) ||
+                  e.splits.some((s) => s.memberId === target.id),
+              );
+          const disposition = memberRemovalDisposition(target, hasHistory);
+          if (disposition === "delete") {
             g.members = g.members.filter((m) => m !== target);
+          } else if (disposition === "former_placeholder") {
+            target.status = "former";
+            target.name = REMOVED_PLACEHOLDER_NAME;
           } else {
             target.status = "former";
+            target.role = "member";
           }
           return new Response(null, { status: 204 });
         }

@@ -16,7 +16,7 @@ import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { consumeRateLimit, rateLimit } from "../rate-limit.js";
 import { parseBody, requireIfMatch } from "../request-guards.js";
-import { assertUnderGroupCap, listGroups } from "./groups.js";
+import { assertUnderGroupCap, listGroups, readLedgerGroup, usersById } from "./groups.js";
 import {
   claimPlaceholder,
   currentInvite,
@@ -32,44 +32,8 @@ import {
   patchMember,
   removeMember,
 } from "./members.js";
-import { requireAdmin, requireMember } from "./membership.js";
-import type { Bindings } from "../env.js";
+import { findMembership, requireAdmin, requireMember } from "./membership.js";
 import { groupLedger } from "../ledger-client.js";
-import type { MemberRow } from "./membership.js";
-
-/** The Group as one Member sees it, with the rev it was read at. */
-async function readLedgerGroup(env: Bindings, me: MemberRow) {
-  const { value: state, rev } = await groupLedger(env, me.groupId).state();
-  const seatedMe = state.seated.find((member) => member.id === me.id) ?? {
-    id: me.id,
-    role: me.role,
-    balance: me.netBalance,
-  };
-  const preview = await Promise.all(
-    state.seated.slice(0, 4).map(async (member) => {
-      const user =
-        member.userId === null
-          ? null
-          : await env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?")
-              .bind(member.userId)
-              .first<{ display_name: string; picture_url: string | null }>();
-      return {
-        name: user?.display_name ?? member.placeholderName ?? "?",
-        pictureUrl: user?.picture_url ?? null,
-      };
-    }),
-  );
-  return {
-    rev,
-    group: {
-      ...state.group,
-      settlementCurrencyLocked: state.locked,
-      memberCount: state.seated.length,
-      memberPreview: preview,
-      me: { memberId: seatedMe.id, role: seatedMe.role, balance: seatedMe.balance },
-    },
-  };
-}
 
 /**
  * Groups, Members, Invites and Placeholder Members (SPEC §5.1, decisions 10, 13, 16, 31).
@@ -94,13 +58,9 @@ export function groupRoutes(deps: AppDeps) {
           : await verifyAccessToken(token, c.env.SESSION_SIGNING_KEY, deps.now());
       if (userId === null) throw new ApiError("UNAUTHORIZED");
       const groupId = c.req.param("id");
-      const summary = await c.env.DB.prepare(
-        "SELECT 1 FROM group_member_summary WHERE group_id=? AND user_id=?",
-      )
-        .bind(groupId, userId)
-        .first();
-      if (summary === null)
-        await consumeRateLimit(createDb(c.env.DB), userId, "membership_lookup", deps.now());
+      const db = createDb(c.env.DB);
+      if ((await findMembership(db, groupId, userId)) === undefined)
+        await consumeRateLimit(db, userId, "membership_lookup", deps.now());
       if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
         if (!(await groupLedger(c.env, groupId).isMember(userId))) throw new ApiError("NOT_FOUND");
         return c.body(null, 426);
@@ -112,13 +72,10 @@ export function groupRoutes(deps: AppDeps) {
     )
     .post("/groups", signedIn, rateLimit("group_create", deps.now), async (c) => {
       const input = await parseBody(c, groupInputSchema);
-      await assertUnderGroupCap(createDb(c.env.DB), c.var.userId);
-      const user = await c.env.DB.prepare(
-        "SELECT display_name, picture_url FROM users WHERE id = ?",
-      )
-        .bind(c.var.userId)
-        .first<{ display_name: string; picture_url: string | null }>();
-      if (user === null) throw new ApiError("UNAUTHORIZED");
+      const db = createDb(c.env.DB);
+      await assertUnderGroupCap(db, c.var.userId);
+      const user = (await usersById(db, [c.var.userId])).get(c.var.userId);
+      if (user === undefined) throw new ApiError("UNAUTHORIZED");
       const id = crypto.randomUUID();
       const memberId = crypto.randomUUID();
       const now = deps.now();
@@ -147,7 +104,7 @@ export function groupRoutes(deps: AppDeps) {
           tripNotes: input.tripNotes ?? null,
           settlementCurrencyLocked: false,
           memberCount: 1,
-          memberPreview: [{ name: user.display_name, pictureUrl: user.picture_url }],
+          memberPreview: [{ name: user.displayName, pictureUrl: user.pictureUrl }],
           createdAt: now,
           updatedAt: now,
           me: { memberId, role: "admin", balance: 0 },
@@ -157,43 +114,14 @@ export function groupRoutes(deps: AppDeps) {
     })
     .get("/groups/:id", signedIn, async (c) => {
       const id = c.req.param("id");
-      const summary = await c.env.DB.prepare(
-        "SELECT 1 FROM group_member_summary WHERE group_id=? AND user_id=?",
-      )
-        .bind(id, c.var.userId)
-        .first();
-      if (summary === null)
-        await consumeRateLimit(createDb(c.env.DB), c.var.userId, "membership_lookup", deps.now());
+      const db = createDb(c.env.DB);
+      if ((await findMembership(db, id, c.var.userId)) === undefined)
+        await consumeRateLimit(db, c.var.userId, "membership_lookup", deps.now());
       const ledger = groupLedger(c.env, id);
       if (!(await ledger.isMember(c.var.userId))) throw new ApiError("NOT_FOUND");
-      const { value: state, rev } = await ledger.state();
-      const me = state.seated.find((member) => member.userId === c.var.userId);
-      if (!me) throw new ApiError("NOT_FOUND");
-      const preview = await Promise.all(
-        state.seated.slice(0, 6).map(async (member) => {
-          const user =
-            member.userId === null
-              ? null
-              : await c.env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?")
-                  .bind(member.userId)
-                  .first<{ display_name: string; picture_url: string | null }>();
-          return {
-            name: user?.display_name ?? member.placeholderName ?? "?",
-            pictureUrl: user?.picture_url ?? null,
-          };
-        }),
-      );
+      const { group, rev } = await readLedgerGroup(db, c.env, id, c.var.userId);
       c.header("X-Group-Rev", String(rev));
-      return c.json(
-        {
-          ...state.group,
-          settlementCurrencyLocked: state.locked,
-          memberCount: state.seated.length,
-          memberPreview: preview,
-          me: { memberId: me.id, role: me.role, balance: me.balance },
-        },
-        200,
-      );
+      return c.json(group, 200);
     })
     .patch("/groups/:id", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
@@ -207,7 +135,7 @@ export function groupRoutes(deps: AppDeps) {
           if (!(error instanceof ApiError)) throw error;
           if (error.code === "EDIT_CONFLICT")
             throw new ApiError("EDIT_CONFLICT", {
-              current: (await readLedgerGroup(c.env, me)).group,
+              current: (await readLedgerGroup(db, c.env, me.groupId, c.var.userId, me)).group,
             });
           // VALIDATION_FAILED carries the invalid Trip dates; a missing Group was INTERNAL.
           if (
@@ -218,7 +146,7 @@ export function groupRoutes(deps: AppDeps) {
             throw error;
           throw new ApiError("INTERNAL");
         });
-      const updated = await readLedgerGroup(c.env, me);
+      const updated = await readLedgerGroup(db, c.env, me.groupId, c.var.userId, me);
       c.header("X-Group-Rev", String(updated.rev));
       return c.json(updated.group, 200);
     })

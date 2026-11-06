@@ -1,9 +1,8 @@
-import { CURRENCY_CODES, LANGUAGES, type Me, type Provider } from "@split/shared";
+import { CURRENCY_CODES, LANGUAGES, type Provider } from "@split/shared";
 import { Check, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { createApiClient, withJson } from "../api/client.js";
-import { ApiFailure, type ErrorCode, toApiFailure } from "../api/errors.js";
+import { ApiFailure, type ErrorCode } from "../api/errors.js";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGoogleErrand } from "../auth/google-errand.js";
@@ -90,7 +89,7 @@ const pickerSelect = "absolute inset-0 size-full cursor-pointer opacity-0";
  * unlink), the policy links, 登出 and 刪除帳號. No hint text, no 登出所有裝置.
  */
 export function SettingsPage() {
-  const { state, session, signOut, updateUser, unlink } = useAuth();
+  const { state, signOut, updateMe, deleteAccount, unlink } = useAuth();
   const { line, google } = useDeps();
   const [error, setError] = useState<ErrorCode | null>(null);
   const [working, setWorking] = useState(false);
@@ -112,7 +111,6 @@ export function SettingsPage() {
   );
   if (state.status !== "signedIn") return null;
   const user = state.user;
-  const api = createApiClient(session.fetch);
   const linked = new Set(user.identities.map((identity) => identity.provider));
   const profileProvider = user.signedInWith;
   const profileEmail = user.identities.find((i) => i.provider === profileProvider)?.email ?? null;
@@ -121,22 +119,7 @@ export function SettingsPage() {
   const sourceIsGoogle = user.identities[0]?.provider === "google";
 
   /** Runs one account call; on failure shows its zh-TW message. */
-  async function run(call: () => Promise<Response>, onOk: (res: Response) => Promise<void>) {
-    setError(null);
-    googleErrand.clearError();
-    setWorking(true);
-    try {
-      const res = await call();
-      if (res.ok) await onOk(res);
-      else setError((await toApiFailure(res)).code);
-    } catch {
-      setError("INTERNAL");
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function runAuth(call: () => Promise<void>) {
+  async function runAuth(call: () => Promise<unknown>) {
     setError(null);
     googleErrand.clearError();
     setWorking(true);
@@ -148,13 +131,6 @@ export function SettingsPage() {
       setWorking(false);
     }
   }
-
-  const acceptMe = async (res: Response) => {
-    updateUser((await res.json()) as Me);
-  };
-
-  /** Ends this device's session too; the Gate then shows the landing page. */
-  const leave = () => signOut();
 
   return (
     <div className="mx-auto max-w-xl">
@@ -207,7 +183,7 @@ export function SettingsPage() {
               onChange={(e) => {
                 const code = CURRENCY_CODES.find((c) => c === e.target.value);
                 if (code === undefined || code === user.preferredCurrency) return;
-                void run(() => api.me.$patch({}, withJson({ preferredCurrency: code })), acceptMe);
+                void runAuth(() => updateMe({ preferredCurrency: code }));
               }}
               className={pickerSelect}
             >
@@ -241,7 +217,7 @@ export function SettingsPage() {
               onChange={(e) => {
                 const language = LANGUAGES.find((l) => l === e.target.value);
                 if (language === undefined || language === user.language) return;
-                void run(() => api.me.$patch({}, withJson({ language })), acceptMe);
+                void runAuth(() => updateMe({ language }));
               }}
               className={pickerSelect}
             >
@@ -361,7 +337,7 @@ export function SettingsPage() {
       </Section>
 
       <div className={`${card} mt-7 overflow-hidden`}>
-        <button type="button" onClick={() => void leave()} className={`${rowBase} ${rowDivider}`}>
+        <button type="button" onClick={() => void signOut()} className={`${rowBase} ${rowDivider}`}>
           <IconBox>👋</IconBox>
           {t("settings.signOut")}
         </button>
@@ -409,7 +385,7 @@ export function SettingsPage() {
                 disabled={busy}
                 onClick={() => {
                   setConfirmingDelete(false);
-                  void run(() => api.me.$delete(), leave);
+                  void runAuth(() => deleteAccount());
                 }}
                 className="press-pill flex-1 rounded-full bg-red-700 py-3 font-bold text-white hover:bg-red-700/90"
               >

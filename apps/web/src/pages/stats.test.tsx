@@ -3,6 +3,7 @@ import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
+import { statsKeys } from "../groups/data.js";
 
 function month(offset: number): string {
   const now = new Date();
@@ -13,7 +14,8 @@ function month(offset: number): string {
 describe("personal spending stats", () => {
   it("converts shares into the preferred currency and switches months and categories", async () => {
     const user = userEvent.setup();
-    const { api } = renderApp({ path: "/stats", cookieUser: makeUser("小宇") });
+    const me = makeUser("小宇");
+    const { api, queryClient } = renderApp({ path: "/stats", cookieUser: me });
     api.spendingStats.push(
       { month: month(0), category: "餐飲", currency: "TWD", amount: 100 },
       { month: month(0), category: "交通", currency: "USD", amount: 100 },
@@ -29,6 +31,9 @@ describe("personal spending stats", () => {
       amount: 100,
     });
     expect((await screen.findAllByText("NT$ 132"))[0]).toBeVisible();
+    expect(queryClient.getQueryData(statsKeys.spending(me.id, month(-5), month(0)))).toHaveLength(
+      3,
+    );
     expect(screen.getByText(/最新參考匯率/)).toBeVisible();
     const categories = screen.getByRole("region", { name: "花在哪裡？" });
     await user.click(within(categories).getByRole("button", { name: /交通/ }));
@@ -40,6 +45,7 @@ describe("personal spending stats", () => {
       "href",
       "/groups/g1/expenses/e1",
     );
+    expect(queryClient.getQueryData(statsKeys.expenses(me.id, month(0), "交通"))).toBeDefined();
     const bars = screen.getByRole("group", { name: "最近六個月" });
     const previous = within(bars).getAllByRole("button")[4];
     if (previous === undefined) throw new Error("Missing previous month");

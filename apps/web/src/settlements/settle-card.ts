@@ -1,8 +1,8 @@
 import { type CurrencyCode, formatAmount, type Group, type PlannedPayment } from "@split/shared";
-import { COLOR } from "../expenses/expense-card.js";
 import { t } from "../i18n/messages.js";
-import { liffLink } from "../platform/liff-link.js";
 import type { LineMessage } from "../platform/line.js";
+import { COLOR, flexBubbleFrame, groupJoinLink, groupJoinUrl } from "../platform/line-flex.js";
+import type { LineShareContent } from "../platform/line-share.js";
 
 const SEGMENTER = new Intl.Segmenter();
 
@@ -32,10 +32,6 @@ export function buildSettleCard(
   inviteToken: string | null = null,
 ): SettleCard {
   const path = `/groups/${group.id}?tab=settle`;
-  const url =
-    inviteToken === null
-      ? `${window.location.origin}${path}`
-      : `${window.location.origin}/join/${inviteToken}?next=${encodeURIComponent(path)}`;
   const sorted = [...payments].sort((a, b) => {
     if (b.amountMinor !== a.amountMinor) return b.amountMinor - a.amountMinor;
     const payerCmp = nameOf(a.fromMemberId).localeCompare(nameOf(b.fromMemberId));
@@ -55,8 +51,8 @@ export function buildSettleCard(
   return {
     groupName: group.name,
     lines,
-    url,
-    lineUrl: liffLink(url),
+    url: groupJoinUrl(group.id, inviteToken, path),
+    lineUrl: groupJoinLink(group.id, inviteToken, path),
   };
 }
 
@@ -77,101 +73,96 @@ export function settleText(card: SettleCard): string {
  * planned payment rows with flow arrows, and a sprout green button that opens the settlement tab.
  */
 export function settleFlexMessage(card: SettleCard): LineMessage {
-  return {
-    type: "flex",
+  return flexBubbleFrame({
     altText: t("settleShare.alt", { name: card.groupName }),
-    contents: {
-      type: "bubble",
-      size: "kilo",
-      styles: {
-        header: { backgroundColor: COLOR.peach },
-        body: { backgroundColor: COLOR.white },
+    spacing: "md",
+    contents: [
+      {
+        type: "text",
+        text: card.groupName,
+        weight: "bold",
+        size: "xl",
+        color: COLOR.ink,
+        wrap: true,
+        maxLines: 2,
       },
-      header: {
-        type: "box",
-        layout: "vertical",
-        paddingAll: "3px",
-        contents: [{ type: "filler" }],
+      {
+        type: "text",
+        text: t("settleShare.subtitle", { count: card.lines.length }),
+        size: "sm",
+        color: COLOR.muted,
+        wrap: true,
       },
-      body: {
-        type: "box",
-        layout: "vertical",
-        paddingAll: "18px",
-        spacing: "md",
-        contents: [
-          {
-            type: "text",
-            text: card.groupName,
-            weight: "bold",
-            size: "xl",
-            color: COLOR.ink,
-            wrap: true,
-            maxLines: 2,
-          },
-          {
-            type: "text",
-            text: t("settleShare.subtitle", { count: card.lines.length }),
-            size: "sm",
-            color: COLOR.muted,
-            wrap: true,
-          },
-          { type: "separator", color: COLOR.line },
-          ...(card.lines.length === 0
-            ? []
-            : [
-                {
-                  type: "box" as const,
-                  layout: "vertical" as const,
-                  margin: "md" as const,
-                  spacing: "sm" as const,
-                  contents: card.lines.map((line) => ({
-                    type: "box" as const,
-                    layout: "horizontal" as const,
-                    alignItems: "center" as const,
-                    spacing: "sm" as const,
-                    contents: [
-                      {
-                        type: "text" as const,
-                        text: line.label,
-                        size: "xs" as const,
-                        color: COLOR.ink,
-                        flex: 1,
-                        wrap: true,
-                      },
-                      {
-                        type: "text" as const,
-                        text: line.amount,
-                        size: "md" as const,
-                        weight: "bold" as const,
-                        color: COLOR.ink,
-                        align: "end" as const,
-                        flex: 0,
-                      },
-                    ],
-                  })),
-                },
-              ]),
-          {
-            type: "box",
-            layout: "horizontal",
-            margin: "lg",
-            cornerRadius: "18px",
-            backgroundColor: COLOR.sprout,
-            paddingAll: "14px",
-            action: { type: "uri", label: `${t("settleShare.action")} ↗`, uri: card.lineUrl },
-            contents: [
-              {
-                type: "text",
-                text: `${t("settleShare.action")} ↗`,
-                color: COLOR.white,
-                weight: "bold",
-                align: "center",
-              },
-            ],
-          },
-        ],
-      },
-    },
+      { type: "separator", color: COLOR.line },
+      ...(card.lines.length === 0
+        ? []
+        : [
+            {
+              type: "box" as const,
+              layout: "vertical" as const,
+              margin: "md" as const,
+              spacing: "sm" as const,
+              contents: card.lines.map((line) => ({
+                type: "box" as const,
+                layout: "horizontal" as const,
+                alignItems: "center" as const,
+                spacing: "sm" as const,
+                contents: [
+                  {
+                    type: "text" as const,
+                    text: line.label,
+                    size: "xs" as const,
+                    color: COLOR.ink,
+                    flex: 1,
+                    wrap: true,
+                  },
+                  {
+                    type: "text" as const,
+                    text: line.amount,
+                    size: "md" as const,
+                    weight: "bold" as const,
+                    color: COLOR.ink,
+                    align: "end" as const,
+                    flex: 0,
+                  },
+                ],
+              })),
+            },
+          ]),
+    ],
+    actionLabel: t("settleShare.action"),
+    actionUri: card.lineUrl,
+    actionMargin: "lg",
+  });
+}
+
+export function settleShareContent(
+  card: SettleCard,
+): LineShareContent & { lineMessages: [LineMessage] };
+export function settleShareContent(
+  payments: readonly PlannedPayment[],
+  group: Group,
+  currency: CurrencyCode,
+  nameOf: (memberId: string) => string,
+  inviteToken?: string | null,
+): LineShareContent & { lineMessages: [LineMessage] };
+export function settleShareContent(
+  cardOrPayments: SettleCard | readonly PlannedPayment[],
+  group?: Group,
+  currency?: CurrencyCode,
+  nameOf?: (memberId: string) => string,
+  inviteToken: string | null = null,
+): LineShareContent & { lineMessages: [LineMessage] } {
+  const card =
+    "groupName" in cardOrPayments ||
+    group === undefined ||
+    currency === undefined ||
+    nameOf === undefined
+      ? (cardOrPayments as SettleCard)
+      : buildSettleCard(cardOrPayments, group, currency, nameOf, inviteToken);
+  return {
+    text: settleText(card),
+    lineMessages: [settleFlexMessage(card)],
   };
 }
 
@@ -199,17 +190,13 @@ export function buildSettledCard(
   inviteToken: string | null = null,
 ): SettledCard {
   const path = `/groups/${group.id}?tab=settle`;
-  const url =
-    inviteToken === null
-      ? `${window.location.origin}${path}`
-      : `${window.location.origin}/join/${inviteToken}?next=${encodeURIComponent(path)}`;
   return {
     groupName: group.name,
     payer: settlement.payer,
     receiver: settlement.receiver,
     amount: formatAmount(settlement.amount, currency),
-    url,
-    lineUrl: liffLink(url),
+    url: groupJoinUrl(group.id, inviteToken, path),
+    lineUrl: groupJoinLink(group.id, inviteToken, path),
     payerPictureUrl: settlement.payerPictureUrl ?? null,
     receiverPictureUrl: settlement.receiverPictureUrl ?? null,
   };
@@ -262,134 +249,98 @@ function avatarBox(name: string, pictureUrl?: string | null) {
 }
 
 export function settledFlexMessage(card: SettledCard): LineMessage {
-  return {
-    type: "flex",
+  return flexBubbleFrame({
     altText: t("settleShare.settledAlt", {
       name: card.groupName,
       payer: card.payer,
       receiver: card.receiver,
       amount: card.amount,
     }),
-    contents: {
-      type: "bubble",
-      size: "kilo",
-      styles: {
-        header: { backgroundColor: COLOR.peach },
-        body: { backgroundColor: COLOR.white },
+    contents: [
+      {
+        type: "text",
+        text: card.groupName,
+        weight: "bold",
+        size: "xl",
+        color: COLOR.ink,
+        wrap: true,
+        maxLines: 2,
       },
-      header: {
+      {
         type: "box",
-        layout: "vertical",
-        paddingAll: "3px",
-        contents: [{ type: "filler" }],
+        layout: "horizontal",
+        alignItems: "center",
+        spacing: "xs",
+        contents: [
+          avatarBox(card.payer, card.payerPictureUrl),
+          {
+            type: "text",
+            text: card.payer,
+            size: "sm",
+            weight: "bold",
+            color: COLOR.ink,
+            flex: 0,
+            maxLines: 1,
+          },
+          {
+            type: "text",
+            text: "➔",
+            size: "xs",
+            color: COLOR.muted,
+            flex: 0,
+            align: "center",
+          },
+          avatarBox(card.receiver, card.receiverPictureUrl),
+          {
+            type: "text",
+            text: card.receiver,
+            size: "sm",
+            weight: "bold",
+            color: COLOR.ink,
+            flex: 0,
+            maxLines: 1,
+          },
+        ],
       },
-      body: {
+      {
         type: "box",
-        layout: "vertical",
-        paddingAll: "18px",
-        spacing: "lg",
+        layout: "horizontal",
+        alignItems: "center",
+        spacing: "md",
         contents: [
           {
             type: "text",
-            text: card.groupName,
+            text: card.amount,
+            size: "xxl",
             weight: "bold",
-            size: "xl",
             color: COLOR.ink,
-            wrap: true,
-            maxLines: 2,
+            flex: 1,
+            adjustMode: "shrink-to-fit",
           },
           {
             type: "box",
-            layout: "horizontal",
-            alignItems: "center",
-            spacing: "xs",
-            contents: [
-              avatarBox(card.payer, card.payerPictureUrl),
-              {
-                type: "text",
-                text: card.payer,
-                size: "sm",
-                weight: "bold",
-                color: COLOR.ink,
-                flex: 0,
-                maxLines: 1,
-              },
-              {
-                type: "text",
-                text: "➔",
-                size: "xs",
-                color: COLOR.muted,
-                flex: 0,
-                align: "center",
-              },
-              avatarBox(card.receiver, card.receiverPictureUrl),
-              {
-                type: "text",
-                text: card.receiver,
-                size: "sm",
-                weight: "bold",
-                color: COLOR.ink,
-                flex: 0,
-                maxLines: 1,
-              },
-            ],
-          },
-          {
-            type: "box",
-            layout: "horizontal",
-            alignItems: "center",
-            spacing: "md",
+            layout: "vertical",
+            cornerRadius: "20px",
+            backgroundColor: COLOR.mint,
+            paddingTop: "6px",
+            paddingBottom: "6px",
+            paddingStart: "12px",
+            paddingEnd: "12px",
+            flex: 0,
             contents: [
               {
                 type: "text",
-                text: card.amount,
-                size: "xxl",
+                text: t("groups.settled"),
+                size: "xxs",
                 weight: "bold",
-                color: COLOR.ink,
-                flex: 1,
-                adjustMode: "shrink-to-fit",
-              },
-              {
-                type: "box",
-                layout: "vertical",
-                cornerRadius: "20px",
-                backgroundColor: COLOR.mint,
-                paddingTop: "6px",
-                paddingBottom: "6px",
-                paddingStart: "12px",
-                paddingEnd: "12px",
-                flex: 0,
-                contents: [
-                  {
-                    type: "text",
-                    text: t("groups.settled"),
-                    size: "xxs",
-                    weight: "bold",
-                    color: COLOR.sprout,
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            type: "box",
-            layout: "horizontal",
-            cornerRadius: "18px",
-            backgroundColor: COLOR.sprout,
-            paddingAll: "14px",
-            action: { type: "uri", label: `${t("settleShare.viewSettle")} ↗`, uri: card.lineUrl },
-            contents: [
-              {
-                type: "text",
-                text: `${t("settleShare.viewSettle")} ↗`,
-                color: COLOR.white,
-                weight: "bold",
-                align: "center",
+                color: COLOR.sprout,
               },
             ],
           },
         ],
       },
-    },
-  };
+    ],
+    actionLabel: t("settleShare.viewSettle"),
+    actionUri: card.lineUrl,
+  });
 }
