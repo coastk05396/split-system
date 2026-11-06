@@ -1,4 +1,4 @@
-import type { Group } from "@split/shared";
+import { type Group, MAX_MEMBER_PREVIEW } from "@split/shared";
 import { Avatar } from "./ui.js";
 
 /**
@@ -6,9 +6,6 @@ import { Avatar } from "./ui.js";
  * Inside a `group` parent they spread apart on hover and spring open on touch/click
  * (group-active:space-x-1.5 with spring easing).
  */
-/** Enough avatars to read as "a group" without squeezing the Balance beside them. */
-export const MAX_STACK_AVATARS = 4;
-
 export function AvatarStack({
   members,
   total,
@@ -16,7 +13,7 @@ export function AvatarStack({
   members: Group["memberPreview"];
   total: number;
 }) {
-  const shown = members.slice(0, MAX_STACK_AVATARS);
+  const shown = members.slice(0, MAX_MEMBER_PREVIEW);
   const more = total - shown.length;
   return (
     <span

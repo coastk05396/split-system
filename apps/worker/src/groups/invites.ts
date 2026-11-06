@@ -6,15 +6,15 @@ import {
   type JoinResult,
   MAX_MEMBERS_PER_GROUP,
 } from "@split/shared";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import type { Bindings } from "../env.js";
 import { groupLedger } from "../ledger-client.js";
-import { groupDirectory, groupMemberSummary, invites } from "../db/schema.js";
+import { groupDirectory, invites } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
 import { listMembers } from "./members.js";
-import { type MemberRow, requireAdmin } from "./membership.js";
+import { findMembership, type MemberRow, requireAdmin } from "./membership.js";
 
 /** 256 random bits, base64url: unguessable, and the whole secret of the link. */
 function newToken(): string {
@@ -93,29 +93,6 @@ async function openInvite(db: Db, token: string, now: number, env: Bindings) {
   return { group, expiresAt: row.expiresAt };
 }
 
-async function ownRow(db: Db, groupId: string, userId: string): Promise<MemberRow | undefined> {
-  const [row] = await db
-    .select({
-      memberId: groupMemberSummary.memberId,
-      groupId: groupMemberSummary.groupId,
-      userId: groupMemberSummary.userId,
-      role: groupMemberSummary.role,
-      netBalance: groupMemberSummary.netBalance,
-    })
-    .from(groupMemberSummary)
-    .where(and(eq(groupMemberSummary.groupId, groupId), eq(groupMemberSummary.userId, userId)));
-  if (row === undefined) return undefined;
-  return {
-    id: row.memberId,
-    groupId: row.groupId,
-    userId: row.userId,
-    role: row.role,
-    status: "active",
-    netBalance: row.netBalance,
-    createdAt: 0,
-  };
-}
-
 /**
  * What the join screen shows: the Group, its seat count and its unclaimed Placeholder
  * Members by name, with who typed each name and what claiming it takes on.
@@ -128,7 +105,7 @@ export async function previewInvite(
   env: Bindings,
 ): Promise<InvitePreview> {
   const { group, expiresAt } = await openInvite(db, token, now, env);
-  const mine = await ownRow(db, group.id, userId);
+  const mine = await findMembership(db, group.id, userId);
   const isMember = mine?.status === "active";
   const everyone = await listMembers(db, group.id, mine?.id ?? null, env);
   const seated = everyone.filter((m) => m.status !== "former");
@@ -190,7 +167,7 @@ export async function joinGroup(
     group.id,
     now,
     async () => {
-      const mine = await ownRow(db, group.id, userId);
+      const mine = await findMembership(db, group.id, userId);
       if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
       return groupLedger(env, group.id).member({
         action: "join",
@@ -216,7 +193,8 @@ export async function claimPlaceholder(
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
-  if ((await ownRow(db, group.id, userId)) !== undefined) throw new ApiError("ALREADY_MEMBER");
+  if ((await findMembership(db, group.id, userId)) !== undefined)
+    throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);
   const result = await withReservation(
     env.DB,

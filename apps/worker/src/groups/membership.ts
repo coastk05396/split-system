@@ -16,11 +16,12 @@ export interface MemberRow {
   createdAt: number;
 }
 
-/**
- * The signed-in User's active Member row in a Group. Anyone else, including a Former
- * Member, gets 404 so a Group's existence is never revealed to outsiders.
- */
-export async function requireMember(db: Db, groupId: string, userId: string): Promise<MemberRow> {
+/** The signed-in User's active Member row in a Group, or undefined when they are not seated. */
+export async function findMembership(
+  db: Db,
+  groupId: string,
+  userId: string,
+): Promise<MemberRow | undefined> {
   const [me] = await db
     .select({
       memberId: groupMemberSummary.memberId,
@@ -31,7 +32,7 @@ export async function requireMember(db: Db, groupId: string, userId: string): Pr
     })
     .from(groupMemberSummary)
     .where(and(eq(groupMemberSummary.groupId, groupId), eq(groupMemberSummary.userId, userId)));
-  if (me === undefined) throw new ApiError("NOT_FOUND");
+  if (me === undefined) return undefined;
   return {
     id: me.memberId,
     groupId: me.groupId,
@@ -41,6 +42,16 @@ export async function requireMember(db: Db, groupId: string, userId: string): Pr
     netBalance: me.netBalance,
     createdAt: 0,
   };
+}
+
+/**
+ * The signed-in User's active Member row in a Group. Anyone else, including a Former
+ * Member, gets 404 so a Group's existence is never revealed to outsiders.
+ */
+export async function requireMember(db: Db, groupId: string, userId: string): Promise<MemberRow> {
+  const me = await findMembership(db, groupId, userId);
+  if (me === undefined) throw new ApiError("NOT_FOUND");
+  return me;
 }
 
 export function requireAdmin(me: MemberRow): void {

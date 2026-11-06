@@ -87,14 +87,14 @@ export type MemberOperation = { now: number } & (
       actorMemberId: string;
       targetMemberId: string;
       input: PlaceholderInput;
-      names?: Record<string, string>;
+      names?: Record<string, string> | undefined;
     }
   | {
       action: "patch";
       actorMemberId: string;
       targetMemberId: string;
       input: MemberPatch;
-      names?: Record<string, string>;
+      names?: Record<string, string> | undefined;
     }
   | { action: "leave" | "remove"; actorMemberId: string; targetMemberId: string }
   | { action: "join"; userId: string; targetMemberId: string; inviteToken: string }
@@ -106,6 +106,7 @@ export interface MemberOutcome {
   /** False when a join found the User already seated. */
   changed: boolean;
   closeUserId?: string | null;
+  member?: LedgerMember | undefined;
 }
 
 export type { ExpenseOperation } from "./ledger-expenses.js";

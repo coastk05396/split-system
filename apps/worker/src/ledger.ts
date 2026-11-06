@@ -14,6 +14,7 @@ import {
   canRemoveMember,
   expenseSchema,
   isLastAdmin,
+  MAX_MEMBER_PREVIEW,
   memberPatchSchema,
   memberRemovalDisposition,
   placeholderInputSchema,
@@ -110,6 +111,15 @@ function seatedMember(row: MemberRow): SeatedMember {
     placeholderName: row.placeholder_name,
     role: row.role,
     balance: row.net_balance,
+  };
+}
+
+function ledgerMember(row: MemberRow): LedgerMember {
+  return {
+    ...seatedMember(row),
+    status: row.status,
+    nickname: row.nickname,
+    createdByMemberId: row.created_by_member_id,
   };
 }
 
@@ -418,7 +428,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               ? null
               : JSON.stringify(
                   active
-                    .slice(0, 6)
+                    .slice(0, MAX_MEMBER_PREVIEW)
                     .map((m) => ({ userId: m.user_id, placeholderName: m.placeholder_name })),
                 ),
             g.deleted ? null : g.created_at,
@@ -887,8 +897,16 @@ export class GroupLedger extends DurableObject<Bindings> {
                 .toArray()
                 .map((row) => `expense:${row.id}`)
             : [];
+        const updatedRow = sql
+          .exec<MemberRow>("SELECT * FROM ledger_members WHERE id=?", memberId)
+          .toArray()[0];
         return {
-          value: { memberId, changed: true, closeUserId },
+          value: {
+            memberId,
+            changed: true,
+            closeUserId,
+            member: updatedRow === undefined ? undefined : ledgerMember(updatedRow),
+          },
           dirty: [...history, "group"],
           leaving: closeUserId,
         };
@@ -960,12 +978,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     if (rows === undefined) return notFound;
     return {
       ok: true,
-      value: rows.map((row) => ({
-        ...seatedMember(row),
-        status: row.status,
-        nickname: row.nickname,
-        createdByMemberId: row.created_by_member_id,
-      })),
+      value: rows.map(ledgerMember),
       rev: this.rev(),
     };
   }

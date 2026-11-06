@@ -12,7 +12,7 @@ import { fxRates } from "../db/schema.js";
 import { rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey, requireIfMatch } from "../request-guards.js";
 import { personalSpending } from "./personal-spending.js";
-import { listMembers } from "../groups/members.js";
+import { readBalances } from "../groups/members.js";
 
 /** Expenses and Balances (SPEC §5.1, decisions 15, 16, 23). Any active Member may write. */
 export function expenseRoutes(deps: AppDeps) {
@@ -180,24 +180,6 @@ export function expenseRoutes(deps: AppDeps) {
     .get("/groups/:id/balances", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      const groupRes = await c.env.DB.prepare(
-        "SELECT settlement_currency FROM group_directory WHERE group_id = ?",
-      )
-        .bind(me.groupId)
-        .first<{ settlement_currency: "TWD" | "USD" | "JPY" | "THB" }>();
-      if (!groupRes) throw new ApiError("NOT_FOUND");
-      const list = await listMembers(db, me.groupId, me.id, c.env);
-      return c.json(
-        {
-          settlementCurrency: groupRes.settlement_currency,
-          balances: list.map((m) => ({
-            memberId: m.id,
-            displayName: m.displayName,
-            status: m.status,
-            balance: m.balance,
-          })),
-        },
-        200,
-      );
+      return c.json(await readBalances(db, me.groupId, me.id, c.env), 200);
     });
 }
