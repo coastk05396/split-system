@@ -3,13 +3,13 @@ import {
   type ExpenseInput,
   MAX_SHARES,
   MIN_SHARES,
+  minorToDecimal,
   parseAmount,
   type SplitLine,
   type SplitMethod,
   splitEqual,
   splitShares,
 } from "@split/shared";
-import { minorToText } from "./money.js";
 
 /**
  * What the split editor holds while someone types (decision 23, screens 15, 17, 30 as
@@ -58,7 +58,9 @@ export function splitDraftFrom(
   return {
     method,
     included: lines.map((l) => l.memberId),
-    exact: Object.fromEntries(lines.map((l) => [l.memberId, minorToText(l.amountMinor, currency)])),
+    exact: Object.fromEntries(
+      lines.map((l) => [l.memberId, minorToDecimal(l.amountMinor, currency)]),
+    ),
     shares: Object.fromEntries(lines.map((l) => [l.memberId, String(l.shares ?? 1)])),
   };
 }

@@ -1,45 +1,35 @@
 import {
   MAX_STOPS_PER_DAY,
+  type Stop,
   stopDayInTrip,
-  stopInputSchema,
-  stopPatchSchema,
+  type StopInput,
+  type StopPatch,
   stopSchema,
   stopTimesValid,
-  type Stop,
 } from "@split/shared";
-import { z } from "zod";
 import { ApiError, invalid } from "./errors.js";
 import { assertIfMatch } from "./request-guards.js";
 
-const operationSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("list"), actorId: z.string().min(1), day: z.string().optional() }),
-  z.object({
-    action: z.literal("create"),
-    actorId: z.string().min(1),
-    input: stopInputSchema,
-    now: z.number().int(),
-  }),
-  z.object({
-    action: z.literal("patch"),
-    actorId: z.string().min(1),
-    id: z.string(),
-    input: stopPatchSchema,
-    expected: z.number().int(),
-    now: z.number().int(),
-  }),
-  z.object({ action: z.literal("delete"), actorId: z.string().min(1), id: z.string() }),
-]);
+export type StopOperation =
+  | { action: "list"; actorId: string; day?: string | undefined }
+  | { action: "create"; actorId: string; input: StopInput; now: number }
+  | {
+      action: "patch";
+      actorId: string;
+      id: string;
+      input: StopPatch;
+      expected: number;
+      now: number;
+    }
+  | { action: "delete"; actorId: string; id: string };
 
 type StopRow = { data: string };
 type Trip = { is_trip: number; trip_start_date: string | null; trip_end_date: string | null };
 
 export function stopOperation(
   sql: SqlStorage,
-  raw: unknown,
+  op: StopOperation,
 ): { value: unknown; changed: boolean; deletedId?: string } {
-  const parsed = operationSchema.safeParse(raw);
-  if (!parsed.success) throw new ApiError("VALIDATION_FAILED");
-  const op = parsed.data;
   const actor = sql
     .exec<{ status: string }>("SELECT status FROM ledger_members WHERE id=?", op.actorId)
     .toArray()[0];

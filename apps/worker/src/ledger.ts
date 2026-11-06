@@ -651,7 +651,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               assertFrozenBalancesUnchanged(sql, frozen);
               if (!outcome.changed) return { value: outcome.value };
               const expenseId =
-                op.action === "create" ? expenseSchema.parse(outcome.value).id : op.id;
+                op.action === "create" ? (outcome.value as { id: string }).id : op.id;
               return { value: outcome.value, dirty: [`expense:${expenseId}`, "group"] };
             })
           : // A read does not commit.

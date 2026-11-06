@@ -1,11 +1,12 @@
-import { type CurrencyCode, formatAmount } from "@split/shared";
+import { type Balances, type CurrencyCode, formatAmount } from "@split/shared";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { AvatarTip } from "../groups/ui.js";
 import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
-import type { BalanceRow } from "./model.js";
+
+export type BalanceRow = Balances["balances"][number];
 
 /**
  * 大家的結餘: everyone still owing or owed, as bars out of a centre line: red to the left for

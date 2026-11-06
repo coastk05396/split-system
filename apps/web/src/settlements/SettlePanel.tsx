@@ -1,7 +1,10 @@
 import {
+  canConfirmSettlement,
+  canUndoSettlement,
   type CurrencyCode,
   formatAmount,
   type Group,
+  maxPayable,
   type PlannedPayment,
   type Settlement,
 } from "@split/shared";
@@ -25,9 +28,8 @@ import { useLineShare } from "../platform/line-share.js";
 import { CountUp } from "../shell/CountUp.js";
 import { SproutMascot, Sparkles } from "../shell/SproutMascot.js";
 import { useBalances, useRecordSettlement, useSettlementAction, useSettlements } from "./api.js";
-import { BalanceChart } from "./BalanceChart.js";
+import { BalanceChart, type BalanceRow } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
-import { type BalanceRow, canConfirm, canUndo, maxPayable } from "./model.js";
 import { buildSettledCard, settledFlexMessage, settleShareContent } from "./settle-card.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
@@ -393,7 +395,7 @@ function HistoryRow({
           {t(statusLabel(s))}
         </span>
       )}
-      {s.status === "confirmed" && canUndo(group.me, s) && (
+      {s.status === "confirmed" && canUndoSettlement(group.me, s) && (
         <button
           type="button"
           className="rounded-full border border-sprout-200 px-3 py-1 text-xs font-bold"
@@ -771,7 +773,7 @@ function PlannedRow({
         currency={currency}
         updating={updating}
       />
-      {canConfirm(group.me, payer, receiver) &&
+      {canConfirmSettlement(group.me, payer.memberId, receiver.memberId) &&
         (tone === "behalf" ? (
           <ConfirmSettlementDialog
             trigger={t(triggerLabel)}
@@ -781,7 +783,7 @@ function PlannedRow({
               payerName: localName(payer.displayName),
               receiverName: localName(receiver.displayName),
               suggested: payment.amountMinor,
-              max: maxPayable(payer, receiver),
+              max: maxPayable(payer.balance, receiver.balance),
             }}
             submit={async (amount, options) => {
               try {
@@ -812,7 +814,7 @@ function PlannedRow({
                 payerName: localName(payer.displayName),
                 receiverName: localName(receiver.displayName),
                 suggested: payment.amountMinor,
-                max: maxPayable(payer, receiver),
+                max: maxPayable(payer.balance, receiver.balance),
               }}
               submit={async (amount, options) => {
                 try {
