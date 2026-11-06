@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { commitAccountCleanups } from "../src/auth/account-cleanup.js";
+import type { AccountDeletionOperation } from "../src/ledger-types.js";
 import { bearer, call } from "./auth-harness.js";
 import { createGroup, groupWith, person } from "./groups-harness.js";
 
@@ -53,10 +54,9 @@ describe("after an account is deleted for good", () => {
       get: (id: DurableObjectId) => {
         const stub = env.GROUP_LEDGER.get(id);
         return {
-          fetch: (url: string, init?: RequestInit) => {
-            if (typeof init?.body === "string" && init.body.includes('"commit"'))
-              throw new Error("ledger unreachable");
-            return stub.fetch(url, init);
+          accountDeletion: (op: AccountDeletionOperation) => {
+            if (op.action === "commit") throw new Error("ledger unreachable");
+            return stub.accountDeletion(op);
           },
         };
       },

@@ -13,6 +13,7 @@ import { identities, linkCodes, sessions, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { commitAccountCleanups } from "./account-cleanup.js";
 import type { Bindings } from "../env.js";
+import { groupLedger } from "../ledger-client.js";
 import type { VerifiedIdentity } from "./identity-verifier.js";
 import {
   base64url,
@@ -309,34 +310,23 @@ export async function deleteAccount(
   if (mark.meta.changes !== 1) throw new ApiError("FORBIDDEN");
   const frozen: string[] = [];
   const finalized: string[] = [];
-  const operation = async (
+  const operation = async <A extends "freeze" | "unfreeze" | "finalize" | "restore">(
     groupId: string,
-    action: "freeze" | "unfreeze" | "finalize" | "restore",
+    action: A,
   ) => {
-    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId));
-    const response = await stub.fetch("https://ledger.internal/account-deletion", {
-      method: "POST",
-      body: JSON.stringify({ action, userId, now: clock(), expires }),
-    });
-    if (!response.ok) {
-      const body: unknown = await response.json();
+    try {
+      return (
+        await groupLedger(env, groupId).accountDeletion({ action, userId, now: clock(), expires })
+      ).value;
+    } catch (error) {
       if (
         action === "finalize" &&
-        typeof body === "object" &&
-        body !== null &&
-        "error" in body &&
-        typeof body.error === "object" &&
-        body.error !== null &&
-        "code" in body.error
-      ) {
-        if (body.error.code === "LAST_ADMIN")
-          throw new ApiError("LAST_ADMIN", { groupIds: [groupId] });
-        if (body.error.code === "BALANCE_NOT_ZERO")
-          throw new ApiError("BALANCE_NOT_ZERO", { groupIds: [groupId] });
-      }
+        error instanceof ApiError &&
+        (error.code === "LAST_ADMIN" || error.code === "BALANCE_NOT_ZERO")
+      )
+        throw new ApiError(error.code, { groupIds: [groupId] });
       throw new ApiError("INTERNAL");
     }
-    return response;
   };
   try {
     const reservations = await env.DB.prepare(
@@ -349,8 +339,7 @@ export async function deleteAccount(
     for (const row of reservations.results) {
       // Include an attempted freeze in cleanup even if its response was lost.
       frozen.push(row.group_id);
-      const response = await operation(row.group_id, "freeze");
-      const check = await response.json<{ balance: number; lastAdmin: boolean }>();
+      const check = await operation(row.group_id, "freeze");
       if (check.balance !== 0) owing.push(row.group_id);
       if (check.lastAdmin) lastAdmin.push(row.group_id);
     }

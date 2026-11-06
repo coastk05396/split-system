@@ -1,6 +1,6 @@
 import { runDurableObjectAlarm } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { purgeExpired } from "../src/maintenance.js";
 import { bearer, call, signIn, uniqueSub } from "./auth-harness.js";
 
@@ -127,7 +127,7 @@ describe("purgeExpired", () => {
     const unavailable = new Proxy(env.GROUP_LEDGER, {
       get(namespace, key) {
         if (key === "get")
-          return () => ({ fetch: () => Promise.reject(new Error("ledger unreachable")) });
+          return () => ({ isMember: () => Promise.reject(new Error("ledger unreachable")) });
         const value: unknown = Reflect.get(namespace, key, namespace);
         return typeof value === "function" ? (value.bind(namespace) as unknown) : value;
       },
@@ -170,35 +170,31 @@ describe("purgeExpired", () => {
     )
       .bind(userId, "stalled-ledger", NOW - 25 * HOUR)
       .run();
-    const signals: (AbortSignal | null | undefined)[] = [];
+    let checks = 0;
     const stalled = new Proxy(env.GROUP_LEDGER, {
       get(namespace, key) {
         if (key === "get")
           return () => ({
-            fetch: (_input: RequestInfo | URL, init?: RequestInit) =>
-              new Promise<Response>((_resolve, reject) => {
-                const signal = init?.signal;
-                signals.push(signal);
-                if (!signal) {
-                  reject(new Error("no deadline"));
-                  return;
-                }
-                signal.addEventListener(
-                  "abort",
-                  () => {
-                    reject(signal.reason as Error);
-                  },
-                  { once: true },
-                );
-              }),
+            isMember: () => {
+              checks += 1;
+              return new Promise<boolean>(() => {});
+            },
           });
         const value: unknown = Reflect.get(namespace, key, namespace);
         return typeof value === "function" ? (value.bind(namespace) as unknown) : value;
       },
     });
-    await purgeExpired({ ...env, GROUP_LEDGER: stalled }, NOW);
-    expect(signals.length).toBeGreaterThan(0);
-    expect(signals.every((signal) => signal?.aborted === true)).toBe(true);
+    vi.useFakeTimers();
+    try {
+      const run = purgeExpired({ ...env, GROUP_LEDGER: stalled }, NOW);
+      await vi.waitFor(() => {
+        expect(checks).toBeGreaterThan(0);
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      await run;
+    } finally {
+      vi.useRealTimers();
+    }
     expect(
       await env.DB.prepare("SELECT group_id FROM group_reservations WHERE user_id=?")
         .bind(userId)

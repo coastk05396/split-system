@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { groupLedger } from "../ledger-client.js";
 
 const BATCH = 100;
 
@@ -16,18 +17,13 @@ export async function commitAccountCleanups(env: Bindings): Promise<void> {
       .all<{ user_id: string; group_id: string; expires_at: number }>();
     for (const task of results) {
       try {
-        const response = await env.GROUP_LEDGER.get(
-          env.GROUP_LEDGER.idFromName(task.group_id),
-        ).fetch("https://ledger.internal/account-deletion", {
-          method: "POST",
-          body: JSON.stringify({
-            action: "commit",
-            userId: task.user_id,
-            now: Date.now(),
-            expires: task.expires_at,
-          }),
+        // A refused commit throws, so the task stays for the next run.
+        await groupLedger(env, task.group_id).accountDeletion({
+          action: "commit",
+          userId: task.user_id,
+          now: Date.now(),
+          expires: task.expires_at,
         });
-        if (!response.ok) continue;
         await env.DB.prepare("DELETE FROM account_cleanups WHERE user_id=? AND group_id=?")
           .bind(task.user_id, task.group_id)
           .run();

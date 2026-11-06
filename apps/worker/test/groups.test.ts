@@ -81,36 +81,23 @@ describe("POST /groups and GET /groups/:id", () => {
           const stub = targetNamespace.get(id);
           return new Proxy(stub, {
             get(targetStub, prop) {
-              if (prop !== "fetch") {
+              if (prop !== "state") {
                 const value: unknown = Reflect.get(targetStub, prop, targetStub);
                 return typeof value === "function"
                   ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
                   : value;
               }
-              return async (input: RequestInfo | URL, init?: RequestInit) => {
-                const url =
-                  typeof input === "string"
-                    ? input
-                    : input instanceof URL
-                      ? input.toString()
-                      : input.url;
-                if (url.includes("/state")) {
-                  const res = await targetStub.fetch(input, init);
-                  // Trigger concurrent write to DO right after revision pre-fetch
-                  await targetStub.fetch("https://ledger.internal/member-op", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "add",
-                      actorMemberId: group.me.memberId,
-                      targetMemberId: crypto.randomUUID(),
-                      input: { name: "並行寫入" },
-                      now: Date.now(),
-                    }),
-                  });
-                  return res;
-                }
-                return targetStub.fetch(input, init);
+              return async () => {
+                const state = await targetStub.state();
+                // Trigger concurrent write to DO right after revision pre-fetch
+                await targetStub.member({
+                  action: "add",
+                  actorMemberId: group.me.memberId,
+                  targetMemberId: crypto.randomUUID(),
+                  input: { name: "並行寫入" },
+                  now: Date.now(),
+                });
+                return state;
               };
             },
           });
@@ -130,10 +117,7 @@ describe("POST /groups and GET /groups/:id", () => {
     expect(read.headers.get("X-Group-Rev")).toBe("0");
 
     // Verify DO is at rev 1
-    const current = await realNamespace
-      .get(realNamespace.idFromName(group.id))
-      .fetch("https://ledger.internal/state");
-    const currentState = await current.json<{ rev: number }>();
+    const currentState = await realNamespace.get(realNamespace.idFromName(group.id)).state();
     expect(currentState.rev).toBe(1);
   });
   it("labels a Members read with the ledger revision the Members were read at", async () => {

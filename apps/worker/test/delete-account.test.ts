@@ -10,6 +10,7 @@ import {
   send,
 } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
+import type { AccountDeletionOperation } from "../src/ledger-types.js";
 
 function deleteMe(accessToken: string) {
   return call("/me", { method: "DELETE", headers: bearer(accessToken) });
@@ -228,19 +229,15 @@ it("refuses a concurrent Expense that would change a frozen Member's Balance", a
         const stub = targetNamespace.get(id);
         return new Proxy(stub, {
           get(targetStub, prop) {
-            if (prop !== "fetch") {
+            if (prop !== "accountDeletion") {
               const value: unknown = Reflect.get(targetStub, prop, targetStub);
               return typeof value === "function"
                 ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
                 : value;
             }
-            return async (url: string, init: RequestInit) => {
-              const result = await targetStub.fetch(url, init);
-              if (
-                url.endsWith("/account-deletion") &&
-                typeof init.body === "string" &&
-                (JSON.parse(init.body) as { action: string }).action === "freeze"
-              ) {
+            return async (op: AccountDeletionOperation) => {
+              const result = await targetStub.accountDeletion(op);
+              if (op.action === "freeze") {
                 observed();
                 await hold;
               }
@@ -349,19 +346,15 @@ it("allows money changes after an abandoned freeze expires without deleting the 
         const stub = targetNamespace.get(id);
         return new Proxy(stub, {
           get(targetStub, prop) {
-            if (prop !== "fetch") {
+            if (prop !== "accountDeletion") {
               const value: unknown = Reflect.get(targetStub, prop, targetStub);
               return typeof value === "function"
                 ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
                 : value;
             }
-            return async (url: string, init: RequestInit) => {
-              const result = await targetStub.fetch(url, init);
-              if (
-                url.endsWith("/account-deletion") &&
-                typeof init.body === "string" &&
-                (JSON.parse(init.body) as { action: string }).action === "freeze"
-              ) {
+            return async (op: AccountDeletionOperation) => {
+              const result = await targetStub.accountDeletion(op);
+              if (op.action === "freeze") {
                 observed();
                 await hold;
               }
@@ -428,19 +421,15 @@ it("keeps a deleting Member when another Admin leaves after the check", async ()
         const stub = targetNamespace.get(id);
         return new Proxy(stub, {
           get(targetStub, prop) {
-            if (prop !== "fetch") {
+            if (prop !== "accountDeletion") {
               const value: unknown = Reflect.get(targetStub, prop, targetStub);
               return typeof value === "function"
                 ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
                 : value;
             }
-            return async (url: string, init: RequestInit) => {
-              const result = await targetStub.fetch(url, init);
-              if (
-                url.endsWith("/account-deletion") &&
-                typeof init.body === "string" &&
-                (JSON.parse(init.body) as { action: string }).action === "freeze"
-              ) {
+            return async (op: AccountDeletionOperation) => {
+              const result = await targetStub.accountDeletion(op);
+              if (op.action === "freeze") {
                 observed();
                 await hold;
               }
