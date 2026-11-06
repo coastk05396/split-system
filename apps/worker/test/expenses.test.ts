@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createDb } from "../src/db/client.js";
 import { fxRates, groupMemberSummary } from "../src/db/schema.js";
+import { groupLedger } from "../src/ledger-client.js";
 import { clock } from "./auth-harness.js";
 import { createGroup, groupWith, listMembers, person, send } from "./groups-harness.js";
 import { balances, createExpense, newKey, postExpense, twdExpense } from "./expenses-harness.js";
@@ -17,17 +18,12 @@ describe("Expenses and Balances", () => {
     if (!memberRow) throw new Error("missing member row");
     const input = twdExpense(group.me.memberId, [group.me.memberId], 100);
     const expense = await createExpense(admin, group.id, input);
-    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
-    const removed = await stub.fetch("https://ledger.internal/member-op", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "remove",
-        actorMemberId: group.me.memberId,
-        targetMemberId: memberRow.id,
-        now: Date.now(),
-      }),
+    await groupLedger(env, group.id).member({
+      action: "remove",
+      actorMemberId: group.me.memberId,
+      targetMemberId: memberRow.id,
+      now: Date.now(),
     });
-    expect(removed.status).toBe(200);
     await createDb(env.DB)
       .insert(groupMemberSummary)
       .values({

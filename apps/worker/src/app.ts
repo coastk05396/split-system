@@ -6,6 +6,7 @@ import { type AppDeps, productionDeps } from "./deps.js";
 import { expenseRoutes } from "./expenses/routes.js";
 import { groupRoutes } from "./groups/routes.js";
 import { lineRoutes } from "./line/routes.js";
+import { groupLedger } from "./ledger-client.js";
 import { rateRoutes } from "./rates/routes.js";
 import { settlementRoutes } from "./settlements/routes.js";
 import { stopRoutes } from "./stops/routes.js";
@@ -35,12 +36,7 @@ export function createApp(deps: AppDeps) {
                 .first();
         if (member !== null) {
           try {
-            const stub = c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(id));
-            const response = await stub.fetch("https://ledger.internal/state");
-            if (response.ok) {
-              const data = await response.json<{ rev: number }>();
-              preFetchedRev = data.rev;
-            }
+            preFetchedRev = (await groupLedger(c.env, id).state()).rev;
           } catch {
             /* ignore if DO not yet available */
           }

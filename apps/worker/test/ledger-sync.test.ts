@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
+import { groupLedger } from "../src/ledger-client.js";
 import { clock } from "./auth-harness.js";
 import { failDirectoryWrites } from "./d1-faults.js";
 import { createGroup, person } from "./groups-harness.js";
@@ -13,17 +14,13 @@ it("a failed D1 projection logs once and schedules its retry", async () => {
   const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {
     const before = Date.now();
-    const response = await stub.fetch("https://ledger.internal/member-op", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "add",
-        actorMemberId: group.me.memberId,
-        targetMemberId: crypto.randomUUID(),
-        input: { name: "Future member" },
-        now: clock.now,
-      }),
+    await groupLedger(env, group.id).member({
+      action: "add",
+      actorMemberId: group.me.memberId,
+      targetMemberId: crypto.randomUUID(),
+      input: { name: "Future member" },
+      now: clock.now,
     });
-    expect(response.status).toBe(200);
     const pending = await runInDurableObject(stub, async (_instance, state) => ({
       alarm: await state.storage.getAlarm(),
       retries: state.storage.sql

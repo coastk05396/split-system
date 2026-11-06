@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
 import { dailyMaintenance } from "../src/maintenance.js";
+import type { AccountDeletionOperation } from "../src/ledger-types.js";
 import { bearer, call, clock } from "./auth-harness.js";
 import { groupWith } from "./groups-harness.js";
 
@@ -12,14 +13,16 @@ function unavailableCommits() {
         return (id: DurableObjectId) =>
           new Proxy(namespace.get(id), {
             get(stub, key) {
-              if (key === "fetch")
-                return (input: RequestInfo | URL, init?: RequestInit) => {
-                  if (typeof init?.body === "string" && init.body.includes('"action":"commit"'))
-                    return Promise.resolve(new Response(null, { status: 503 }));
-                  return stub.fetch(input, init);
+              if (key === "accountDeletion")
+                return (op: AccountDeletionOperation) => {
+                  if (op.action === "commit")
+                    return Promise.resolve({ ok: false, code: "INTERNAL" });
+                  return stub.accountDeletion(op);
                 };
               const value: unknown = Reflect.get(stub, key, stub);
-              return typeof value === "function" ? (value.bind(stub) as unknown) : value;
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, stub, args)
+                : value;
             },
           });
       const value: unknown = Reflect.get(namespace, property, namespace);

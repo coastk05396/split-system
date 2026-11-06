@@ -1,8 +1,10 @@
+import type { GroupLedger } from "./ledger.js";
+
 /** Bindings declared in wrangler.jsonc, plus Worker secrets and local `.dev.vars`. */
 export interface Bindings {
   MAINTENANCE?: string;
   DB: D1Database;
-  GROUP_LEDGER: DurableObjectNamespace;
+  GROUP_LEDGER: DurableObjectNamespace<GroupLedger>;
   JWKS_CACHE: KVNamespace;
   ASSETS: Fetcher;
   /** Secret that signs access tokens (`wrangler secret put`; locally `.dev.vars`). */

@@ -3,6 +3,7 @@ import { createDb } from "./db/client.js";
 import { commitAccountCleanups } from "./auth/account-cleanup.js";
 import { productionDeps } from "./deps.js";
 import type { Bindings } from "./env.js";
+import { groupLedger } from "./ledger-client.js";
 import { refreshRates } from "./rates/rates.js";
 import { groupReservations, linkCodes, rateCounters, sessions } from "./db/schema.js";
 import { RATE_COUNTER_RETENTION_MS } from "./rate-limit.js";
@@ -32,13 +33,15 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
       .limit(100);
     for (const reservation of stale) {
       try {
-        const response = await env.GROUP_LEDGER.get(
-          env.GROUP_LEDGER.idFromName(reservation.groupId),
-        ).fetch("https://ledger.internal/member-check", {
-          headers: { "X-User-Id": reservation.userId },
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (response.status === 204) {
+        const seated = await Promise.race([
+          groupLedger(env, reservation.groupId).isMember(reservation.userId),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              reject(new Error("member check timed out"));
+            }, 5_000);
+          }),
+        ]);
+        if (seated) {
           // Seated: settle the row ourselves so a delayed projection cannot crowd the next runs.
           await db
             .update(groupReservations)
@@ -52,7 +55,6 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
             );
           continue;
         }
-        if (response.status !== 404) continue;
         await db
           .delete(groupReservations)
           .where(

@@ -12,8 +12,7 @@ import { newSortableId } from "./ids.js";
 type Member = { id: string; status: string; role: string };
 type Group = { id: string; settlement_currency: Expense["originalCurrency"] };
 type Row = { data: string; deleted: number };
-export type ExpenseOperation = (
-  | { action: "balances" }
+export type ExpenseOperation = { actorMemberId: string } & (
   | { action: "list"; cursor?: string | undefined }
   | { action: "get"; id: string }
   | { action: "delete"; id: string; now: number }
@@ -34,11 +33,7 @@ export type ExpenseOperation = (
       now: number;
       rates: { base: string; quote: string; rate: number }[];
     }
-) &
-  (
-    | { actorMemberId: string; systemBypass?: never }
-    | { action: "balances"; systemBypass: true; actorMemberId?: never }
-  );
+);
 
 function read(row: Row): Expense {
   return expenseSchema.parse(JSON.parse(row.data));
@@ -56,13 +51,10 @@ export function expenseOperation(
   sql: SqlStorage,
   op: ExpenseOperation,
 ): { value: unknown; changed: boolean } {
-  const systemBypass = op.action === "balances" && op.systemBypass === true;
-  const actor = systemBypass
-    ? undefined
-    : sql
-        .exec<Member>("SELECT id,status,role FROM ledger_members WHERE id=?", op.actorMemberId)
-        .toArray()[0];
-  if (!systemBypass && actor?.status !== "active") throw new ApiError("FORBIDDEN");
+  const actor = sql
+    .exec<Member>("SELECT id,status,role FROM ledger_members WHERE id=?", op.actorMemberId)
+    .toArray()[0];
+  if (actor?.status !== "active") throw new ApiError("FORBIDDEN");
   const get = (id: string): Expense => {
     const row = sql
       .exec<Row>("SELECT data, deleted FROM ledger_expenses WHERE id = ? AND deleted = 0", id)
@@ -70,15 +62,6 @@ export function expenseOperation(
     if (!row) throw new ApiError("NOT_FOUND");
     return read(row);
   };
-  if (op.action === "balances")
-    return {
-      value: sql
-        .exec<{ id: string; net_balance: number }>(
-          "SELECT id,net_balance FROM ledger_members ORDER BY created_at,rowid",
-        )
-        .toArray(),
-      changed: false,
-    };
   if (op.action === "list") {
     const rows = sql
       .exec<Row>(
@@ -113,7 +96,7 @@ export function expenseOperation(
     if (count >= MAX_EXPENSES_PER_GROUP) throw new ApiError("EXPENSE_LIMIT_REACHED");
   }
   const previous = op.action === "create" ? null : get(op.id);
-  if (previous && actor && actor.id !== previous.creatorMemberId && actor.role !== "admin")
+  if (previous && actor.id !== previous.creatorMemberId && actor.role !== "admin")
     throw new ApiError("FORBIDDEN");
   if (op.action === "update" && previous?.updatedAt !== op.expected)
     throw new ApiError("EDIT_CONFLICT", { current: previous });
