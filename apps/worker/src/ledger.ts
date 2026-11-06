@@ -10,6 +10,7 @@ import {
 } from "./ledger-account-deletion.js";
 import { DurableObject } from "cloudflare:workers";
 import {
+  canChangeMemberRole,
   canEditPlaceholderName,
   canRemoveMember,
   expenseSchema,
@@ -660,13 +661,11 @@ export class GroupLedger extends DurableObject<Bindings> {
               const outcome = expenseOperation(sql, op);
               assertFrozenBalancesUnchanged(sql, frozen);
               if (!outcome.changed) return { value: outcome.value };
-              const expenseId =
-                op.action === "create" ? (outcome.value as { id: string }).id : op.id;
-              return { value: outcome.value, dirty: [`expense:${expenseId}`, "group"] };
+              return { value: outcome.value, dirty: [`expense:${outcome.id}`, "group"] };
             })
           : // A read does not commit.
             this.read((sql) => expenseOperation(sql, op).value);
-      return { ok: true, value: value as ExpenseValues[keyof ExpenseValues], rev };
+      return { ok: true, value, rev };
     } catch (error) {
       return failure(error);
     }
@@ -819,8 +818,16 @@ export class GroupLedger extends DurableObject<Bindings> {
               target.id,
             );
           } else if (input.data.role !== undefined) {
-            if (actor?.role !== "admin") return { value: { error: "FORBIDDEN" } };
-            if (target.status !== "active") return { value: { error: "MEMBER_NOT_ACTIVE" } };
+            if (!actor || !canChangeMemberRole(actor, target)) {
+              return {
+                value: {
+                  error:
+                    actor?.role === "admin" && target.status !== "active"
+                      ? "MEMBER_NOT_ACTIVE"
+                      : "FORBIDDEN",
+                },
+              };
+            }
             if (input.data.role === "member" && isLastAdmin(all, target.id))
               return { value: { error: "LAST_ADMIN" } };
             sql.exec("UPDATE ledger_members SET role=? WHERE id=?", input.data.role, target.id);

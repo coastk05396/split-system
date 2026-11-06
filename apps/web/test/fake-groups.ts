@@ -1,4 +1,5 @@
 import {
+  canChangeMemberRole,
   canEditPlaceholderName,
   canRemoveMember,
   type CurrencyCode,
@@ -604,8 +605,12 @@ export function createFakeGroups(): FakeGroups {
             target.name = name;
           }
           if (body.role === "admin" || body.role === "member") {
-            if (!isAdmin) return error("FORBIDDEN", 403);
-            if (target.status !== "active") return error("MEMBER_NOT_ACTIVE", 409);
+            if (!canChangeMemberRole(me, target)) {
+              return error(
+                isAdmin && target.status !== "active" ? "MEMBER_NOT_ACTIVE" : "FORBIDDEN",
+                isAdmin && target.status !== "active" ? 409 : 403,
+              );
+            }
             if (body.role === "member" && isLastAdmin(g.members, target.id)) {
               return error("LAST_ADMIN", 409);
             }

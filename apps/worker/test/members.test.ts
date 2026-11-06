@@ -190,6 +190,18 @@ describe("PATCH /groups/:id/members/:mid", () => {
     expect(await renamed.json()).toMatchObject({ id: placeholder.id, displayName: "小華" });
     expect(membersRpcCalls).toBe(0);
   });
+
+  it("blocks a Placeholder Member from duplicating a joined User's name even before group_member_summary catches up", async () => {
+    const { admin, group, others } = await groupWith("小宇", "阿明");
+    const ming = at(others, 0);
+    await env.DB.prepare("DELETE FROM group_member_summary WHERE group_id=? AND user_id=?")
+      .bind(group.id, ming.userId)
+      .run();
+
+    const duplicateAdd = await send(admin, "POST", `/groups/${group.id}/members`, { name: "阿明" });
+    expect(duplicateAdd.status).toBe(409);
+    expect(await errorCode(duplicateAdd)).toBe("PLACEHOLDER_NAME_TAKEN");
+  });
 });
 
 describe("DELETE /groups/:id/members/:mid and POST /groups/:id/leave", () => {

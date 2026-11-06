@@ -10,7 +10,7 @@ import type { Db } from "../db/client.js";
 import type { Bindings } from "../env.js";
 import { groupLedger } from "../ledger-client.js";
 import type { LedgerMember } from "../ledger-types.js";
-import { groupDirectory, groupMemberSummary, users } from "../db/schema.js";
+import { groupDirectory, groupMemberSummary, groupReservations, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { usersById } from "./groups.js";
 import type { MemberRow } from "./membership.js";
@@ -92,12 +92,19 @@ export async function readBalances(db: Db, groupId: string, meId: string, env: B
 }
 
 async function namesByUser(db: Db, groupId: string): Promise<Record<string, string>> {
-  const rows = await db
-    .select({ id: users.id, displayName: users.displayName })
-    .from(groupMemberSummary)
-    .innerJoin(users, eq(users.id, groupMemberSummary.userId))
-    .where(eq(groupMemberSummary.groupId, groupId));
-  return Object.fromEntries(rows.map((r) => [r.id, r.displayName]));
+  const [summaryRows, reservationRows] = await Promise.all([
+    db
+      .select({ id: users.id, displayName: users.displayName })
+      .from(groupMemberSummary)
+      .innerJoin(users, eq(users.id, groupMemberSummary.userId))
+      .where(eq(groupMemberSummary.groupId, groupId)),
+    db
+      .select({ id: users.id, displayName: users.displayName })
+      .from(groupReservations)
+      .innerJoin(users, eq(users.id, groupReservations.userId))
+      .where(eq(groupReservations.groupId, groupId)),
+  ]);
+  return Object.fromEntries([...reservationRows, ...summaryRows].map((r) => [r.id, r.displayName]));
 }
 
 export async function patchMember(

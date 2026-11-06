@@ -5,6 +5,7 @@ import {
   MAX_EXPENSES_PER_GROUP,
   type Expense,
   type ExpenseInput,
+  type ExpensePage,
 } from "@split/shared";
 import { ApiError, invalid } from "./errors.js";
 import { newSortableId } from "./ids.js";
@@ -35,6 +36,11 @@ export type ExpenseOperation = { actorMemberId: string } & (
     }
 );
 
+export type ExpenseOutcome =
+  | { value: ExpensePage; changed: false }
+  | { value: Expense; changed: boolean; id: string }
+  | { value: null; changed: true; id: string };
+
 function read(row: Row): Expense {
   return expenseSchema.parse(JSON.parse(row.data));
 }
@@ -47,10 +53,7 @@ function effect(expense: Expense): Map<string, number> {
   return result;
 }
 
-export function expenseOperation(
-  sql: SqlStorage,
-  op: ExpenseOperation,
-): { value: unknown; changed: boolean } {
+export function expenseOperation(sql: SqlStorage, op: ExpenseOperation): ExpenseOutcome {
   const actor = sql
     .exec<Member>("SELECT id,status,role FROM ledger_members WHERE id=?", op.actorMemberId)
     .toArray()[0];
@@ -80,7 +83,10 @@ export function expenseOperation(
       changed: false,
     };
   }
-  if (op.action === "get") return { value: get(op.id), changed: false };
+  if (op.action === "get") {
+    const found = get(op.id);
+    return { value: found, changed: false, id: found.id };
+  }
   if (op.action === "create") {
     const row = sql
       .exec<Row>(
@@ -89,7 +95,10 @@ export function expenseOperation(
         op.key,
       )
       .toArray()[0];
-    if (row) return { value: read(row), changed: false };
+    if (row) {
+      const existing = read(row);
+      return { value: existing, changed: false, id: existing.id };
+    }
     const count = sql
       .exec<{ n: number }>("SELECT count(*) n FROM ledger_expenses WHERE deleted=0")
       .one().n;
@@ -173,8 +182,12 @@ export function expenseOperation(
     for (const [id, value] of effect(previous)) delta.set(id, (delta.get(id) ?? 0) - value);
   for (const [id, value] of delta)
     sql.exec("UPDATE ledger_members SET net_balance=net_balance+? WHERE id=?", value, id);
-  if (op.action === "delete") sql.exec("UPDATE ledger_expenses SET deleted=1 WHERE id=?", op.id);
-  else if (op.action === "create" && next)
+  if (op.action === "delete") {
+    sql.exec("UPDATE ledger_expenses SET deleted=1 WHERE id=?", op.id);
+    return { value: null, changed: true, id: op.id };
+  }
+  if (!next) throw new ApiError("INTERNAL");
+  if (op.action === "create")
     sql.exec(
       "INSERT INTO ledger_expenses (id,creator_member_id,idempotency_key,data,deleted) VALUES (?,?,?,?,0)",
       next.id,
@@ -182,7 +195,6 @@ export function expenseOperation(
       op.key,
       JSON.stringify(next),
     );
-  else if (next)
-    sql.exec("UPDATE ledger_expenses SET data=? WHERE id=?", JSON.stringify(next), next.id);
-  return { value: next, changed: true };
+  else sql.exec("UPDATE ledger_expenses SET data=? WHERE id=?", JSON.stringify(next), next.id);
+  return { value: next, changed: true, id: next.id };
 }

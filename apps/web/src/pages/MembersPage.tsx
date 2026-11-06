@@ -156,10 +156,9 @@ function MemberList({ group, members }: { group: Group; members: Member[] }) {
             </span>
             {!leaving &&
               !isUnsavedMember(m) &&
-              !m.isMe &&
               (canEditPlaceholderName(m) ||
-                canChangeMemberRole(me, m) ||
-                canRemoveMember(me, m)) && (
+                canChangeMemberRole(me, m, { allowSelf: false }) ||
+                (!m.isMe && canRemoveMember(me, m))) && (
                 <MemberControls group={group} member={m} onBlocked={setBlocked} />
               )}
           </li>
@@ -212,7 +211,7 @@ function MemberControls({
 
   return (
     <div className="flex items-center gap-1">
-      {canChangeMemberRole(me, member) && (
+      {canChangeMemberRole(me, member, { allowSelf: false }) && (
         <Menu.Root>
           <Menu.Trigger
             aria-label={t("members.role", { name })}

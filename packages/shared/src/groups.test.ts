@@ -55,7 +55,7 @@ describe("Member and Placeholder Member rules", () => {
       target: { id: "a", status: "active" },
       remove: true,
       editName: false,
-      changeRole: false,
+      changeRole: true,
     },
     {
       actor: { id: "a", role: "admin" },
@@ -112,6 +112,9 @@ describe("Member and Placeholder Member rules", () => {
       expect(canRemoveMember(actor, target)).toBe(remove);
       expect(canEditPlaceholderName(target)).toBe(editName);
       expect(canChangeMemberRole(actor, target)).toBe(changeRole);
+      expect(canChangeMemberRole(actor, target, { allowSelf: false })).toBe(
+        changeRole && actor.id !== target.id,
+      );
     },
   );
 

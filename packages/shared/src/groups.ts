@@ -44,12 +44,20 @@ export function canEditPlaceholderName(target: { status: MemberStatus }): boolea
   return target.status === "placeholder";
 }
 
-/** An Admin may promote or demote another active Member. */
+/**
+ * An Admin may promote another active Member or demote any active Member (including themselves,
+ * subject to the `isLastAdmin` check). `allowSelf` defaults to `true` for server/domain validation
+ * and can be passed as `false` for UI row controls that hide the role menu on the current user's row.
+ */
 export function canChangeMemberRole(
   actor: { id: string; role: MemberRole },
   target: { id: string; status: MemberStatus },
+  options: { allowSelf?: boolean } = {},
 ): boolean {
-  return actor.role === "admin" && actor.id !== target.id && target.status === "active";
+  const { allowSelf = true } = options;
+  return (
+    actor.role === "admin" && (allowSelf || actor.id !== target.id) && target.status === "active"
+  );
 }
 
 /** True when `targetId` is the Group's only active Admin. */
