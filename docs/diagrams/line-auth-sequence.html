@@ -63,11 +63,11 @@
         <rect width="960" height="600" fill="#f5f5f5"/>
 
         <!-- Lifelines -->
-        <line x1="112" y1="132" x2="112" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="296" y1="132" x2="296" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="480" y1="132" x2="480" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="664" y1="132" x2="664" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
-        <line x1="848" y1="132" x2="848" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="112" y1="140" x2="112" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="296" y1="140" x2="296" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="480" y1="140" x2="480" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="664" y1="140" x2="664" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="848" y1="140" x2="848" y2="520" stroke="rgba(45,49,66,.20)" stroke-width="1" stroke-dasharray="3,3"/>
 
         <!-- Optional refresh on a cache miss or key rotation. -->
         <rect x="276" y="252" width="416" height="140" rx="4" fill="rgba(45,49,66,.02)" stroke="rgba(45,49,66,.22)" stroke-width="1"/>
@@ -85,8 +85,8 @@
 
         <!-- Messages; returns are dashed with filled arrowheads. -->
         <line x1="116" y1="164" x2="292" y2="164" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
-        <rect x="168" y="140" width="72" height="12" rx="2" fill="#f5f5f5"/>
-        <text x="204" y="149" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">POST /AUTH</text>
+        <rect x="188" y="140" width="32" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="204" y="149" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">POST</text>
         <line x1="300" y1="200" x2="476" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
         <rect x="348" y="176" width="80" height="12" rx="2" fill="#f5f5f5"/>
         <text x="388" y="185" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">GET KEYSET</text>
@@ -113,19 +113,20 @@
         <text x="204" y="477" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing=".06em">TOKEN + COOKIE</text>
 
         <!-- Participants -->
-        <rect x="40" y="72" width="144" height="60" rx="6" fill="rgba(79,93,117,.10)" stroke="#5a6580"/>
+        <rect x="40" y="72" width="144" height="68" rx="6" fill="rgba(79,93,117,.10)" stroke="#5a6580"/>
         <text x="112" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">React SPA</text>
         <text x="112" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">LIFF / Google SDK</text>
-        <rect x="224" y="72" width="144" height="60" rx="6" fill="rgba(191,69,32,.08)" stroke="#bf4520" stroke-width="1.4"/>
+        <rect x="224" y="72" width="144" height="68" rx="6" fill="rgba(191,69,32,.08)" stroke="#bf4520" stroke-width="1.4"/>
         <text x="296" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Worker</text>
-        <text x="296" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">verify · issue session</text>
-        <rect x="408" y="72" width="144" height="60" rx="6" fill="rgba(45,49,66,.05)" stroke="#4f5d75"/>
+        <text x="296" y="114" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">POST /api/v1/auth/google</text>
+        <text x="296" y="128" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">POST /api/v1/auth/line</text>
+        <rect x="408" y="72" width="144" height="68" rx="6" fill="rgba(45,49,66,.05)" stroke="#4f5d75"/>
         <text x="480" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">JWKS_CACHE</text>
         <text x="480" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Workers KV · 1h</text>
-        <rect x="592" y="72" width="144" height="60" rx="6" fill="rgba(45,49,66,.03)" stroke="rgba(45,49,66,.30)"/>
+        <rect x="592" y="72" width="144" height="68" rx="6" fill="rgba(45,49,66,.03)" stroke="rgba(45,49,66,.30)"/>
         <text x="664" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Provider</text>
         <text x="664" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Google or LINE</text>
-        <rect x="776" y="72" width="144" height="60" rx="6" fill="rgba(45,49,66,.05)" stroke="#4f5d75"/>
+        <rect x="776" y="72" width="144" height="68" rx="6" fill="rgba(45,49,66,.05)" stroke="#4f5d75"/>
         <text x="848" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Cloudflare D1</text>
         <text x="848" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">accounts · sessions</text>
 
