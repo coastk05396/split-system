@@ -118,32 +118,34 @@ pnpm e2e
 
 ---
 
-## 系統架構與設計圖 (System Design & Architecture)
+## System Design & Architecture
 
-### 1. 前後端系統架構圖 (System Architecture)
+### 1. System Architecture
 
-展示 React SPA、LINE 平台（LIFF／Messaging API）、Cloudflare Worker（Hono API）、GroupLedger Durable Object（每個群組一個，群組帳務的權威與 `/live` WebSocket）、D1（帳號、Session 與讀取模型）、KV 金鑰快取及外部 API 之間的呼叫關係：
+Shows how the React SPA, LINE platform (LIFF and Messaging API), Cloudflare Worker (Hono API), GroupLedger Durable Objects (the authoritative ledger and `/live` WebSocket for each group), D1 (accounts, sessions, and read models), KV key cache, and external APIs interact:
 
-![前後端系統架構圖](docs/diagrams/architecture.svg)
+![System architecture](docs/diagrams/architecture.svg)
 
-> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+D1 stores account and FX data, along with read projections; GroupLedger is the source of truth for group ledgers. The Worker caches Google and LINE signing keys in KV. Frankfurter is the primary FX rate provider, with ExchangeRate-API as a fallback.
 
----
-
-### 2. LINE 登入流程時序圖 (LINE Authentication Sequence)
-
-展示 SPA 取得 LIFF ID token、Worker 以 KV 快取的 LINE 公鑰驗證簽章（快取失效才重新下載）、在 D1 建立或沿用 User／Identity 並新增 Session，最後回傳 access token 與 HttpOnly refresh cookie 的時序：
-
-![LINE 登入流程時序圖](docs/diagrams/line-auth-sequence.svg)
-
-> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/line-auth-sequence.html`](docs/diagrams/line-auth-sequence.html)
+> [Open the interactive architecture diagram](docs/diagrams/architecture.html)
 
 ---
 
-### 3. D1 資料庫實體關聯圖 (Database Schema & ER)
+### 2. Google and LINE Authentication Sequence
 
-展示 D1 帳號子系統（`users`、`identities`、`sessions`、`rate_counters`）之欄位、SQL 型態、主鍵與以 `users.id` 為根的 `ON DELETE CASCADE` 外鍵；群組帳務資料存放在 GroupLedger Durable Object，不在 D1：
+Shows the shared sign-in flow for Google and LINE ID tokens: the Worker verifies each token using the provider's public keys cached in KV (refreshing the keys on a cache miss or unknown `kid`), creates or reuses the User and Identity in D1, creates a Session, then returns an access token and an HttpOnly refresh cookie:
 
-![D1 資料庫實體關聯圖](docs/diagrams/db-schema-er.svg)
+![Google and LINE authentication sequence](docs/diagrams/line-auth-sequence.svg)
 
-> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/db-schema-er.html`](docs/diagrams/db-schema-er.html)
+> [Open the interactive authentication sequence](docs/diagrams/line-auth-sequence.html)
+
+---
+
+### 3. D1 Account Schema
+
+Shows selected columns, SQL types, primary keys, and `ON DELETE CASCADE` foreign keys for five D1 account and authentication tables: `users`, `identities`, `sessions`, `link_codes`, and `rate_counters`. This is not the complete D1 schema; authoritative group ledger data lives in GroupLedger Durable Objects:
+
+![D1 account schema](docs/diagrams/db-schema-er.svg)
+
+> [Open the interactive D1 account schema](docs/diagrams/db-schema-er.html)

@@ -1,105 +1,104 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1060 670" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="split-seq-title split-seq-desc" id="line-auth-sequence-root">
-        <title id="split-seq-title">LINE 登入流程時序圖</title>
-        <desc id="split-seq-desc">SPA 取得 LIFF ID token 後呼叫 /auth/line；Worker 用 KV 快取的 LINE 公鑰驗證簽章（快取失效才重新下載），在 D1 建立或沿用 User 與 Identity、新增 Session，回傳 access token 與 refresh cookie。</desc>
+<svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="line-auth-sequence-title line-auth-sequence-desc" id="line-auth-sequence-root">
+        <title id="line-auth-sequence-title">Google and LINE sign-in sequence</title>
+        <desc id="line-auth-sequence-desc">The Worker verifies a Google or LINE ID token using cached provider keys, creates or reuses the account and session in D1, then returns an access token and secure refresh cookie.</desc>
         <defs>
       <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
-      #line-auth-sequence-root { --color-paper:   #f6fff8;
-      --color-paper-2: #e8f5eb;
-      --color-ink:     #163d2a;
-      --color-muted:   #26684b;
-      --color-accent:  #1b7a43;
-      --color-link:    #06c755;
-      --font-sans:     'Geist', 'Noto Sans TC', system-ui, sans-serif;
-      --font-serif:    'Instrument Serif', serif;
-      --font-mono:     'Geist Mono', ui-monospace, monospace; }
-      #line-auth-sequence-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #line-auth-sequence-root { --paper: #f5f5f5;
+      --ink: #2d3142;
+      --muted: #4f5d75;
+      --accent: #bf4520;
+      --rule: rgba(45,49,66,.12);
+      --font-sans: 'Geist', 'Noto Sans TC', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif TC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #line-auth-sequence-root { color: var(--ink); font-family: var(--font-sans); }
+      #line-auth-sequence-root .dek { margin-bottom: 1.5rem; color: var(--muted); font-size: .9rem; }
       #line-auth-sequence-root .diagram-container { width: 100%; overflow-x: auto; }
       @media print {
 #line-auth-sequence-root .diagram-container { overflow-x: visible; }
-}</style><pattern id="line-auth-sequence-dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="#163d2a" fill-opacity="0.08"/></pattern>
-<marker id="line-auth-sequence-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#26684b"/></marker>
-<marker id="line-auth-sequence-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#1b7a43"/></marker>
-<marker id="line-auth-sequence-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#06c755"/></marker>
-<marker id="line-auth-sequence-arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#26684b" stroke-width="1.2"/></marker></defs>
+}</style>
+          <marker id="line-auth-sequence-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+          <marker id="line-auth-sequence-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker>
+          <marker id="line-auth-sequence-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        </defs>
+        <rect width="960" height="600" fill="#f5f5f5"/>
 
-        <rect width="100%" height="100%" fill="#f6fff8"/>
-        <rect width="100%" height="100%" fill="url(#line-auth-sequence-dots)" opacity="0.6"/>
-<!-- Lifelines -->
-<line x1="110" y1="90" x2="110" y2="600" stroke="#163d2a" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.22"/>
-<line x1="330" y1="90" x2="330" y2="600" stroke="#163d2a" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.22"/>
-<line x1="550" y1="90" x2="550" y2="600" stroke="#163d2a" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.22"/>
-<line x1="770" y1="90" x2="770" y2="600" stroke="#163d2a" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.22"/>
-<line x1="950" y1="90" x2="950" y2="600" stroke="#163d2a" stroke-width="1" stroke-dasharray="4,4" stroke-opacity="0.22"/>
-<rect x="306" y="280" width="488" height="140" rx="4" fill="#163d2a" stroke="#163d2a" stroke-width="1" fill-opacity="0.02" stroke-opacity="0.20"/>
-<rect x="306" y="280" width="40" height="16" rx="2" fill="#f6fff8" stroke="#163d2a" stroke-width="1" stroke-opacity="0.20"/>
-<text x="326" y="292" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.12em">OPT</text>
-<text x="350" y="312" fill="#26684b" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.04em">[cache miss or unknown key id]</text>
-<rect x="106" y="118" width="8" height="32" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<rect x="106" y="190" width="8" height="384" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<rect x="326" y="190" width="8" height="384" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<rect x="546" y="226" width="8" height="30" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<rect x="546" y="388" width="8" height="20" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<rect x="766" y="342" width="8" height="30" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<rect x="946" y="500" width="8" height="30" rx="2" fill="#e8f5eb" stroke="#26684b" stroke-width="0.8"/>
-<!-- Messages -->
-<path d="M 114,120 H 154 Q 162,120 162,128 V 140 Q 162,148 154,148 H 114" fill="none" stroke="#06c755" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-link)"/>
-<text x="170" y="137" fill="#06c755" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="start" letter-spacing="0.04em">liff.getIDToken()</text>
-<line x1="114" y1="190" x2="326" y2="190" stroke="#26684b" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
-<rect x="143" y="170" width="154" height="14" rx="2" fill="#f6fff8"/>
-<text x="220" y="180" fill="#163d2a" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.04em">POST /auth/line { idToken }</text>
-<line x1="334" y1="226" x2="546" y2="226" stroke="#26684b" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
-<rect x="401" y="206" width="78" height="14" rx="2" fill="#f6fff8"/>
-<text x="440" y="216" fill="#163d2a" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.04em">GET jwks:line</text>
-<line x1="546" y1="256" x2="334" y2="256" stroke="#26684b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#line-auth-sequence-arrow)"/>
-<rect x="405" y="236" width="70" height="14" rx="2" fill="#f6fff8"/>
-<text x="440" y="246" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">keys, or null</text>
-<line x1="334" y1="342" x2="766" y2="342" stroke="#06c755" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-link)"/>
-<rect x="379" y="322" width="127" height="14" rx="2" fill="#f6fff8"/>
-<text x="442" y="332" fill="#06c755" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.04em">GET /oauth2/v2.1/certs</text>
-<line x1="766" y1="370" x2="334" y2="370" stroke="#06c755" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#line-auth-sequence-arrow-link)"/>
-<rect x="615" y="350" width="90" height="14" rx="2" fill="#f6fff8"/>
-<text x="660" y="360" fill="#06c755" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">JWKS (ES256 keys)</text>
-<line x1="334" y1="398" x2="546" y2="398" stroke="#26684b" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
-<rect x="376" y="378" width="132" height="14" rx="2" fill="#f6fff8"/>
-<text x="442" y="388" fill="#163d2a" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.04em">PUT jwks:line · TTL 1 h</text>
-<path d="M 334,440 H 374 Q 382,440 382,448 V 460 Q 382,468 374,468 H 334" fill="none" stroke="#26684b" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
-<text x="390" y="457" fill="#26684b" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="start" letter-spacing="0.04em">verify ES256 · aud · exp</text>
-<line x1="334" y1="504" x2="946" y2="504" stroke="#26684b" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
-<rect x="578" y="484" width="165" height="14" rx="2" fill="#f6fff8"/>
-<text x="660" y="494" fill="#163d2a" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.04em">users · identities · sessions</text>
-<line x1="946" y1="534" x2="334" y2="534" stroke="#26684b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#line-auth-sequence-arrow)"/>
-<rect x="630" y="514" width="61" height="14" rx="2" fill="#f6fff8"/>
-<text x="660" y="524" fill="#245b41" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">ok · userId</text>
-<line x1="326" y1="570" x2="114" y2="570" stroke="#1b7a43" stroke-width="1.8" marker-end="url(#line-auth-sequence-arrow-accent)"/>
-<rect x="151" y="550" width="138" height="14" rx="2" fill="#1b7a43"/>
-<text x="220" y="560" fill="#ffffff" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing="0.04em">200 accessToken + cookie</text>
-<!-- Actors -->
-<g><rect x="30" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
-<text x="110" y="62" fill="#163d2a" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">React SPA</text>
-<text x="110" y="78" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">@line/liff · browser</text></g>
-<g><rect x="250" y="40" width="160" height="50" rx="6" fill="#1b7a43" stroke="#1b7a43" stroke-width="1.6" fill-opacity="0.06"/>
-<text x="330" y="62" fill="#163d2a" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">split Worker</text>
-<text x="330" y="78" fill="#1b7a43" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Hono · /api/v1/auth</text></g>
-<g><rect x="470" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
-<text x="550" y="62" fill="#163d2a" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">JWKS_CACHE</text>
-<text x="550" y="78" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Workers KV</text></g>
-<g><rect x="690" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#06c755" stroke-width="1.6"/>
-<text x="770" y="62" fill="#163d2a" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">LINE Platform</text>
-<text x="770" y="78" fill="#06c755" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">api.line.me</text></g>
-<g><rect x="870" y="40" width="160" height="50" rx="6" fill="#f6fff8" stroke="#26684b" stroke-width="1.2"/>
-<text x="950" y="62" fill="#163d2a" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Cloudflare D1</text>
-<text x="950" y="78" fill="#4f6b5b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">users · sessions</text></g>
-<g id="legend" transform="translate(30, 624)">
-<line x1="0" y1="0" x2="1000" y2="0" stroke="#163d2a" stroke-width="0.8" stroke-opacity="0.12"/>
-<line x1="10" y1="16" x2="40" y2="16" stroke="#1b7a43" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-accent)"/>
-<text x="50" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Token issued</text>
-<line x1="190" y1="16" x2="220" y2="16" stroke="#06c755" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-link)"/>
-<text x="230" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">LINE protocol</text>
-<line x1="370" y1="16" x2="400" y2="16" stroke="#26684b" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
-<text x="410" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Call</text>
-<line x1="480" y1="16" x2="510" y2="16" stroke="#26684b" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#line-auth-sequence-arrow)"/>
-<text x="520" y="20" fill="#245b41" font-size="9" font-family="'Geist Mono', monospace">Return</text>
-</g>
+        <!-- Lifelines -->
+        <line x1="112" y1="140" x2="112" y2="520" stroke="#2d3142" stroke-width="1" stroke-dasharray="3,3" stroke-opacity=".20"/>
+        <line x1="296" y1="140" x2="296" y2="520" stroke="#2d3142" stroke-width="1" stroke-dasharray="3,3" stroke-opacity=".20"/>
+        <line x1="480" y1="140" x2="480" y2="520" stroke="#2d3142" stroke-width="1" stroke-dasharray="3,3" stroke-opacity=".20"/>
+        <line x1="664" y1="140" x2="664" y2="520" stroke="#2d3142" stroke-width="1" stroke-dasharray="3,3" stroke-opacity=".20"/>
+        <line x1="848" y1="140" x2="848" y2="520" stroke="#2d3142" stroke-width="1" stroke-dasharray="3,3" stroke-opacity=".20"/>
 
+        <!-- Optional refresh on a cache miss or key rotation. -->
+        <rect x="276" y="252" width="416" height="140" rx="4" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity=".02" stroke-opacity=".22"/>
+        <rect x="276" y="252" width="40" height="16" rx="2" fill="#f5f5f5" stroke="#2d3142" stroke-width="1" stroke-opacity=".22"/>
+        <text x="296" y="264" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" font-weight="500" text-anchor="middle" letter-spacing=".12em">OPT</text>
+        <text x="328" y="282" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing=".04em">[cache miss or unknown key id]</text>
+
+        <!-- Activations -->
+        <rect x="108" y="160" width="8" height="16" rx="2" fill="#4f5d75" stroke="#5a6580" stroke-width=".8" fill-opacity=".10"/>
+        <rect x="292" y="160" width="8" height="344" rx="2" fill="#4f5d75" stroke="#5a6580" stroke-width=".8" fill-opacity=".10"/>
+        <rect x="476" y="196" width="8" height="36" rx="2" fill="#4f5d75" stroke="#5a6580" stroke-width=".8" fill-opacity=".10"/>
+        <rect x="476" y="368" width="8" height="16" rx="2" fill="#4f5d75" stroke="#5a6580" stroke-width=".8" fill-opacity=".10"/>
+        <rect x="660" y="312" width="8" height="40" rx="2" fill="#4f5d75" stroke="#5a6580" stroke-width=".8" fill-opacity=".10"/>
+        <rect x="844" y="420" width="8" height="40" rx="2" fill="#4f5d75" stroke="#5a6580" stroke-width=".8" fill-opacity=".10"/>
+
+        <!-- Messages; returns are dashed with filled arrowheads. -->
+        <line x1="116" y1="164" x2="292" y2="164" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-link)"/>
+        <rect x="188" y="140" width="32" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="204" y="149" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">POST</text>
+        <line x1="300" y1="200" x2="476" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
+        <rect x="348" y="176" width="80" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="388" y="185" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">GET KEYSET</text>
+        <line x1="476" y1="228" x2="300" y2="228" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#line-auth-sequence-arrow)"/>
+        <rect x="348" y="204" width="80" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="388" y="213" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">KEYSET / NULL</text>
+        <line x1="300" y1="316" x2="660" y2="316" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-link)"/>
+        <rect x="432" y="292" width="96" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="480" y="301" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">FETCH JWKS</text>
+        <line x1="660" y1="344" x2="300" y2="344" stroke="#2e5aa8" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#line-auth-sequence-arrow-link)"/>
+        <rect x="432" y="320" width="96" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="480" y="329" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">PUBLIC KEYS</text>
+        <line x1="300" y1="372" x2="476" y2="372" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
+        <rect x="352" y="348" width="72" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="388" y="357" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">PUT KEYSET</text>
+        <line x1="300" y1="424" x2="844" y2="424" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow)"/>
+        <rect x="524" y="400" width="96" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="572" y="409" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">USER + SESSION</text>
+        <line x1="844" y1="452" x2="300" y2="452" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#line-auth-sequence-arrow)"/>
+        <rect x="524" y="428" width="96" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="572" y="437" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing=".06em">SESSION USER</text>
+        <line x1="292" y1="492" x2="116" y2="492" stroke="#bf4520" stroke-width="1.6" marker-end="url(#line-auth-sequence-arrow-accent)"/>
+        <rect x="160" y="468" width="88" height="12" rx="2" fill="#bf4520"/>
+        <text x="204" y="477" fill="#ffffff" font-size="8" font-family="'Geist Mono', monospace" font-weight="600" text-anchor="middle" letter-spacing=".06em">TOKEN + COOKIE</text>
+
+        <!-- Participants -->
+        <rect x="40" y="72" width="144" height="68" rx="6" fill="#4f5d75" stroke="#5a6580" fill-opacity=".10"/>
+        <text x="112" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">React SPA</text>
+        <text x="112" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">LIFF / Google SDK</text>
+        <rect x="224" y="72" width="144" height="68" rx="6" fill="#bf4520" stroke="#bf4520" stroke-width="1.4" fill-opacity=".08"/>
+        <text x="296" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Worker</text>
+        <text x="296" y="114" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">POST /api/v1/auth/google</text>
+        <text x="296" y="128" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">POST /api/v1/auth/line</text>
+        <rect x="408" y="72" width="144" height="68" rx="6" fill="#2d3142" stroke="#4f5d75" fill-opacity=".05"/>
+        <text x="480" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">JWKS_CACHE</text>
+        <text x="480" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Workers KV · 1h</text>
+        <rect x="592" y="72" width="144" height="68" rx="6" fill="#2d3142" stroke="#2d3142" fill-opacity=".03" stroke-opacity=".30"/>
+        <text x="664" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Provider</text>
+        <text x="664" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Google or LINE</text>
+        <rect x="776" y="72" width="144" height="68" rx="6" fill="#2d3142" stroke="#4f5d75" fill-opacity=".05"/>
+        <text x="848" y="96" fill="#2d3142" font-size="12" font-family="'Geist', 'Noto Sans TC', sans-serif" font-weight="600" text-anchor="middle">Cloudflare D1</text>
+        <text x="848" y="116" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">accounts · sessions</text>
+
+        <!-- Horizontal legend strip -->
+        <line x1="40" y1="536" x2="920" y2="536" stroke="#2d3142" stroke-width="1" stroke-opacity=".12"/>
+        <text x="40" y="568" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing=".14em">LEGEND</text>
+        <line x1="120" y1="562" x2="152" y2="562" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#line-auth-sequence-arrow-link)"/>
+        <text x="164" y="566" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">Request / fetch</text>
+        <line x1="340" y1="562" x2="372" y2="562" stroke="#4f5d75" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#line-auth-sequence-arrow)"/>
+        <text x="384" y="566" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">Return</text>
+        <line x1="500" y1="562" x2="532" y2="562" stroke="#bf4520" stroke-width="1.6" marker-end="url(#line-auth-sequence-arrow-accent)"/>
+        <text x="544" y="566" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">Session issued</text>
       </svg>
