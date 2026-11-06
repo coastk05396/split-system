@@ -1,14 +1,19 @@
 import { z } from "zod";
+import { MAX_MEMBER_PREVIEW } from "./labels.js";
 import {
   currencyCodeSchema,
+  daysBetween,
   idSchema,
   localDateSchema,
   MAX_NAME_LENGTH,
   MAX_NOTES_LENGTH,
-  MAX_TRIP_DAYS,
+  tripDatesValid,
+  tripLength,
 } from "./schemas.js";
 
 /** Groups, Members, Invites and Placeholder Members (SPEC §5, decisions 10, 13, 31). */
+
+export { daysBetween, MAX_MEMBER_PREVIEW, tripDatesValid, tripLength };
 
 /** Active Groups one User may belong to; placeholders do not count (decisions 15, 31). */
 export const MAX_GROUPS_PER_USER = 20;
@@ -20,14 +25,65 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 export const MEMBER_STATUSES = ["active", "former", "placeholder"] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
-const daysInclusive = (start: string, end: string): number =>
-  (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000 + 1;
+/**
+ * Who may remove or leave as `target`: the Member themselves, an Admin, or any Member removing
+ * an unclaimed Placeholder Member. Former Members cannot be removed again.
+ */
+export function canRemoveMember(
+  actor: { id: string; role: MemberRole },
+  target: { id: string; status: MemberStatus },
+): boolean {
+  return (
+    target.status !== "former" &&
+    (target.id === actor.id || actor.role === "admin" || target.status === "placeholder")
+  );
+}
 
-/** A Trip runs forward and lasts at most 31 days; either date may still be unset. */
-export function tripDatesValid(start: string | null, end: string | null): boolean {
-  if (start === null || end === null) return true;
-  const days = daysInclusive(start, end);
-  return days >= 1 && days <= MAX_TRIP_DAYS;
+/** Only an unclaimed Placeholder Member's typed name may be edited in the Group. */
+export function canEditPlaceholderName(target: { status: MemberStatus }): boolean {
+  return target.status === "placeholder";
+}
+
+/** An Admin may promote or demote another active Member. */
+export function canChangeMemberRole(
+  actor: { id: string; role: MemberRole },
+  target: { id: string; status: MemberStatus },
+): boolean {
+  return actor.role === "admin" && actor.id !== target.id && target.status === "active";
+}
+
+/** True when `targetId` is the Group's only active Admin. */
+export function isLastAdmin(
+  members: ReadonlyArray<{ id: string; role: MemberRole; status: MemberStatus }>,
+  targetId: string,
+): boolean {
+  const target = members.find((m) => m.id === targetId);
+  if (target?.status !== "active" || target.role !== "admin") return false;
+  return !members.some((m) => m.id !== targetId && m.status === "active" && m.role === "admin");
+}
+
+/** The lowest numbered default Placeholder Member name ("成員1", "成員2", …) not yet in `existingNames`. */
+export function nextPlaceholderName(existingNames: Iterable<string>): string {
+  const taken = new Set(existingNames);
+  let number = 1;
+  while (taken.has(`成員${String(number)}`)) number += 1;
+  return `成員${String(number)}`;
+}
+
+/**
+ * How a removed or leaving Member is persisted:
+ * - `"delete"`: an unclaimed Placeholder Member with no Expense history is deleted outright.
+ * - `"former_placeholder"`: a Placeholder Member with Expense history becomes a Former Member (`已移除的成員`).
+ * - `"former_member"`: a seated Member becomes a Former Member with their own name kept.
+ */
+export function memberRemovalDisposition(
+  target: { status: MemberStatus },
+  hasExpenseHistory: boolean,
+): "delete" | "former_placeholder" | "former_member" {
+  if (target.status === "placeholder") {
+    return hasExpenseHistory ? "former_placeholder" : "delete";
+  }
+  return "former_member";
 }
 
 const nameSchema = z.string().trim().min(1).max(MAX_NAME_LENGTH);

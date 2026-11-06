@@ -10,9 +10,14 @@ import {
 } from "./ledger-account-deletion.js";
 import { DurableObject } from "cloudflare:workers";
 import {
+  canEditPlaceholderName,
+  canRemoveMember,
   expenseSchema,
+  isLastAdmin,
   memberPatchSchema,
+  memberRemovalDisposition,
   placeholderInputSchema,
+  REMOVED_PLACEHOLDER_NAME,
   settlementSchema,
   tripDatesValid,
   type Invite,
@@ -66,8 +71,8 @@ interface MemberRow extends Record<string, SqlStorageValue> {
   placeholder_name: string | null;
   nickname: string | null;
   created_by_member_id: string | null;
-  role: string;
-  status: string;
+  role: MemberRole;
+  status: MemberStatus;
   net_balance: number;
   created_at: number;
 }
@@ -103,7 +108,7 @@ function seatedMember(row: MemberRow): SeatedMember {
     id: row.id,
     userId: row.user_id,
     placeholderName: row.placeholder_name,
-    role: row.role as MemberRole,
+    role: row.role,
     balance: row.net_balance,
   };
 }
@@ -795,7 +800,7 @@ export class GroupLedger extends DurableObject<Bindings> {
           const input = memberPatchSchema.safeParse(op.input);
           if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
           if (input.data.placeholderName !== undefined) {
-            if (target.status !== "placeholder") return { value: { error: "MEMBER_NOT_ACTIVE" } };
+            if (!canEditPlaceholderName(target)) return { value: { error: "MEMBER_NOT_ACTIVE" } };
             if (conflict(input.data.placeholderName, target.id))
               return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
             sql.exec(
@@ -806,11 +811,7 @@ export class GroupLedger extends DurableObject<Bindings> {
           } else if (input.data.role !== undefined) {
             if (actor?.role !== "admin") return { value: { error: "FORBIDDEN" } };
             if (target.status !== "active") return { value: { error: "MEMBER_NOT_ACTIVE" } };
-            if (
-              target.role === "admin" &&
-              input.data.role === "member" &&
-              !all.some((m) => m.id !== target.id && m.status === "active" && m.role === "admin")
-            )
+            if (input.data.role === "member" && isLastAdmin(all, target.id))
               return { value: { error: "LAST_ADMIN" } };
             sql.exec("UPDATE ledger_members SET role=? WHERE id=?", input.data.role, target.id);
           }
@@ -818,9 +819,16 @@ export class GroupLedger extends DurableObject<Bindings> {
           const leaving = op.action === "leave" ? actor : target;
           if (leaving === undefined) return { value: { error: "NOT_FOUND" } };
           if (actor === undefined) return { value: { error: "FORBIDDEN" } };
-          if (leaving.id !== actor.id && actor.role !== "admin" && leaving.status !== "placeholder")
-            return { value: { error: "FORBIDDEN" } };
-          if (leaving.status === "former") return { value: { error: "MEMBER_NOT_ACTIVE" } };
+          if (!canRemoveMember(actor, leaving)) {
+            return {
+              value: {
+                error:
+                  leaving.status === "former" && actor.role === "admin"
+                    ? "MEMBER_NOT_ACTIVE"
+                    : "FORBIDDEN",
+              },
+            };
+          }
           const balance = leaving.net_balance;
           if (balance !== 0)
             return {
@@ -833,12 +841,7 @@ export class GroupLedger extends DurableObject<Bindings> {
                 },
               },
             };
-          if (
-            leaving.id === actor.id &&
-            leaving.role === "admin" &&
-            !all.some((m) => m.id !== leaving.id && m.status === "active" && m.role === "admin")
-          )
-            return { value: { error: "LAST_ADMIN" } };
+          if (isLastAdmin(all, leaving.id)) return { value: { error: "LAST_ADMIN" } };
           const hasHistory =
             leaving.status === "placeholder" &&
             sql
@@ -851,11 +854,13 @@ export class GroupLedger extends DurableObject<Bindings> {
                   expense.splits.some((split) => split.memberId === leaving.id)
                 );
               });
-          if (leaving.status === "placeholder" && !hasHistory)
+          const disposition = memberRemovalDisposition(leaving, hasHistory);
+          if (disposition === "delete")
             sql.exec("DELETE FROM ledger_members WHERE id=?", leaving.id);
-          else if (leaving.status === "placeholder")
+          else if (disposition === "former_placeholder")
             sql.exec(
-              "UPDATE ledger_members SET status='former',placeholder_name=NULL,nickname='已移除的成員' WHERE id=?",
+              "UPDATE ledger_members SET status='former',placeholder_name=NULL,nickname=? WHERE id=?",
+              REMOVED_PLACEHOLDER_NAME,
               leaving.id,
             );
           else
@@ -957,7 +962,7 @@ export class GroupLedger extends DurableObject<Bindings> {
       ok: true,
       value: rows.map((row) => ({
         ...seatedMember(row),
-        status: row.status as MemberStatus,
+        status: row.status,
         nickname: row.nickname,
         createdByMemberId: row.created_by_member_id,
       })),
