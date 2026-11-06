@@ -1,6 +1,6 @@
 # Design changes for v1
 
-Collected by **Reconcile the designs with the decisions**. `docs/split.pen` is not edited by the map; this list is the brief for the follow-up design pass. Screen numbers are the `docs/screens/` numbers. "Not reviewed" means the frame was not opened during the map, so only the changes that follow from decisions are listed.
+Collected by **Reconcile the designs with the decisions**. This list is the brief for the follow-up design pass. Screen numbers are the `docs/screens/` numbers. "Not reviewed" means the frame was not opened during the map, so only the changes that follow from decisions are listed.
 
 ## Across every screen
 

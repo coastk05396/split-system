@@ -8,14 +8,17 @@
   },
   "scripts": {
     "dev": "node -e \"const fs=require('node:fs');const t='apps/worker/.dev.vars';if(!fs.existsSync(t))fs.copyFileSync('.dev.vars.example',t)\" && pnpm --parallel --filter @split/worker --filter @split/web dev",
-    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
+    "typecheck": "pnpm -r typecheck && tsc -p e2e/tsconfig.json",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
-    "e2e": "rm -rf /tmp/wrangler-e2e-8787 /tmp/wrangler-e2e-8788 && VITE_TEST_SIGN_IN=1 pnpm build && (cd apps/worker && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8787 && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8788) && node ./node_modules/@playwright/test/cli.js test",
+    "e2e": "rm -rf /tmp/wrangler-e2e-8787 /tmp/wrangler-e2e-8788 && VITE_TEST_SIGN_IN=1 pnpm build && (cd apps/worker && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8787 && echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8788) && node ./node_modules/@playwright/test/cli.js test --config=e2e/playwright.config.ts",
     "build": "pnpm --filter @split/web build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky"
+  },
+  "lint-staged": {
+    "*": "prettier --ignore-unknown --write"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
