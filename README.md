@@ -126,24 +126,26 @@ pnpm e2e
 
 ![前後端系統架構圖](docs/diagrams/architecture.svg)
 
-> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+D1 保留帳號、FX rates 與查詢投影；群組帳務的權威狀態只存在 GroupLedger。Worker 透過 KV 快取 Google 與 LINE 的公開簽章金鑰，FX 匯率則以 Frankfurter 為主、ExchangeRate-API 為備援。
+
+> 💡 [開啟互動式向量頁面](docs/diagrams/architecture.html)
 
 ---
 
-### 2. LINE 登入流程時序圖 (LINE Authentication Sequence)
+### 2. Google + LINE 登入流程時序圖 (Authentication Sequence)
 
-展示 SPA 取得 LIFF ID token、Worker 以 KV 快取的 LINE 公鑰驗證簽章（快取失效才重新下載）、在 D1 建立或沿用 User／Identity 並新增 Session，最後回傳 access token 與 HttpOnly refresh cookie 的時序：
+展示 Google 或 LINE ID token 的共用登入路徑：Worker 以 KV 快取的供應商公開金鑰驗證 token（快取未命中或找不到 `kid` 時重新下載），在 D1 建立或沿用 User／Identity 並新增 Session，最後回傳 access token 與 HttpOnly refresh cookie：
 
-![LINE 登入流程時序圖](docs/diagrams/line-auth-sequence.svg)
+![Google 與 LINE 登入流程時序圖](docs/diagrams/line-auth-sequence.svg)
 
-> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/line-auth-sequence.html`](docs/diagrams/line-auth-sequence.html)
+> 💡 [開啟登入流程向量頁面](docs/diagrams/line-auth-sequence.html)
 
 ---
 
-### 3. D1 資料庫實體關聯圖 (Database Schema & ER)
+### 3. D1 帳號資料庫結構 (D1 Account Schema)
 
-展示 D1 帳號子系統（`users`、`identities`、`sessions`、`rate_counters`）之欄位、SQL 型態、主鍵與以 `users.id` 為根的 `ON DELETE CASCADE` 外鍵；群組帳務資料存放在 GroupLedger Durable Object，不在 D1：
+展示 D1 帳號／驗證子系統的五張資料表（`users`、`identities`、`sessions`、`link_codes`、`rate_counters`）之選定欄位、SQL 型態、主鍵與 `ON DELETE CASCADE` 外鍵。這不是完整 D1 schema；群組帳務權威資料存放在 GroupLedger Durable Object：
 
 ![D1 資料庫實體關聯圖](docs/diagrams/db-schema-er.svg)
 
-> 💡 可直接在瀏覽器開啟出版級向量頁面：[`docs/diagrams/db-schema-er.html`](docs/diagrams/db-schema-er.html)
+> 💡 [開啟 D1 schema 向量頁面](docs/diagrams/db-schema-er.html)
