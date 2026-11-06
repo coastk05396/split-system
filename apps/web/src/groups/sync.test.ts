@@ -4,15 +4,14 @@ import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  computeBackoffWait,
   cancelStatsInvalidation,
   getQueryRev,
-  GroupLiveSync,
   handleGroupSignal,
-  onGroupMutationSuccess,
+  refreshGroup,
   readWithRev,
   setQueryRev,
-} from "./sync.js";
+} from "./data.js";
+import { computeBackoffWait, GroupLiveSync } from "./sync.js";
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
@@ -107,6 +106,27 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
     vi.useRealTimers();
   });
 
+  it("refreshes the Home Group list and only the changed Group without stamping patched data", async () => {
+    const home = ["groups"];
+    const group = ["groups", "g-1"];
+    const expenses = ["groups", "g-1", "expenses"];
+    const balances = ["groups", "g-1", "balances"];
+    const otherGroup = ["groups", "g-2", "members"];
+    for (const key of [home, group, expenses, balances, otherGroup]) {
+      client.setQueryData(key, []);
+      setQueryRev(client, key, 40);
+    }
+
+    await refreshGroup(client, "g-1");
+
+    for (const key of [home, group, expenses, balances]) {
+      expect(getQuery(client, key).state.isInvalidated).toBe(true);
+      expect(getQueryRev(client, key)).toBe(40);
+    }
+    expect(getQuery(client, otherGroup).state.isInvalidated).toBe(false);
+    expect(getQueryRev(client, otherGroup)).toBe(40);
+  });
+
   it("refreshes active Stats after a mutation once the projection catches up", async () => {
     let projected = false;
     const fetched: number[] = [];
@@ -122,7 +142,7 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
     const unsubscribe = observer.subscribe(() => {});
     try {
       await observer.refetch();
-      onGroupMutationSuccess(client, "g-1", 42);
+      await refreshGroup(client, "g-1");
       await vi.advanceTimersByTimeAsync(2000);
       expect(client.getQueryData(key)).toBe(100);
       projected = true;
@@ -171,7 +191,7 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
     try {
       await observer.refetch();
       for (let i = 0; i < 10; i++) {
-        onGroupMutationSuccess(client, `g-${i}`, i);
+        void refreshGroup(client, `g-${i}`);
         await vi.advanceTimersByTimeAsync(100);
       }
       await handleGroupSignal(client, "g-other", 42);
@@ -203,7 +223,7 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
       await screen.findByRole("button", { name: "登出" });
       if (ending === "chosen sign-out") await import("../pages/LandingPage.js");
       vi.useFakeTimers();
-      onGroupMutationSuccess(queryClient, groupId, 42);
+      void refreshGroup(queryClient, groupId);
       await vi.advanceTimersByTimeAsync(0);
       if (ending === "unmount") {
         cleanup();
@@ -628,37 +648,6 @@ describe("Web live sync: connection, heartbeat, reconnect and rev rule", () => {
       // It must return the newer data, NOT the older response!
       expect(result).toEqual({ expenses: [{ id: "e-new" }] });
       expect(getQueryRev(client, queryKey)).toBe(42);
-    });
-
-    it("after writer's mutation returns rev N, it invalidates the other queries rather than marking them as N", () => {
-      client.getQueryCache().build(client, {
-        queryKey: ["groups", "g-1"],
-      });
-      client.getQueryCache().build(client, {
-        queryKey: ["groups", "g-1", "members"],
-      });
-      client.getQueryCache().build(client, {
-        queryKey: ["groups", "g-1", "expenses"],
-      });
-
-      setQueryRev(client, ["groups", "g-1"], 40);
-      setQueryRev(client, ["groups", "g-1", "members"], 40);
-      setQueryRev(client, ["groups", "g-1", "expenses"], 40);
-
-      const invalidateSpy = vi.spyOn(client, "invalidateQueries");
-
-      // Mutation updated group details at rev 42
-      onGroupMutationSuccess(client, "g-1", 42, { updatedQueryKey: ["groups", "g-1"] });
-
-      // Group itself is marked as 42
-      expect(getQueryRev(client, ["groups", "g-1"])).toBe(42);
-
-      // The other queries are NOT marked as 42! Their rev remains 40.
-      expect(getQueryRev(client, ["groups", "g-1", "members"])).toBe(40);
-      expect(getQueryRev(client, ["groups", "g-1", "expenses"])).toBe(40);
-
-      // And the other queries were invalidated
-      expect(invalidateSpy).toHaveBeenCalled();
     });
   });
 });

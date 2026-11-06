@@ -4,8 +4,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { SeedGroup } from "../../test/fake-groups.js";
-import { expenseKeys } from "../expenses/api.js";
-import { clearPendingWrites } from "../expenses/pending-writes.js";
+import { expenseKeys } from "../groups/data.js";
 import { renderApp } from "../../test/render-app.js";
 
 // The Trip module is under maintenance in the app; these tests run it switched on.
@@ -198,38 +197,51 @@ describe("add Expense form", () => {
     expect(within(screen.getByRole("region", { name: "帳目" })).queryByText("儲存中…")).toBeNull();
   });
 
-  it("ignores a save that is answered after the User signed out", async () => {
-    const user = userEvent.setup();
-    const { api, id, router, queryClient } = openForm();
-    await user.type(await screen.findByLabelText("名稱"), "晚餐");
-    await user.type(screen.getByLabelText("金額"), "360");
-    const release = api.holdResponses(`POST /api/v1/groups/${id()}/expenses`);
-    try {
-      await user.click(submit());
+  it.each(["chosen", "forced"])(
+    "ignores a save that is answered after %s sign-out",
+    async (kind) => {
+      const user = userEvent.setup();
+      const { api, id, router, queryClient } = openForm();
+      await user.type(await screen.findByLabelText("名稱"), "晚餐");
+      await user.type(screen.getByLabelText("金額"), "360");
+      const release = api.holdResponses(`POST /api/v1/groups/${id()}/expenses`);
+      try {
+        await user.click(submit());
+        await waitFor(() => {
+          expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+        });
+        if (kind === "chosen") {
+          await act(async () => {
+            await router.navigate("/settings");
+          });
+          await user.click(await screen.findByRole("button", { name: "登出" }));
+        } else {
+          api.expireAccessToken();
+          api.setCookieUser(null);
+          await act(async () => {
+            await queryClient.invalidateQueries({ queryKey: ["groups", id()] });
+          });
+        }
+        await waitFor(() => {
+          expect(router.state.location.pathname).toBe(kind === "chosen" ? "/" : "/sign-in");
+        });
+      } finally {
+        release();
+      }
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+        expect(api.groups.expenses.list(id())).toHaveLength(1);
       });
-      // What signing out does to the transient stores.
-      act(() => {
-        clearPendingWrites();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
       });
-    } finally {
-      release();
-    }
-    await waitFor(() => {
-      expect(api.groups.expenses.list(id())).toHaveLength(1);
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
-    // The Expense exists on the server, so the list may show it by its own fetch; what must not
-    // happen is this save's answer being applied: no "saved" note, no row stuck as saving, and
-    // no copy of the Expense written to the cache by the save itself.
-    expect(screen.queryByText(/已新增 ✓/)).toBeNull();
-    expect(within(screen.getByRole("region", { name: "帳目" })).queryByText("儲存中…")).toBeNull();
-    const [saved] = api.groups.expenses.list(id());
-    expect(queryClient.getQueryData(expenseKeys.one(id(), saved?.id ?? ""))).toBeUndefined();
-  });
+      // The server kept the Expense, but the departing User's answer cannot repopulate local state.
+      expect(screen.queryByText(/已新增 ✓/)).toBeNull();
+      expect(screen.queryByText("儲存中…")).toBeNull();
+      expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+      const [saved] = api.groups.expenses.list(id());
+      expect(queryClient.getQueryData(expenseKeys.one(id(), saved?.id ?? ""))).toBeUndefined();
+    },
+  );
 
   it("keeps a failed save on the Group with its reason, and retries it with the same key", async () => {
     const user = userEvent.setup();

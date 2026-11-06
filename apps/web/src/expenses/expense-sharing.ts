@@ -2,6 +2,7 @@ import type { Expense, Group } from "@split/shared";
 import { useLineShare } from "../platform/line-share.js";
 import type { ShareContent } from "../groups/ShareButtons.js";
 import { t } from "../i18n/messages.js";
+import { currentEpoch, rememberShare } from "./writes.js";
 import {
   buildExpenseCard,
   type ExpenseCard,
@@ -16,16 +17,6 @@ export interface SavedShare {
   chat: ChatSendResult;
 }
 
-/**
- * Shares still being prepared after their Expense was saved, by Expense id. Router state must
- * be serialisable, so the Group page picks the promise up here instead.
- */
-/** How long a share note waits for the Group page before it is dropped. */
-const SHARE_KEPT_MS = 60_000;
-const pendingShares = new Map<string, Promise<SavedShare>>();
-export const watchPendingShare = (expenseId: string) => pendingShares.get(expenseId);
-export const settlePendingShare = (expenseId: string) => pendingShares.delete(expenseId);
-
 /** Prepare one Expense for sharing; a missing Invite never prevents sharing with existing Members. */
 export function useExpenseSharing(groupId: string) {
   const sharing = useLineShare();
@@ -34,8 +25,10 @@ export function useExpenseSharing(groupId: string) {
     group: Group,
     nameOf: (memberId: string) => string,
     sendToChat: boolean,
-  ): Promise<SavedShare> {
+  ): Promise<SavedShare | null> {
+    const asked = currentEpoch();
     const token = await sharing.inviteToken(groupId, { cached: true });
+    if (asked !== currentEpoch()) return null;
     const card = buildExpenseCard(expense, group, nameOf, token);
     let chat: ChatSendResult = "none";
     if (sendToChat) {
@@ -44,7 +37,7 @@ export function useExpenseSharing(groupId: string) {
         .then((): ChatSendResult => "sent")
         .catch((): ChatSendResult => "failed");
     }
-    return { card, chat };
+    return asked === currentEpoch() ? { card, chat } : null;
   }
   /** Best effort: have the Invite ready before the card is built. */
   function warm() {
@@ -52,13 +45,7 @@ export function useExpenseSharing(groupId: string) {
   }
   /** Prepare in the background; the Group page shows the result once it arrives. */
   function prepareLater(...args: Parameters<typeof prepare>) {
-    const id = args[0].id;
-    const share = prepare(...args);
-    pendingShares.set(id, share);
-    // If the user left before the Group page could pick it up, nobody else will drop it.
-    setTimeout(() => {
-      if (pendingShares.get(id) === share) pendingShares.delete(id);
-    }, SHARE_KEPT_MS);
+    rememberShare(groupId, args[0].id, prepare(...args));
   }
   return { prepare, prepareLater, warm };
 }

@@ -1,17 +1,11 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import type { Group } from "@split/shared";
 import { Plane, Plus, Trash2, UserPlus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ExpenseList } from "../expenses/ExpenseList.js";
 import { ExpenseSavedToast } from "../expenses/ExpenseSavedToast.js";
-import { dismissDeleteFailure, useDeleteFailure } from "../expenses/delete-failure.js";
-import { clearJustSaved, useJustSaved } from "../expenses/pending-writes.js";
-import {
-  type SavedShare,
-  settlePendingShare,
-  watchPendingShare,
-} from "../expenses/expense-sharing.js";
+import { useDeleteFailure, useSavedShares } from "../expenses/writes.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
 import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
@@ -44,34 +38,7 @@ function GroupDetail({ group }: { group: Group }) {
   ];
   // `?tab=trip` or `?tab=settle` opens a tab directly
   const asked = useSearchParams()[0].get("tab") ?? "";
-  // The note after saving an Expense is prepared in the background; the store names the Expense
-  // (and drives the highlight). A reload finds nothing pending and shows no note.
-  const newExpenseId = useJustSaved(group.id);
-  useEffect(() => clearJustSaved, []);
-  const [saved, setSaved] = useState<{ expenseId: string; share: SavedShare }[]>([]);
-  useEffect(() => {
-    if (newExpenseId === undefined) return;
-    const pending = watchPendingShare(newExpenseId);
-    if (pending === undefined) return;
-    // A result is shown whenever it arrives, even after a newer save or the hint's own expiry.
-    void pending
-      .then((share) => {
-        setSaved((all) =>
-          all.some((r) => r.expenseId === newExpenseId)
-            ? all
-            : [...all, { expenseId: newExpenseId, share }],
-        );
-      })
-      .catch(() => undefined)
-      // Settle either way, so an entry never outlives its page or a failed card build.
-      .finally(() => {
-        settlePendingShare(newExpenseId);
-      });
-  }, [newExpenseId]);
-  const first = saved[0];
-  const dropFirst = useCallback(() => {
-    setSaved((all) => all.slice(1));
-  }, []);
+  const { first, dismiss } = useSavedShares(group.id);
   const deleteFailure = useDeleteFailure(group.id);
   const [activeTab, setActiveTab] = useState(
     tabs.some((tab) => tab.value === asked) ? asked : "expenses",
@@ -80,15 +47,15 @@ function GroupDetail({ group }: { group: Group }) {
     <div className="flex flex-col gap-3">
       {/* One note at a time; the next waits its turn, so none hides another. */}
       {first !== undefined && (
-        <ExpenseSavedToast key={first.expenseId} saved={first.share} onDone={dropFirst} />
+        <ExpenseSavedToast key={first.expenseId} saved={first.share} onDone={dismiss} />
       )}
-      {deleteFailure !== null && (
+      {deleteFailure.message !== null && (
         <p
           role="alert"
           className="flex items-center justify-between gap-3 rounded-2xl bg-peach p-3 font-bold"
         >
-          <span>{deleteFailure}</span>
-          <button type="button" className="min-h-11 px-3" onClick={dismissDeleteFailure}>
+          <span>{deleteFailure.message}</span>
+          <button type="button" className="min-h-11 px-3" onClick={deleteFailure.dismiss}>
             {t("expense.deleteFailedDismiss")}
           </button>
         </p>

@@ -1,54 +1,8 @@
-import type { CurrencyCode, Expense, ExpenseInput, ExpensePage, Rate, Stop } from "@split/shared";
-import {
-  type InfiniteData,
-  type QueryFunctionContext,
-  useInfiniteQuery,
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useMemo } from "react";
-import type { ClientRequestOptions } from "hono/client";
-import { createApiClient } from "../api/client.js";
-import { ApiFailure, toApiFailure } from "../api/errors.js";
-import { useAuth } from "../auth/AuthProvider.js";
-import { groupKeys } from "../groups/api.js";
-import { failureMessage } from "../groups/ui.js";
-import { t } from "../i18n/messages.js";
-import { dismissDeleteFailure, reportDeleteFailure } from "./delete-failure.js";
-import { sameEdit } from "./edit-reconcile.js";
-import { currentEpoch, markDeleting, unmarkDeleting } from "./pending-writes.js";
-import { abortable, invalidateStats, readWithRev } from "../groups/sync.js";
+import type { CurrencyCode, Expense, ExpensePage, Rate, Stop } from "@split/shared";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import { abortable, expenseKeys, readWithRev as read, useGroupData } from "../groups/data.js";
 
 /** TanStack Query hooks over the Worker's Expense, Rate and Stop routes (SPEC §5.1). */
-
-export const expenseKeys = {
-  list: (groupId: string) => ["groups", groupId, "expenses"] as const,
-  one: (groupId: string, expenseId: string) => ["groups", groupId, "expenses", expenseId] as const,
-  stops: (groupId: string, day: string) => ["groups", groupId, "stops", day] as const,
-  rate: (date: string, base: CurrencyCode, quote: CurrencyCode) =>
-    ["rates", date, base, quote] as const,
-};
-
-function useSession() {
-  const { session } = useAuth();
-  return useMemo(() => ({ api: createApiClient(session.fetch), fetch: session.fetch }), [session]);
-}
-
-async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
-  return readWithRev<T>(call, context);
-}
-
-/** A JSON body plus headers; the Worker reads bodies itself, so the typed client has no input. */
-function jsonWith(body: unknown, headers: Record<string, string>): ClientRequestOptions {
-  return {
-    init: {
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json", ...headers },
-    },
-  };
-}
 
 /** Routes whose query string the typed client cannot describe are called by path. */
 const path = (base: string, query: Record<string, string | undefined>) => {
@@ -61,7 +15,7 @@ const path = (base: string, query: Record<string, string | undefined>) => {
 
 /** A Group's Expenses, newest first, 50 a page. */
 export function useExpenses(groupId: string) {
-  const { fetch } = useSession();
+  const { fetch } = useGroupData();
   return useInfiniteQuery({
     queryKey: expenseKeys.list(groupId),
     initialPageParam: undefined as string | undefined,
@@ -78,7 +32,7 @@ export function useExpenses(groupId: string) {
 }
 
 export function useExpense(groupId: string, expenseId: string) {
-  const { api } = useSession();
+  const { api } = useGroupData();
   return useQuery({
     queryKey: expenseKeys.one(groupId, expenseId),
     queryFn: (ctx) =>
@@ -94,7 +48,7 @@ export function useExpense(groupId: string, expenseId: string) {
 
 /** The reference Exchange rate for a day, or nothing when both currencies are the same. */
 export function useRate(date: string, base: CurrencyCode, quote: CurrencyCode) {
-  const { fetch } = useSession();
+  const { fetch } = useGroupData();
   return useQuery({
     queryKey: expenseKeys.rate(date, base, quote),
     enabled: base !== quote && date !== "",
@@ -106,7 +60,7 @@ export function useRate(date: string, base: CurrencyCode, quote: CurrencyCode) {
 
 /** The reference rates from each of `bases` into `quote` for one day, in the order of `bases`. */
 export function useRates(date: string, quote: CurrencyCode, bases: readonly CurrencyCode[]) {
-  const { fetch } = useSession();
+  const { fetch } = useGroupData();
   return useQueries({
     queries: bases.map((base) => ({
       queryKey: expenseKeys.rate(date, base, quote),
@@ -120,126 +74,11 @@ export function useRates(date: string, quote: CurrencyCode, bases: readonly Curr
 
 /** A Trip's Stops on one day, for the Expense's Stop link. */
 export function useStops(groupId: string, day: string, enabled: boolean) {
-  const { fetch } = useSession();
+  const { fetch } = useGroupData();
   return useQuery({
     queryKey: expenseKeys.stops(groupId, day),
     enabled: enabled && day !== "",
     queryFn: () =>
       read<Stop[]>(fetch(path(`/api/v1/groups/${encodeURIComponent(groupId)}/stops`, { day }))),
-  });
-}
-
-/** Re-reads the Group (Balances, Members, Expenses) and the Group list after a write. */
-function useRefresh(groupId: string) {
-  const client = useQueryClient();
-  return () =>
-    Promise.all([
-      invalidateStats(client),
-      client.invalidateQueries({ queryKey: groupKeys.group(groupId) }),
-      client.invalidateQueries({ queryKey: groupKeys.all, exact: true }),
-    ]);
-}
-
-/**
- * Creates an Expense under the caller's `Idempotency-Key`, or edits one under
- * `If-Match: <updatedAt>`. A retried create must reuse its key so it cannot write twice.
- */
-export function useSaveExpense(groupId: string) {
-  const { api } = useSession();
-  const refresh = useRefresh(groupId);
-  const client = useQueryClient();
-  // A retry whose answer was lost meets EDIT_CONFLICT with its own edit already applied:
-  // that is a success, not a conflict (the server has no idempotency key for edits).
-  async function readEdit(input: ExpenseInput, expense: Expense): Promise<Expense> {
-    const param = { id: groupId, eid: expense.id };
-    try {
-      return await read<Expense>(
-        api.groups[":id"].expenses[":eid"].$patch(
-          { param },
-          jsonWith(input, { "If-Match": String(expense.updatedAt) }),
-        ),
-      );
-    } catch (error) {
-      if (!(error instanceof ApiFailure) || error.code !== "EDIT_CONFLICT") throw error;
-      const held = await read<Expense>(api.groups[":id"].expenses[":eid"].$get({ param }));
-      if (sameEdit(input, held)) return held;
-      throw error;
-    }
-  }
-  return useMutation({
-    mutationFn: (
-      save:
-        | { kind: "create"; input: ExpenseInput; idempotencyKey: string }
-        | { kind: "edit"; input: ExpenseInput; expense: Expense },
-    ) =>
-      save.kind === "create"
-        ? read<Expense>(
-            api.groups[":id"].expenses.$post(
-              { param: { id: groupId } },
-              jsonWith(save.input, { "Idempotency-Key": save.idempotencyKey }),
-            ),
-          )
-        : readEdit(save.input, save.expense),
-    onMutate: () => ({ epoch: currentEpoch() }),
-    onSuccess: (expense, _save, context) => {
-      // Asked by an account that has since signed out: its answer belongs to nobody now.
-      if (context.epoch !== currentEpoch()) return;
-      client.setQueryData(expenseKeys.one(groupId, expense.id), expense);
-      client.setQueryData<InfiniteData<ExpensePage>>(expenseKeys.list(groupId), (data) => {
-        if (!data) return data;
-        const exists = data.pages.some((p) => p.expenses.some((e) => e.id === expense.id));
-        if (exists) return data;
-        const [first, ...rest] = data.pages;
-        if (!first) return data;
-        return {
-          ...data,
-          pages: [{ ...first, expenses: [expense, ...first.expenses] }, ...rest],
-        };
-      });
-      void refresh();
-    },
-  });
-}
-
-export function useDeleteExpense(groupId: string) {
-  const { api } = useSession();
-  const refresh = useRefresh(groupId);
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (expenseId: string) => {
-      const res: Response = await api.groups[":id"].expenses[":eid"].$delete({
-        param: { id: groupId, eid: expenseId },
-      });
-      if (!res.ok) throw await toApiFailure(res);
-    },
-    // The row is hidden by the list while the delete is pending, so a refetch cannot bring it back.
-    onMutate: (expenseId) => {
-      dismissDeleteFailure();
-      markDeleting(groupId, expenseId);
-      return { epoch: currentEpoch() };
-    },
-    onError: (error, expenseId, context) => {
-      if (context?.epoch !== currentEpoch()) return;
-      unmarkDeleting(groupId, expenseId);
-      reportDeleteFailure(groupId, t("expense.deleteFailed", { reason: failureMessage(error) }));
-      void refresh();
-    },
-    onSuccess: (_, expenseId, context) => {
-      if (context.epoch !== currentEpoch()) return;
-      client.removeQueries({ queryKey: expenseKeys.one(groupId, expenseId) });
-      client.setQueryData<InfiniteData<ExpensePage>>(expenseKeys.list(groupId), (data) =>
-        data === undefined
-          ? data
-          : {
-              ...data,
-              pages: data.pages.map((p) => ({
-                ...p,
-                expenses: p.expenses.filter((e) => e.id !== expenseId),
-              })),
-            },
-      );
-      unmarkDeleting(groupId, expenseId);
-      void refresh();
-    },
   });
 }

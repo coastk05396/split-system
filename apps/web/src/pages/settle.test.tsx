@@ -6,8 +6,8 @@ import { makeUser } from "../../test/fake-api.js";
 import type { FakeGroups, SeedGroup } from "../../test/fake-groups.js";
 import type { SettlementPage } from "@split/shared";
 import type { InfiniteData } from "@tanstack/react-query";
-import { handleGroupSignal } from "../groups/sync.js";
-import { settlementKeys } from "../settlements/api.js";
+import { handleGroupSignal } from "../groups/data.js";
+import { settlementKeys } from "../groups/data.js";
 import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
 
 const me = makeUser("小宇");

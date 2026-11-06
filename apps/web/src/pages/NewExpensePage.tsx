@@ -1,4 +1,3 @@
-import { announceSaved } from "../expenses/pending-writes.js";
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useExpenseSharing } from "../expenses/expense-sharing.js";
@@ -48,7 +47,6 @@ export function NewExpensePage() {
         onSaving={() => void navigate(`/groups/${id}`)}
         onSaved={(saved, { sendToChat }) => {
           sharing.prepareLater(saved, group.data, memberNames(members.data), sendToChat);
-          announceSaved(id, saved.id);
         }}
       />
     </div>

@@ -12,8 +12,14 @@ export type ApiClient = ReturnType<typeof createApiClient>;
  * Request options carrying a JSON body. The Worker validates bodies with `parseBody`
  * rather than a Hono validator, so the typed client has no `json` input for them.
  */
-export function withJson(body: unknown): ClientRequestOptions {
+export function withJson(
+  body: unknown,
+  headers: Record<string, string> = {},
+): ClientRequestOptions {
   return {
-    init: { body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+    init: {
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json", ...headers },
+    },
   };
 }
