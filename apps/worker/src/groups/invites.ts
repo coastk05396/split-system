@@ -9,7 +9,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import type { Bindings } from "../env.js";
-import { memberOperation } from "./ledger-client.js";
+import { groupLedger } from "../ledger-client.js";
 import { groupDirectory, groupMemberSummary, invites } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
@@ -33,31 +33,21 @@ async function ledgerInvite(
   actorMemberId?: string,
   setRev?: (rev: string) => void,
 ): Promise<Invite> {
-  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(groupId)).fetch(
-    "https://ledger.internal/invite",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        action,
-        now,
-        actorMemberId,
-        token: token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined),
-        expiresAt: now + INVITE_TTL_MS,
-      }),
-    },
-  );
-  const data = await response.json<Invite | { error: string }>();
-  if ("error" in data)
-    throw new ApiError(
-      data.error === "INVITE_EXPIRED"
-        ? "INVITE_EXPIRED"
-        : data.error === "FORBIDDEN"
-          ? "FORBIDDEN"
-          : "NOT_FOUND",
-    );
-  const rev = response.headers.get("X-Group-Rev");
-  if (rev !== null) setRev?.(rev);
-  return data;
+  const { value, rev } = await groupLedger(env, groupId)
+    .invite({
+      action,
+      now,
+      actorMemberId,
+      token: token ?? (action === "ensure" || action === "regenerate" ? newToken() : undefined),
+      expiresAt: now + INVITE_TTL_MS,
+    })
+    .catch((error: unknown) => {
+      if (!(error instanceof ApiError)) throw error;
+      const kept = error.code === "INVITE_EXPIRED" || error.code === "FORBIDDEN";
+      throw new ApiError(kept ? error.code : "NOT_FOUND");
+    });
+  setRev?.(String(rev));
+  return value;
 }
 
 export async function regenerateInvite(
@@ -146,11 +136,12 @@ export async function previewInvite(
 
   const creatorOf = new Map(everyone.map((m) => [m.id, m.createdByMemberId]));
   const nameOf = new Map(everyone.map((m) => [m.id, m.displayName]));
-  const response = await env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id)).fetch(
-    "https://ledger.internal/placeholder-counts",
-  );
-  if (!response.ok) throw new ApiError("INTERNAL");
-  const counts = new Map(Object.entries(await response.json<Record<string, number>>()));
+  const { value: placeholderCounts } = await groupLedger(env, group.id)
+    .placeholderCounts()
+    .catch(() => {
+      throw new ApiError("INTERNAL");
+    });
+  const counts = new Map(Object.entries(placeholderCounts));
 
   return {
     groupId: group.id,
@@ -201,7 +192,7 @@ export async function joinGroup(
     async () => {
       const mine = await ownRow(db, group.id, userId);
       if (mine?.status !== "active") await assertUnderGroupCap(db, userId);
-      return memberOperation(env, group.id, {
+      return groupLedger(env, group.id).member({
         action: "join",
         inviteToken: token,
         userId,
@@ -212,7 +203,7 @@ export async function joinGroup(
     () => isSeated(db, env, group.id, userId),
   );
   setRev?.(String(result.rev));
-  return { groupId: group.id, memberId: result.memberId };
+  return { groupId: group.id, memberId: result.value.memberId };
 }
 
 export async function claimPlaceholder(
@@ -233,7 +224,7 @@ export async function claimPlaceholder(
     group.id,
     now,
     () =>
-      memberOperation(env, group.id, {
+      groupLedger(env, group.id).member({
         action: "claim",
         inviteToken: token,
         userId,
@@ -243,5 +234,5 @@ export async function claimPlaceholder(
     () => isSeated(db, env, group.id, userId),
   );
   setRev?.(String(result.rev));
-  return { groupId: group.id, memberId: result.memberId };
+  return { groupId: group.id, memberId: result.value.memberId };
 }

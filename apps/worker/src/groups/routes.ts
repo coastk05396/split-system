@@ -34,74 +34,39 @@ import {
 } from "./members.js";
 import { requireAdmin, requireMember } from "./membership.js";
 import type { Bindings } from "../env.js";
+import { groupLedger } from "../ledger-client.js";
 import type { MemberRow } from "./membership.js";
 
-function ledger(env: Bindings, id: string) {
-  return env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(id));
-}
-
+/** The Group as one Member sees it, with the rev it was read at. */
 async function readLedgerGroup(env: Bindings, me: MemberRow) {
-  const response = await ledger(env, me.groupId).fetch("https://ledger.internal/state");
-  if (!response.ok) throw new ApiError("NOT_FOUND");
-  const state = await response.json<{
-    rev: number;
-    locked: boolean;
-    group: {
-      id: string;
-      name: string;
-      settlement_currency: "TWD" | "USD" | "JPY" | "THB";
-      is_trip: number;
-      trip_destination: string | null;
-      trip_start_date: string | null;
-      trip_end_date: string | null;
-      trip_notes: string | null;
-      created_at: number;
-      updated_at: number;
-    };
-    seated: Array<{
-      id: string;
-      user_id: string | null;
-      placeholder_name: string | null;
-      role: "admin" | "member";
-      net_balance: number;
-    }>;
-  }>();
+  const { value: state, rev } = await groupLedger(env, me.groupId).state();
   const seatedMe = state.seated.find((member) => member.id === me.id) ?? {
     id: me.id,
     role: me.role,
-    net_balance: me.netBalance,
+    balance: me.netBalance,
   };
   const preview = await Promise.all(
     state.seated.slice(0, 4).map(async (member) => {
       const user =
-        member.user_id === null
+        member.userId === null
           ? null
           : await env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?")
-              .bind(member.user_id)
+              .bind(member.userId)
               .first<{ display_name: string; picture_url: string | null }>();
       return {
-        name: user?.display_name ?? member.placeholder_name ?? "?",
+        name: user?.display_name ?? member.placeholderName ?? "?",
         pictureUrl: user?.picture_url ?? null,
       };
     }),
   );
   return {
-    rev: state.rev,
+    rev,
     group: {
-      id: state.group.id,
-      name: state.group.name,
-      settlementCurrency: state.group.settlement_currency,
-      isTrip: state.group.is_trip === 1,
-      tripDestination: state.group.trip_destination,
-      tripStartDate: state.group.trip_start_date,
-      tripEndDate: state.group.trip_end_date,
-      tripNotes: state.group.trip_notes,
-      createdAt: state.group.created_at,
-      updatedAt: state.group.updated_at,
+      ...state.group,
       settlementCurrencyLocked: state.locked,
       memberCount: state.seated.length,
       memberPreview: preview,
-      me: { memberId: seatedMe.id, role: seatedMe.role, balance: seatedMe.net_balance },
+      me: { memberId: seatedMe.id, role: seatedMe.role, balance: seatedMe.balance },
     },
   };
 }
@@ -137,17 +102,10 @@ export function groupRoutes(deps: AppDeps) {
       if (summary === null)
         await consumeRateLimit(createDb(c.env.DB), userId, "membership_lookup", deps.now());
       if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
-        const check = await c.env.GROUP_LEDGER.get(c.env.GROUP_LEDGER.idFromName(groupId)).fetch(
-          "https://ledger.internal/member-check",
-          { headers: { "X-User-Id": userId } },
-        );
-        if (!check.ok) throw new ApiError("NOT_FOUND");
+        if (!(await groupLedger(c.env, groupId).isMember(userId))) throw new ApiError("NOT_FOUND");
         return c.body(null, 426);
       }
-      const id = c.env.GROUP_LEDGER.idFromName(groupId);
-      const headers = new Headers({ Upgrade: "websocket", "X-User-Id": userId });
-      if (protocol !== undefined) headers.set("Sec-WebSocket-Protocol", protocol);
-      return c.env.GROUP_LEDGER.get(id).fetch("https://ledger.internal/live", { headers });
+      return groupLedger(c.env, groupId).live(userId, protocol);
     })
     .get("/groups", signedIn, async (c) =>
       c.json(await listGroups(createDb(c.env.DB), c.var.userId), 200),
@@ -164,26 +122,17 @@ export function groupRoutes(deps: AppDeps) {
       const id = crypto.randomUUID();
       const memberId = crypto.randomUUID();
       const now = deps.now();
-      const stub = ledger(c.env, id);
+      const ledger = groupLedger(c.env, id);
       await withReservation(
         c.env.DB,
         c.var.userId,
         id,
         now,
         async () => {
-          const response = await stub.fetch("https://ledger.internal/create", {
-            method: "POST",
-            body: JSON.stringify({ id, memberId, userId: c.var.userId, now, input }),
-          });
-          if (!response.ok) throw new ApiError("INTERNAL");
+          if (!(await ledger.create({ id, memberId, userId: c.var.userId, now, input })))
+            throw new ApiError("INTERNAL");
         },
-        async () => {
-          const response = await stub.fetch("https://ledger.internal/member-check", {
-            headers: { "X-User-Id": c.var.userId },
-          });
-          if (response.status !== 204 && response.status !== 404) throw new ApiError("INTERNAL");
-          return response.status === 204;
-        },
+        () => ledger.isMember(c.var.userId),
       );
       c.header("X-Group-Rev", "0");
       return c.json(
@@ -215,68 +164,33 @@ export function groupRoutes(deps: AppDeps) {
         .first();
       if (summary === null)
         await consumeRateLimit(createDb(c.env.DB), c.var.userId, "membership_lookup", deps.now());
-      const check = await ledger(c.env, id).fetch("https://ledger.internal/member-check", {
-        headers: { "X-User-Id": c.var.userId },
-      });
-      if (!check.ok) throw new ApiError("NOT_FOUND");
-      const response = await ledger(c.env, id).fetch("https://ledger.internal/state");
-      if (!response.ok) throw new ApiError("NOT_FOUND");
-      const state = await response.json<{
-        rev: number;
-        locked: boolean;
-        group: {
-          id: string;
-          name: string;
-          settlement_currency: "TWD" | "USD" | "JPY" | "THB";
-          is_trip: number;
-          trip_destination: string | null;
-          trip_start_date: string | null;
-          trip_end_date: string | null;
-          trip_notes: string | null;
-          created_at: number;
-          updated_at: number;
-        };
-        seated: Array<{
-          id: string;
-          user_id: string | null;
-          placeholder_name: string | null;
-          role: "admin" | "member";
-          net_balance: number;
-        }>;
-      }>();
-      const me = state.seated.find((member) => member.user_id === c.var.userId);
+      const ledger = groupLedger(c.env, id);
+      if (!(await ledger.isMember(c.var.userId))) throw new ApiError("NOT_FOUND");
+      const { value: state, rev } = await ledger.state();
+      const me = state.seated.find((member) => member.userId === c.var.userId);
       if (!me) throw new ApiError("NOT_FOUND");
       const preview = await Promise.all(
         state.seated.slice(0, 6).map(async (member) => {
           const user =
-            member.user_id === null
+            member.userId === null
               ? null
               : await c.env.DB.prepare("SELECT display_name, picture_url FROM users WHERE id=?")
-                  .bind(member.user_id)
+                  .bind(member.userId)
                   .first<{ display_name: string; picture_url: string | null }>();
           return {
-            name: user?.display_name ?? member.placeholder_name ?? "?",
+            name: user?.display_name ?? member.placeholderName ?? "?",
             pictureUrl: user?.picture_url ?? null,
           };
         }),
       );
-      c.header("X-Group-Rev", String(state.rev));
+      c.header("X-Group-Rev", String(rev));
       return c.json(
         {
-          id: state.group.id,
-          name: state.group.name,
-          settlementCurrency: state.group.settlement_currency,
-          isTrip: state.group.is_trip === 1,
-          tripDestination: state.group.trip_destination,
-          tripStartDate: state.group.trip_start_date,
-          tripEndDate: state.group.trip_end_date,
-          tripNotes: state.group.trip_notes,
-          createdAt: state.group.created_at,
-          updatedAt: state.group.updated_at,
+          ...state.group,
           settlementCurrencyLocked: state.locked,
           memberCount: state.seated.length,
           memberPreview: preview,
-          me: { memberId: me.id, role: me.role, balance: me.net_balance },
+          me: { memberId: me.id, role: me.role, balance: me.balance },
         },
         200,
       );
@@ -287,31 +201,23 @@ export function groupRoutes(deps: AppDeps) {
       requireAdmin(me);
       const expected = requireIfMatch(c);
       const patch = await parseBody(c, groupPatchSchema);
-      const response = await ledger(c.env, me.groupId).fetch("https://ledger.internal/patch", {
-        method: "POST",
-        body: JSON.stringify({
-          patch,
-          expected,
-          now: deps.now(),
-          actorMemberId: me.id,
-        }),
-      });
-      if (!response.ok) {
-        const result = await response.json<{ error: string }>();
-        if (result.error === "FORBIDDEN" || response.status === 403)
-          throw new ApiError("FORBIDDEN");
-        if (result.error === "EDIT_CONFLICT")
-          throw new ApiError("EDIT_CONFLICT", {
-            current: (await readLedgerGroup(c.env, me)).group,
-          });
-        if (result.error === "SETTLEMENT_CURRENCY_LOCKED")
-          throw new ApiError("SETTLEMENT_CURRENCY_LOCKED");
-        if (result.error === "TRIP_DATES_INVALID")
-          throw new ApiError("VALIDATION_FAILED", {
-            issues: [{ path: ["tripEndDate"], message: "TRIP_DATES_INVALID" }],
-          });
-        throw new ApiError("INTERNAL");
-      }
+      await groupLedger(c.env, me.groupId)
+        .patch({ patch, expected, now: deps.now(), actorMemberId: me.id })
+        .catch(async (error: unknown) => {
+          if (!(error instanceof ApiError)) throw error;
+          if (error.code === "EDIT_CONFLICT")
+            throw new ApiError("EDIT_CONFLICT", {
+              current: (await readLedgerGroup(c.env, me)).group,
+            });
+          // VALIDATION_FAILED carries the invalid Trip dates; a missing Group was INTERNAL.
+          if (
+            error.code === "FORBIDDEN" ||
+            error.code === "SETTLEMENT_CURRENCY_LOCKED" ||
+            error.code === "VALIDATION_FAILED"
+          )
+            throw error;
+          throw new ApiError("INTERNAL");
+        });
       const updated = await readLedgerGroup(c.env, me);
       c.header("X-Group-Rev", String(updated.rev));
       return c.json(updated.group, 200);
@@ -320,17 +226,13 @@ export function groupRoutes(deps: AppDeps) {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
       requireAdmin(me);
-      const response = await ledger(c.env, me.groupId).fetch("https://ledger.internal/delete", {
-        method: "POST",
-        body: JSON.stringify({
-          actorMemberId: me.id,
-        }),
-      });
-      if (!response.ok) {
-        if (response.status === 403) throw new ApiError("FORBIDDEN");
-        throw new ApiError("INTERNAL");
-      }
-      const { rev } = await response.json<{ rev: number }>();
+      const { rev } = await groupLedger(c.env, me.groupId)
+        .delete({ actorMemberId: me.id })
+        .catch((error: unknown) => {
+          throw error instanceof ApiError && error.code === "FORBIDDEN"
+            ? error
+            : new ApiError("INTERNAL");
+        });
       c.header("X-Group-Rev", String(rev));
       return c.body(null, 204);
     })
@@ -360,14 +262,14 @@ export function groupRoutes(deps: AppDeps) {
     .delete("/groups/:id/members/:mid", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      const result = await removeMember(db, me, c.req.param("mid"), c.env);
+      const result = await removeMember(me, c.req.param("mid"), c.env);
       c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
     })
     .post("/groups/:id/leave", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      const result = await leaveGroup(db, me, c.env);
+      const result = await leaveGroup(me, c.env);
       c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
     })

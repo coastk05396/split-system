@@ -11,17 +11,16 @@ function failedCreates(mode: "response" | "throw") {
           const stub = namespace.get(id);
           return new Proxy(stub, {
             get(target, key) {
-              if (key === "fetch")
-                return (input: RequestInfo | URL, init?: RequestInit) => {
-                  const url = input instanceof Request ? input.url : input.toString();
-                  if (new URL(url).pathname === "/create") {
-                    if (mode === "throw") throw new Error("injected create failure");
-                    return Promise.resolve(new Response(null, { status: 503 }));
-                  }
-                  return target.fetch(input, init);
+              if (key === "createGroup")
+                return () => {
+                  if (mode === "throw") throw new Error("injected create failure");
+                  return Promise.resolve(false);
                 };
               const value: unknown = Reflect.get(target, key, target);
-              return typeof value === "function" ? (value.bind(target) as unknown) : value;
+              // An RPC method has no own `bind`: the stub would ask the ledger for it.
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, target, args)
+                : value;
             },
           });
         };

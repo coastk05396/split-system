@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createDb } from "../src/db/client.js";
 import { groupDirectory, groupMemberSummary } from "../src/db/schema.js";
+import { groupLedger } from "../src/ledger-client.js";
 import { bearer, call, clock, signIn, uniqueSub, type Session } from "./auth-harness.js";
 import { failDirectoryWrites } from "./d1-faults.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
@@ -126,8 +127,7 @@ describe("POST /groups and GET /groups/:id", () => {
     expect((await send(yu, "POST", `/groups/${group.id}/members`, { name: "小明" })).status).toBe(
       201,
     );
-    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
-    const state = await (await stub.fetch("https://ledger.internal/state")).json<{ rev: number }>();
+    const state = await groupLedger(env, group.id).state();
     expect(state.rev).toBeGreaterThan(0);
 
     const read = await send(yu, "GET", `/groups/${group.id}/members`);
@@ -458,21 +458,16 @@ describe("ledger authority for admin actions (stale D1 projection)", () => {
     });
     expect(promoteRes.status).toBe(200);
 
-    const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));
+    const ledger = groupLedger(env, group.id);
 
     // Case 1: Actor is demoted in DO ledger, but D1 projection is stale (still says admin)
-    const demoteRes = await stub.fetch("https://ledger.internal/member-op", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "patch",
-        actorMemberId: mingMember.id,
-        targetMemberId: group.me.memberId,
-        input: { role: "member" },
-        now: Date.now(),
-      }),
+    await ledger.member({
+      action: "patch",
+      actorMemberId: mingMember.id,
+      targetMemberId: group.me.memberId,
+      input: { role: "member" },
+      now: Date.now(),
     });
-    expect(demoteRes.status).toBe(200);
 
     // Force D1 to be stale: set yu's role back to admin in D1 members table
     await db
@@ -504,18 +499,12 @@ describe("ledger authority for admin actions (stale D1 projection)", () => {
     expect(deleteRes.status).toBe(403);
 
     // Case 2: Actor is removed in DO ledger, but D1 projection is stale (still says active admin)
-    const removeRes = await stub.fetch("https://ledger.internal/member-op", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "remove",
-        actorMemberId: mingMember.id,
-        targetMemberId: group.me.memberId,
-        targetBalance: 0,
-        now: Date.now(),
-      }),
+    await ledger.member({
+      action: "remove",
+      actorMemberId: mingMember.id,
+      targetMemberId: group.me.memberId,
+      now: Date.now(),
     });
-    expect(removeRes.status).toBe(200);
 
     // Force D1 to be stale again: set yu's status back to active admin in D1
     await db
