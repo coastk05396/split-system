@@ -17,12 +17,36 @@ import {
   placeholderInputSchema,
   settlementSchema,
   tripDatesValid,
+  type Invite,
+  type MemberRole,
+  type MemberStatus,
 } from "@split/shared";
 import { z } from "zod";
 import type { Bindings } from "./env.js";
-import { ApiError } from "./errors.js";
-import { expenseOperation, type ExpenseOperation } from "./ledger-expenses.js";
+import { ApiError, ERROR_STATUS, invalid, type ErrorCode } from "./errors.js";
+import { expenseOperation } from "./ledger-expenses.js";
 import { settlementOperation } from "./ledger-settlements.js";
+import type {
+  AccountDeletionOperation,
+  AccountDeletionValues,
+  CreateGroup,
+  DeleteGroup,
+  ExpenseAction,
+  ExpenseValues,
+  GroupFields,
+  InviteOperation,
+  LedgerMember,
+  LedgerResult,
+  LedgerState,
+  MemberOperation,
+  MemberOutcome,
+  PatchGroup,
+  SeatedMember,
+  SettlementOperation,
+  SettlementValues,
+  StopOperation,
+  StopValues,
+} from "./ledger-types.js";
 
 const initialiseGroupSchema = z.object({
   id: z.uuid(),
@@ -45,7 +69,27 @@ const memberOpSchema = z.object({
   hasHistory: z.boolean().optional(),
 });
 
-interface LedgerGroup extends Record<string, SqlStorageValue> {
+const inviteOpSchema = z.object({
+  action: z.enum(["get", "regenerate", "ensure", "validate"]),
+  token: z.string().optional(),
+  actorMemberId: z.string().optional(),
+  now: z.number().int(),
+  expiresAt: z.number().int().optional(),
+});
+
+const patchGroupSchema = z.object({
+  patch: groupPatchSchema,
+  expected: z.number().int(),
+  now: z.number().int(),
+  actorMemberId: z.string().min(1),
+});
+
+const deleteGroupSchema = z.union([
+  z.object({ actorMemberId: z.string().min(1) }),
+  z.object({ systemBypass: z.literal(true) }),
+]);
+
+interface GroupRow extends Record<string, SqlStorageValue> {
   id: string;
   name: string;
   settlement_currency: string;
@@ -60,7 +104,7 @@ interface LedgerGroup extends Record<string, SqlStorageValue> {
   deleted: number;
 }
 
-interface LedgerMember extends Record<string, SqlStorageValue> {
+interface MemberRow extends Record<string, SqlStorageValue> {
   id: string;
   user_id: string | null;
   placeholder_name: string | null;
@@ -98,6 +142,40 @@ const MEMBER_FACING_PATHS: ReadonlySet<string> = new Set([
   "/placeholder-counts",
   "/settlement-check",
 ]);
+
+type LedgerFailure = Extract<LedgerResult<unknown>, { ok: false }>;
+
+const notFound = { ok: false, code: "NOT_FOUND" } as const;
+
+/** An ApiError as a result RPC can carry. Anything else is a bug, so it propagates. */
+function failure(error: unknown): LedgerFailure {
+  if (error instanceof ApiError) return { ok: false, code: error.code, details: error.details };
+  throw error;
+}
+
+/** The `{ error, details }` body the stop and expense routes answered with. */
+function flatError(result: LedgerFailure): Response {
+  return Response.json(
+    { error: result.code, details: result.details },
+    { status: ERROR_STATUS[result.code] },
+  );
+}
+
+/** The API's own `{ error: { code, details } }` body, which settlements and account deletion used. */
+function nestedError(result: LedgerFailure): Response {
+  const error = new ApiError(result.code, result.details);
+  return Response.json(error.toBody(), { status: error.status });
+}
+
+function seatedMember(row: MemberRow): SeatedMember {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    placeholderName: row.placeholder_name,
+    role: row.role as MemberRole,
+    balance: row.net_balance,
+  };
+}
 
 export class GroupLedger extends DurableObject<Bindings> {
   private drainInFlight: Promise<void> | undefined;
@@ -228,13 +306,13 @@ export class GroupLedger extends DurableObject<Bindings> {
           )
           .toArray()[0],
         expenseIds,
-        group: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one(),
+        group: sql.exec<GroupRow>("SELECT * FROM ledger_group").one(),
         expenses: expenseRows.map((row) => expenseSchema.parse(JSON.parse(row.data) as unknown)),
         locked:
           sql.exec<{ n: number }>("SELECT count(*) n FROM ledger_expenses WHERE deleted=0").one()
             .n > 0,
         members: sql
-          .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at, rowid")
+          .exec<MemberRow>("SELECT * FROM ledger_members ORDER BY created_at, rowid")
           .toArray(),
         settlements: sql
           .exec<{ data: string; idempotency_key: string | null }>(
@@ -540,545 +618,545 @@ export class GroupLedger extends DurableObject<Bindings> {
 
   /** Whether the Group has been deleted (its tombstone is kept, with its rows). */
   private isDeleted(): boolean {
-    const sql = this.ctx.storage.sql;
     return (
-      sql
-        .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_group'")
-        .toArray().length > 0 &&
-      sql.exec("SELECT 1 FROM ledger_group WHERE deleted=1").toArray().length > 0
+      this.hasTable("ledger_group") &&
+      this.ctx.storage.sql.exec("SELECT 1 FROM ledger_group WHERE deleted=1").toArray().length > 0
     );
   }
 
-  override async fetch(request: Request): Promise<Response> {
-    // What Members reach through the API stops with the Group. Delete, account deletion and
-    // the maintenance paths stay open so a failed deletion can still be put back.
-    if (MEMBER_FACING_PATHS.has(new URL(request.url).pathname) && this.isDeleted()) {
-      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
-    }
-    if (new URL(request.url).pathname === "/stop-op" && request.method === "POST") {
-      const op: unknown = await request.json();
-      try {
-        const edit = (sql: SqlStorage): Edit<unknown> => {
-          const outcome = stopOperation(sql, op);
-          if (!outcome.changed) return { value: outcome.value };
-          if (outcome.deletedId !== undefined) {
-            for (const row of sql
-              .exec<{ id: string; data: string }>(
-                "SELECT id,data FROM ledger_expenses WHERE deleted=0",
-              )
-              .toArray()) {
-              const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
-              if (expense.stopId !== outcome.deletedId) continue;
-              expense.stopId = null;
-              sql.exec(
-                "UPDATE ledger_expenses SET data=? WHERE id=?",
-                JSON.stringify(expense),
-                row.id,
-              );
-            }
-          }
-          return {
-            value: outcome.value,
-            dirty: [outcome.deletedId === undefined ? "group" : `stop:${outcome.deletedId}`],
-          };
-        };
-        // A list reads, so it does not commit.
-        const { value, rev } = z.object({ action: z.literal("list") }).safeParse(op).success
-          ? this.ctx.storage.transactionSync(() => ({
-              value: edit(this.ctx.storage.sql).value,
-              rev: this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one()
-                .rev,
-            }))
-          : await this.commit(edit);
-        return Response.json({ value }, { headers: { "X-Group-Rev": String(rev) } });
-      } catch (error) {
-        if (error instanceof ApiError)
-          return Response.json(
-            { error: error.code, details: error.details },
-            { status: error.status },
-          );
-        throw error;
-      }
-    }
-    if (new URL(request.url).pathname === "/placeholder-counts" && request.method === "GET") {
-      const counts: Record<string, number> = {};
-      for (const row of this.ctx.storage.sql
-        .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
-        .toArray()) {
-        const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
-        const ids = new Set([
-          ...expense.payers.map((payer) => payer.memberId),
-          ...expense.splits.map((split) => split.memberId),
-        ]);
-        for (const id of ids) counts[id] = (counts[id] ?? 0) + 1;
-      }
-      return Response.json(counts);
-    }
-    if (new URL(request.url).pathname === "/settlement-op" && request.method === "POST") {
-      const payload: unknown = await request.json();
-      try {
-        const edit = (sql: SqlStorage): Edit<unknown> => {
-          const now =
-            typeof payload === "object" &&
-            payload !== null &&
-            "now" in payload &&
-            typeof payload.now === "number"
-              ? payload.now
-              : Date.now();
-          const frozen = frozenBalances(sql, now);
-          const outcome = settlementOperation(sql, payload);
-          assertFrozenBalancesUnchanged(sql, frozen);
-          return outcome.changed
-            ? { value: outcome.data, dirty: [`settlement:${outcome.id ?? ""}`] }
-            : { value: outcome.data };
-        };
-        // A list reads, so it does not commit.
-        const { value, rev } = z.object({ action: z.literal("list") }).safeParse(payload).success
-          ? this.ctx.storage.transactionSync(() => ({
-              value: edit(this.ctx.storage.sql).value,
-              rev: this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one()
-                .rev,
-            }))
-          : await this.commit(edit);
-        return Response.json(value, { headers: { "X-Group-Rev": String(rev) } });
-      } catch (error) {
-        if (error instanceof ApiError)
-          return Response.json(error.toBody(), { status: error.status });
-        throw error;
-      }
-    }
-    if (new URL(request.url).pathname === "/expense-op" && request.method === "POST") {
-      const op = await request.json<ExpenseOperation>();
-      try {
-        const { value, rev } =
-          op.action === "create" || op.action === "update" || op.action === "delete"
-            ? await this.commit((sql) => {
-                const frozen = frozenBalances(sql, op.now);
-                const outcome = expenseOperation(sql, op);
-                assertFrozenBalancesUnchanged(sql, frozen);
-                if (!outcome.changed) return { value: outcome.value };
-                const expenseId =
-                  op.action === "create" ? expenseSchema.parse(outcome.value).id : op.id;
-                return { value: outcome.value, dirty: [`expense:${expenseId}`, "group"] };
-              })
-            : // A read does not commit.
-              this.ctx.storage.transactionSync(() => ({
-                value: expenseOperation(this.ctx.storage.sql, op).value,
-                rev: this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one()
-                  .rev,
-              }));
-        return Response.json({ value }, { headers: { "X-Group-Rev": String(rev) } });
-      } catch (error) {
-        if (error instanceof ApiError)
-          return Response.json(
-            { error: error.code, details: error.details },
-            { status: error.status },
-          );
-        throw error;
-      }
-    }
-    if (new URL(request.url).pathname === "/account-deletion" && request.method === "POST") {
-      const op = await request.json<{
-        action: "freeze" | "unfreeze" | "finalize" | "restore" | "commit";
-        userId: string;
-        now: number;
-        expires: number;
-      }>();
-      if (op.action === "freeze") {
-        const result = this.ctx.storage.transactionSync(() =>
-          freezeAccount(this.ctx.storage.sql, op.userId, op.expires),
-        );
-        return Response.json(result);
-      }
-      if (op.action === "commit") {
-        this.ctx.storage.transactionSync(() => {
-          commitAccountDeletion(this.ctx.storage.sql, op.userId, op.expires);
-        });
-        return Response.json({ ok: true });
-      }
-      if (op.action === "unfreeze") {
-        this.ctx.storage.transactionSync(() => {
-          const exists =
-            this.ctx.storage.sql
-              .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='account_freezes'")
-              .toArray().length > 0;
-          if (exists)
-            this.ctx.storage.sql.exec(
-              "DELETE FROM account_freezes WHERE user_id=? AND expires_at=?",
-              op.userId,
-              op.expires,
-            );
-        });
-        return Response.json({ ok: true });
-      }
-      const initialized =
-        this.ctx.storage.sql
-          .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_members'")
-          .toArray().length > 0;
-      if (op.action === "restore") {
-        if (!initialized) return Response.json({ ok: true, restored: false });
-        const { value: restored } = await this.commit(
-          (sql) =>
-            restoreAccount(sql, op.userId, op.expires)
-              ? { value: true, dirty: ["group"] }
-              : { value: false },
-          { signal: "after push" },
-        );
-        return Response.json({ ok: true, restored });
-      }
-      if (!initialized) return Response.json({ ok: true });
-      try {
-        await this.commit((sql) =>
-          finalizeAccount(sql, op.userId, op.now, op.expires)
-            ? { value: undefined, dirty: ["group"], leaving: op.userId }
-            : { value: undefined },
-        );
-      } catch (error) {
-        if (error instanceof ApiError)
-          return Response.json(error.toBody(), { status: error.status });
-        throw error;
-      }
-      return Response.json({ ok: true });
-    }
-    if (new URL(request.url).pathname === "/member-op" && request.method === "POST") {
-      const parsed = memberOpSchema.safeParse(await request.json());
-      if (!parsed.success) return Response.json({ error: "VALIDATION_FAILED" }, { status: 400 });
-      const op = parsed.data;
-      const { value: result, rev } = await this.commit(
-        (
-          sql,
-        ): Edit<{
-          memberId?: string;
-          error?: string;
-          details?: unknown;
-          changed?: boolean;
-          closeUserId?: string | null;
-        }> => {
-          if (op.action === "join" || op.action === "claim") {
-            const invite = sql
-              .exec<{ token: string; expires_at: number }>(
-                "SELECT token,expires_at FROM ledger_invite LIMIT 1",
-              )
-              .toArray()[0];
-            if (!invite || invite.token !== op.inviteToken)
-              return { value: { error: "NOT_FOUND" } };
-            if (invite.expires_at <= op.now) return { value: { error: "INVITE_EXPIRED" } };
-          }
-          if (
-            (op.action === "join" || op.action === "claim") &&
-            op.userId !== undefined &&
-            isFrozen(sql, op.userId, op.now)
-          )
-            return { value: { error: "FORBIDDEN" } };
-          const all = sql
-            .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
-            .toArray();
-          const actor = all.find((m) => m.id === op.actorMemberId && m.status === "active");
-          const target = all.find((m) => m.id === op.targetMemberId);
-          const seated = all.filter((m) => m.status === "active" || m.status === "placeholder");
-          const conflict = (name: string, except?: string) =>
-            seated.some(
-              (m) =>
-                m.id !== except &&
-                (m.placeholder_name ?? (m.user_id === null ? undefined : op.names?.[m.user_id])) ===
-                  name,
-            );
-          let memberId = op.targetMemberId;
-          let closeUserId: string | null = null;
-          if (op.action !== "join" && op.action !== "claim" && actor === undefined)
-            return { value: { error: "NOT_FOUND" } };
-          if (op.action === "add") {
-            const input = placeholderInputSchema.safeParse(op.input);
-            if (!input.success || memberId === undefined)
-              return { value: { error: "VALIDATION_FAILED" } };
-            if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
-            if (conflict(input.data.name)) return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
-            sql.exec(
-              "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at,placeholder_name,created_by_member_id) VALUES (?,NULL,'member','placeholder',0,?,?,?)",
-              memberId,
-              op.now,
-              input.data.name,
-              actor?.id ?? null,
-            );
-          } else if (op.action === "join") {
-            if (op.userId === undefined || memberId === undefined)
-              return { value: { error: "VALIDATION_FAILED" } };
-            const existing = all.find((m) => m.user_id === op.userId);
-            if (existing?.status === "active")
-              return { value: { memberId: existing.id, changed: false } };
-            if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
-            if (existing !== undefined) {
-              memberId = existing.id;
-              sql.exec(
-                "UPDATE ledger_members SET status='active',role='member' WHERE id=?",
-                memberId,
-              );
-            } else
-              sql.exec(
-                "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at) VALUES (?,?,'member','active',0,?)",
-                memberId,
-                op.userId,
-                op.now,
-              );
-          } else if (op.action === "claim") {
-            if (op.userId === undefined || target === undefined)
-              return { value: { error: "NOT_FOUND" } };
-            if (all.some((m) => m.user_id === op.userId))
-              return { value: { error: "ALREADY_MEMBER" } };
-            if (target.status !== "placeholder") return { value: { error: "PLACEHOLDER_CLAIMED" } };
-            sql.exec(
-              "UPDATE ledger_members SET user_id=?,status='active',placeholder_name=NULL WHERE id=?",
-              op.userId,
-              target.id,
-            );
-            memberId = target.id;
-          } else if (op.action === "patch") {
-            if (target === undefined) return { value: { error: "NOT_FOUND" } };
-            const input = memberPatchSchema.safeParse(op.input);
-            if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
-            if (input.data.placeholderName !== undefined) {
-              if (target.status !== "placeholder") return { value: { error: "MEMBER_NOT_ACTIVE" } };
-              if (conflict(input.data.placeholderName, target.id))
-                return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
-              sql.exec(
-                "UPDATE ledger_members SET placeholder_name=? WHERE id=?",
-                input.data.placeholderName,
-                target.id,
-              );
-            } else if (input.data.role !== undefined) {
-              if (actor?.role !== "admin") return { value: { error: "FORBIDDEN" } };
-              if (target.status !== "active") return { value: { error: "MEMBER_NOT_ACTIVE" } };
-              if (
-                target.role === "admin" &&
-                input.data.role === "member" &&
-                !all.some((m) => m.id !== target.id && m.status === "active" && m.role === "admin")
-              )
-                return { value: { error: "LAST_ADMIN" } };
-              sql.exec("UPDATE ledger_members SET role=? WHERE id=?", input.data.role, target.id);
-            }
-          } else {
-            const leaving = op.action === "leave" ? actor : target;
-            if (leaving === undefined) return { value: { error: "NOT_FOUND" } };
-            if (actor === undefined) return { value: { error: "FORBIDDEN" } };
-            if (
-              leaving.id !== actor.id &&
-              actor.role !== "admin" &&
-              leaving.status !== "placeholder"
+  private hasTable(name: string): boolean {
+    return (
+      this.ctx.storage.sql
+        .exec("SELECT name FROM sqlite_master WHERE type='table' AND name=?", name)
+        .toArray().length > 0
+    );
+  }
+
+  private rev(): number {
+    return this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev;
+  }
+
+  /** A read in one transaction, with the rev it read at. It commits nothing. */
+  private read<T>(run: (sql: SqlStorage) => T): { value: T; rev: number } {
+    return this.ctx.storage.transactionSync(() => ({
+      value: run(this.ctx.storage.sql),
+      rev: this.rev(),
+    }));
+  }
+
+  // RPC operations, one per ledger action. The internal fetch routes below answer through them.
+
+  async stop(op: StopOperation): Promise<LedgerResult<StopValues[keyof StopValues]>> {
+    if (this.isDeleted()) return notFound;
+    try {
+      const edit = (sql: SqlStorage): Edit<unknown> => {
+        const outcome = stopOperation(sql, op);
+        if (!outcome.changed) return { value: outcome.value };
+        if (outcome.deletedId !== undefined) {
+          for (const row of sql
+            .exec<{ id: string; data: string }>(
+              "SELECT id,data FROM ledger_expenses WHERE deleted=0",
             )
-              return { value: { error: "FORBIDDEN" } };
-            if (leaving.status === "former") return { value: { error: "MEMBER_NOT_ACTIVE" } };
-            const balance = leaving.net_balance;
-            if (balance !== 0)
-              return {
-                value: {
-                  error: "BALANCE_NOT_ZERO",
-                  details: {
-                    balance,
-                    currency: sql.exec<LedgerGroup>("SELECT * FROM ledger_group").one()
-                      .settlement_currency,
-                  },
-                },
-              };
-            if (
-              leaving.id === actor.id &&
-              leaving.role === "admin" &&
-              !all.some((m) => m.id !== leaving.id && m.status === "active" && m.role === "admin")
-            )
-              return { value: { error: "LAST_ADMIN" } };
-            const hasHistory =
-              leaving.status === "placeholder" &&
-              sql
-                .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
-                .toArray()
-                .some((row) => {
-                  const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
-                  return (
-                    expense.payers.some((payer) => payer.memberId === leaving.id) ||
-                    expense.splits.some((split) => split.memberId === leaving.id)
-                  );
-                });
-            if (leaving.status === "placeholder" && !hasHistory)
-              sql.exec("DELETE FROM ledger_members WHERE id=?", leaving.id);
-            else if (leaving.status === "placeholder")
-              sql.exec(
-                "UPDATE ledger_members SET status='former',placeholder_name=NULL,nickname='已移除的成員' WHERE id=?",
-                leaving.id,
-              );
-            else
-              sql.exec(
-                "UPDATE ledger_members SET status='former',role='member' WHERE id=?",
-                leaving.id,
-              );
-            memberId = leaving.id;
-            closeUserId = leaving.user_id;
+            .toArray()) {
+            const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+            if (expense.stopId !== outcome.deletedId) continue;
+            expense.stopId = null;
+            sql.exec(
+              "UPDATE ledger_expenses SET data=? WHERE id=?",
+              JSON.stringify(expense),
+              row.id,
+            );
           }
-          if (memberId === undefined) throw new Error("Member operation has no target");
-          const history =
-            op.action === "claim" ||
-            op.action === "leave" ||
-            op.action === "remove" ||
-            (op.action === "join" && all.some((member) => member.id === memberId))
-              ? sql
-                  .exec<{ id: string }>(
-                    `SELECT id FROM ledger_expenses WHERE deleted=0 AND (
-                 EXISTS (SELECT 1 FROM json_each(data,'$.payers') WHERE json_extract(value,'$.memberId')=?) OR
-                 EXISTS (SELECT 1 FROM json_each(data,'$.splits') WHERE json_extract(value,'$.memberId')=?))`,
-                    memberId,
-                    memberId,
-                  )
-                  .toArray()
-                  .map((row) => `expense:${row.id}`)
-              : [];
-          return {
-            value: { memberId, changed: true, closeUserId },
-            dirty: [...history, "group"],
-            leaving: closeUserId,
-          };
-        },
+        }
+        return {
+          value: outcome.value,
+          dirty: [outcome.deletedId === undefined ? "group" : `stop:${outcome.deletedId}`],
+        };
+      };
+      // A list reads, so it does not commit.
+      const { value, rev } =
+        op.action === "list" ? this.read((sql) => edit(sql).value) : await this.commit(edit);
+      return { ok: true, value: value as StopValues[keyof StopValues], rev };
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async settlement(
+    op: SettlementOperation,
+  ): Promise<LedgerResult<SettlementValues[keyof SettlementValues]>> {
+    if (this.isDeleted()) return notFound;
+    try {
+      const edit = (sql: SqlStorage): Edit<unknown> => {
+        const frozen = frozenBalances(sql, op.now);
+        const outcome = settlementOperation(sql, op);
+        assertFrozenBalancesUnchanged(sql, frozen);
+        return outcome.changed
+          ? { value: outcome.data, dirty: [`settlement:${outcome.id ?? ""}`] }
+          : { value: outcome.data };
+      };
+      // A list reads, so it does not commit.
+      const { value, rev } =
+        op.action === "list" ? this.read((sql) => edit(sql).value) : await this.commit(edit);
+      return { ok: true, value: value as SettlementValues[keyof SettlementValues], rev };
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async expense(op: ExpenseAction): Promise<LedgerResult<ExpenseValues[keyof ExpenseValues]>> {
+    if (this.isDeleted()) return notFound;
+    try {
+      const { value, rev } =
+        op.action === "create" || op.action === "update" || op.action === "delete"
+          ? await this.commit((sql) => {
+              const frozen = frozenBalances(sql, op.now);
+              const outcome = expenseOperation(sql, op);
+              assertFrozenBalancesUnchanged(sql, frozen);
+              if (!outcome.changed) return { value: outcome.value };
+              const expenseId =
+                op.action === "create" ? expenseSchema.parse(outcome.value).id : op.id;
+              return { value: outcome.value, dirty: [`expense:${expenseId}`, "group"] };
+            })
+          : // A read does not commit.
+            this.read((sql) => expenseOperation(sql, op).value);
+      return { ok: true, value: value as ExpenseValues[keyof ExpenseValues], rev };
+    } catch (error) {
+      return failure(error);
+    }
+  }
+
+  async accountDeletion(
+    op: AccountDeletionOperation,
+  ): Promise<LedgerResult<AccountDeletionValues[keyof AccountDeletionValues]>> {
+    const sql = this.ctx.storage.sql;
+    const done = (
+      value: AccountDeletionValues[keyof AccountDeletionValues],
+    ): LedgerResult<AccountDeletionValues[keyof AccountDeletionValues]> => ({
+      ok: true,
+      value,
+      rev: this.hasTable("ledger_meta") ? this.rev() : 0,
+    });
+    if (op.action === "freeze")
+      return done(
+        this.ctx.storage.transactionSync(() => freezeAccount(sql, op.userId, op.expires)),
+      );
+    if (op.action === "commit") {
+      this.ctx.storage.transactionSync(() => {
+        commitAccountDeletion(sql, op.userId, op.expires);
+      });
+      return done(null);
+    }
+    if (op.action === "unfreeze") {
+      this.ctx.storage.transactionSync(() => {
+        if (this.hasTable("account_freezes"))
+          sql.exec(
+            "DELETE FROM account_freezes WHERE user_id=? AND expires_at=?",
+            op.userId,
+            op.expires,
+          );
+      });
+      return done(null);
+    }
+    const initialized = this.hasTable("ledger_members");
+    if (op.action === "restore") {
+      if (!initialized) return done(false);
+      const { value: restored } = await this.commit(
+        (edited) =>
+          restoreAccount(edited, op.userId, op.expires)
+            ? { value: true, dirty: ["group"] }
+            : { value: false },
         { signal: "after push" },
       );
-      if (result.error !== undefined) return Response.json(result, { status: 409 });
-      const { memberId, ...rest } = result;
-      return Response.json({ memberId, rev, ...rest });
+      return done(restored);
     }
-    if (new URL(request.url).pathname === "/invite" && request.method === "POST") {
-      const parsed = z
-        .object({
-          action: z.enum(["get", "regenerate", "ensure", "validate"]),
-          token: z.string().optional(),
-          actorMemberId: z.string().optional(),
-          now: z.number().int(),
-          expiresAt: z.number().int().optional(),
-        })
-        .safeParse(await request.json());
-      if (!parsed.success) return new Response(null, { status: 400 });
-      const op = parsed.data;
-      const edit = (
-        sql: SqlStorage,
-      ): Edit<{ error: string } | { token: string; expiresAt: number }> => {
-        const existing = sql
-          .exec<{ token: string; expires_at: number }>(
-            "SELECT token,expires_at FROM ledger_invite LIMIT 1",
-          )
-          .toArray()[0];
-        if (op.action !== "validate") {
-          const actor = sql
-            .exec<{ role: string }>(
-              "SELECT role FROM ledger_members WHERE id=? AND status='active'",
-              op.actorMemberId ?? "",
+    if (!initialized) return done(null);
+    try {
+      await this.commit((edited) =>
+        finalizeAccount(edited, op.userId, op.now, op.expires)
+          ? { value: undefined, dirty: ["group"], leaving: op.userId }
+          : { value: undefined },
+      );
+    } catch (error) {
+      return failure(error);
+    }
+    return done(null);
+  }
+
+  member(op: MemberOperation): Promise<LedgerResult<MemberOutcome>> {
+    return this.memberOperation(op);
+  }
+
+  private async memberOperation(
+    op: z.infer<typeof memberOpSchema>,
+  ): Promise<LedgerResult<MemberOutcome>> {
+    if (this.isDeleted()) return notFound;
+    const { value: result, rev } = await this.commit(
+      (sql): Edit<MemberOutcome | { error: ErrorCode; details?: unknown }> => {
+        if (op.action === "join" || op.action === "claim") {
+          const invite = sql
+            .exec<{ token: string; expires_at: number }>(
+              "SELECT token,expires_at FROM ledger_invite LIMIT 1",
             )
             .toArray()[0];
-          if (!actor) return { value: { error: "NOT_FOUND" } };
-          if (op.action === "regenerate" && actor.role !== "admin")
-            return { value: { error: "FORBIDDEN" } };
+          if (!invite || invite.token !== op.inviteToken) return { value: { error: "NOT_FOUND" } };
+          if (invite.expires_at <= op.now) return { value: { error: "INVITE_EXPIRED" } };
         }
-        if (op.action === "validate")
-          return {
-            value:
-              !existing || existing.token !== op.token
-                ? { error: "NOT_FOUND" }
-                : existing.expires_at <= op.now
-                  ? { error: "INVITE_EXPIRED" }
-                  : { token: existing.token, expiresAt: existing.expires_at },
-          };
-        if (op.action === "get")
-          return {
-            value:
-              !existing || existing.expires_at <= op.now
-                ? { error: "NOT_FOUND" }
-                : { token: existing.token, expiresAt: existing.expires_at },
-          };
-        if (op.action === "ensure" && existing && existing.expires_at > op.now)
-          return { value: { token: existing.token, expiresAt: existing.expires_at } };
-        if (!op.token || op.expiresAt === undefined)
-          return { value: { error: "VALIDATION_FAILED" } };
-        sql.exec("DELETE FROM ledger_invite");
-        sql.exec(
-          "INSERT INTO ledger_invite(token,expires_at,created_at) VALUES (?,?,?)",
-          op.token,
-          op.expiresAt,
-          op.now,
-        );
-        return { value: { token: op.token, expiresAt: op.expiresAt }, dirty: ["group"] };
-      };
-      // Showing or checking the Invite reads, so it does not commit.
-      const { value, rev } =
-        op.action === "get" || op.action === "validate"
-          ? this.ctx.storage.transactionSync(() => ({
-              value: edit(this.ctx.storage.sql).value,
-              rev: this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one()
-                .rev,
-            }))
-          : await this.commit(edit);
-      if ("error" in value) return Response.json(value, { status: 404 });
-      return Response.json(
-        { token: value.token, expiresAt: value.expiresAt },
-        { headers: { "X-Group-Rev": String(rev) } },
-      );
-    }
-    if (new URL(request.url).pathname === "/members" && request.method === "GET") {
-      const asUser = request.headers.get("X-User-Id");
-      if (
-        asUser !== null &&
-        this.ctx.storage.sql
-          .exec("SELECT 1 FROM ledger_members WHERE user_id=? AND status='active'", asUser)
-          .toArray().length === 0
-      )
-        return new Response(null, { status: 404 });
-      const members = this.ctx.storage.sql
-        .exec<LedgerMember>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
-        .toArray();
-      const { rev } = this.ctx.storage.sql
-        .exec<{ rev: number }>("SELECT rev FROM ledger_meta")
-        .one();
-      return Response.json({ members, rev });
-    }
-    if (new URL(request.url).pathname === "/settlement-check" && request.method === "GET") {
-      const candidate = request.headers.get("X-User-Id");
-      const sid = new URL(request.url).searchParams.get("id");
-      if (!candidate || !sid) return new Response(null, { status: 400 });
-      const sql = this.ctx.storage.sql;
-      const isMember =
-        sql
-          .exec(
-            "SELECT 1 FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'",
-            candidate,
-          )
-          .toArray().length > 0;
-      if (!isMember) return new Response(null, { status: 404 });
-      const found =
-        sql.exec("SELECT 1 FROM ledger_settlements WHERE id=?", sid).toArray().length > 0;
-      if (!found) return new Response(null, { status: 404 });
-      return Response.json({ found: true });
-    }
-    if (new URL(request.url).pathname === "/state" && request.method === "GET") {
-      const group = this.ctx.storage.sql
-        .exec<LedgerGroup>("SELECT * FROM ledger_group WHERE deleted = 0")
-        .toArray()[0];
-      if (group === undefined) return new Response(null, { status: 404 });
-      const meta = this.ctx.storage.sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one();
-      const locked =
-        this.ctx.storage.sql
-          .exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0")
-          .one().n > 0;
-      const seated = this.ctx.storage.sql
-        .exec<LedgerMember>(
-          "SELECT * FROM ledger_members WHERE status IN ('active','placeholder') ORDER BY created_at,rowid",
+        if (
+          (op.action === "join" || op.action === "claim") &&
+          op.userId !== undefined &&
+          isFrozen(sql, op.userId, op.now)
         )
-        .toArray();
-      return Response.json({ group, rev: meta.rev, locked, seated });
+          return { value: { error: "FORBIDDEN" } };
+        const all = sql
+          .exec<MemberRow>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
+          .toArray();
+        const actor = all.find((m) => m.id === op.actorMemberId && m.status === "active");
+        const target = all.find((m) => m.id === op.targetMemberId);
+        const seated = all.filter((m) => m.status === "active" || m.status === "placeholder");
+        const conflict = (name: string, except?: string) =>
+          seated.some(
+            (m) =>
+              m.id !== except &&
+              (m.placeholder_name ?? (m.user_id === null ? undefined : op.names?.[m.user_id])) ===
+                name,
+          );
+        let memberId = op.targetMemberId;
+        let closeUserId: string | null = null;
+        if (op.action !== "join" && op.action !== "claim" && actor === undefined)
+          return { value: { error: "NOT_FOUND" } };
+        if (op.action === "add") {
+          const input = placeholderInputSchema.safeParse(op.input);
+          if (!input.success || memberId === undefined)
+            return { value: { error: "VALIDATION_FAILED" } };
+          if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
+          if (conflict(input.data.name)) return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
+          sql.exec(
+            "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at,placeholder_name,created_by_member_id) VALUES (?,NULL,'member','placeholder',0,?,?,?)",
+            memberId,
+            op.now,
+            input.data.name,
+            actor?.id ?? null,
+          );
+        } else if (op.action === "join") {
+          if (op.userId === undefined || memberId === undefined)
+            return { value: { error: "VALIDATION_FAILED" } };
+          const existing = all.find((m) => m.user_id === op.userId);
+          if (existing?.status === "active")
+            return { value: { memberId: existing.id, changed: false } };
+          if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
+          if (existing !== undefined) {
+            memberId = existing.id;
+            sql.exec(
+              "UPDATE ledger_members SET status='active',role='member' WHERE id=?",
+              memberId,
+            );
+          } else
+            sql.exec(
+              "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at) VALUES (?,?,'member','active',0,?)",
+              memberId,
+              op.userId,
+              op.now,
+            );
+        } else if (op.action === "claim") {
+          if (op.userId === undefined || target === undefined)
+            return { value: { error: "NOT_FOUND" } };
+          if (all.some((m) => m.user_id === op.userId))
+            return { value: { error: "ALREADY_MEMBER" } };
+          if (target.status !== "placeholder") return { value: { error: "PLACEHOLDER_CLAIMED" } };
+          sql.exec(
+            "UPDATE ledger_members SET user_id=?,status='active',placeholder_name=NULL WHERE id=?",
+            op.userId,
+            target.id,
+          );
+          memberId = target.id;
+        } else if (op.action === "patch") {
+          if (target === undefined) return { value: { error: "NOT_FOUND" } };
+          const input = memberPatchSchema.safeParse(op.input);
+          if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
+          if (input.data.placeholderName !== undefined) {
+            if (target.status !== "placeholder") return { value: { error: "MEMBER_NOT_ACTIVE" } };
+            if (conflict(input.data.placeholderName, target.id))
+              return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
+            sql.exec(
+              "UPDATE ledger_members SET placeholder_name=? WHERE id=?",
+              input.data.placeholderName,
+              target.id,
+            );
+          } else if (input.data.role !== undefined) {
+            if (actor?.role !== "admin") return { value: { error: "FORBIDDEN" } };
+            if (target.status !== "active") return { value: { error: "MEMBER_NOT_ACTIVE" } };
+            if (
+              target.role === "admin" &&
+              input.data.role === "member" &&
+              !all.some((m) => m.id !== target.id && m.status === "active" && m.role === "admin")
+            )
+              return { value: { error: "LAST_ADMIN" } };
+            sql.exec("UPDATE ledger_members SET role=? WHERE id=?", input.data.role, target.id);
+          }
+        } else {
+          const leaving = op.action === "leave" ? actor : target;
+          if (leaving === undefined) return { value: { error: "NOT_FOUND" } };
+          if (actor === undefined) return { value: { error: "FORBIDDEN" } };
+          if (leaving.id !== actor.id && actor.role !== "admin" && leaving.status !== "placeholder")
+            return { value: { error: "FORBIDDEN" } };
+          if (leaving.status === "former") return { value: { error: "MEMBER_NOT_ACTIVE" } };
+          const balance = leaving.net_balance;
+          if (balance !== 0)
+            return {
+              value: {
+                error: "BALANCE_NOT_ZERO",
+                details: {
+                  balance,
+                  currency: sql.exec<GroupRow>("SELECT * FROM ledger_group").one()
+                    .settlement_currency,
+                },
+              },
+            };
+          if (
+            leaving.id === actor.id &&
+            leaving.role === "admin" &&
+            !all.some((m) => m.id !== leaving.id && m.status === "active" && m.role === "admin")
+          )
+            return { value: { error: "LAST_ADMIN" } };
+          const hasHistory =
+            leaving.status === "placeholder" &&
+            sql
+              .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
+              .toArray()
+              .some((row) => {
+                const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+                return (
+                  expense.payers.some((payer) => payer.memberId === leaving.id) ||
+                  expense.splits.some((split) => split.memberId === leaving.id)
+                );
+              });
+          if (leaving.status === "placeholder" && !hasHistory)
+            sql.exec("DELETE FROM ledger_members WHERE id=?", leaving.id);
+          else if (leaving.status === "placeholder")
+            sql.exec(
+              "UPDATE ledger_members SET status='former',placeholder_name=NULL,nickname='已移除的成員' WHERE id=?",
+              leaving.id,
+            );
+          else
+            sql.exec(
+              "UPDATE ledger_members SET status='former',role='member' WHERE id=?",
+              leaving.id,
+            );
+          memberId = leaving.id;
+          closeUserId = leaving.user_id;
+        }
+        if (memberId === undefined) throw new Error("Member operation has no target");
+        const history =
+          op.action === "claim" ||
+          op.action === "leave" ||
+          op.action === "remove" ||
+          (op.action === "join" && all.some((member) => member.id === memberId))
+            ? sql
+                .exec<{ id: string }>(
+                  `SELECT id FROM ledger_expenses WHERE deleted=0 AND (
+               EXISTS (SELECT 1 FROM json_each(data,'$.payers') WHERE json_extract(value,'$.memberId')=?) OR
+               EXISTS (SELECT 1 FROM json_each(data,'$.splits') WHERE json_extract(value,'$.memberId')=?))`,
+                  memberId,
+                  memberId,
+                )
+                .toArray()
+                .map((row) => `expense:${row.id}`)
+            : [];
+        return {
+          value: { memberId, changed: true, closeUserId },
+          dirty: [...history, "group"],
+          leaving: closeUserId,
+        };
+      },
+      { signal: "after push" },
+    );
+    if ("error" in result) return { ok: false, code: result.error, details: result.details };
+    return { ok: true, value: result, rev };
+  }
+
+  async invite(op: InviteOperation): Promise<LedgerResult<Invite>> {
+    if (this.isDeleted()) return notFound;
+    const edit = (sql: SqlStorage): Edit<{ error: ErrorCode } | Invite> => {
+      const existing = sql
+        .exec<{ token: string; expires_at: number }>(
+          "SELECT token,expires_at FROM ledger_invite LIMIT 1",
+        )
+        .toArray()[0];
+      if (op.action !== "validate") {
+        const actor = sql
+          .exec<{ role: string }>(
+            "SELECT role FROM ledger_members WHERE id=? AND status='active'",
+            op.actorMemberId ?? "",
+          )
+          .toArray()[0];
+        if (!actor) return { value: { error: "NOT_FOUND" } };
+        if (op.action === "regenerate" && actor.role !== "admin")
+          return { value: { error: "FORBIDDEN" } };
+      }
+      if (op.action === "validate")
+        return {
+          value:
+            !existing || existing.token !== op.token
+              ? { error: "NOT_FOUND" }
+              : existing.expires_at <= op.now
+                ? { error: "INVITE_EXPIRED" }
+                : { token: existing.token, expiresAt: existing.expires_at },
+        };
+      if (op.action === "get")
+        return {
+          value:
+            !existing || existing.expires_at <= op.now
+              ? { error: "NOT_FOUND" }
+              : { token: existing.token, expiresAt: existing.expires_at },
+        };
+      if (op.action === "ensure" && existing && existing.expires_at > op.now)
+        return { value: { token: existing.token, expiresAt: existing.expires_at } };
+      if (!op.token || op.expiresAt === undefined) return { value: { error: "VALIDATION_FAILED" } };
+      sql.exec("DELETE FROM ledger_invite");
+      sql.exec(
+        "INSERT INTO ledger_invite(token,expires_at,created_at) VALUES (?,?,?)",
+        op.token,
+        op.expiresAt,
+        op.now,
+      );
+      return { value: { token: op.token, expiresAt: op.expiresAt }, dirty: ["group"] };
+    };
+    // Showing or checking the Invite reads, so it does not commit.
+    const { value, rev } =
+      op.action === "get" || op.action === "validate"
+        ? this.read((sql) => edit(sql).value)
+        : await this.commit(edit);
+    return "error" in value ? { ok: false, code: value.error } : { ok: true, value, rev };
+  }
+
+  members(asUserId?: string): LedgerResult<LedgerMember[]> {
+    if (this.isDeleted()) return notFound;
+    const rows = this.memberRows(asUserId);
+    if (rows === undefined) return notFound;
+    return {
+      ok: true,
+      value: rows.map((row) => ({
+        ...seatedMember(row),
+        status: row.status as MemberStatus,
+        nickname: row.nickname,
+        createdByMemberId: row.created_by_member_id,
+      })),
+      rev: this.rev(),
+    };
+  }
+
+  /** Every Member row; undefined when `asUserId` is given and is not an active Member. */
+  private memberRows(asUserId: string | undefined): MemberRow[] | undefined {
+    const sql = this.ctx.storage.sql;
+    if (
+      asUserId !== undefined &&
+      sql
+        .exec("SELECT 1 FROM ledger_members WHERE user_id=? AND status='active'", asUserId)
+        .toArray().length === 0
+    )
+      return undefined;
+    return sql.exec<MemberRow>("SELECT * FROM ledger_members ORDER BY created_at,rowid").toArray();
+  }
+
+  placeholderCounts(): LedgerResult<Record<string, number>> {
+    if (this.isDeleted()) return notFound;
+    return { ok: true, value: this.expenseCounts(), rev: this.rev() };
+  }
+
+  /** How many live Expenses each Member pays or shares in. */
+  private expenseCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const row of this.ctx.storage.sql
+      .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
+      .toArray()) {
+      const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+      const ids = new Set([
+        ...expense.payers.map((payer) => payer.memberId),
+        ...expense.splits.map((split) => split.memberId),
+      ]);
+      for (const id of ids) counts[id] = (counts[id] ?? 0) + 1;
     }
-    if (new URL(request.url).pathname === "/patch" && request.method === "POST") {
-      const schema = z.object({
-        patch: groupPatchSchema,
-        expected: z.number().int(),
-        now: z.number().int(),
-        actorMemberId: z.string().min(1),
-      });
-      const parsed = schema.safeParse(await request.json().catch(() => null));
-      if (!parsed.success) return new Response(null, { status: 400 });
-      const { patch, expected, now, actorMemberId } = parsed.data;
-      const { value: result, rev } = await this.commit((sql): Edit<string> => {
+    return counts;
+  }
+
+  settlementCheck(userId: string, settlementId: string): boolean {
+    return (
+      this.isMember(userId) &&
+      this.ctx.storage.sql
+        .exec("SELECT 1 FROM ledger_settlements WHERE id=?", settlementId)
+        .toArray().length > 0
+    );
+  }
+
+  /** Whether the User is an active Member of this Group, and the Group is not deleted. */
+  isMember(userId: string): boolean {
+    return (
+      this.hasTable("ledger_members") &&
+      this.ctx.storage.sql
+        .exec(
+          "SELECT m.id FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'",
+          userId,
+        )
+        .toArray().length > 0
+    );
+  }
+
+  state(): LedgerResult<LedgerState> {
+    const state = this.stateRows();
+    if (state === undefined) return notFound;
+    const { group } = state;
+    return {
+      ok: true,
+      value: {
+        group: {
+          id: group.id,
+          name: group.name,
+          settlementCurrency: group.settlement_currency as GroupFields["settlementCurrency"],
+          isTrip: group.is_trip === 1,
+          tripDestination: group.trip_destination,
+          tripStartDate: group.trip_start_date,
+          tripEndDate: group.trip_end_date,
+          tripNotes: group.trip_notes,
+          createdAt: group.created_at,
+          updatedAt: group.updated_at,
+        },
+        locked: state.locked,
+        seated: state.seated.map(seatedMember),
+      },
+      rev: state.rev,
+    };
+  }
+
+  /** The live Group's row, rev, Expense lock and seated Members; undefined once deleted. */
+  private stateRows() {
+    const sql = this.ctx.storage.sql;
+    const group = sql.exec<GroupRow>("SELECT * FROM ledger_group WHERE deleted = 0").toArray()[0];
+    if (group === undefined) return undefined;
+    const locked =
+      sql.exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0").one().n >
+      0;
+    const seated = sql
+      .exec<MemberRow>(
+        "SELECT * FROM ledger_members WHERE status IN ('active','placeholder') ORDER BY created_at,rowid",
+      )
+      .toArray();
+    return { group, rev: this.rev(), locked, seated };
+  }
+
+  async patchGroup(input: PatchGroup): Promise<LedgerResult<null>> {
+    const { patch, expected, now, actorMemberId } = input;
+    const { value: result, rev } = await this.commit(
+      (
+        sql,
+      ): Edit<
+        | "OK"
+        | "FORBIDDEN"
+        | "NOT_FOUND"
+        | "EDIT_CONFLICT"
+        | "TRIP_DATES_INVALID"
+        | "SETTLEMENT_CURRENCY_LOCKED"
+      > => {
         {
           const actor = sql
             .exec<{ role: string; status: string }>(
@@ -1090,7 +1168,7 @@ export class GroupLedger extends DurableObject<Bindings> {
             return { value: "FORBIDDEN" };
         }
         const current = sql
-          .exec<LedgerGroup>("SELECT * FROM ledger_group WHERE deleted = 0")
+          .exec<GroupRow>("SELECT * FROM ledger_group WHERE deleted = 0")
           .toArray()[0];
         if (current === undefined) return { value: "NOT_FOUND" };
         if (current.updated_at !== expected) return { value: "EDIT_CONFLICT" };
@@ -1119,124 +1197,204 @@ export class GroupLedger extends DurableObject<Bindings> {
           Math.max(now, current.updated_at + 1),
         );
         return { value: "OK", dirty: ["group"] };
-      });
-      if (result === "FORBIDDEN") return Response.json({ error: result }, { status: 403 });
-      if (result !== "OK") return Response.json({ error: result }, { status: 409 });
-      return Response.json({ rev });
-    }
-    if (new URL(request.url).pathname === "/delete" && request.method === "POST") {
-      const deleteSchema = z.union([
-        z.object({ actorMemberId: z.string().min(1) }),
-        z.object({ systemBypass: z.literal(true) }),
-      ]);
-      const body: unknown = request.body ? await request.json().catch(() => null) : null;
-      const parsed = deleteSchema.safeParse(body);
-      if (!parsed.success) return new Response(null, { status: 400 });
-      if (
-        this.ctx.storage.sql
-          .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_group'")
-          .toArray().length === 0
+      },
+    );
+    if (result === "OK") return { ok: true, value: null, rev };
+    if (result === "TRIP_DATES_INVALID")
+      return failure(invalid("tripEndDate", "TRIP_DATES_INVALID"));
+    return { ok: false, code: result };
+  }
+
+  /** NOT_FOUND before the Group exists; FORBIDDEN unless an active admin asks. */
+  async deleteGroup(by: DeleteGroup): Promise<LedgerResult<null>> {
+    if (!this.hasTable("ledger_group")) return notFound;
+    const { value: allowed, rev } = await this.commit(
+      (sql) => {
+        if ("actorMemberId" in by) {
+          const actor = sql
+            .exec<{ role: string; status: string }>(
+              "SELECT role, status FROM ledger_members WHERE id=?",
+              by.actorMemberId,
+            )
+            .toArray()[0];
+          if (!actor || actor.status !== "active" || actor.role !== "admin")
+            return { value: false };
+        }
+        sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
+        return { value: true, dirty: ["group"] };
+      },
+      { closeAll: true },
+    );
+    return allowed ? { ok: true, value: null, rev } : { ok: false, code: "FORBIDDEN" };
+  }
+
+  /** False when the creator holds no live reservation for it, or the Group already exists. */
+  async createGroup(create: CreateGroup): Promise<boolean> {
+    const { id, memberId, userId, now, input } = create;
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const eligible = await this.env.DB.prepare(
+        `SELECT r.user_id FROM group_reservations r JOIN users u ON u.id=r.user_id
+        WHERE r.user_id=? AND r.group_id=? AND NOT EXISTS
+        (SELECT 1 FROM account_deletions d WHERE d.user_id=r.user_id AND d.expires_at>?)`,
       )
-        return new Response(null, { status: 404 });
-      const { value: allowed, rev } = await this.commit(
+        .bind(userId, id, now)
+        .first();
+      if (eligible === null) return false;
+      const created = await this.commit(
         (sql) => {
-          if ("actorMemberId" in parsed.data) {
-            const actor = sql
-              .exec<{ role: string; status: string }>(
-                "SELECT role, status FROM ledger_members WHERE id=?",
-                parsed.data.actorMemberId,
-              )
-              .toArray()[0];
-            if (!actor || actor.status !== "active" || actor.role !== "admin")
-              return { value: false };
-          }
-          sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
+          sql.exec(
+            "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
+          );
+          sql.exec(
+            "INSERT INTO ledger_meta (schema_version, rev) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
+          );
+          this.upgradeSchema();
+          if (sql.exec("SELECT id FROM ledger_group LIMIT 1").toArray().length > 0)
+            return { value: false };
+          sql.exec(
+            `INSERT INTO ledger_group (id, name, settlement_currency, default_expense_currency, is_trip,
+        trip_destination, trip_start_date, trip_end_date, trip_notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id,
+            input.name,
+            input.settlementCurrency,
+            input.settlementCurrency,
+            input.isTrip ? 1 : 0,
+            input.tripDestination ?? null,
+            input.tripStartDate ?? null,
+            input.tripEndDate ?? null,
+            input.tripNotes ?? null,
+            now,
+            now,
+          );
+          sql.exec(
+            "INSERT INTO ledger_members (id, user_id, role, status, net_balance, created_at) VALUES (?, ?, 'admin', 'active', 0, ?)",
+            memberId,
+            userId,
+            now,
+          );
           return { value: true, dirty: ["group"] };
         },
-        { closeAll: true },
+        { bumpRev: false, signal: "none" },
       );
-      if (!allowed) return Response.json({ error: "FORBIDDEN" }, { status: 403 });
-      return Response.json({ rev });
+      return created.value;
+    });
+  }
+
+  /**
+   * The internal HTTP routes, kept beside the RPC operations until every caller has moved over.
+   * Each answers through its operation and keeps its old status codes and bodies. The live-update
+   * WebSocket stays here for good.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    const pathname = new URL(request.url).pathname;
+    const post = request.method === "POST";
+    // What Members reach through the API stops with the Group. Delete, account deletion and
+    // the maintenance paths stay open so a failed deletion can still be put back.
+    if (MEMBER_FACING_PATHS.has(pathname) && this.isDeleted()) {
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
     }
-    if (new URL(request.url).pathname === "/create" && request.method === "POST") {
+    if (pathname === "/stop-op" && post) {
+      const result = await this.stop(await request.json<StopOperation>());
+      if (!result.ok) return flatError(result);
+      return Response.json(
+        { value: result.value },
+        { headers: { "X-Group-Rev": String(result.rev) } },
+      );
+    }
+    if (pathname === "/placeholder-counts" && request.method === "GET") {
+      return Response.json(this.expenseCounts());
+    }
+    if (pathname === "/settlement-op" && post) {
+      const result = await this.settlement(await request.json<SettlementOperation>());
+      if (!result.ok) return nestedError(result);
+      return Response.json(result.value, { headers: { "X-Group-Rev": String(result.rev) } });
+    }
+    if (pathname === "/expense-op" && post) {
+      const result = await this.expense(await request.json<ExpenseAction>());
+      if (!result.ok) return flatError(result);
+      return Response.json(
+        { value: result.value },
+        { headers: { "X-Group-Rev": String(result.rev) } },
+      );
+    }
+    if (pathname === "/account-deletion" && post) {
+      const op = await request.json<AccountDeletionOperation>();
+      const result = await this.accountDeletion(op);
+      if (!result.ok) return nestedError(result);
+      if (op.action === "freeze") return Response.json(result.value);
+      if (op.action === "restore") return Response.json({ ok: true, restored: result.value });
+      return Response.json({ ok: true });
+    }
+    if (pathname === "/member-op" && post) {
+      const parsed = memberOpSchema.safeParse(await request.json());
+      if (!parsed.success) return Response.json({ error: "VALIDATION_FAILED" }, { status: 400 });
+      const result = await this.memberOperation(parsed.data);
+      if (!result.ok)
+        return Response.json({ error: result.code, details: result.details }, { status: 409 });
+      const { memberId, ...rest } = result.value;
+      return Response.json({ memberId, rev: result.rev, ...rest });
+    }
+    if (pathname === "/invite" && post) {
+      const parsed = inviteOpSchema.safeParse(await request.json());
+      if (!parsed.success) return new Response(null, { status: 400 });
+      const result = await this.invite(parsed.data);
+      if (!result.ok) return Response.json({ error: result.code }, { status: 404 });
+      return Response.json(
+        { token: result.value.token, expiresAt: result.value.expiresAt },
+        { headers: { "X-Group-Rev": String(result.rev) } },
+      );
+    }
+    if (pathname === "/members" && request.method === "GET") {
+      const members = this.memberRows(request.headers.get("X-User-Id") ?? undefined);
+      if (members === undefined) return new Response(null, { status: 404 });
+      return Response.json({ members, rev: this.rev() });
+    }
+    if (pathname === "/settlement-check" && request.method === "GET") {
+      const candidate = request.headers.get("X-User-Id");
+      const sid = new URL(request.url).searchParams.get("id");
+      if (!candidate || !sid) return new Response(null, { status: 400 });
+      if (!this.settlementCheck(candidate, sid)) return new Response(null, { status: 404 });
+      return Response.json({ found: true });
+    }
+    if (pathname === "/state" && request.method === "GET") {
+      const state = this.stateRows();
+      if (state === undefined) return new Response(null, { status: 404 });
+      return Response.json(state);
+    }
+    if (pathname === "/patch" && post) {
+      const parsed = patchGroupSchema.safeParse(await request.json().catch(() => null));
+      if (!parsed.success) return new Response(null, { status: 400 });
+      const result = await this.patchGroup(parsed.data);
+      if (result.ok) return Response.json({ rev: result.rev });
+      if (result.code === "FORBIDDEN")
+        return Response.json({ error: result.code }, { status: 403 });
+      // The old route named the invalid Trip dates by their own code.
+      const error = result.code === "VALIDATION_FAILED" ? "TRIP_DATES_INVALID" : result.code;
+      return Response.json({ error }, { status: 409 });
+    }
+    if (pathname === "/delete" && post) {
+      const body: unknown = request.body ? await request.json().catch(() => null) : null;
+      const parsed = deleteGroupSchema.safeParse(body);
+      if (!parsed.success) return new Response(null, { status: 400 });
+      const result = await this.deleteGroup(parsed.data);
+      if (result.ok) return Response.json({ rev: result.rev });
+      if (result.code === "NOT_FOUND") return new Response(null, { status: 404 });
+      return Response.json({ error: result.code }, { status: 403 });
+    }
+    if (pathname === "/create" && post) {
       const parsed = initialiseGroupSchema.safeParse(await request.json());
       if (!parsed.success) return new Response(null, { status: 400 });
-      const { id, memberId, userId, now, input } = parsed.data;
-      const inserted = await this.ctx.blockConcurrencyWhile(async () => {
-        const eligible = await this.env.DB.prepare(
-          `SELECT r.user_id FROM group_reservations r JOIN users u ON u.id=r.user_id
-          WHERE r.user_id=? AND r.group_id=? AND NOT EXISTS
-          (SELECT 1 FROM account_deletions d WHERE d.user_id=r.user_id AND d.expires_at>?)`,
-        )
-          .bind(userId, id, now)
-          .first();
-        if (eligible === null) return false;
-        const created = await this.commit(
-          (sql) => {
-            sql.exec(
-              "CREATE TABLE IF NOT EXISTS ledger_meta (schema_version INTEGER NOT NULL, rev INTEGER NOT NULL)",
-            );
-            sql.exec(
-              "INSERT INTO ledger_meta (schema_version, rev) SELECT 1, 0 WHERE NOT EXISTS (SELECT 1 FROM ledger_meta)",
-            );
-            this.upgradeSchema();
-            if (sql.exec("SELECT id FROM ledger_group LIMIT 1").toArray().length > 0)
-              return { value: false };
-            sql.exec(
-              `INSERT INTO ledger_group (id, name, settlement_currency, default_expense_currency, is_trip,
-          trip_destination, trip_start_date, trip_end_date, trip_notes, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              id,
-              input.name,
-              input.settlementCurrency,
-              input.settlementCurrency,
-              input.isTrip ? 1 : 0,
-              input.tripDestination ?? null,
-              input.tripStartDate ?? null,
-              input.tripEndDate ?? null,
-              input.tripNotes ?? null,
-              now,
-              now,
-            );
-            sql.exec(
-              "INSERT INTO ledger_members (id, user_id, role, status, net_balance, created_at) VALUES (?, ?, 'admin', 'active', 0, ?)",
-              memberId,
-              userId,
-              now,
-            );
-            return { value: true, dirty: ["group"] };
-          },
-          { bumpRev: false, signal: "none" },
-        );
-        return created.value;
-      });
-      return new Response(null, { status: inserted ? 201 : 409 });
+      return new Response(null, { status: (await this.createGroup(parsed.data)) ? 201 : 409 });
     }
-    const pathname = new URL(request.url).pathname;
     if (pathname !== "/live" && pathname !== "/member-check")
       return new Response(null, { status: 404 });
-    const candidate = request.headers.get("X-User-Id");
-    const sql = this.ctx.storage.sql;
-    const exists = sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_members'")
-      .toArray();
-    if (
-      candidate === null ||
-      exists.length === 0 ||
-      sql
-        .exec(
-          "SELECT m.id FROM ledger_members m JOIN ledger_group g ON g.deleted=0 WHERE m.user_id=? AND m.status='active'",
-          candidate,
-        )
-        .toArray().length === 0
-    )
-      return new Response(null, { status: 404 });
+    const userId = request.headers.get("X-User-Id");
+    if (userId === null || !this.isMember(userId)) return new Response(null, { status: 404 });
     if (pathname === "/member-check") return new Response(null, { status: 204 });
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
-    const userId = request.headers.get("X-User-Id");
-    if (userId === null) return new Response(null, { status: 404 });
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     this.ctx.acceptWebSocket(server, [userId]);
     const headers = new Headers();

@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { z } from "zod";
+import { reserveGroup } from "../src/auth/reservations.js";
+import { groupLedger } from "../src/ledger-client.js";
 import { call, clock, type Session } from "./auth-harness.js";
 import { createExpense, newKey, twdExpense } from "./expenses-harness.js";
 import {
@@ -82,23 +84,13 @@ async function history(admin: Session, groupId: string, memberId: string): Promi
     await createExpense(admin, groupId, twdExpense(memberId, [memberId], 100));
 }
 
-async function ok(response: Promise<Response>): Promise<void> {
-  const res = await response;
-  if (!res.ok) throw new Error(`${String(res.status)} ${await res.text()}`);
-}
-
 /** Account deletion has no route of its own per step; the account flow calls the ledger. */
 async function accountDeletion(
   groupId: string,
   action: "freeze" | "finalize" | "restore" | "commit" | "unfreeze",
   userId: string,
 ): Promise<void> {
-  await ok(
-    ledger(groupId).fetch("https://ledger.internal/account-deletion", {
-      method: "POST",
-      body: JSON.stringify({ action, userId, now: clock.now, expires }),
-    }),
-  );
+  await groupLedger(env, groupId).accountDeletion({ action, userId, now: clock.now, expires });
 }
 
 function within<T>(promise: Promise<T>, failure: string): Promise<T> {
@@ -204,13 +196,12 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(
-            send(admin, "POST", `/groups/${group.id}/stops`, {
-              dayDate: "2026-07-01",
-              title: "赤崁樓",
-              category: "景點",
-            }),
-          );
+          await groupLedger(env, group.id).stop({
+            action: "create",
+            actorId: group.me.memberId,
+            input: { dayDate: "2026-07-01", title: "赤崁樓", category: "景點" },
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -223,7 +214,7 @@ const rows: Row[] = [
     signal: "unordered",
     closes: "none",
     scene: async () => {
-      const { admin, group, member, memberId } = await pair("settlement");
+      const { admin, group, memberId } = await pair("settlement");
       await createExpense(
         admin,
         group.id,
@@ -233,15 +224,13 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(
-            send(
-              member,
-              "POST",
-              `/groups/${group.id}/settlements`,
-              { payerMemberId: memberId, receiverMemberId: group.me.memberId, amount: 100 },
-              { "Idempotency-Key": newKey() },
-            ),
-          );
+          await groupLedger(env, group.id).settlement({
+            action: "create",
+            actorId: memberId,
+            now: clock.now,
+            key: newKey(),
+            input: { payerMemberId: memberId, receiverMemberId: group.me.memberId, amount: 100 },
+          });
           return group.id;
         },
       };
@@ -259,7 +248,15 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await createExpense(admin, group.id, twdExpense(group.me.memberId, [group.me.memberId]));
+          await groupLedger(env, group.id).expense({
+            action: "create",
+            actorMemberId: group.me.memberId,
+            memberId: group.me.memberId,
+            input: twdExpense(group.me.memberId, [group.me.memberId]),
+            key: newKey(),
+            now: clock.now,
+            rates: [],
+          });
           return group.id;
         },
       };
@@ -277,7 +274,13 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(send(admin, "POST", `/groups/${group.id}/members`, { name: "小明" }));
+          await groupLedger(env, group.id).member({
+            action: "add",
+            actorMemberId: group.me.memberId,
+            targetMemberId: crypto.randomUUID(),
+            input: { name: "小明" },
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -297,7 +300,13 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(send(joiner, "POST", `/invites/${token}/join`));
+          await groupLedger(env, group.id).member({
+            action: "join",
+            userId: joiner.userId,
+            targetMemberId: crypto.randomUUID(),
+            inviteToken: token,
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -320,7 +329,13 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(send(claimant, "POST", `/invites/${token}/claim`, { memberId: placeholder.id }));
+          await groupLedger(env, group.id).member({
+            action: "claim",
+            userId: claimant.userId,
+            targetMemberId: placeholder.id,
+            inviteToken: token,
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -338,9 +353,13 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(
-            send(admin, "PATCH", `/groups/${group.id}/members/${memberId}`, { role: "admin" }),
-          );
+          await groupLedger(env, group.id).member({
+            action: "patch",
+            actorMemberId: group.me.memberId,
+            targetMemberId: memberId,
+            input: { role: "admin" },
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -360,7 +379,12 @@ const rows: Row[] = [
         observer: admin,
         target: member,
         write: async () => {
-          await ok(send(member, "POST", `/groups/${group.id}/leave`));
+          await groupLedger(env, group.id).member({
+            action: "leave",
+            actorMemberId: memberId,
+            targetMemberId: memberId,
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -380,7 +404,12 @@ const rows: Row[] = [
         observer: admin,
         target: member,
         write: async () => {
-          await ok(send(admin, "DELETE", `/groups/${group.id}/members/${memberId}`));
+          await groupLedger(env, group.id).member({
+            action: "remove",
+            actorMemberId: group.me.memberId,
+            targetMemberId: memberId,
+            now: clock.now,
+          });
           return group.id;
         },
       };
@@ -398,7 +427,13 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(send(admin, "POST", `/groups/${group.id}/invite`));
+          await groupLedger(env, group.id).invite({
+            action: "regenerate",
+            actorMemberId: group.me.memberId,
+            token: crypto.randomUUID(),
+            now: clock.now,
+            expiresAt: expires,
+          });
           return group.id;
         },
       };
@@ -416,15 +451,12 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(
-            send(
-              admin,
-              "PATCH",
-              `/groups/${group.id}`,
-              { name: "新的名稱" },
-              { "If-Match": String(group.updatedAt) },
-            ),
-          );
+          await groupLedger(env, group.id).patch({
+            patch: { name: "新的名稱" },
+            expected: group.updatedAt,
+            now: clock.now,
+            actorMemberId: group.me.memberId,
+          });
           return group.id;
         },
       };
@@ -442,7 +474,7 @@ const rows: Row[] = [
         groupId: group.id,
         observer: admin,
         write: async () => {
-          await ok(send(admin, "DELETE", `/groups/${group.id}`));
+          await groupLedger(env, group.id).delete({ actorMemberId: group.me.memberId });
           return group.id;
         },
       };
@@ -457,7 +489,21 @@ const rows: Row[] = [
     closes: "none",
     scene: async () => {
       const admin = await person("create admin");
-      return { write: async () => (await createGroup(admin)).id };
+      return {
+        write: async () => {
+          const id = crypto.randomUUID();
+          await reserveGroup(env.DB, admin.userId, id, clock.now);
+          const created = await groupLedger(env, id).create({
+            id,
+            memberId: crypto.randomUUID(),
+            userId: admin.userId,
+            now: clock.now,
+            input: { name: "台南小旅行", settlementCurrency: "TWD", isTrip: false },
+          });
+          if (!created) throw new Error("create refused");
+          return id;
+        },
+      };
     },
   },
   {
