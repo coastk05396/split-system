@@ -6,7 +6,7 @@ import type {
   AccountDeletionValues,
   CreateGroup,
   DeleteGroup,
-  ExpenseAction,
+  ExpenseOperation,
   ExpenseValues,
   InviteOperation,
   LedgerMember,
@@ -61,7 +61,7 @@ export function groupLedger(env: Bindings, groupId: string) {
       decode<Record<string, number>>(stub.placeholderCounts()),
     member: (op: MemberOperation): Promise<Revised<MemberOutcome>> =>
       decode<MemberOutcome>(stub.member(op)),
-    expense: <O extends ExpenseAction>(op: O): Promise<Revised<ExpenseValues[O["action"]]>> =>
+    expense: <O extends ExpenseOperation>(op: O): Promise<Revised<ExpenseValues[O["action"]]>> =>
       decode<unknown>(stub.expense(op)) as Promise<Revised<ExpenseValues[O["action"]]>>,
     settlement: <O extends SettlementOperation>(
       op: O,

@@ -10,9 +10,7 @@ import {
 } from "./ledger-account-deletion.js";
 import { DurableObject } from "cloudflare:workers";
 import {
-  groupInputSchema,
   expenseSchema,
-  groupPatchSchema,
   memberPatchSchema,
   placeholderInputSchema,
   settlementSchema,
@@ -21,9 +19,8 @@ import {
   type MemberRole,
   type MemberStatus,
 } from "@split/shared";
-import { z } from "zod";
 import type { Bindings } from "./env.js";
-import { ApiError, ERROR_STATUS, invalid, type ErrorCode } from "./errors.js";
+import { ApiError, invalid, type ErrorCode } from "./errors.js";
 import { expenseOperation } from "./ledger-expenses.js";
 import { settlementOperation } from "./ledger-settlements.js";
 import type {
@@ -31,7 +28,7 @@ import type {
   AccountDeletionValues,
   CreateGroup,
   DeleteGroup,
-  ExpenseAction,
+  ExpenseOperation,
   ExpenseValues,
   GroupFields,
   InviteOperation,
@@ -47,47 +44,6 @@ import type {
   StopOperation,
   StopValues,
 } from "./ledger-types.js";
-
-const initialiseGroupSchema = z.object({
-  id: z.uuid(),
-  memberId: z.uuid(),
-  userId: z.uuid(),
-  now: z.number().int(),
-  input: groupInputSchema,
-});
-
-const memberOpSchema = z.object({
-  action: z.enum(["add", "patch", "remove", "leave", "join", "claim"]),
-  actorMemberId: z.string().optional(),
-  targetMemberId: z.string().optional(),
-  userId: z.string().optional(),
-  input: z.unknown().optional(),
-  now: z.number().int(),
-  names: z.record(z.string(), z.string()).optional(),
-  inviteToken: z.string().optional(),
-  targetBalance: z.number().optional(),
-  hasHistory: z.boolean().optional(),
-});
-
-const inviteOpSchema = z.object({
-  action: z.enum(["get", "regenerate", "ensure", "validate"]),
-  token: z.string().optional(),
-  actorMemberId: z.string().optional(),
-  now: z.number().int(),
-  expiresAt: z.number().int().optional(),
-});
-
-const patchGroupSchema = z.object({
-  patch: groupPatchSchema,
-  expected: z.number().int(),
-  now: z.number().int(),
-  actorMemberId: z.string().min(1),
-});
-
-const deleteGroupSchema = z.union([
-  z.object({ actorMemberId: z.string().min(1) }),
-  z.object({ systemBypass: z.literal(true) }),
-]);
 
 interface GroupRow extends Record<string, SqlStorageValue> {
   id: string;
@@ -132,17 +88,6 @@ interface Edit<T> {
   leaving?: string | null | undefined;
 }
 
-const MEMBER_FACING_PATHS: ReadonlySet<string> = new Set([
-  "/stop-op",
-  "/settlement-op",
-  "/expense-op",
-  "/member-op",
-  "/invite",
-  "/members",
-  "/placeholder-counts",
-  "/settlement-check",
-]);
-
 type LedgerFailure = Extract<LedgerResult<unknown>, { ok: false }>;
 
 const notFound = { ok: false, code: "NOT_FOUND" } as const;
@@ -151,20 +96,6 @@ const notFound = { ok: false, code: "NOT_FOUND" } as const;
 function failure(error: unknown): LedgerFailure {
   if (error instanceof ApiError) return { ok: false, code: error.code, details: error.details };
   throw error;
-}
-
-/** The `{ error, details }` body the stop and expense routes answered with. */
-function flatError(result: LedgerFailure): Response {
-  return Response.json(
-    { error: result.code, details: result.details },
-    { status: ERROR_STATUS[result.code] },
-  );
-}
-
-/** The API's own `{ error: { code, details } }` body, which settlements and account deletion used. */
-function nestedError(result: LedgerFailure): Response {
-  const error = new ApiError(result.code, result.details);
-  return Response.json(error.toBody(), { status: error.status });
 }
 
 function seatedMember(row: MemberRow): SeatedMember {
@@ -644,7 +575,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     }));
   }
 
-  // RPC operations, one per ledger action. The internal fetch routes below answer through them.
+  // RPC operations, one per ledger action.
 
   async stop(op: StopOperation): Promise<LedgerResult<StopValues[keyof StopValues]>> {
     if (this.isDeleted()) return notFound;
@@ -704,7 +635,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     }
   }
 
-  async expense(op: ExpenseAction): Promise<LedgerResult<ExpenseValues[keyof ExpenseValues]>> {
+  async expense(op: ExpenseOperation): Promise<LedgerResult<ExpenseValues[keyof ExpenseValues]>> {
     if (this.isDeleted()) return notFound;
     try {
       const { value, rev } =
@@ -783,13 +714,7 @@ export class GroupLedger extends DurableObject<Bindings> {
     return done(null);
   }
 
-  member(op: MemberOperation): Promise<LedgerResult<MemberOutcome>> {
-    return this.memberOperation(op);
-  }
-
-  private async memberOperation(
-    op: z.infer<typeof memberOpSchema>,
-  ): Promise<LedgerResult<MemberOutcome>> {
+  async member(op: MemberOperation): Promise<LedgerResult<MemberOutcome>> {
     if (this.isDeleted()) return notFound;
     const { value: result, rev } = await this.commit(
       (sql): Edit<MemberOutcome | { error: ErrorCode; details?: unknown }> => {
@@ -802,23 +727,22 @@ export class GroupLedger extends DurableObject<Bindings> {
           if (!invite || invite.token !== op.inviteToken) return { value: { error: "NOT_FOUND" } };
           if (invite.expires_at <= op.now) return { value: { error: "INVITE_EXPIRED" } };
         }
-        if (
-          (op.action === "join" || op.action === "claim") &&
-          op.userId !== undefined &&
-          isFrozen(sql, op.userId, op.now)
-        )
+        if ((op.action === "join" || op.action === "claim") && isFrozen(sql, op.userId, op.now))
           return { value: { error: "FORBIDDEN" } };
         const all = sql
           .exec<MemberRow>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
           .toArray();
-        const actor = all.find((m) => m.id === op.actorMemberId && m.status === "active");
+        const actorMemberId =
+          op.action === "join" || op.action === "claim" ? undefined : op.actorMemberId;
+        const names = op.action === "add" || op.action === "patch" ? op.names : undefined;
+        const actor = all.find((m) => m.id === actorMemberId && m.status === "active");
         const target = all.find((m) => m.id === op.targetMemberId);
         const seated = all.filter((m) => m.status === "active" || m.status === "placeholder");
         const conflict = (name: string, except?: string) =>
           seated.some(
             (m) =>
               m.id !== except &&
-              (m.placeholder_name ?? (m.user_id === null ? undefined : op.names?.[m.user_id])) ===
+              (m.placeholder_name ?? (m.user_id === null ? undefined : names?.[m.user_id])) ===
                 name,
           );
         let memberId = op.targetMemberId;
@@ -827,8 +751,7 @@ export class GroupLedger extends DurableObject<Bindings> {
           return { value: { error: "NOT_FOUND" } };
         if (op.action === "add") {
           const input = placeholderInputSchema.safeParse(op.input);
-          if (!input.success || memberId === undefined)
-            return { value: { error: "VALIDATION_FAILED" } };
+          if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
           if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
           if (conflict(input.data.name)) return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
           sql.exec(
@@ -839,8 +762,6 @@ export class GroupLedger extends DurableObject<Bindings> {
             actor?.id ?? null,
           );
         } else if (op.action === "join") {
-          if (op.userId === undefined || memberId === undefined)
-            return { value: { error: "VALIDATION_FAILED" } };
           const existing = all.find((m) => m.user_id === op.userId);
           if (existing?.status === "active")
             return { value: { memberId: existing.id, changed: false } };
@@ -859,8 +780,7 @@ export class GroupLedger extends DurableObject<Bindings> {
               op.now,
             );
         } else if (op.action === "claim") {
-          if (op.userId === undefined || target === undefined)
-            return { value: { error: "NOT_FOUND" } };
+          if (target === undefined) return { value: { error: "NOT_FOUND" } };
           if (all.some((m) => m.user_id === op.userId))
             return { value: { error: "ALREADY_MEMBER" } };
           if (target.status !== "placeholder") return { value: { error: "PLACEHOLDER_CLAIMED" } };
@@ -946,7 +866,6 @@ export class GroupLedger extends DurableObject<Bindings> {
           memberId = leaving.id;
           closeUserId = leaving.user_id;
         }
-        if (memberId === undefined) throw new Error("Member operation has no target");
         const history =
           op.action === "claim" ||
           op.action === "leave" ||
@@ -1210,16 +1129,13 @@ export class GroupLedger extends DurableObject<Bindings> {
     if (!this.hasTable("ledger_group")) return notFound;
     const { value: allowed, rev } = await this.commit(
       (sql) => {
-        if ("actorMemberId" in by) {
-          const actor = sql
-            .exec<{ role: string; status: string }>(
-              "SELECT role, status FROM ledger_members WHERE id=?",
-              by.actorMemberId,
-            )
-            .toArray()[0];
-          if (!actor || actor.status !== "active" || actor.role !== "admin")
-            return { value: false };
-        }
+        const actor = sql
+          .exec<{ role: string; status: string }>(
+            "SELECT role, status FROM ledger_members WHERE id=?",
+            by.actorMemberId,
+          )
+          .toArray()[0];
+        if (!actor || actor.status !== "active" || actor.role !== "admin") return { value: false };
         sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
         return { value: true, dirty: ["group"] };
       },
@@ -1281,117 +1197,10 @@ export class GroupLedger extends DurableObject<Bindings> {
     });
   }
 
-  /**
-   * The internal HTTP routes, kept beside the RPC operations until every caller has moved over.
-   * Each answers through its operation and keeps its old status codes and bodies. The live-update
-   * WebSocket stays here for good.
-   */
-  override async fetch(request: Request): Promise<Response> {
-    const pathname = new URL(request.url).pathname;
-    const post = request.method === "POST";
-    // What Members reach through the API stops with the Group. Delete, account deletion and
-    // the maintenance paths stay open so a failed deletion can still be put back.
-    if (MEMBER_FACING_PATHS.has(pathname) && this.isDeleted()) {
-      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
-    }
-    if (pathname === "/stop-op" && post) {
-      const result = await this.stop(await request.json<StopOperation>());
-      if (!result.ok) return flatError(result);
-      return Response.json(
-        { value: result.value },
-        { headers: { "X-Group-Rev": String(result.rev) } },
-      );
-    }
-    if (pathname === "/placeholder-counts" && request.method === "GET") {
-      return Response.json(this.expenseCounts());
-    }
-    if (pathname === "/settlement-op" && post) {
-      const result = await this.settlement(await request.json<SettlementOperation>());
-      if (!result.ok) return nestedError(result);
-      return Response.json(result.value, { headers: { "X-Group-Rev": String(result.rev) } });
-    }
-    if (pathname === "/expense-op" && post) {
-      const result = await this.expense(await request.json<ExpenseAction>());
-      if (!result.ok) return flatError(result);
-      return Response.json(
-        { value: result.value },
-        { headers: { "X-Group-Rev": String(result.rev) } },
-      );
-    }
-    if (pathname === "/account-deletion" && post) {
-      const op = await request.json<AccountDeletionOperation>();
-      const result = await this.accountDeletion(op);
-      if (!result.ok) return nestedError(result);
-      if (op.action === "freeze") return Response.json(result.value);
-      if (op.action === "restore") return Response.json({ ok: true, restored: result.value });
-      return Response.json({ ok: true });
-    }
-    if (pathname === "/member-op" && post) {
-      const parsed = memberOpSchema.safeParse(await request.json());
-      if (!parsed.success) return Response.json({ error: "VALIDATION_FAILED" }, { status: 400 });
-      const result = await this.memberOperation(parsed.data);
-      if (!result.ok)
-        return Response.json({ error: result.code, details: result.details }, { status: 409 });
-      const { memberId, ...rest } = result.value;
-      return Response.json({ memberId, rev: result.rev, ...rest });
-    }
-    if (pathname === "/invite" && post) {
-      const parsed = inviteOpSchema.safeParse(await request.json());
-      if (!parsed.success) return new Response(null, { status: 400 });
-      const result = await this.invite(parsed.data);
-      if (!result.ok) return Response.json({ error: result.code }, { status: 404 });
-      return Response.json(
-        { token: result.value.token, expiresAt: result.value.expiresAt },
-        { headers: { "X-Group-Rev": String(result.rev) } },
-      );
-    }
-    if (pathname === "/members" && request.method === "GET") {
-      const members = this.memberRows(request.headers.get("X-User-Id") ?? undefined);
-      if (members === undefined) return new Response(null, { status: 404 });
-      return Response.json({ members, rev: this.rev() });
-    }
-    if (pathname === "/settlement-check" && request.method === "GET") {
-      const candidate = request.headers.get("X-User-Id");
-      const sid = new URL(request.url).searchParams.get("id");
-      if (!candidate || !sid) return new Response(null, { status: 400 });
-      if (!this.settlementCheck(candidate, sid)) return new Response(null, { status: 404 });
-      return Response.json({ found: true });
-    }
-    if (pathname === "/state" && request.method === "GET") {
-      const state = this.stateRows();
-      if (state === undefined) return new Response(null, { status: 404 });
-      return Response.json(state);
-    }
-    if (pathname === "/patch" && post) {
-      const parsed = patchGroupSchema.safeParse(await request.json().catch(() => null));
-      if (!parsed.success) return new Response(null, { status: 400 });
-      const result = await this.patchGroup(parsed.data);
-      if (result.ok) return Response.json({ rev: result.rev });
-      if (result.code === "FORBIDDEN")
-        return Response.json({ error: result.code }, { status: 403 });
-      // The old route named the invalid Trip dates by their own code.
-      const error = result.code === "VALIDATION_FAILED" ? "TRIP_DATES_INVALID" : result.code;
-      return Response.json({ error }, { status: 409 });
-    }
-    if (pathname === "/delete" && post) {
-      const body: unknown = request.body ? await request.json().catch(() => null) : null;
-      const parsed = deleteGroupSchema.safeParse(body);
-      if (!parsed.success) return new Response(null, { status: 400 });
-      const result = await this.deleteGroup(parsed.data);
-      if (result.ok) return Response.json({ rev: result.rev });
-      if (result.code === "NOT_FOUND") return new Response(null, { status: 404 });
-      return Response.json({ error: result.code }, { status: 403 });
-    }
-    if (pathname === "/create" && post) {
-      const parsed = initialiseGroupSchema.safeParse(await request.json());
-      if (!parsed.success) return new Response(null, { status: 400 });
-      return new Response(null, { status: (await this.createGroup(parsed.data)) ? 201 : 409 });
-    }
-    if (pathname !== "/live" && pathname !== "/member-check")
-      return new Response(null, { status: 404 });
+  /** The live-update WebSocket: the one operation RPC cannot carry. */
+  override fetch(request: Request): Response {
     const userId = request.headers.get("X-User-Id");
     if (userId === null || !this.isMember(userId)) return new Response(null, { status: 404 });
-    if (pathname === "/member-check") return new Response(null, { status: 204 });
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];

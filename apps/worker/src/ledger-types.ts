@@ -16,7 +16,6 @@ import type {
   StopPatch,
 } from "@split/shared";
 import type { ErrorCode } from "./errors.js";
-import type { ExpenseOperation } from "./ledger-expenses.js";
 
 /**
  * What a Group ledger operation answers over RPC, which cannot carry an ApiError: the value
@@ -70,7 +69,9 @@ export interface PatchGroup {
   actorMemberId: string;
 }
 
-export type DeleteGroup = { actorMemberId: string } | { systemBypass: true };
+export interface DeleteGroup {
+  actorMemberId: string;
+}
 
 export interface InviteOperation {
   action: "get" | "regenerate" | "ensure" | "validate";
@@ -107,8 +108,7 @@ export interface MemberOutcome {
   closeUserId?: string | null;
 }
 
-/** Every Expense action but the unused system Balance read. */
-export type ExpenseAction = Exclude<ExpenseOperation, { action: "balances" }>;
+export type { ExpenseOperation } from "./ledger-expenses.js";
 
 export interface ExpenseValues {
   list: ExpensePage;
