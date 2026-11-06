@@ -29,7 +29,7 @@ The full list of changes is in [docs/design-changes.md](../../design-changes.md)
 - **Settings:** remove 通知提醒 and the user-level 預設幣別 (defaults live on each Group). Keep 我的群組, 帳號與隱私 (linked accounts, 刪除帳號) and 登入與安全.
 - **Home total:** 目前淨收付 shows one amount per currency, never a summed figure; the subtitle is "你在 N 個群組有待結算款項".
 - **Web:** one responsive app. Desktop is the same routes with a sidebar and two columns, with no features of its own. The group page has the same three tabs everywhere: 帳目, 行程 (Trips only), 結算.
-- **Editing the designs:** this map does not edit `split.pen`; the list is the brief for a follow-up design pass.
+- **Editing the designs:** this map does not edit the designs; the list is the brief for a follow-up design pass.
 - **Landing page:** kept as the static logged-out page at `/` for desktop visitors, with the brand and wording fixed; signed-in users go straight to the app.
 
 Three screens were never opened during the map (10, 12, 14, 19 and 20 are marked "not reviewed" in the list); they are reviewed in the design pass.
