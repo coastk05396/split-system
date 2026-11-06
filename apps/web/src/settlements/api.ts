@@ -2,7 +2,6 @@ import type { Balances, Settlement, SettlementInput, SettlementPage } from "@spl
 import {
   type InfiniteData,
   type QueryClient,
-  type QueryFunctionContext,
   type QueryKey,
   hashKey,
   useInfiniteQuery,
@@ -10,40 +9,19 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
-import type { ClientRequestOptions } from "hono/client";
-import { createApiClient } from "../api/client.js";
-import { useAuth } from "../auth/AuthProvider.js";
-import { groupKeys } from "../groups/api.js";
-import { abortable, invalidateStats, readWithRev } from "../groups/sync.js";
+import { withJson } from "../api/client.js";
+import {
+  abortable,
+  readWithRev as read,
+  refreshGroup,
+  settlementKeys,
+  useGroupData,
+} from "../groups/data.js";
 
 /** TanStack Query hooks over the Worker's Balance and Settlement routes (SPEC §5.1). */
 
-export const settlementKeys = {
-  balances: (groupId: string) => ["groups", groupId, "balances"] as const,
-  list: (groupId: string) => ["groups", groupId, "settlements"] as const,
-};
-
-function useSession() {
-  const { session } = useAuth();
-  return useMemo(() => ({ api: createApiClient(session.fetch), fetch: session.fetch }), [session]);
-}
-
-async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
-  return readWithRev<T>(call, context);
-}
-
-function jsonWith(body: unknown, headers: Record<string, string> = {}): ClientRequestOptions {
-  return {
-    init: {
-      body: JSON.stringify(body),
-      headers: { "Content-Type": "application/json", ...headers },
-    },
-  };
-}
-
 export function useBalances(groupId: string) {
-  const { api } = useSession();
+  const { api } = useGroupData();
   return useQuery({
     queryKey: settlementKeys.balances(groupId),
     queryFn: (ctx) =>
@@ -56,7 +34,7 @@ export function useBalances(groupId: string) {
 
 /** A Group's Settlements of every status, newest first, 50 a page. */
 export function useSettlements(groupId: string) {
-  const { fetch } = useSession();
+  const { fetch } = useGroupData();
   return useInfiniteQuery({
     queryKey: settlementKeys.list(groupId),
     initialPageParam: undefined as string | undefined,
@@ -68,17 +46,6 @@ export function useSettlements(groupId: string) {
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
-}
-
-/** Re-reads the Group (Balances, Members, Settlements) and the Group list after a write. */
-function useRefresh(groupId: string) {
-  const client = useQueryClient();
-  return () =>
-    Promise.all([
-      invalidateStats(client),
-      client.invalidateQueries({ queryKey: groupKeys.group(groupId) }),
-      client.invalidateQueries({ queryKey: groupKeys.all, exact: true }),
-    ]);
 }
 
 /**
@@ -136,15 +103,14 @@ function watchReads(client: QueryClient, key: QueryKey) {
  * Records a Settlement under the caller's `Idempotency-Key`. The ledger records it as confirmed.
  */
 export function useRecordSettlement(groupId: string) {
-  const { api } = useSession();
-  const refresh = useRefresh(groupId);
+  const { api } = useGroupData();
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ input, idempotencyKey }: { input: SettlementInput; idempotencyKey: string }) =>
       read<Settlement>(
         api.groups[":id"].settlements.$post(
           { param: { id: groupId } },
-          jsonWith(input, { "Idempotency-Key": idempotencyKey }),
+          withJson(input, { "Idempotency-Key": idempotencyKey }),
         ),
       ),
     onMutate: async ({ input }) => {
@@ -161,7 +127,7 @@ export function useRecordSettlement(groupId: string) {
     },
     onSettled: (_data, _err, _vars, context) => {
       context?.reads.stop();
-      void refresh();
+      void refreshGroup(client, groupId);
     },
   });
 }
@@ -191,9 +157,8 @@ export type SettlementAction = { kind: "undo"; settlementId: string };
 
 /** Undo one confirmed Settlement. */
 export function useSettlementAction(groupId: string) {
-  const { api } = useSession();
+  const { api } = useGroupData();
   const client = useQueryClient();
-  const refresh = useRefresh(groupId);
   return useMutation({
     mutationFn: (action: SettlementAction) => {
       const param = { param: { sid: action.settlementId } };
@@ -237,14 +202,14 @@ export function useSettlementAction(groupId: string) {
           (current) => current.status === "undone" && current.undoneAt === null,
         );
       }
-      void refresh();
+      void refreshGroup(client, groupId);
     },
     onSettled: (_data, _err, _vars, context) => {
       context?.balanceReads?.stop();
     },
     onSuccess: (undone) => {
       replaceSettlement(client, groupId, undone);
-      void refresh();
+      void refreshGroup(client, groupId);
     },
   });
 }

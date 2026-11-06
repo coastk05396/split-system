@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
-import { read } from "../groups/api.js";
+import { readWithRev as read } from "../groups/data.js";
 import { card, LoadError, Loading } from "../groups/ui.js";
 import { categoryInfo, categoryLabel } from "../expenses/categories.js";
 import { getLocale, t } from "../i18n/messages.js";

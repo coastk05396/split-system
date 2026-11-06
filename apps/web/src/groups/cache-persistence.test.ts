@@ -14,7 +14,7 @@ import {
   setQueryRestored,
   startCachePersistence,
 } from "./cache-persistence.js";
-import { getQueryRev, readWithRev, setQueryRev } from "./sync.js";
+import { getQueryRev, readWithRev, setQueryRev } from "./data.js";
 
 class FakeStorage implements CacheStorage {
   private store = new Map<string, string>();

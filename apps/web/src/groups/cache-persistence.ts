@@ -1,7 +1,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
-import { getQueryRev, setQueryRev } from "./sync.js";
+import { getQueryRev, setQueryRev } from "./data.js";
 
 export const CACHE_VERSION = "split.v1";
 

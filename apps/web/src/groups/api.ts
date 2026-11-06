@@ -7,51 +7,28 @@ import type {
   Member,
   MemberPatch,
 } from "@split/shared";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type QueryFunctionContext,
-  type QueryClient,
-} from "@tanstack/react-query";
-import { useMemo } from "react";
-import { createApiClient, withJson, type ApiClient } from "../api/client.js";
-import { toApiFailure } from "../api/errors.js";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { withJson, type ApiClient } from "../api/client.js";
 import { useAuth } from "../auth/AuthProvider.js";
-import { abortable, readWithRev, useGroupLiveSync } from "./sync.js";
+import {
+  abortable,
+  groupKeys,
+  readWithRev as read,
+  refreshGroup,
+  send,
+  useGroupData,
+} from "./data.js";
+import { useGroupLiveSync } from "./sync.js";
 
 /** TanStack Query hooks over the Worker's Group, Member and Invite routes (SPEC §5.1). */
 
-export const groupKeys = {
-  all: ["groups"] as const,
-  group: (id: string) => ["groups", id] as const,
-  members: (id: string) => ["groups", id, "members"] as const,
-  invite: (id: string) => ["groups", id, "invite"] as const,
-  preview: (token: string) => ["invites", token] as const,
-};
-
-export function useApi() {
-  const { session } = useAuth();
-  return useMemo(() => createApiClient(session.fetch), [session]);
-}
-
-/** Reads a JSON answer, throwing ApiFailure for anything but 2xx. Records and checks X-Group-Rev. */
-export async function read<T>(call: Promise<Response>, context?: QueryFunctionContext): Promise<T> {
-  return readWithRev<T>(call, context);
-}
-
-export async function send(call: Promise<Response>): Promise<void> {
-  const res: Response = await call;
-  if (!res.ok) throw await toApiFailure(res);
-}
-
 export function useGroups() {
-  const api = useApi();
+  const { api } = useGroupData();
   return useQuery({ queryKey: groupKeys.all, queryFn: () => read<Group[]>(api.groups.$get()) });
 }
 
 export function useGroup(id: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   useGroupLiveSync(id);
   return useQuery({
     queryKey: groupKeys.group(id),
@@ -61,7 +38,7 @@ export function useGroup(id: string) {
 }
 
 export function useMembers(id: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   return useQuery({
     queryKey: groupKeys.members(id),
     queryFn: (ctx) =>
@@ -73,7 +50,7 @@ export function useMembers(id: string) {
 }
 
 export function useInvitePreview(token: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   return useQuery({
     queryKey: groupKeys.preview(token),
     queryFn: () => read<InvitePreview>(api.invites[":token"].$get({ param: { token } })),
@@ -82,7 +59,7 @@ export function useInvitePreview(token: string) {
 }
 
 export function useCreateGroup() {
-  const api = useApi();
+  const { api } = useGroupData();
   const client = useQueryClient();
   const { state } = useAuth();
   const userId = state.status === "signedIn" ? state.user.id : null;
@@ -107,27 +84,21 @@ export function useCreateGroup() {
           },
         ]);
       }
-      void client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
+      void refreshGroup(client, group.id);
     },
   });
 }
 
 export function useDeleteGroup(id: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   const client = useQueryClient();
   return useMutation({
     mutationFn: () => send(api.groups[":id"].$delete({ param: { id } })),
     onSuccess: () => {
       client.removeQueries({ queryKey: groupKeys.group(id) });
-      void client.invalidateQueries({ queryKey: groupKeys.all, exact: true });
+      void refreshGroup(client, id);
     },
   });
-}
-
-/** Re-reads the Group and its Members after a Member change. */
-function useRefreshGroup(id: string) {
-  const client = useQueryClient();
-  return () => client.invalidateQueries({ queryKey: groupKeys.group(id) });
 }
 
 const TEMP_ID_PREFIX = "tmp-";
@@ -196,14 +167,13 @@ function useOptimisticMembers<TVariables>(
       // The edit being settled still counts as pending here; an early re-read could drop a later
       // edit's row, so only the last one to finish asks.
       if (client.isMutating({ mutationKey }) > 1) return;
-      void client.invalidateQueries({ queryKey: key });
-      void client.invalidateQueries({ queryKey: groupKeys.group(id) });
+      void refreshGroup(client, id);
     },
   };
 }
 
 export function useAddPlaceholder(id: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   const optimistic = useOptimisticMembers(id, (members, name: string): MembersEdit => {
     const tempId = `${TEMP_ID_PREFIX}${crypto.randomUUID()}`;
     const unsaved: Member = {
@@ -232,7 +202,7 @@ export function useAddPlaceholder(id: string) {
 type PatchMemberVariables = { memberId: string; patch: MemberPatch };
 
 export function usePatchMember(id: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   const optimistic = useOptimisticMembers(
     id,
     (members, { memberId, patch }: PatchMemberVariables): MembersEdit => {
@@ -266,8 +236,7 @@ export function usePatchMember(id: string) {
 }
 
 export function useRemoveMember(id: string) {
-  const api = useApi();
-  const refresh = useRefreshGroup(id);
+  const { api } = useGroupData();
   const optimistic = useOptimisticMembers(id, (members, memberId: string): MembersEdit => {
     const beforeIndex = members.findIndex((m) => m.id === memberId);
     const before = members[beforeIndex];
@@ -285,10 +254,6 @@ export function useRemoveMember(id: string) {
     mutationFn: (memberId: string) =>
       send(api.groups[":id"].members[":mid"].$delete({ param: { id, mid: memberId } })),
     ...optimistic,
-    onSuccess: (data, variables, context) => {
-      optimistic.onSuccess(data, variables, context);
-      void refresh();
-    },
   });
 }
 
@@ -303,14 +268,14 @@ export function ensureInvite(api: ApiClient, client: QueryClient, id: string): P
 }
 
 export function useEnsureInvite(id: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   const client = useQueryClient();
   return useMutation({ mutationFn: () => ensureInvite(api, client, id) });
 }
 
 /** Join as a new Member, or with `memberId` by claiming that Placeholder Member. */
 export function useJoin(token: string) {
-  const api = useApi();
+  const { api } = useGroupData();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (memberId: string | null) =>
@@ -319,8 +284,8 @@ export function useJoin(token: string) {
           ? api.invites[":token"].join.$post({ param: { token } })
           : api.invites[":token"].claim.$post({ param: { token } }, withJson({ memberId })),
       ),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: groupKeys.all });
+    onSuccess: (joined) => {
+      void refreshGroup(client, joined.groupId);
     },
   });
 }

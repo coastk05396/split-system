@@ -211,6 +211,36 @@ describe("members", () => {
     expect(api.groups.members(id()).filter((m) => m.status === "placeholder")).toHaveLength(1);
   });
 
+  it("keeps an unanswered Placeholder row when a concurrent removal finishes", async () => {
+    const user = userEvent.setup();
+    const { api, id, queryClient } = membersOf({ name: "台南", others: [{ name: "宜庭" }] });
+    const addRoute = `POST /api/v1/groups/${id()}/members`;
+    api.failNext(addRoute);
+    const release = api.holdResponses(addRoute);
+    try {
+      await user.click(await screen.findByRole("button", { name: "新增成員" }));
+      expect(await screen.findByText("成員1")).toBeVisible();
+
+      await user.click(screen.getByRole("button", { name: "移除 宜庭" }));
+      await user.click(await screen.findByRole("button", { name: "移除" }));
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(1);
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(screen.getByText("成員1")).toBeVisible();
+      act(() => {
+        release();
+      });
+      expect(await screen.findByRole("alert")).toBeVisible();
+      await waitFor(() => {
+        expect(screen.queryByText("成員1")).toBeNull();
+      });
+    } finally {
+      release();
+    }
+  });
+
   it("reopens the rename dialog with the reason and the old name when it is refused", async () => {
     const user = userEvent.setup();
     const { api, id } = membersOf({

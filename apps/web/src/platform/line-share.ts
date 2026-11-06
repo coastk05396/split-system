@@ -1,5 +1,6 @@
 import type { Invite } from "@split/shared";
-import { ensureInvite, groupKeys, useApi } from "../groups/api.js";
+import { ensureInvite } from "../groups/api.js";
+import { groupKeys, useGroupData } from "../groups/data.js";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
@@ -60,7 +61,7 @@ export function createLineShare({
 /** Only screens with a chat checkbox ask for its capability; edits never ask. */
 export function useLineShare(checkChat = false) {
   const { line } = useDeps();
-  const api = useApi();
+  const { api } = useGroupData();
   const client = useQueryClient();
   const sharing = useMemo(() => createLineShare({ line, api, client }), [line, api, client]);
   const [chatAvailable, setChatAvailable] = useState(false);

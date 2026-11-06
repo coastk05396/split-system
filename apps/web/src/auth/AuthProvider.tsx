@@ -12,7 +12,7 @@ import {
 import { dismissDeleteFailure } from "../expenses/delete-failure.js";
 import { voidMutationsInFlight } from "./void-mutations.js";
 import { clearPendingWrites } from "../expenses/pending-writes.js";
-import { cancelStatsInvalidation } from "../groups/sync.js";
+import { cancelStatsInvalidation } from "../groups/data.js";
 import type { LineSignIn } from "../platform/line.js";
 import { createSession, type Session } from "./session.js";
 

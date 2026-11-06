@@ -4,7 +4,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import type { SeedGroup } from "../../test/fake-groups.js";
-import { expenseKeys } from "../expenses/api.js";
+import { expenseKeys } from "../groups/data.js";
 import { clearPendingWrites } from "../expenses/pending-writes.js";
 import { renderApp } from "../../test/render-app.js";
 
