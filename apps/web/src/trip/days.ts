@@ -1,27 +1,9 @@
-import type { Stop } from "@split/shared";
+import { daysBetween, type Stop, tripLength } from "@split/shared";
 import { monthDay, weekday } from "../i18n/format.js";
 
 /** Trip dates and Stop days are local calendar dates, "2026-06-13" (no timezone). */
 
-const DAY_MS = 86_400_000;
-
-function utc(day: string): Date {
-  return new Date(`${day}T00:00:00Z`);
-}
-
-/** Every day from `start` to `end`, both included. */
-export function daysBetween(start: string, end: string): string[] {
-  const days: string[] = [];
-  for (let at = utc(start).getTime(); at <= utc(end).getTime(); at += DAY_MS) {
-    days.push(new Date(at).toISOString().slice(0, 10));
-  }
-  return days;
-}
-
-/** Days in the Trip's number of days, inclusive; NaN when either date is missing. */
-export function tripLength(start: string, end: string): number {
-  return (utc(end).getTime() - utc(start).getTime()) / DAY_MS + 1;
-}
+export { daysBetween, tripLength };
 
 /**
  * The days the itinerary shows: the Trip's dates when both are set, else the days that

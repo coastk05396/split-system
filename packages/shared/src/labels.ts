@@ -10,6 +10,9 @@ export const DELETED_USER_NAME = "已刪除的使用者";
 /** Shown for a removed Placeholder Member that old Expenses still name; the typed name is gone. */
 export const REMOVED_PLACEHOLDER_NAME = "已移除的成員";
 
+/** Seated Members shown in a Group's Member stack preview (GLOSSARY.md). */
+export const MAX_MEMBER_PREVIEW = 4;
+
 /** The interface languages: Traditional Chinese (the default) and English. */
 export const LANGUAGES = ["zh-TW", "en"] as const;
 export type Language = (typeof LANGUAGES)[number];
