@@ -1,8 +1,9 @@
 import { type Expense, formatAmount, type Group } from "@split/shared";
 import { categoryInfo, categoryLabel } from "./categories.js";
+import type { ShareContent } from "../groups/ShareButtons.js";
 import { t } from "../i18n/messages.js";
 import type { LineMessage } from "../platform/line.js";
-import { liffLink } from "../platform/liff-link.js";
+import { COLOR, flexBubbleFrame, groupJoinLink, groupJoinUrl } from "../platform/line-flex.js";
 
 /** What a shared Expense says, kept plain so it can ride in router state and become text or a card. */
 export interface ExpenseCard {
@@ -22,17 +23,6 @@ export interface ExpenseCard {
   lineUrl: string;
 }
 
-/** Brand colours of the card, the same sprout palette as the app. */
-export const COLOR = {
-  mint: "#E8F5EB",
-  line: "#DBEDE0",
-  peach: "#FFE3CA",
-  sprout: "#2E9D71",
-  ink: "#163D2A",
-  muted: "#4F6B5B",
-  white: "#FFFFFF",
-} as const;
-
 function splitText(expense: Expense): string {
   if (expense.splitMethod === "equal") {
     return t("expenseShare.splitEqual", { count: expense.splits.length });
@@ -50,10 +40,6 @@ export function buildExpenseCard(
   inviteToken: string | null = null,
 ): ExpenseCard {
   const path = `/groups/${group.id}/expenses/${expense.id}`;
-  const url =
-    inviteToken === null
-      ? `${window.location.origin}${path}`
-      : `${window.location.origin}/join/${inviteToken}?next=${encodeURIComponent(path)}`;
   const [payer, ...otherPayers] = expense.payers;
   const eachMinor = Math.max(0, ...expense.splits.map((split) => split.amountMinor));
   return {
@@ -71,8 +57,8 @@ export function buildExpenseCard(
       expense.splitMethod === "equal" && expense.splits.length > 1
         ? t("expenseShare.each", { amount: formatAmount(eachMinor, expense.originalCurrency) })
         : null,
-    url,
-    lineUrl: liffLink(url),
+    url: groupJoinUrl(group.id, inviteToken, path),
+    lineUrl: groupJoinLink(group.id, inviteToken, path),
   };
 }
 
@@ -93,132 +79,128 @@ export function expenseText(card: ExpenseCard): string {
  * button that opens the Expense.
  */
 export function expenseFlexMessage(card: ExpenseCard): LineMessage {
-  return {
-    type: "flex",
+  return flexBubbleFrame({
     altText: t("expenseShare.alt", { title: card.title, amount: card.amount }),
-    contents: {
-      type: "bubble",
-      size: "kilo",
-      styles: {
-        header: { backgroundColor: COLOR.peach },
-        body: { backgroundColor: COLOR.white },
+    contents: [
+      {
+        type: "text",
+        text: card.groupName,
+        size: "sm",
+        weight: "bold",
+        color: COLOR.muted,
+        wrap: true,
+        maxLines: 2,
       },
-      // LINE rejects a box with no contents, so the thin peach strip holds one empty filler.
-      header: {
-        type: "box",
-        layout: "vertical",
-        paddingAll: "3px",
-        contents: [{ type: "filler" }],
+      {
+        type: "text",
+        text: `${card.title} ${card.emoji}`,
+        weight: "bold",
+        size: "lg",
+        color: COLOR.ink,
+        wrap: true,
+        maxLines: 2,
       },
-      body: {
+      {
         type: "box",
-        layout: "vertical",
-        paddingAll: "18px",
-        spacing: "lg",
+        layout: "horizontal",
+        alignItems: "center",
+        spacing: "md",
         contents: [
           {
             type: "text",
-            text: card.groupName,
-            size: "sm",
+            text: card.amount,
+            size: "xxl",
             weight: "bold",
-            color: COLOR.muted,
-            wrap: true,
-            maxLines: 2,
-          },
-          {
-            type: "text",
-            text: `${card.title} ${card.emoji}`,
-            weight: "bold",
-            size: "lg",
             color: COLOR.ink,
-            wrap: true,
-            maxLines: 2,
+            flex: 1,
+            adjustMode: "shrink-to-fit",
           },
           {
             type: "box",
-            layout: "horizontal",
-            alignItems: "center",
-            spacing: "md",
+            layout: "vertical",
+            cornerRadius: "20px",
+            backgroundColor: COLOR.mint,
+            paddingTop: "6px",
+            paddingBottom: "6px",
+            paddingStart: "12px",
+            paddingEnd: "12px",
+            flex: 0,
             contents: [
               {
                 type: "text",
-                text: card.amount,
-                size: "xxl",
+                text: card.split,
+                size: "xxs",
                 weight: "bold",
-                color: COLOR.ink,
-                flex: 1,
-                adjustMode: "shrink-to-fit",
-              },
-              {
-                type: "box",
-                layout: "vertical",
-                cornerRadius: "20px",
-                backgroundColor: COLOR.mint,
-                paddingTop: "6px",
-                paddingBottom: "6px",
-                paddingStart: "12px",
-                paddingEnd: "12px",
-                flex: 0,
-                contents: [
-                  {
-                    type: "text",
-                    text: card.split,
-                    size: "xxs",
-                    weight: "bold",
-                    color: COLOR.sprout,
-                  },
-                ],
-              },
-            ],
-          },
-          { type: "separator", color: COLOR.line },
-          {
-            type: "box",
-            layout: "horizontal",
-            contents: [
-              {
-                type: "text",
-                text: card.payer,
-                size: "xs",
-                color: COLOR.muted,
-                flex: 1,
-                wrap: true,
-              },
-              ...(card.each === null
-                ? []
-                : [
-                    {
-                      type: "text" as const,
-                      text: card.each,
-                      size: "xs",
-                      wrap: true,
-                      weight: "bold" as const,
-                      color: COLOR.sprout,
-                      align: "end" as const,
-                      flex: 0,
-                    },
-                  ]),
-            ],
-          },
-          {
-            type: "box",
-            layout: "horizontal",
-            cornerRadius: "18px",
-            backgroundColor: COLOR.sprout,
-            paddingAll: "14px",
-            action: { type: "uri", label: `${t("expenseShare.view")} ↗`, uri: card.lineUrl },
-            contents: [
-              {
-                type: "text",
-                text: `${t("expenseShare.view")} ↗`,
-                color: COLOR.white,
-                weight: "bold",
-                align: "center",
+                color: COLOR.sprout,
               },
             ],
           },
         ],
       },
-    },
+      { type: "separator", color: COLOR.line },
+      {
+        type: "box",
+        layout: "horizontal",
+        contents: [
+          {
+            type: "text",
+            text: card.payer,
+            size: "xs",
+            color: COLOR.muted,
+            flex: 1,
+            wrap: true,
+          },
+          ...(card.each === null
+            ? []
+            : [
+                {
+                  type: "text" as const,
+                  text: card.each,
+                  size: "xs" as const,
+                  wrap: true,
+                  weight: "bold" as const,
+                  color: COLOR.sprout,
+                  align: "end" as const,
+                  flex: 0,
+                },
+              ]),
+        ],
+      },
+    ],
+    actionLabel: t("expenseShare.view"),
+    actionUri: card.lineUrl,
+  });
+}
+
+export function expenseShareContent(
+  card: ExpenseCard,
+): ShareContent & { lineMessages: [LineMessage] };
+export function expenseShareContent(
+  expense: Expense,
+  group: Group,
+  nameOf: (memberId: string) => string,
+  inviteToken?: string | null,
+): ShareContent & { lineMessages: [LineMessage] };
+/** Every sharing adapter receives the same Expense text, link, and LINE card. */
+export function expenseShareContent(
+  cardOrExpense: ExpenseCard | Expense,
+  group?: Group,
+  nameOf?: (memberId: string) => string,
+  inviteToken: string | null = null,
+): ShareContent & { lineMessages: [LineMessage] } {
+  const card =
+    "groupName" in cardOrExpense
+      ? cardOrExpense
+      : buildExpenseCard(cardOrExpense, group!, nameOf!, inviteToken);
+  const text = expenseText(card);
+  return {
+    text,
+    url: card.url,
+    title: card.title,
+    telegramText: expenseTextWithoutLink(card),
+    lineMessages: [expenseFlexMessage(card)],
+    copyText: text,
+    copyLabel: t("expenseShare.copy"),
+    copiedNotice: t("expenseShare.copied"),
   };
 }

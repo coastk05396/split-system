@@ -1,6 +1,11 @@
 import type { Expense, Group } from "@split/shared";
 import { describe, expect, it } from "vitest";
-import { buildExpenseCard, expenseFlexMessage, expenseText } from "./expense-card.js";
+import {
+  buildExpenseCard,
+  expenseFlexMessage,
+  expenseShareContent,
+  expenseText,
+} from "./expense-card.js";
 
 const group = { id: "g-1", name: "東京小旅行" } as Group;
 const names: Record<string, string> = { m1: "小宇", m2: "宜庭", m3: "阿哲", m4: "小美" };
@@ -110,5 +115,23 @@ describe("expense share card", () => {
     expect(expenseText(buildExpenseCard(expense(), group, nameOf))).toBe(
       `東京小旅行\n🍽️ 火鍋  NT$ 2,160\n小宇先付 · 4 人一起分 · 每人約 NT$ 540\n${window.location.origin}/groups/g-1/expenses/e-1`,
     );
+  });
+
+  it("assembles one-step ShareContent with text, Telegram text and Flex message", () => {
+    const content = expenseShareContent(expense(), group, nameOf, "tok-1");
+    const expectedUrl = `${window.location.origin}/join/tok-1?next=${encodeURIComponent("/groups/g-1/expenses/e-1")}`;
+    expect(content).toMatchObject({
+      url: expectedUrl,
+      title: "火鍋",
+      telegramText: "東京小旅行\n🍽️ 火鍋  NT$ 2,160\n小宇先付 · 4 人一起分 · 每人約 NT$ 540",
+      text: `東京小旅行\n🍽️ 火鍋  NT$ 2,160\n小宇先付 · 4 人一起分 · 每人約 NT$ 540\n${expectedUrl}`,
+      copyLabel: "複製訊息",
+      copiedNotice: "已複製訊息",
+    });
+    expect(content.lineMessages).toHaveLength(1);
+    expect(content.lineMessages[0]).toMatchObject({
+      type: "flex",
+      altText: "火鍋 NT$ 2,160",
+    });
   });
 });

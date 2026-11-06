@@ -28,13 +28,7 @@ import { useBalances, useRecordSettlement, useSettlementAction, useSettlements }
 import { BalanceChart } from "./BalanceChart.js";
 import { ConfirmSettlementDialog } from "./ConfirmSettlementDialog.js";
 import { type BalanceRow, canConfirm, canUndo, maxPayable } from "./model.js";
-import {
-  buildSettleCard,
-  buildSettledCard,
-  settleFlexMessage,
-  settledFlexMessage,
-  settleText,
-} from "./settle-card.js";
+import { buildSettledCard, settledFlexMessage, settleShareContent } from "./settle-card.js";
 import { usePaymentPlan } from "./use-payment-plan.js";
 
 import { SettledStamp } from "./SettledStamp.js";
@@ -531,14 +525,7 @@ async function paymentPlanShare(
   currency: CurrencyCode,
   nameOf: (id: string) => string,
 ) {
-  const card = buildSettleCard(
-    payments,
-    group,
-    currency,
-    nameOf,
-    await sharing.inviteToken(group.id),
-  );
-  return { lineMessages: [settleFlexMessage(card)], text: settleText(card) };
+  return settleShareContent(payments, group, currency, nameOf, await sharing.inviteToken(group.id));
 }
 
 function involvesMe(group: Group, p: PlannedPayment): boolean {
