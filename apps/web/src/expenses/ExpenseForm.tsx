@@ -23,18 +23,17 @@ import {
   Users,
 } from "lucide-react";
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
-import { ApiFailure } from "../api/errors.js";
 import { useLineShare } from "../platform/line-share.js";
 import { hapticTick } from "../shell/haptics.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
-import { Avatar, card, failureMessage, input, primaryButton } from "../groups/ui.js";
+import { Avatar, card, input, primaryButton } from "../groups/ui.js";
 import { localName } from "../i18n/format.js";
 import { CATEGORIES, categoryLabel } from "./categories.js";
 import { errorMessage, t } from "../i18n/messages.js";
 import { TRIP_ENABLED } from "../trip/enabled.js";
-import { useRate, useSaveExpense, useStops } from "./api.js";
+import { useRate, useStops } from "./api.js";
 import {
   type ConversionState,
   type DraftEvaluation,
@@ -44,7 +43,7 @@ import {
   newExpenseDraft,
   storedExpense,
 } from "./expense-draft.js";
-import { currentEpoch, removeSave, startSave, updateSave } from "./pending-writes.js";
+import { useExpenseWrites } from "./writes.js";
 import { minorToText } from "./money.js";
 import { SplitEditor, type SplitMember } from "./SplitEditor.js";
 
@@ -98,15 +97,13 @@ export function ExpenseForm({
       : expenseDraftFrom(expense),
   );
   const [sendToChat, setSendToChat] = useState(true);
-  // Reuse a key only while retrying the same submitted content.
-  const idempotencyKey = useRef({ body: "", key: crypto.randomUUID() });
   const saved = storedExpense(draft);
   const rate = useRate(
     saved === undefined ? draft.date : "",
     draft.currency,
     group.settlementCurrency,
   );
-  const save = useSaveExpense(group.id);
+  const save = useExpenseWrites(group.id);
   const evaluation = evaluateDraft(draft, {
     settlementCurrency: group.settlementCurrency,
     memberOrder: order,
@@ -120,50 +117,15 @@ export function ExpenseForm({
     event.preventDefault();
     const body = evaluation.input;
     if (body === null || save.isPending) return;
-    const serialized = JSON.stringify(body);
-    if (idempotencyKey.current.body !== serialized)
-      idempotencyKey.current = { body: serialized, key: crypto.randomUUID() };
-    const request = (
-      expense === undefined
-        ? { kind: "create", input: body, idempotencyKey: idempotencyKey.current.key }
-        : { kind: "edit", input: body, expense }
-    ) satisfies Parameters<typeof save.mutateAsync>[0];
-    const key = request.kind === "create" ? request.idempotencyKey : `edit-${crypto.randomUUID()}`;
     const withChat = chatAvailable && sendToChat;
-    // The Group page shows the save as a row while it waits, and offers a retry if it fails.
-    // The retry sends the same request, so a lost answer cannot record the Expense twice.
-    const attempt = () => {
-      const asked = currentEpoch();
-      updateSave(key, { status: "saving", error: null });
-      save.mutateAsync(request).then(
-        (saved) => {
-          if (asked !== currentEpoch()) return;
-          removeSave(key);
-          void onSaved(saved, { sendToChat: withChat });
-        },
-        (error: unknown) => {
-          if (asked !== currentEpoch()) return;
-          updateSave(key, {
-            status: "failed",
-            error: error instanceof ApiFailure ? failureMessage(error) : t("expense.networkError"),
-          });
-        },
-      );
-    };
-    startSave({
-      key,
-      groupId: group.id,
-      expenseId: expense?.id ?? null,
-      description: body.description,
-      category: body.category,
-      amount: body.originalAmount,
-      currency: body.originalCurrency,
-      status: "saving",
-      error: null,
-      retry: attempt,
-    });
-    attempt();
-    onSaving();
+    if (
+      save.save({
+        input: body,
+        expense,
+        onSaved: (saved) => onSaved(saved, { sendToChat: withChat }),
+      })
+    )
+      onSaving();
   };
 
   return (

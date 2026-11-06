@@ -8,13 +8,7 @@ import { localName } from "../i18n/format.js";
 import { t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 import { useExpenses } from "./api.js";
-import {
-  type PendingSave,
-  removeSave,
-  useJustSaved,
-  usePendingDeletes,
-  usePendingSaves,
-} from "./pending-writes.js";
+import { type PendingSave, useJustSaved, usePendingDeletes, usePendingSaves } from "./writes.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
 
 export function memberPictures(
@@ -193,13 +187,7 @@ export function PendingRow({ save }: { save: PendingSave }) {
             <button type="button" className="min-h-11 px-2" onClick={save.retry}>
               {t("expense.saveRetry")}
             </button>
-            <button
-              type="button"
-              className="min-h-11 px-2"
-              onClick={() => {
-                removeSave(save.key);
-              }}
-            >
+            <button type="button" className="min-h-11 px-2" onClick={save.discard}>
               {t("expense.saveDiscard")}
             </button>
           </span>

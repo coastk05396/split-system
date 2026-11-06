@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp, type RenderAppOptions } from "../../test/render-app.js";
 
@@ -27,6 +27,85 @@ async function recordDinner(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("sharing a new Expense", () => {
+  it("shows a claimed share even when its Invite arrives after the retention window", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openNewExpense();
+    const release = api.holdResponses(`POST /api/v1/groups/${id()}/invite/ensure`);
+    try {
+      await recordDinner(user);
+      await screen.findByRole("region", { name: "帳目" });
+      vi.useFakeTimers();
+      await act(async () => vi.advanceTimersByTimeAsync(60_001));
+      await act(async () => {
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText(/已新增 ✓/)).toBeVisible();
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a saved share through StrictMode's effect replay", async () => {
+    const user = userEvent.setup();
+    const { api, id } = openNewExpense({ strictMode: true });
+    const release = api.holdResponses(`POST /api/v1/groups/${id()}/invite/ensure`);
+    try {
+      await recordDinner(user);
+      await screen.findByRole("region", { name: "帳目" });
+      act(() => {
+        release();
+      });
+      expect(await screen.findByText(/已新增 ✓/)).toBeVisible();
+    } finally {
+      release();
+    }
+  });
+
+  it.each(["chosen", "forced"])(
+    "does not post a saved Expense whose Invite arrives after %s sign-out",
+    async (kind) => {
+      const user = userEvent.setup();
+      const { api, id, router, lineChatMessages, queryClient } = openNewExpense({
+        insideLine: { idToken: null },
+        lineChat: true,
+      });
+      const release = api.holdResponses(`POST /api/v1/groups/${id()}/invite/ensure`);
+      try {
+        await screen.findByRole("checkbox", { name: /LINE 對話框/ });
+        await recordDinner(user);
+        await waitFor(() => {
+          expect(router.state.location.pathname).toBe(`/groups/${id()}`);
+        });
+        if (kind === "chosen") {
+          await act(async () => {
+            await router.navigate("/settings");
+          });
+          await user.click(await screen.findByRole("button", { name: "登出" }));
+        } else {
+          api.expireAccessToken();
+          api.setCookieUser(null);
+          await act(async () => {
+            await queryClient.invalidateQueries({ queryKey: ["groups", id()] });
+          });
+        }
+        await waitFor(() => {
+          expect(router.state.location.pathname).toBe(kind === "chosen" ? "/" : "/sign-in");
+        });
+        await act(async () => {
+          release();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+        expect(lineChatMessages).toHaveLength(0);
+        expect(screen.queryByText(/已新增/)).toBeNull();
+        expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+      } finally {
+        release();
+      }
+    },
+  );
+
   it("opens the Group while invite and chat delivery are pending, then shows a late chat failure", async () => {
     const user = userEvent.setup();
     let rejectChat: (reason: Error) => void = () => undefined;

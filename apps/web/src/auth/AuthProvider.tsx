@@ -1,6 +1,15 @@
 import type { Me, Provider, TestSignInRequest } from "@split/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, use, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ApiFailure, type ErrorCode } from "../api/errors.js";
 import {
   type CacheStorage,
@@ -9,9 +18,8 @@ import {
   restoreCache,
   startCachePersistence,
 } from "../groups/cache-persistence.js";
-import { dismissDeleteFailure } from "../expenses/delete-failure.js";
 import { voidMutationsInFlight } from "./void-mutations.js";
-import { clearPendingWrites } from "../expenses/pending-writes.js";
+import { clearExpenseWrites } from "../expenses/writes.js";
 import { cancelStatsInvalidation } from "../groups/data.js";
 import type { LineSignIn } from "../platform/line.js";
 import { createSession, type Session } from "./session.js";
@@ -61,23 +69,29 @@ export function AuthProvider({
   const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const stopPersistence = useRef<(() => void) | null>(null);
+  const forgetUser = useCallback(
+    (userId: string | null) => {
+      clearExpenseWrites();
+      cancelStatsInvalidation(queryClient);
+      stopPersistence.current?.();
+      // Before clear(), which forgets the writes it should void.
+      voidMutationsInFlight(queryClient);
+      queryClient.clear();
+      if (userId === null) clearAllCaches(storage);
+      else clearCache(userId, storage);
+    },
+    [queryClient, storage],
+  );
   const session = useMemo(
     () =>
       createSession({
         fetch,
         onSignedOut: () => {
-          cancelStatsInvalidation(queryClient);
-          stopPersistence.current?.();
-          // Before clear(), which forgets the writes it should void.
-          voidMutationsInFlight(queryClient);
-          queryClient.clear();
-          clearAllCaches(storage);
-          dismissDeleteFailure();
-          clearPendingWrites();
+          forgetUser(null);
           setState({ status: "signedOut", error: "UNAUTHORIZED" });
         },
       }),
-    [fetch, queryClient, storage],
+    [fetch, forgetUser],
   );
 
   useEffect(
@@ -129,21 +143,8 @@ export function AuthProvider({
   }, [userId, queryClient, storage]);
 
   const auth = useMemo<Auth>(() => {
-    /** Forgets everything the current User had on this device, before another User takes over. */
-    function dropLocalUser() {
-      cancelStatsInvalidation(queryClient);
-      stopPersistence.current?.();
-      voidMutationsInFlight(queryClient);
-      if (state.status === "signedIn") {
-        clearCache(state.user.id, storage);
-      }
-      queryClient.clear();
-      dismissDeleteFailure();
-      clearPendingWrites();
-    }
-
     async function leave() {
-      dropLocalUser();
+      forgetUser(state.status === "signedIn" ? state.user.id : null);
       await session.signOut();
       setState({ status: "signedOut", error: null, byChoice: true });
     }
@@ -196,7 +197,7 @@ export function AuthProvider({
       signOut: leave,
       updateUser,
     };
-  }, [state, session, queryClient, storage]);
+  }, [state, session, forgetUser]);
 
   return <AuthContext value={auth}>{children}</AuthContext>;
 }

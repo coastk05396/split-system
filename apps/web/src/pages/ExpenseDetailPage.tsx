@@ -1,11 +1,11 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { type Expense, formatAmount, formatRate, type Group } from "@split/shared";
 import { Pencil, Share2, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { useDeleteExpense, useExpense } from "../expenses/api.js";
+import { useExpense } from "../expenses/api.js";
 import { PendingRow } from "../expenses/ExpenseList.js";
-import { usePendingSaves } from "../expenses/pending-writes.js";
+import { useExpenseWrites, usePendingSaves } from "../expenses/writes.js";
 import { CategoryIcon, categoryTone } from "../expenses/CategoryIcon.js";
 import type { ExpenseCard } from "../expenses/expense-card.js";
 import { useExpenseSharing } from "../expenses/expense-sharing.js";
@@ -110,9 +110,11 @@ function Detail({
               aria-label={t("expenseShare.action")}
               onClick={() => {
                 void (async () => {
-                  const { card: prepared } = await share.prepare(expense, group, nameOf, false);
-                  setShareCard(prepared);
-                  setSharing(true);
+                  const prepared = await share.prepare(expense, group, nameOf, false);
+                  if (prepared !== null) {
+                    setShareCard(prepared.card);
+                    setSharing(true);
+                  }
                 })();
               }}
               className="press-icon flex size-11 items-center justify-center rounded-full text-sprout-600 hover:bg-sprout-150"
@@ -234,17 +236,10 @@ function Detail({
 }
 
 function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
-  const remove = useDeleteExpense(group.id);
+  const writes = useExpenseWrites(group.id);
   const navigate = useNavigate();
-  // A second press in the same tick would send a second delete, which the server answers 404.
-  const asked = useRef(false);
   return (
-    <Dialog.Root
-      onOpenChange={() => {
-        asked.current = false;
-        remove.reset();
-      }}
-    >
+    <Dialog.Root>
       <Dialog.Trigger className={`${secondaryButton} py-3 text-red-700`}>
         <Trash2 aria-hidden="true" className="size-5" />
         {t("expense.delete")}
@@ -266,11 +261,7 @@ function DeleteExpense({ group, expense }: { group: Group; expense: Expense }) {
               type="button"
               className={`${primaryButton} flex-1 bg-red-700 py-3 hover:bg-red-700/90`}
               onClick={() => {
-                if (asked.current) return;
-                asked.current = true;
-                // Leave at once; a refusal is reported on the Group page.
-                remove.mutate(expense.id);
-                void navigate(`/groups/${group.id}`);
+                if (writes.delete(expense.id)) void navigate(`/groups/${group.id}`);
               }}
             >
               {t("expense.deleteConfirm")}

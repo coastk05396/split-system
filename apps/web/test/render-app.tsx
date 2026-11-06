@@ -1,8 +1,8 @@
-import { dismissDeleteFailure } from "../src/expenses/delete-failure.js";
-import { clearPendingWrites } from "../src/expenses/pending-writes.js";
+import { clearExpenseWrites } from "../src/expenses/writes.js";
 import type { Me } from "@split/shared";
 import { QueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
+import { StrictMode } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { AppProviders, type AppDeps } from "../src/app/AppProviders.js";
 import { routes } from "../src/app/routes.js";
@@ -14,6 +14,7 @@ import { createFakeApi, type FakeApi } from "./fake-api.js";
 import type { FakeGroups } from "./fake-groups.js";
 
 export interface RenderAppOptions {
+  strictMode?: boolean;
   webSocket?: typeof WebSocket;
   path?: string;
   /** A User whose refresh cookie the browser already holds. */
@@ -69,8 +70,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   const api = createFakeApi();
   api.setCookieUser(options.cookieUser ?? null);
   // Pending writes live in module state; each test starts without the last one's.
-  clearPendingWrites();
-  dismissDeleteFailure();
+  clearExpenseWrites();
   options.seed?.(api.groups);
   const { line, google, ...signInLogs } = createFakeSignIn(options, (path) =>
     router.navigate(path),
@@ -88,11 +88,12 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     initialEntries: [options.pathFor?.() ?? options.path ?? "/"],
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const app = (
     <AppProviders deps={deps} queryClient={queryClient}>
       <RouterProvider router={router} />
-    </AppProviders>,
+    </AppProviders>
   );
+  render(options.strictMode === true ? <StrictMode>{app}</StrictMode> : app);
   return {
     api,
     router,
