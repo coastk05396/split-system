@@ -5,6 +5,7 @@ import {
   buildSettledCard,
   settleFlexMessage,
   settledFlexMessage,
+  settleShareContent,
   settleText,
 } from "./settle-card.js";
 
@@ -100,6 +101,25 @@ describe("settle share card", () => {
         `${window.location.origin}/groups/g-1?tab=settle`,
       ].join("\n"),
     );
+  });
+
+  it("assembles one-step LineShareContent with plain text and Flex message", () => {
+    const content = settleShareContent(payments, group, "TWD", nameOf, "tok-1");
+    expect(content.text).toBe(
+      [
+        "週末台南小旅行",
+        "還有 3 筆沒結清",
+        "小宇 ➔ Gulu  NT$ 430",
+        "Yizhen ➔ ty  NT$ 194",
+        "Gulu ➔ ty  NT$ 99",
+        `${window.location.origin}/join/tok-1?next=${encodeURIComponent("/groups/g-1?tab=settle")}`,
+      ].join("\n"),
+    );
+    expect(content.lineMessages).toHaveLength(1);
+    expect(content.lineMessages[0]).toMatchObject({
+      type: "flex",
+      altText: "「週末台南小旅行」的結算通知",
+    });
   });
 });
 
