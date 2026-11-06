@@ -10,6 +10,7 @@ import {
   send,
 } from "./groups-harness.js";
 import { createExpense, twdExpense } from "./expenses-harness.js";
+import type { CreateGroup } from "../src/ledger-types.js";
 
 function deleteMe(accessToken: string) {
   return call("/me", { method: "DELETE", headers: bearer(accessToken) });
@@ -290,18 +291,16 @@ it("does not create a Group after deletion froze its pending reservation", async
         const stub = targetNamespace.get(id);
         return new Proxy(stub, {
           get(targetStub, prop) {
-            if (prop !== "fetch") {
+            if (prop !== "createGroup") {
               const value: unknown = Reflect.get(targetStub, prop, targetStub);
               return typeof value === "function"
                 ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
                 : value;
             }
-            return async (url: string, init: RequestInit) => {
-              if (url.endsWith("/create")) {
-                observed();
-                await hold;
-              }
-              return targetStub.fetch(url, init);
+            return async (input: CreateGroup) => {
+              observed();
+              await hold;
+              return targetStub.createGroup(input);
             };
           },
         });
