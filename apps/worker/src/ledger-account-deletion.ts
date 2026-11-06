@@ -118,10 +118,6 @@ export function finalizeAccount(
       DELETED_USER_NAME,
       member.id,
     );
-  sql.exec("UPDATE ledger_meta SET rev=rev+1");
-  sql.exec(
-    "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
-  );
   return true;
 }
 
@@ -149,10 +145,6 @@ export function restoreAccount(sql: SqlStorage, userId: string, expires: number)
     saved.member_id,
   );
   sql.exec("DELETE FROM account_finalizations WHERE user_id=?", userId);
-  sql.exec("UPDATE ledger_meta SET rev=rev+1");
-  sql.exec(
-    "INSERT INTO ledger_dirty(kind,rev) SELECT 'group',rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
-  );
   return true;
 }
 
