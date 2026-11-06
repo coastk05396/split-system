@@ -11,6 +11,7 @@ import {
   formatRate,
   type Group,
   type Member,
+  minorToDecimal,
 } from "@split/shared";
 import {
   ArrowRight,
@@ -44,7 +45,6 @@ import {
   storedExpense,
 } from "./expense-draft.js";
 import { useExpenseWrites } from "./writes.js";
-import { minorToText } from "./money.js";
 import { SplitEditor, type SplitMember } from "./SplitEditor.js";
 
 const label = "text-sm font-bold";
@@ -379,7 +379,7 @@ function AmountSection({
                     }
                     onClick={() => {
                       hapticTick(10);
-                      update({ amountText: minorToText(next, draft.currency) });
+                      update({ amountText: minorToDecimal(next, draft.currency) });
                     }}
                     className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-3 py-1 text-xs font-bold text-sprout-700 tabular-nums disabled:opacity-40"
                   >

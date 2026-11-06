@@ -48,7 +48,6 @@ interface FakeGroup {
   trip: FakeTrip;
   updatedAt: number;
   stops: Stop[];
-  expenses: Expense[];
 }
 
 interface FakeTrip {
@@ -251,25 +250,6 @@ export function createFakeGroups(): FakeGroups {
   }
 
   const expenses = createFakeExpenses(nextId);
-  expenses.addStop = (groupId, stop) => {
-    const g = groups.get(groupId);
-    seq += 1;
-    const id = `s-${String(seq)}`;
-    const s: Stop = {
-      id,
-      dayDate: stop.dayDate,
-      startTime: stop.startTime ?? null,
-      endTime: null,
-      title: stop.title,
-      category: "景點",
-      locationName: null,
-      notes: null,
-      createdAt: fake.now + seq,
-      updatedAt: fake.now + seq,
-    };
-    if (g) g.stops.push(s);
-    return id;
-  };
 
   const fake: FakeGroups = {
     now: 1_700_000_000_000,
@@ -349,7 +329,6 @@ export function createFakeGroups(): FakeGroups {
         },
         updatedAt: fake.now,
         stops,
-        expenses,
         name: seed.name,
         settlementCurrency: seed.settlementCurrency ?? "TWD",
         isTrip: seed.isTrip ?? false,
@@ -584,7 +563,6 @@ export function createFakeGroups(): FakeGroups {
           if (g.stops.length === before) return error("NOT_FOUND", 404);
           for (const e of fake.expenses.list(g.id))
             if (e.stopId === parts[3]) (e as { stopId: string | null }).stopId = null;
-          for (const e of g.expenses) if (e.stopId === parts[3]) e.stopId = null;
           return new Response(null, { status: 204 });
         }
         case "DELETE groups/:":

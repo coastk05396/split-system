@@ -33,6 +33,14 @@ export const tripKeys = {
   stopExpenses: (id: string) => ["groups", id, "stopExpenses"] as const,
 };
 
+export const statsKeys = {
+  all: ["stats"] as const,
+  spending: (userId: string | null, from: string, to: string) =>
+    ["stats", "spending", userId, from, to] as const,
+  expenses: (userId: string | null, month: string, category: string) =>
+    ["stats", "expenses", userId, month, category] as const,
+};
+
 /** Shared session transport for Group reads and writes, including routes called by path. */
 export function useGroupData() {
   const { session } = useAuth();
@@ -144,10 +152,10 @@ export function invalidateStats(client: QueryClient): Promise<void> {
     client,
     setTimeout(() => {
       statsRefreshTimers.delete(client);
-      void client.invalidateQueries({ queryKey: ["stats"] });
+      void client.invalidateQueries({ queryKey: statsKeys.all });
     }, 3000),
   );
-  return client.invalidateQueries({ queryKey: ["stats"] });
+  return client.invalidateQueries({ queryKey: statsKeys.all });
 }
 
 /**

@@ -1,26 +1,17 @@
 import { CURRENCIES, type CurrencyCode, formatAmount } from "@split/shared";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
+import { useCategoryExpenses, usePersonalSpending } from "../expenses/api.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
-import { readWithRev as read } from "../groups/data.js";
+import { statsKeys } from "../groups/data.js";
 import { card, LoadError, Loading } from "../groups/ui.js";
 import { categoryInfo, categoryLabel } from "../expenses/categories.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
-import { convertSpending, type SpendingRow } from "./spending-conversion.js";
+import { convertSpending } from "./spending-conversion.js";
 
-type Detail = {
-  id: string;
-  groupId: string;
-  groupName: string;
-  description: string;
-  date: string;
-  currency: CurrencyCode;
-  amount: number;
-};
 const COLOURS = ["#2e9d71", "#f4a261", "#5b8def", "#d57491", "#8ab17d", "#a68bd4", "#e2ad42"];
 
 function formatBubbleAmount(minor: number, currency: CurrencyCode): string {
@@ -78,26 +69,7 @@ function monthLabel(month: string): string {
 }
 
 function CategoryExpenses({ month, category }: { month: string; category: string }) {
-  const { session, state } = useAuth();
-  const query = useInfiniteQuery({
-    queryKey: [
-      "stats",
-      "expenses",
-      state.status === "signedIn" ? state.user.id : null,
-      month,
-      category,
-    ],
-    staleTime: 0,
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams({ month, category });
-      if (pageParam !== undefined) params.set("cursor", pageParam);
-      return read<{ items: Detail[]; nextCursor: string | null }>(
-        session.fetch(`/api/v1/stats/expenses?${params.toString()}`),
-      );
-    },
-    getNextPageParam: (page) => page.nextCursor ?? undefined,
-  });
+  const query = useCategoryExpenses(month, category);
   if (query.isPending) return <Loading />;
   if (query.isError) return <LoadError error={query.error} onRetry={() => void query.refetch()} />;
   return (
@@ -142,30 +114,17 @@ function CategoryExpenses({ month, category }: { month: string; category: string
 
 export function StatsPage() {
   const ringMask = useId();
-  const { session, state } = useAuth();
+  const { state } = useAuth();
   const preferred = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
+  const userId = state.status === "signedIn" ? state.user.id : null;
   const [months] = useState(() => recentMonths(new Date()));
   const [selectedMonth, setSelectedMonth] = useState(() => months[5] ?? "");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [interacted, setInteracted] = useState(false);
-  const spendingKey = [
-    "stats",
-    "spending",
-    state.status === "signedIn" ? state.user.id : null,
-    months[0],
-    months[5],
-  ];
-  const query = useQuery({
-    queryKey: spendingKey,
-    staleTime: 0,
-    queryFn: () =>
-      read<SpendingRow[]>(
-        session.fetch(
-          `/api/v1/stats/spending?${new URLSearchParams({ from: months[0] ?? "", to: months[5] ?? "" }).toString()}`,
-        ),
-      ),
-  });
-  const isUpdating = useIsUpdating(spendingKey);
+  const from = months[0] ?? "";
+  const to = months[5] ?? "";
+  const query = usePersonalSpending(from, to);
+  const isUpdating = useIsUpdating(statsKeys.spending(userId, from, to));
   const rows = (query.data ?? []).filter((row) => months.includes(row.month) && row.amount > 0);
   const bases = [...new Set(rows.map((row) => row.currency).filter((c) => c !== preferred))];
   const reference = usePreferredRates(preferred, bases);

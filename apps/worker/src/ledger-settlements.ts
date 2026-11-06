@@ -3,24 +3,19 @@ import {
   canUndoSettlement,
   maxPayable,
   type MemberRole,
-  settlementInputSchema,
-  settlementSchema,
-  SETTLEMENT_PAGE_SIZE,
   type Settlement,
+  type SettlementInput,
+  SETTLEMENT_PAGE_SIZE,
+  settlementSchema,
 } from "@split/shared";
-import { z } from "zod";
 import { ApiError, invalid } from "./errors.js";
 import { newSortableId } from "./ids.js";
 
-const commandSchema = z.object({
-  action: z.enum(["list", "create", "undo"]),
-  actorId: z.string(),
-  now: z.number().int(),
-  cursor: z.string().optional(),
-  id: z.string().optional(),
-  key: z.string().optional(),
-  input: z.unknown().optional(),
-});
+export type SettlementCommand =
+  | { action: "list"; actorId: string; now: number; cursor?: string | undefined }
+  | { action: "create"; actorId: string; now: number; key: string; input: SettlementInput }
+  | { action: "undo"; actorId: string; now: number; id: string };
+
 type Party = { id: string; role: MemberRole; status: string; net_balance: number };
 interface Row extends Record<string, SqlStorageValue> {
   data: string;
@@ -29,11 +24,8 @@ interface Row extends Record<string, SqlStorageValue> {
 /** Must run inside the ledger transaction; callers publish changes only after commit. */
 export function settlementOperation(
   sql: SqlStorage,
-  raw: unknown,
+  op: SettlementCommand,
 ): { data: unknown; changed: boolean; id?: string } {
-  const parsed = commandSchema.safeParse(raw);
-  if (!parsed.success) throw new ApiError("VALIDATION_FAILED");
-  const op = parsed.data;
   const actor = sql
     .exec<Party>(
       "SELECT id,role,status,net_balance FROM ledger_members WHERE id=? AND status='active'",
@@ -101,16 +93,13 @@ export function settlementOperation(
     return { payer, receiver };
   };
   if (op.action === "create") {
-    if (op.key === undefined) throw new ApiError("VALIDATION_FAILED");
     const storedKey = `${actor.id}:${op.key}`;
     const existing = sql
       .exec<Row>("SELECT data FROM ledger_settlements WHERE idempotency_key=?", storedKey)
       .toArray()[0];
     if (existing !== undefined)
       return { data: settlementSchema.parse(JSON.parse(existing.data) as unknown), changed: false };
-    const result = settlementInputSchema.safeParse(op.input);
-    if (!result.success) throw new ApiError("VALIDATION_FAILED");
-    const input = result.data,
+    const input = op.input,
       found = parties(input.payerMemberId, input.receiverMemberId);
     if (
       !canConfirmSettlement(
@@ -140,7 +129,6 @@ export function settlementOperation(
     move(item, 1);
     return { data: item, changed: true, id: item.id };
   }
-  if (op.id === undefined) throw new ApiError("NOT_FOUND");
   const existing = sql
     .exec<Row>("SELECT data FROM ledger_settlements WHERE id=?", op.id)
     .toArray()[0];

@@ -414,8 +414,12 @@ describe("add Expense form", () => {
     const { api } = renderApp({
       cookieUser: me,
       seed: (groups) => {
-        id = groups.add(me, { name: "台南", isTrip: true, others: friends });
-        groups.expenses.addStop(id, { dayDate: day, title: "赤崁樓", startTime: "10:00" });
+        id = groups.add(me, {
+          name: "台南",
+          isTrip: true,
+          others: friends,
+          stops: [{ dayDate: day, title: "赤崁樓", startTime: "10:00" }],
+        });
       },
       pathFor: () => `/groups/${id}/expenses/new`,
     });

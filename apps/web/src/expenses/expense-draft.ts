@@ -8,13 +8,13 @@ import {
   formatRate,
   type Expense,
   type ExpenseInput,
+  minorToDecimal,
   parseAmount,
   parseRate,
   RATE_SCALE,
   type Rate,
   type SplitLine,
 } from "@split/shared";
-import { minorToText } from "./money.js";
 import {
   evaluateSplit,
   newSplitDraft,
@@ -88,7 +88,7 @@ export function expenseDraftFrom(expense: Expense): ExpenseDraft {
     description: expense.description,
     category: expense.category,
     currency,
-    amountText: minorToText(expense.originalAmount, currency),
+    amountText: minorToDecimal(expense.originalAmount, currency),
     conversion: { source: "stored", expense },
     date: expense.expenseDate,
     time: expense.expenseTime ?? "",
@@ -99,7 +99,7 @@ export function expenseDraftFrom(expense: Expense): ExpenseDraft {
         : {
             mode: "several",
             amounts: Object.fromEntries(
-              expense.payers.map((p) => [p.memberId, minorToText(p.amountMinor, currency)]),
+              expense.payers.map((p) => [p.memberId, minorToDecimal(p.amountMinor, currency)]),
             ),
           },
     split: splitDraftFrom(expense.splitMethod, expense.splits, currency),
@@ -177,7 +177,7 @@ export function evaluateConversion(
       isCustomRate: saved.isCustomRate,
       fxDate: saved.fxDate,
       rateText: formatRate(saved.fxRateScaled),
-      convertedText: minorToText(saved.settlementAmount, settlementCurrency),
+      convertedText: minorToDecimal(saved.settlementAmount, settlementCurrency),
     };
   const converting = (rateScaled: number, rateText: string, custom: boolean, fxDate: string) => {
     const converted =
@@ -194,7 +194,7 @@ export function evaluateConversion(
       isCustomRate: custom,
       fxDate,
       rateText,
-      convertedText: minorToText(converted.value, settlementCurrency),
+      convertedText: minorToDecimal(converted.value, settlementCurrency),
     };
   };
 
@@ -220,7 +220,7 @@ export function evaluateConversion(
   // A typed converted amount is the authority; the rate is derived from it.
   const text =
     conversion.source === "stored"
-      ? minorToText(conversion.expense.settlementAmount, settlementCurrency)
+      ? minorToDecimal(conversion.expense.settlementAmount, settlementCurrency)
       : conversion.text;
   const typed = parseAmount(text, settlementCurrency);
   const rate =
