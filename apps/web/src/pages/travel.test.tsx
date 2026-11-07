@@ -1,4 +1,4 @@
-import { googleFlightsUrl, type FlightCard } from "@split/shared";
+import { flightSearchRequestSchema, googleFlightsUrl, type FlightCard } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
@@ -107,5 +107,71 @@ describe("Flight Radar", () => {
       await screen.findByText("20% below the rolling average · 14 observed days"),
     ).toBeVisible();
     expect(screen.getByText("Price percentile: 7")).toBeVisible();
+  });
+  it("mixes recipe defaults with a Soul Prompt and edits Entity Pills without another prompt parse", async () => {
+    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
+    api.flightPromptIntent = {
+      origin: "TPE",
+      destination: "OKA",
+      theme: "warm_island",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      currency: "TWD",
+      budget: 15000,
+      excludeRedEye: true,
+      directOnly: false,
+    };
+    fireEvent.click(await screen.findByRole("button", { name: "溫暖海島" }));
+    await screen.findByText("Example Air");
+    fireEvent.change(screen.getByLabelText("想去哪裡？"), {
+      target: { value: "下個月週末四天，一萬五以內不要紅眼" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+    const pills = await screen.findByRole("region", { name: "目前搜尋條件" });
+    expect(
+      await within(pills).findByRole("button", { name: "日期: 2027-01-08 – 2027-01-11" }),
+    ).toBeVisible();
+    fireEvent.click(within(pills).getByRole("button", { name: "移除預算上限" }));
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(3);
+    });
+    const requests = api.requests
+      .filter((r) => r.route === "POST /api/v1/flights/search")
+      .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
+    expect(requests[0]).toMatchObject({ theme: "warm_island" });
+    expect(requests[1]).toMatchObject({
+      prompt: "下個月週末四天，一萬五以內不要紅眼",
+      defaults: { theme: "warm_island" },
+    });
+    expect(requests[2]).not.toHaveProperty("prompt");
+    expect(requests[2]).not.toHaveProperty("budget");
+    expect(requests[2]).toMatchObject({
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      excludeRedEye: true,
+    });
+  });
+  it("edits an English Entity Pill inline without parsing", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    await screen.findByText("Example Air");
+    const pills = screen.getByRole("region", { name: "Active search conditions" });
+    fireEvent.click(within(pills).getByRole("button", { name: "Origin airport: TPE" }));
+    const editor = within(pills).getByRole("form", { name: "Edit search condition" });
+    expect(within(editor).getByLabelText("Origin airport")).toHaveFocus();
+    fireEvent.change(within(editor).getByLabelText("Origin airport"), { target: { value: "KHH" } });
+    fireEvent.click(within(editor).getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);
+    });
+    const requests = api.requests
+      .filter((r) => r.route === "POST /api/v1/flights/search")
+      .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
+    expect(requests[1]).toMatchObject({ origin: "KHH", theme: "warm_island" });
+    expect(requests.every((request) => !("prompt" in request))).toBe(true);
   });
 });

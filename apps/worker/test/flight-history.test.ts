@@ -10,19 +10,20 @@ it("records daily route minima, hides immature statistics, and returns today's v
   const app = createApp({
     ...productionDeps,
     now: () => clock.now,
-    flightSource: async () => [
-      {
-        price: 8000,
-        airline: "Test Air",
-        outboundDeparture: "08:00",
-        outboundArrival: "12:00",
-        inboundDeparture: null,
-        inboundArrival: null,
-        stops: 0,
-        durationMinutes: 180,
-        priceLevel: "low",
-      },
-    ],
+    flightSource: () =>
+      Promise.resolve([
+        {
+          price: 8000,
+          airline: "Test Air",
+          outboundDeparture: "08:00",
+          outboundArrival: "12:00",
+          inboundDeparture: null,
+          inboundArrival: null,
+          stops: 0,
+          durationMinutes: 180,
+          priceLevel: "low",
+        },
+      ]),
   });
   const intent = {
     origin: "TSA",
@@ -37,7 +38,7 @@ it("records daily route minima, hides immature statistics, and returns today's v
     env,
   );
   expect(await result.json<FlightSearchReply>()).toMatchObject({
-    cards: [{ signal: "strong_buy", history: null }],
+    cards: Array.from({ length: 3 }, () => ({ signal: "strong_buy", history: null })),
   });
   const highlights = await app.request(
     "https://split.test/api/v1/flights/highlights?currency=TWD",
@@ -91,7 +92,7 @@ it("uses fourteen distinct days, ignoring another currency and observations outs
   const app = createApp({
     ...productionDeps,
     now: () => clock.now,
-    flightSource: async () => [{ ...oldFare, price: 8000 }],
+    flightSource: () => Promise.resolve([{ ...oldFare, price: 8000 }]),
   });
   const result = await app.request(
     "https://split.test/api/v1/flights/search",
@@ -99,9 +100,10 @@ it("uses fourteen distinct days, ignoring another currency and observations outs
     env,
   );
   expect(await result.json()).toMatchObject({
-    cards: [
-      { signal: "strong_buy", history: { days: 14, percentBelowMean: 18.8, percentile: 7.1 } },
-    ],
+    cards: Array.from({ length: 3 }, () => ({
+      signal: "strong_buy",
+      history: { days: 14, percentBelowMean: 18.8, percentile: 7.1 },
+    })),
   });
 });
 
@@ -112,9 +114,9 @@ it("daily maintenance rotates four verified routes and purges history older than
     ...productionDeps,
     now: () => clock.now,
     rateSource: { fetchRate: () => Promise.reject(new Error("offline")) },
-    flightSource: async (intent: import("@split/shared").FlightSearchIntent) => {
+    flightSource: (intent: import("@split/shared").FlightSearchIntent) => {
       calls.push(intent.destination);
-      return [
+      return Promise.resolve([
         {
           price: 7777,
           airline: "Cron Air",
@@ -126,7 +128,7 @@ it("daily maintenance rotates four verified routes and purges history older than
           durationMinutes: 150,
           priceLevel: "low" as const,
         },
-      ];
+      ]);
     },
   };
   await dailyMaintenance(env, clock.now, deps);

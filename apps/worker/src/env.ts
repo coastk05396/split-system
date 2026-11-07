@@ -2,6 +2,16 @@ import type { GroupLedger } from "./ledger.js";
 
 /** Bindings declared in wrangler.jsonc, plus Worker secrets and local `.dev.vars`. */
 export interface Bindings {
+  AI?: {
+    run(
+      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      input: {
+        messages: { role: string; content: string }[];
+        response_format: { type: "json_object" };
+      },
+    ): Promise<unknown>;
+  };
+  GROQ_API_KEY?: string;
   FLIGHT_CONTAINER?: DurableObjectNamespace;
   MAINTENANCE?: string;
   DB: D1Database;

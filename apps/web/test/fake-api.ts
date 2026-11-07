@@ -1,8 +1,11 @@
 import {
+  flightSearchRequestSchema,
   flightSearchIntentSchema,
+  defaultFlightIntent,
   googleFlightsUrl,
   type FlightFare,
   type FlightCard,
+  type FlightSearchIntent,
   type FareHistoryStats,
 } from "@split/shared";
 import type { CurrencyCode, Me } from "@split/shared";
@@ -18,6 +21,7 @@ export interface FakeApi {
   flightsDegraded: boolean;
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
+  flightPromptIntent: FlightSearchIntent | null;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -121,6 +125,7 @@ export function createFakeApi(): FakeApi {
     flightsDegraded: false,
     flightHighlights: [],
     flightHistory: null,
+    flightPromptIntent: null,
     flightFares: [
       {
         price: 25000,
@@ -221,9 +226,16 @@ export function createFakeApi(): FakeApi {
           : json({ highlights: api.flightHighlights });
       case "POST /api/v1/flights/search": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
-        const parsed = flightSearchIntentSchema.safeParse(await readJson(init));
+        const parsed = flightSearchRequestSchema.safeParse(await readJson(init));
         if (!parsed.success) return error("VALIDATION_FAILED", 400);
-        const intent = parsed.data;
+        const intent =
+          "prompt" in parsed.data
+            ? (api.flightPromptIntent ??
+              flightSearchIntentSchema.parse({
+                ...defaultFlightIntent(Date.now(), authed.preferredCurrency),
+                ...parsed.data.defaults,
+              }))
+            : parsed.data;
         const url = googleFlightsUrl(intent);
         return json({
           intent,
