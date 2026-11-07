@@ -1,16 +1,11 @@
 import { Plus } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
+import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { hapticTick } from "./haptics.js";
-import {
-  CuteHomeIcon,
-  CuteSettingsIcon,
-  CuteStatsIcon,
-  CuteTripPlaneNavIcon,
-  type NavIconProps,
-} from "./NavIcons.js";
+import { CuteHomeIcon, CuteSettingsIcon, CuteStatsIcon, type NavIconProps } from "./NavIcons.js";
 import { SelectionPill } from "./SelectionPill.js";
 import { SproutMascot } from "./SproutMascot.js";
 
@@ -24,14 +19,14 @@ type Tab =
   | {
       action: "tripNotice";
       label: MessageId;
-      icon: ComponentType<NavIconProps>;
+      icon: ComponentType<SVGProps<SVGSVGElement>>;
       isAction: true;
     };
 
 /** SPEC §6: the same five destinations/actions on every screen size. */
 const TABS: readonly Tab[] = [
   { to: "/", label: "nav.home", icon: CuteHomeIcon },
-  { action: "tripNotice", label: "nav.trip", icon: CuteTripPlaneNavIcon, isAction: true },
+  { action: "tripNotice", label: "nav.trip", icon: CuteTripPlaneIcon, isAction: true },
   { to: "/new", label: "nav.new", icon: Plus },
   { to: "/stats", label: "nav.stats", icon: CuteStatsIcon },
   { to: "/settings", label: "nav.settings", icon: CuteSettingsIcon },
@@ -56,8 +51,6 @@ function BottomBar({ onTripClick }: { onTripClick: () => void }) {
               >
                 <tab.icon
                   aria-hidden="true"
-                  active={false}
-                  strokeWidth={1.9}
                   className="relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none"
                 />
                 <span className="relative">{t(tab.label)}</span>
@@ -128,7 +121,7 @@ function Sidebar({ onTripClick }: { onTripClick: () => void }) {
                   onClick={onTripClick}
                   className="press-pill relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-[15px] text-white/85 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
                 >
-                  <tab.icon aria-hidden="true" active={false} className="relative size-5" />
+                  <tab.icon aria-hidden="true" className="relative size-5" />
                   <span className="relative">{t(tab.label)}</span>
                 </button>
               ) : (
@@ -174,12 +167,17 @@ function Sidebar({ onTripClick }: { onTripClick: () => void }) {
 export function AppShell({ children }: { children: ReactNode }) {
   const [showTripNotice, setShowTripNotice] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isStacked, setIsStacked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const triggerTripNotice = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    const hasOtherToast =
+      typeof document !== "undefined" &&
+      Boolean(document.querySelector(".saved-toast:not(.trip-notice)"));
+    setIsStacked(hasOtherToast);
     setIsLeaving(false);
     setShowTripNotice(true);
 
@@ -188,6 +186,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       exitTimerRef.current = setTimeout(() => {
         setShowTripNotice(false);
         setIsLeaving(false);
+        setIsStacked(false);
       }, 200);
     }, 2500);
   }, []);
@@ -210,7 +209,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           role="status"
           aria-live="polite"
-          className={`saved-toast ${isLeaving ? "is-leaving" : ""} fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-sprout-900 px-5 py-3 text-sm font-bold text-white shadow-lg md:bottom-8`}
+          data-testid="trip-notice"
+          className={`saved-toast trip-notice ${isStacked ? "is-stacked bottom-38 md:bottom-22" : "bottom-24 md:bottom-8"} ${isLeaving ? "is-leaving" : ""} fixed inset-x-0 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-sprout-900 px-5 py-3 text-sm font-bold text-white shadow-lg transition-[bottom] duration-200`}
         >
           <SproutMascot className="size-5 shrink-0" mood="cheer" interactive={false} />
           <span>{t("nav.tripComingSoon")}</span>

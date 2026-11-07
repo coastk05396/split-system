@@ -95,4 +95,47 @@ describe("AppShell BottomBar", () => {
     fireEvent.click(tripButton);
     expect(screen.getByRole("status")).toHaveTextContent("旅遊功能即將推出，敬請期待！");
   });
+
+  it("stacks trip notice above an existing saved-toast without collision or timer interference", () => {
+    vi.useFakeTimers();
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppShell>
+          <div className="saved-toast" role="status">
+            Existing expense saved toast
+          </div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const bottomNav = screen.getByRole("navigation", { name: "底部導覽" });
+    const tripButton = within(bottomNav).getByRole("button", { name: /旅遊/ });
+
+    fireEvent.click(tripButton);
+
+    const tripNotice = screen.getByTestId("trip-notice");
+    expect(tripNotice).toBeVisible();
+    expect(tripNotice).toHaveClass("is-stacked");
+    expect(tripNotice).toHaveClass("bottom-38");
+
+    // Both notices coexist in the document
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(2);
+    expect(screen.getByText("Existing expense saved toast")).toBeVisible();
+
+    // Fast-forward 2500ms: trip notice starts leaving while existing toast is untouched
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+    expect(tripNotice).toHaveClass("is-leaving");
+    expect(screen.getByText("Existing expense saved toast")).toBeVisible();
+
+    // Fast-forward 200ms: trip notice is removed, existing toast remains
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByTestId("trip-notice")).toBeNull();
+    expect(screen.getByText("Existing expense saved toast")).toBeVisible();
+  });
 });
