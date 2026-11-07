@@ -48,6 +48,10 @@ _Avoid_: Subscription, price tracker
 One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons and editable in place.
 _Avoid_: Tag, search parameter
 
+**Adaptive Next-Move Chip**:
+One tappable follow-up under a finished Flight Radar search—such as leaving Thursday or allowing stops—chosen from the actual results and carrying a structured edit of the Entity Pills, so one tap re-runs the search without parsing a prompt.
+_Avoid_: Suggestion, quick reply
+
 **User**:
 One real person, who may sign in through more than one Identity.
 _Avoid_: Account, member (when meaning the person outside a Group)

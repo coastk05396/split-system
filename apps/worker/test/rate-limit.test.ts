@@ -80,6 +80,9 @@ describe("consumeRateLimit", () => {
       membership_lookup: { limit: 30, windowMs: 60_000 },
       settlement_lookup_fallback: { limit: 30, windowMs: 60_000 },
       rates_lookup: { limit: 30, windowMs: 60_000 },
+      flights_minute: { limit: 10, windowMs: 60_000 },
+      flights_hour: { limit: 40, windowMs: 3_600_000 },
+      flights_advise: { limit: 20, windowMs: 60_000 },
     });
   });
 });

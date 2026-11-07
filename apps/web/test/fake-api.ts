@@ -1,3 +1,16 @@
+import {
+  flightSearchRequestSchema,
+  flightSearchIntentSchema,
+  defaultFlightIntent,
+  googleFlightsUrl,
+  type FlightFare,
+  type FlightAdviceReply,
+  type FlightCard,
+  type FlightSearchIntent,
+  type FareHistoryStats,
+  createFlightWatchSchema,
+  type FlightPriceWatch,
+} from "@split/shared";
 import type { CurrencyCode, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
@@ -7,6 +20,15 @@ import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
  */
 export interface FakeApi {
   fetch: typeof fetch;
+  flightFares: FlightFare[];
+  flightsDegraded: boolean;
+  flightHighlights: FlightCard[];
+  flightHistory: FareHistoryStats | null;
+  flightWatches: FlightPriceWatch[];
+  /** Whether LINE Push alerts can be chosen: a linked LINE Identity and room left this month. */
+  linePushAvailable: boolean;
+  flightPromptIntent: FlightSearchIntent | null;
+  flightAdvice: FlightAdviceReply;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -107,6 +129,41 @@ export function createFakeApi(): FakeApi {
   }
 
   const api: FakeApi = {
+    flightsDegraded: false,
+    flightHighlights: [],
+    flightHistory: null,
+    flightWatches: [],
+    linePushAvailable: true,
+    flightPromptIntent: null,
+    flightAdvice: {
+      commentary: "Example Air is the cheapest option.",
+      moves: [
+        {
+          id: "thursday",
+          label: "Leave Thursday 2027-01-07",
+          patch: { departureDate: "2027-01-07", returnDate: "2027-01-10" },
+        },
+        { id: "relax_direct", label: "Allow stops", patch: { directOnly: false } },
+        {
+          id: "later_week",
+          label: "One week later",
+          patch: { departureDate: "2027-01-15", returnDate: "2027-01-18" },
+        },
+      ],
+    },
+    flightFares: [
+      {
+        price: 25000,
+        airline: "Example Air",
+        outboundDeparture: "08:00",
+        outboundArrival: "12:00",
+        inboundDeparture: "18:00",
+        inboundArrival: "20:00",
+        stops: 0,
+        durationMinutes: 180,
+        priceLevel: "low",
+      },
+    ],
     calls,
     groups: createFakeGroups(),
     failNext(route, code = "INTERNAL", status = 500) {
@@ -187,7 +244,86 @@ export function createFakeApi(): FakeApi {
       return error(failure.code, failure.status);
     }
 
+    if (method === "DELETE" && url.pathname.startsWith("/api/v1/flights/watches/")) {
+      if (authed === undefined) return error("UNAUTHORIZED", 401);
+      api.flightWatches = api.flightWatches.filter(
+        (watch) => watch.id !== url.pathname.split("/").at(-1),
+      );
+      return new Response(null, { status: 204 });
+    }
     switch (`${method} ${url.pathname}`) {
+      case "GET /api/v1/flights/vapid-public-key":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ publicKey: "test-vapid-key" });
+      case "POST /api/v1/flights/push-subscriptions":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : new Response(null, { status: 204 });
+      case "GET /api/v1/flights/line-push":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ available: api.linePushAvailable });
+      case "GET /api/v1/flights/watches":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ watches: api.flightWatches });
+      case "POST /api/v1/flights/watches": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const input = createFlightWatchSchema.parse(await readJson(init));
+        const watch: FlightPriceWatch = {
+          ...input,
+          id: crypto.randomUUID(),
+          status: "active",
+          latestFare: null,
+          checkedAt: null,
+          createdAt: Date.now(),
+        };
+        api.flightWatches.push(watch);
+        return json(watch, 201);
+      }
+      case "GET /api/v1/flights/highlights":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ highlights: api.flightHighlights });
+      case "POST /api/v1/flights/search": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const parsed = flightSearchRequestSchema.safeParse(await readJson(init));
+        if (!parsed.success) return error("VALIDATION_FAILED", 400);
+        const intent =
+          "prompt" in parsed.data
+            ? (api.flightPromptIntent ??
+              flightSearchIntentSchema.parse({
+                ...defaultFlightIntent(Date.now(), authed.preferredCurrency),
+                ...parsed.data.defaults,
+              }))
+            : parsed.data;
+        const url = googleFlightsUrl(intent);
+        return json({
+          intent,
+          url,
+          degraded: api.flightsDegraded,
+          cards: api.flightsDegraded
+            ? []
+            : api.flightFares.map((fare) => ({
+                ...fare,
+                history: api.flightHistory,
+                intent,
+                url,
+                overBudget: Math.max(0, fare.price - (intent.budget ?? fare.price)),
+                signal:
+                  intent.budget !== undefined && fare.price > intent.budget
+                    ? "hold"
+                    : fare.priceLevel === "low"
+                      ? "strong_buy"
+                      : fare.priceLevel === "typical"
+                        ? "buy"
+                        : "hold",
+              })),
+        });
+      }
+      case "POST /api/v1/flights/advise":
+        return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.flightAdvice);
       case "GET /api/v1/stats/spending":
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.spendingStats);
       case "GET /api/v1/stats/expenses":

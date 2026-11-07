@@ -23,6 +23,8 @@ function harness(options: { failReplies?: boolean } = {}) {
       sent.push({ replyToken, messages });
       return Promise.resolve();
     },
+    startLoading: () => Promise.resolve(),
+    push: () => Promise.reject(new Error("the webhook never pushes")),
   };
   const app = createApp({
     verifier: () => fakeVerifier,
@@ -109,11 +111,12 @@ describe("POST /line/webhook", () => {
     expect(res.status).toBe(200);
     expect(sent).toHaveLength(1);
     expect(sent[0]?.replyToken).toBe("r-follow");
-    const text = sent[0]?.messages.map((m) => m.text).join("\n") ?? "";
+    const text = sent[0]?.messages.map((m) => (m.type === "text" ? m.text : "")).join("\n") ?? "";
     expect(text).toContain("小芽分帳");
     expect(text).toContain("選單");
     // Decision 14: the welcome no longer suggests typing an Expense sentence.
     expect(text).not.toContain("四人均分");
+    expect(text).toContain("機票");
   });
 
   it("answers free text with the one-line menu pointer, without parsing it", async () => {
@@ -144,8 +147,9 @@ describe("POST /line/webhook", () => {
     await post(body, await sign(body));
 
     expect(sent).toHaveLength(1);
-    expect(sent[0]?.messages[0]?.text).toContain("使用幫助");
-    expect(sent[0]?.messages[0]?.text).toContain("記一筆");
+    expect(JSON.stringify(sent[0]?.messages)).toContain("使用幫助");
+    expect(JSON.stringify(sent[0]?.messages)).toContain("記一筆");
+    expect(JSON.stringify(sent[0]?.messages)).toContain("機票雷達");
   });
 
   it("ignores every other event, including unfollow and unknown postbacks", async () => {

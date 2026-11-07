@@ -1,0 +1,291 @@
+import { flightSearchRequestSchema, googleFlightsUrl, type FlightCard } from "@split/shared";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { renderApp } from "../../test/render-app.js";
+import { makeUser } from "../../test/fake-api.js";
+
+describe("Flight Radar", () => {
+  it("opens from both Travel links and redirects the old Rich Menu address", async () => {
+    const { router } = renderApp({ path: "/trips/latest", cookieUser: makeUser("Rick") });
+    expect(await screen.findByRole("heading", { name: "航班雷達" })).toBeVisible();
+    expect(router.state.location.pathname).toBe("/travel");
+    for (const name of ["底部導覽", "側邊導覽"]) {
+      expect(
+        within(screen.getByRole("navigation", { name })).getByRole("link", { name: "旅遊" }),
+      ).toHaveAttribute("href", "/travel");
+    }
+    expect(screen.queryByText("旅遊功能即將推出，敬請期待！")).toBeNull();
+  });
+  it("prices an English round trip in the Preferred currency and shows the Google handoff", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
+    });
+    expect(await screen.findByRole("heading", { name: "Flight Radar" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Destination airport"), { target: { value: "NRT" } });
+    fireEvent.change(screen.getByLabelText("Departure date"), { target: { value: "2027-01-08" } });
+    fireEvent.change(screen.getByLabelText("Return date"), { target: { value: "2027-01-11" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+    expect(await screen.findByText("US$ 250.00")).toBeVisible();
+    expect(screen.getByText("Strong Buy")).toBeVisible();
+    expect(screen.getByText("Example Air")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View Flights" }).getAttribute("href")).toContain(
+      "?tfs=",
+    );
+    const request = api.requests.find((r) => r.route === "POST /api/v1/flights/search");
+    expect(JSON.parse(request?.body ?? "{}")).toMatchObject({
+      origin: "TPE",
+      destination: "NRT",
+      currency: "USD",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+    });
+  });
+
+  it("returns signed-out visitors to Flight Radar after sign-in", async () => {
+    const { router } = renderApp({ path: "/travel" });
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/sign-in");
+    });
+    expect(new URLSearchParams(router.state.location.search).get("next")).toBe("/travel");
+  });
+
+  it("offers a direct Google link when live pricing is blocked", async () => {
+    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
+    api.flightsDegraded = true;
+    await screen.findByRole("heading", { name: "航班雷達" });
+    fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
+    fireEvent.change(screen.getByLabelText("出發日期"), { target: { value: "2027-01-08" } });
+    fireEvent.change(screen.getByLabelText("回程日期"), { target: { value: "2027-01-11" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜尋航班" }));
+    expect(
+      await screen.findByText("暫時無法取得即時票價，請直接到 Google 航班查看。"),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看航班" }).getAttribute("href")).toContain("?tfs=");
+  });
+  it("runs a verified highlight in one tap and shows history only after 14 observed days", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
+    });
+    const intent = {
+      origin: "TPE",
+      destination: "NRT",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      currency: "USD" as const,
+      excludeRedEye: false,
+      directOnly: false,
+    };
+    const card: FlightCard = {
+      price: 25000,
+      airline: "Example Air",
+      outboundDeparture: "08:00",
+      outboundArrival: "12:00",
+      inboundDeparture: null,
+      inboundArrival: null,
+      stops: 0,
+      durationMinutes: 180,
+      priceLevel: "low",
+      intent,
+      signal: "strong_buy",
+      overBudget: 0,
+      url: googleFlightsUrl(intent),
+    };
+    api.flightHighlights.push(card);
+    api.flightHistory = { days: 13, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
+    const ticker = await screen.findByRole("region", { name: "Today's Strong Buy fares" });
+    fireEvent.click(await within(ticker).findByRole("button", { name: /TPE → NRT/ }));
+    expect(await screen.findByText("Example Air")).toBeVisible();
+    expect(screen.queryByText(/rolling average/)).toBeNull();
+    const request = api.requests.find((r) => r.route === "POST /api/v1/flights/search");
+    expect(JSON.parse(request?.body ?? "{}")).toEqual(intent);
+    expect(api.requests.find((r) => r.route === "GET /api/v1/flights/highlights")).toBeDefined();
+    api.flightHistory = { days: 14, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
+    fireEvent.click(within(ticker).getByRole("button", { name: /TPE → NRT/ }));
+    expect(
+      await screen.findByText("20% below the rolling average · 14 observed days"),
+    ).toBeVisible();
+    expect(screen.getByText("Price percentile: 7")).toBeVisible();
+  });
+  it("mixes recipe defaults with a Soul Prompt and edits Entity Pills without another prompt parse", async () => {
+    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
+    api.flightPromptIntent = {
+      origin: "TPE",
+      destination: "OKA",
+      theme: "warm_island",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      currency: "TWD",
+      budget: 15000,
+      excludeRedEye: true,
+      directOnly: false,
+    };
+    fireEvent.click(await screen.findByRole("button", { name: "溫暖海島" }));
+    await screen.findByText("Example Air");
+    fireEvent.change(screen.getByLabelText("想去哪裡？"), {
+      target: { value: "下個月週末四天，一萬五以內不要紅眼" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+    const pills = await screen.findByRole("region", { name: "目前搜尋條件" });
+    expect(
+      await within(pills).findByRole("button", { name: "日期: 2027-01-08 – 2027-01-11" }),
+    ).toBeVisible();
+    fireEvent.click(within(pills).getByRole("button", { name: "移除預算上限" }));
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(3);
+    });
+    const requests = api.requests
+      .filter((r) => r.route === "POST /api/v1/flights/search")
+      .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
+    expect(requests[0]).toMatchObject({ theme: "warm_island" });
+    expect(requests[1]).toMatchObject({
+      prompt: "下個月週末四天，一萬五以內不要紅眼",
+      defaults: { theme: "warm_island" },
+    });
+    expect(requests[2]).not.toHaveProperty("prompt");
+    expect(requests[2]).not.toHaveProperty("budget");
+    expect(requests[2]).toMatchObject({
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      excludeRedEye: true,
+    });
+  });
+  it("edits an English Entity Pill inline without parsing", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    await screen.findByText("Example Air");
+    const pills = screen.getByRole("region", { name: "Active search conditions" });
+    fireEvent.click(within(pills).getByRole("button", { name: "Origin airport: TPE" }));
+    const editor = within(pills).getByRole("form", { name: "Edit search condition" });
+    expect(within(editor).getByLabelText("Origin airport")).toHaveFocus();
+    fireEvent.change(within(editor).getByLabelText("Origin airport"), { target: { value: "KHH" } });
+    fireEvent.click(within(editor).getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);
+    });
+    const requests = api.requests
+      .filter((r) => r.route === "POST /api/v1/flights/search")
+      .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
+    expect(requests[1]).toMatchObject({ origin: "KHH", theme: "warm_island" });
+    expect(requests.every((request) => !("prompt" in request))).toBe(true);
+  });
+
+  it("renders fares immediately, then reveals commentary and Adaptive Next-Move Chips", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    const release = api.holdResponses("POST /api/v1/flights/advise");
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    expect(await screen.findByText("Example Air")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View Flights" })).toBeVisible();
+    await waitFor(() => {
+      expect(api.requests.some((r) => r.route === "POST /api/v1/flights/advise")).toBe(true);
+    });
+    expect(screen.queryByRole("region", { name: "Deal commentary" })).toBeNull();
+    release();
+    const advice = await screen.findByRole("region", { name: "Deal commentary" });
+    expect(within(advice).getByText("Example Air is the cheapest option.")).toBeVisible();
+    expect(
+      within(advice)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Leave Thursday 2027-01-07", "Allow stops", "One week later"]);
+    const request = api.requests.find((r) => r.route === "POST /api/v1/flights/advise");
+    expect(JSON.parse(request?.body ?? "{}")).toMatchObject({
+      language: "en",
+      cards: [{ airline: "Example Air", price: 25000 }],
+    });
+  });
+
+  it("applies a chip's intent patch to the pills and searches directly without a prompt parse", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    const advice = await screen.findByRole("region", { name: "Deal commentary" });
+    fireEvent.click(within(advice).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
+    const pills = screen.getByRole("region", { name: "Active search conditions" });
+    expect(
+      await within(pills).findByRole("button", { name: "Dates: 2027-01-07 – 2027-01-10" }),
+    ).toBeVisible();
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);
+    });
+    const searches = api.requests
+      .filter((r) => r.route === "POST /api/v1/flights/search")
+      .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
+    expect(searches[1]).toMatchObject({
+      departureDate: "2027-01-07",
+      returnDate: "2027-01-10",
+      theme: "warm_island",
+    });
+    expect(searches.every((request) => !("prompt" in request))).toBe(true);
+  });
+
+  it("keeps fares and shows no error when advice fails", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    api.failNext("POST /api/v1/flights/advise", "INTERNAL", 500);
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    expect(await screen.findByText("Example Air")).toBeVisible();
+    await waitFor(() => {
+      expect(api.requests.some((r) => r.route === "POST /api/v1/flights/advise")).toBe(true);
+    });
+    expect(screen.queryByRole("region", { name: "Deal commentary" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("runs the search carried by the LINE portal link without parsing a prompt", async () => {
+    const query = new URLSearchParams({
+      origin: "TPE",
+      destination: "NRT",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      currency: "TWD",
+      budget: "15000",
+      excludeRedEye: "1",
+      directOnly: "0",
+    });
+    const { api } = renderApp({
+      path: `/travel?${query.toString()}`,
+      cookieUser: makeUser("Rick"),
+    });
+
+    expect(await screen.findByRole("link", { name: "查看航班" })).toBeVisible();
+    const requests = api.requests.filter((r) => r.route === "POST /api/v1/flights/search");
+    expect(requests).toHaveLength(1);
+    const body: unknown = JSON.parse(requests[0]?.body ?? "{}");
+    expect(body).toMatchObject({
+      origin: "TPE",
+      destination: "NRT",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      budget: 15000,
+      excludeRedEye: true,
+      directOnly: false,
+    });
+    expect(body).not.toHaveProperty("prompt");
+  });
+
+  it("ignores a malformed portal link and shows the starter view", async () => {
+    const { api } = renderApp({
+      path: "/travel?destination=nowhere&departureDate=soon",
+      cookieUser: makeUser("Rick"),
+    });
+
+    expect(await screen.findByRole("heading", { name: "航班雷達" })).toBeVisible();
+    expect(api.requests.some((r) => r.route === "POST /api/v1/flights/search")).toBe(false);
+  });
+});

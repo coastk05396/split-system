@@ -11,6 +11,9 @@ import { ApiError } from "./errors.js";
  * itself is limited by the WAF rule on `/api/v1/auth/*`.
  */
 export const RATE_LIMITS = {
+  flights_minute: { limit: 10, windowMs: 60_000 },
+  flights_hour: { limit: 40, windowMs: 3_600_000 },
+  flights_advise: { limit: 20, windowMs: 60_000 },
   expense_write: { limit: 30, windowMs: 60_000 },
   invite_join: { limit: 10, windowMs: 60_000 },
   group_create: { limit: 5, windowMs: 3_600_000 },
@@ -43,6 +46,30 @@ export async function consumeRateLimit(
     .returning({ count: rateCounters.count });
   const count = counted[0]?.count ?? 1;
   if (count > limit) {
+    const retryAfter = Math.ceil((windowStart + windowMs - now) / 1000);
+    throw new ApiError("RATE_LIMITED", undefined, { "Retry-After": String(retryAfter) });
+  }
+}
+
+/**
+ * The same fixed-window count for a LINE sender who may have no User yet. The key is a keyed
+ * hash of the LINE user id, and the table has no foreign key, so unregistered friends count too.
+ */
+export async function consumeSenderRateLimit(
+  d1: D1Database,
+  senderKey: string,
+  routeGroup: RouteGroup,
+  now: number,
+): Promise<void> {
+  const { limit, windowMs } = RATE_LIMITS[routeGroup];
+  const windowStart = now - (now % windowMs);
+  const counted = await d1
+    .prepare(
+      "INSERT INTO line_sender_counters(sender_key,route_group,window_start,count) VALUES(?,?,?,1) ON CONFLICT(sender_key,route_group,window_start) DO UPDATE SET count=count+1 RETURNING count",
+    )
+    .bind(senderKey, routeGroup, windowStart)
+    .first<{ count: number }>();
+  if ((counted?.count ?? 1) > limit) {
     const retryAfter = Math.ceil((windowStart + windowMs - now) / 1000);
     throw new ApiError("RATE_LIMITED", undefined, { "Retry-After": String(retryAfter) });
   }

@@ -30,10 +30,10 @@ const COLUMNS = 3;
 /** Must equal HELP_POSTBACK_DATA in events.ts; the Rich Menu test checks it. */
 const HELP_DATA = "action=help";
 
-/** The SPA path each LIFF button opens; the app resolves "last used" Group or Trip. */
+/** The SPA path each LIFF button opens; "我的旅程" opens Flight Radar. */
 const BUTTONS: readonly ({ label: string } & ({ path: string } | { help: true }))[] = [
   { label: "快速分帳", path: "/groups?create=running-tab" },
-  { label: "我的旅程", path: "/trips/latest" },
+  { label: "我的旅程", path: "/travel" },
   { label: "記一筆", path: "/new" },
   { label: "查看結算", path: "/settle" },
   { label: "邀請夥伴", path: "/invite" },

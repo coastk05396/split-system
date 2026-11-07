@@ -35,6 +35,9 @@ describe("the default Rich Menu (decision 14)", () => {
       );
     }
     expect(add?.type === "uri" ? add.uri : "").toBe("https://liff.line.me/1234567890-abcdefgh/new");
+    expect(trip?.type === "uri" ? trip.uri : "").toBe(
+      "https://liff.line.me/1234567890-abcdefgh/travel",
+    );
     expect(help).toEqual({
       type: "postback",
       label: "使用幫助",

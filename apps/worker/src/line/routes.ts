@@ -3,6 +3,7 @@ import type { AppEnv } from "../api.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { repliesFor, webhookBodySchema } from "./events.js";
+import { flightChatRequest, handleFlightChat } from "./flight-chat.js";
 import { verifyLineSignature } from "./signature.js";
 
 /**
@@ -28,11 +29,20 @@ export function lineRoutes(deps: AppDeps) {
     if (!parsed.success) throw new ApiError("VALIDATION_FAILED");
 
     const client = deps.lineReplyClient(c.env);
+    const portalBase =
+      c.env.LIFF_ID === undefined || c.env.LIFF_ID === ""
+        ? new URL(c.req.url).origin
+        : `https://liff.line.me/${c.env.LIFF_ID}`;
     const sends = parsed.data.events.flatMap((event) => {
+      const flight = flightChatRequest(event);
       const messages = repliesFor(event);
-      if (messages.length === 0 || event.replyToken === undefined) return [];
+      if (event.replyToken === undefined || (flight === null && messages.length === 0)) return [];
+      const send =
+        flight === null
+          ? client.reply(event.replyToken, messages)
+          : handleFlightChat(c.env, deps, client, flight, event.replyToken, portalBase, secret);
       return [
-        client.reply(event.replyToken, messages).catch((error: unknown) => {
+        send.catch((error: unknown) => {
           console.error(
             JSON.stringify({
               requestId: c.get("requestId"),

@@ -14,6 +14,7 @@ import { createFakeApi, type FakeApi } from "./fake-api.js";
 import type { FakeGroups } from "./fake-groups.js";
 
 export interface RenderAppOptions {
+  webPush?: AppDeps["webPush"];
   strictMode?: boolean;
   webSocket?: typeof WebSocket;
   path?: string;
@@ -83,6 +84,7 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     testSignIn: options.testSignIn ?? false,
     cacheStorage: options.cacheStorage,
   };
+  if (options.webPush !== undefined) deps.webPush = options.webPush;
   if (options.webSocket !== undefined) deps.webSocket = options.webSocket;
   const router = createMemoryRouter(routes, {
     initialEntries: [options.pathFor?.() ?? options.path ?? "/"],

@@ -1,4 +1,8 @@
 // Local-first Worker config: `wrangler dev` runs with local D1 and KV and needs no account.
+// The top level is what `wrangler dev` and vitest read, so it must not declare the `ai` binding
+// (always remote: needs a Cloudflare login) or the FLIGHT_CONTAINER binding, v2 migration and
+// `containers` block (need Docker). Those live only in env.staging / env.production (ADR 0006);
+// locally the Worker sees env.AI and env.FLIGHT_CONTAINER as undefined and degrades to deep links.
 // The database_id and KV id are placeholders until the deploy ticket creates the real resources.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
@@ -12,7 +16,9 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"],
   },
-  "durable_objects": { "bindings": [{ "name": "GROUP_LEDGER", "class_name": "GroupLedger" }] },
+  "durable_objects": {
+    "bindings": [{ "name": "GROUP_LEDGER", "class_name": "GroupLedger" }],
+  },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GroupLedger"] }],
   "d1_databases": [
     {
@@ -43,8 +49,25 @@
     "staging": {
       "name": "split-staging",
       "workers_dev": true,
-      "durable_objects": { "bindings": [{ "name": "GROUP_LEDGER", "class_name": "GroupLedger" }] },
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GroupLedger"] }],
+      "durable_objects": {
+        "bindings": [
+          { "name": "GROUP_LEDGER", "class_name": "GroupLedger" },
+          { "name": "FLIGHT_CONTAINER", "class_name": "FlightContainer" },
+        ],
+      },
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["GroupLedger"] },
+        { "tag": "v2", "new_sqlite_classes": ["FlightContainer"] },
+      ],
+      "ai": { "binding": "AI" },
+      "containers": [
+        {
+          "class_name": "FlightContainer",
+          "image": "./flight-container/Dockerfile",
+          "max_instances": 1,
+          "instance_type": "lite",
+        },
+      ],
       "d1_databases": [
         {
           "binding": "DB",
@@ -67,8 +90,25 @@
     "production": {
       "name": "split-prod",
       "routes": [{ "pattern": "split.rickchen.si", "custom_domain": true }],
-      "durable_objects": { "bindings": [{ "name": "GROUP_LEDGER", "class_name": "GroupLedger" }] },
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GroupLedger"] }],
+      "durable_objects": {
+        "bindings": [
+          { "name": "GROUP_LEDGER", "class_name": "GroupLedger" },
+          { "name": "FLIGHT_CONTAINER", "class_name": "FlightContainer" },
+        ],
+      },
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["GroupLedger"] },
+        { "tag": "v2", "new_sqlite_classes": ["FlightContainer"] },
+      ],
+      "ai": { "binding": "AI" },
+      "containers": [
+        {
+          "class_name": "FlightContainer",
+          "image": "./flight-container/Dockerfile",
+          "max_instances": 1,
+          "instance_type": "lite",
+        },
+      ],
       "d1_databases": [
         {
           "binding": "DB",
