@@ -5,6 +5,7 @@ import { requireUser } from "../auth/require-user.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { parseBody } from "../request-guards.js";
+import { linePushHasQuota, lineUserIdOf } from "./line-push.js";
 import { createFlightWatch, expireWatches, watchFromRow, type WatchRow } from "./watches.js";
 
 export function flightWatchRoutes(deps: AppDeps) {
@@ -15,6 +16,14 @@ export function flightWatchRoutes(deps: AppDeps) {
       await next();
     })
     .get("/flights/vapid-public-key", (c) => c.json({ publicKey: c.env.VAPID_PUBLIC_KEY ?? null }))
+    .get("/flights/line-push", async (c) =>
+      // Available: a linked LINE Identity and room left in this month's push allowance.
+      c.json({
+        available:
+          (await lineUserIdOf(c.env.DB, c.var.userId)) !== null &&
+          (await linePushHasQuota(c.env.DB, deps.now())),
+      }),
+    )
     .get("/flights/watches", async (c) => {
       await expireWatches(c.env.DB, deps.now());
       const rows = await c.env.DB.prepare(

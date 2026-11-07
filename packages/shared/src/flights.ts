@@ -24,6 +24,21 @@ export type FlightSearchIntent = z.infer<typeof flightSearchIntentSchema>;
  * A search carried in a query string (the LINE postback and the LIFF portal link share it);
  * null when anything is missing or invalid.
  */
+/** Query string that carries a whole search: LINE postbacks, the LIFF portal and /travel share it. */
+export function intentToQuery(intent: FlightSearchIntent): string {
+  const params = new URLSearchParams({
+    origin: intent.origin,
+    destination: intent.destination,
+    departureDate: intent.departureDate,
+    returnDate: intent.returnDate,
+    currency: intent.currency,
+    excludeRedEye: intent.excludeRedEye ? "1" : "0",
+    directOnly: intent.directOnly ? "1" : "0",
+  });
+  if (intent.budget !== undefined) params.set("budget", String(intent.budget));
+  if (intent.theme !== undefined) params.set("theme", intent.theme);
+  return params.toString();
+}
 export function intentFromQuery(params: URLSearchParams): FlightSearchIntent | null {
   const parsed = flightSearchIntentSchema.safeParse({
     origin: params.get("origin") ?? undefined,

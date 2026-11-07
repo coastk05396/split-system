@@ -5,6 +5,7 @@ import {
 } from "@split/shared";
 import type { Bindings } from "../env.js";
 import { ApiError } from "../errors.js";
+import { lineUserIdOf, MAX_LINE_WATCHES } from "./line-push.js";
 
 export interface WatchRow {
   id: string;
@@ -50,14 +51,16 @@ export async function createFlightWatch(
   input: CreateFlightWatch,
   now: number,
 ): Promise<FlightPriceWatch> {
-  if (input.channel !== "web_push") throw new ApiError("VALIDATION_FAILED");
+  // LINE Push needs a LINE Identity to address the message to.
+  if (input.channel === "line_push" && (await lineUserIdOf(env.DB, userId)) === null)
+    throw new ApiError("VALIDATION_FAILED");
   if (input.intent.departureDate < new Date(now).toISOString().slice(0, 10))
     throw new ApiError("VALIDATION_FAILED");
   await expireWatches(env.DB, now);
   const id = crypto.randomUUID();
   const intent = JSON.stringify(input.intent);
   const result = await env.DB.prepare(
-    "INSERT INTO flight_price_watches(id,user_id,intent_json,baseline_fare,target_fare,channel,created_at,departure_date) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM flight_price_watches WHERE user_id=? AND channel=? AND status='active')<5 ON CONFLICT DO NOTHING",
+    "INSERT INTO flight_price_watches(id,user_id,intent_json,baseline_fare,target_fare,channel,created_at,departure_date) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM flight_price_watches WHERE user_id=? AND channel=? AND status='active')<? ON CONFLICT DO NOTHING",
   )
     .bind(
       id,
@@ -70,6 +73,7 @@ export async function createFlightWatch(
       input.intent.departureDate,
       userId,
       input.channel,
+      input.channel === "line_push" ? MAX_LINE_WATCHES : 5,
     )
     .run();
   if (!result.meta.changes) {

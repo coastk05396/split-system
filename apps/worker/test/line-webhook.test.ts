@@ -24,6 +24,7 @@ function harness(options: { failReplies?: boolean } = {}) {
       return Promise.resolve();
     },
     startLoading: () => Promise.resolve(),
+    push: () => Promise.reject(new Error("the webhook never pushes")),
   };
   const app = createApp({
     verifier: () => fakeVerifier,

@@ -2,7 +2,9 @@ import * as Dialog from "@radix-ui/react-dialog";
 import {
   CURRENCIES,
   formatAmount,
+  intentToQuery,
   parseAmount,
+  type CreateFlightWatch,
   type FlightCard,
   type FlightWatchesReply,
   type FlightPriceWatch,
@@ -14,6 +16,19 @@ import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev, send } from "../groups/data.js";
 import { failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+
+/** Saves a Price Watch; the caller refreshes the watch list. */
+export function useCreateWatch() {
+  const { session } = useAuth();
+  return (watch: CreateFlightWatch) =>
+    readWithRev<FlightPriceWatch>(
+      session.fetch("/api/v1/flights/watches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(watch),
+      }),
+    );
+}
 
 export function FlightPriceWatchButton({
   card,
@@ -157,8 +172,17 @@ function WatchForm({
   onClose: () => void;
 }) {
   const { session } = useAuth();
-  const { webPush } = useDeps();
+  const { webPush, line } = useDeps();
   const queryClient = useQueryClient();
+  const createWatch = useCreateWatch();
+  // Browser Web Push does not exist inside LIFF: there the alert goes through LINE Push.
+  const inLine = line.isInClient();
+  const linePush = useQuery({
+    queryKey: ["flights", "line-push"],
+    enabled: inLine,
+    queryFn: () => readWithRev<{ available: boolean }>(session.fetch("/api/v1/flights/line-push")),
+  });
+  const lineMode = inLine && linePush.data?.available === true;
   const [target, setTarget] = useState(
     String(
       Math.max(1, Math.floor(card.price * 0.85)) / 10 ** CURRENCIES[card.intent.currency].decimals,
@@ -167,6 +191,12 @@ function WatchForm({
   const [invalid, setInvalid] = useState(false);
   const save = useMutation({
     mutationFn: async (amount: number) => {
+      const watch = {
+        intent: card.intent,
+        baselineFare: card.price,
+        targetFare: amount,
+      };
+      if (lineMode) return createWatch({ ...watch, channel: "line_push" });
       if (!webPush || !publicKey) throw new Error("Push unavailable");
       const subscription = await webPush.subscribe(publicKey);
       await send(
@@ -176,18 +206,7 @@ function WatchForm({
           body: JSON.stringify(subscription),
         }),
       );
-      return readWithRev<FlightPriceWatch>(
-        session.fetch("/api/v1/flights/watches", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            intent: card.intent,
-            baselineFare: card.price,
-            targetFare: amount,
-            channel: "web_push",
-          }),
-        }),
-      );
+      return createWatch({ ...watch, channel: "web_push" });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["flights", "watches"] });
@@ -224,7 +243,8 @@ function WatchForm({
         />
       </label>
       <p className="text-sm text-ink-muted">{card.intent.currency}</p>
-      {(!available || !publicKey) && <p role="status">{t("flight.pushUnavailable")}</p>}
+      {!inLine && (!available || !publicKey) && <p role="status">{t("flight.pushUnavailable")}</p>}
+      {inLine && linePush.isSuccess && !lineMode && <p role="status">{t("flight.lineFull")}</p>}
       {(save.isError || invalid) && (
         <p role="alert">
           {save.error instanceof Error && !("code" in save.error)
@@ -234,13 +254,27 @@ function WatchForm({
               : failureMessage(save.error)}
         </p>
       )}
-      <button
-        className={primaryButton}
-        type="submit"
-        disabled={save.isPending || !available || !publicKey}
-      >
-        {t("flight.enablePush")}
-      </button>
+      {inLine && linePush.isSuccess && !lineMode ? (
+        <button
+          className={primaryButton}
+          type="button"
+          onClick={() => {
+            void line.openExternal(
+              `${window.location.origin}/travel?${intentToQuery(card.intent)}`,
+            );
+          }}
+        >
+          {t("flight.openBrowser")}
+        </button>
+      ) : (
+        <button
+          className={primaryButton}
+          type="submit"
+          disabled={save.isPending || (inLine ? !lineMode : !available || !publicKey)}
+        >
+          {t(inLine ? "flight.enableLine" : "flight.enablePush")}
+        </button>
+      )}
       <Dialog.Close className={secondaryButton}>{t("common.cancel")}</Dialog.Close>
     </form>
   );

@@ -34,7 +34,9 @@ export type FlexComponent =
       type: "button";
       style: "primary" | "secondary" | "link";
       height: "sm";
-      action: { type: "uri"; label: string; uri: string };
+      action:
+        | { type: "uri"; label: string; uri: string }
+        | { type: "postback"; label: string; data: string; displayText: string };
     };
 
 export interface FlexBubble {
@@ -65,14 +67,17 @@ export interface LineReplyClient {
   reply(replyToken: string, messages: LineMessage[]): Promise<void>;
   /** LINE's native "typing" indicator in a one-on-one chat. */
   startLoading(userId: string): Promise<void>;
+  /** A LINE Push message; counts against the monthly quota, so callers reserve a slot first. */
+  push(userId: string, messages: LineMessage[]): Promise<void>;
 }
 
 const REPLY_URL = "https://api.line.me/v2/bot/message/reply";
+const PUSH_URL = "https://api.line.me/v2/bot/message/push";
 const LOADING_URL = "https://api.line.me/v2/bot/chat/loading/start";
 /** Multiples of 5 from 5 to 60; the reply clears it earlier. */
 const LOADING_SECONDS = 30;
 
-/** The Messaging API reply call. Replies are free; the Bot never pushes. */
+/** The Messaging API reply and push calls. Replies are free; pushes count against the quota. */
 export function createLineReplyClient(
   channelAccessToken: string,
   fetchImpl: typeof fetch = fetch,
@@ -92,6 +97,7 @@ export function createLineReplyClient(
     reply: (replyToken, messages) => post(REPLY_URL, { replyToken, messages }, "reply"),
     startLoading: (userId) =>
       post(LOADING_URL, { chatId: userId, loadingSeconds: LOADING_SECONDS }, "loading"),
+    push: (userId, messages) => post(PUSH_URL, { to: userId, messages }, "push"),
   };
 }
 
@@ -99,4 +105,6 @@ export function createLineReplyClient(
 export const silentReplyClient: LineReplyClient = {
   reply: () => Promise.resolve(),
   startLoading: () => Promise.resolve(),
+  // Throws so a watch is never marked delivered when no channel token is configured.
+  push: () => Promise.reject(new Error("LINE push is not configured")),
 };

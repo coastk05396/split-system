@@ -1,33 +1,18 @@
-import {
-  FLIGHT_DESTINATIONS,
-  formatAmount,
-  type FlightCard,
-  type FlightSearchIntent,
-} from "@split/shared";
+import { FLIGHT_DESTINATIONS, formatAmount, intentToQuery, type FlightCard } from "@split/shared";
 import { SIGNAL_LABEL, time } from "../flights/advice.js";
 import type { FlexBubble, FlexComponent } from "./reply-client.js";
+
+type FlexButtonAction = Extract<FlexComponent, { type: "button" }>["action"];
 
 /** One carousel holds at most 5 bubbles: up to 4 flights and 1 portal into LIFF. */
 export const MAX_FLIGHT_BUBBLES = 4;
 
+/** Postback data of 降價叫醒我: `action=watch&` plus the card's search and `fare=` (minor units). */
+export const WATCH_POSTBACK_PREFIX = "action=watch&";
+export const WATCH_LABEL = "降價叫醒我";
+
 const SIGNAL_COLOR = { strong_buy: "#1B8A4B", buy: "#2563EB", hold: "#B45309" } as const;
 const MUTED = "#6B7280";
-
-/** Query string that carries a whole search: postbacks and the LIFF portal share it. */
-export function serializeIntent(intent: FlightSearchIntent): string {
-  const params = new URLSearchParams({
-    origin: intent.origin,
-    destination: intent.destination,
-    departureDate: intent.departureDate,
-    returnDate: intent.returnDate,
-    currency: intent.currency,
-    excludeRedEye: intent.excludeRedEye ? "1" : "0",
-    directOnly: intent.directOnly ? "1" : "0",
-  });
-  if (intent.budget !== undefined) params.set("budget", String(intent.budget));
-  if (intent.theme !== undefined) params.set("theme", intent.theme);
-  return params.toString();
-}
 
 // Every text has a fixed maxLines and every bubble the same rows, so all cards share one height.
 const row = (
@@ -71,6 +56,8 @@ function bubble(parts: {
   tag: string;
   body: FlexComponent[];
   action: { label: string; uri: string };
+  /** The second footer action; every bubble has one so all footers keep one height. */
+  second: FlexButtonAction;
 }): FlexBubble {
   return {
     type: "bubble",
@@ -96,6 +83,7 @@ function bubble(parts: {
           height: "sm",
           action: { type: "uri", label: parts.action.label, uri: parts.action.uri },
         },
+        { type: "button", style: "link", height: "sm", action: parts.second },
       ],
     },
   };
@@ -122,6 +110,12 @@ export function flightBubble(card: FlightCard): FlexBubble {
       row(second, { color: MUTED }),
     ],
     action: { label: "查看航班 ↗", uri: card.url },
+    second: {
+      type: "postback",
+      label: WATCH_LABEL,
+      data: `${WATCH_POSTBACK_PREFIX}${intentToQuery(intent)}&fare=${card.price}`,
+      displayText: WATCH_LABEL,
+    },
   });
 }
 
@@ -144,5 +138,6 @@ export function portalBubble(portalUrl: string): FlexBubble {
       row("登入小芽即可使用", { color: MUTED }),
     ],
     action: { label: "打開小芽機票雷達 ↗", uri: portalUrl },
+    second: { type: "uri", label: "設定降價提醒 ↗", uri: portalUrl },
   });
 }

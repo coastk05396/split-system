@@ -1,6 +1,8 @@
-import { formatAmount, pushSubscriptionSchema } from "@split/shared";
+import { formatAmount, pushSubscriptionSchema, type FlightCard } from "@split/shared";
 import type { AppDeps } from "../deps.js";
 import type { Bindings } from "../env.js";
+import { flightBubble } from "../line/flight-flex.js";
+import { lineUserIdOf, releaseLinePush, reserveLinePush } from "./line-push.js";
 import { buildFlightReply, lookupFares } from "./search.js";
 import { expireWatches, watchFromRow, type WatchRow } from "./watches.js";
 import { sendWebPush } from "./web-push.js";
@@ -9,7 +11,7 @@ export async function maintainFlightWatches(env: Bindings, deps: AppDeps): Promi
   const now = deps.now();
   await expireWatches(env.DB, now);
   const watches = await env.DB.prepare(
-    "SELECT * FROM flight_price_watches WHERE status='active' AND channel='web_push' AND claim_until<? ORDER BY COALESCE(checked_at,0),created_at",
+    "SELECT * FROM flight_price_watches WHERE status='active' AND claim_until<? ORDER BY COALESCE(checked_at,0),created_at",
   )
     .bind(now)
     .all<WatchRow>();
@@ -39,6 +41,10 @@ export async function maintainFlightWatches(env: Bindings, deps: AppDeps): Promi
         (card) => card.signal === "strong_buy" || card.price <= watch.targetFare,
       );
       if (!match) continue;
+      if (row.channel === "line_push") {
+        triggered = await pushLineAlert(env, deps, row, token, match, now);
+        continue;
+      }
       const subscriptions = await env.DB.prepare(
         "SELECT endpoint,p256dh,auth FROM web_push_subscriptions WHERE user_id=?",
       )
@@ -89,5 +95,39 @@ export async function maintainFlightWatches(env: Bindings, deps: AppDeps): Promi
         .bind(triggered ? 1 : 0, row.id, token)
         .run();
     }
+  }
+}
+
+/** One sprout-free Flex alert; at the monthly cap nothing is sent and the in-app badge remains. */
+async function pushLineAlert(
+  env: Bindings,
+  deps: AppDeps,
+  row: WatchRow,
+  token: string,
+  match: FlightCard,
+  now: number,
+): Promise<boolean> {
+  const to = await lineUserIdOf(env.DB, row.user_id);
+  if (to === null) return false;
+  // Cancellation/account deletion wins before any external notification starts.
+  const claimed = await env.DB.prepare(
+    "SELECT id FROM flight_price_watches WHERE id=? AND status='active' AND claim_token=?",
+  )
+    .bind(row.id, token)
+    .first();
+  if (!claimed) return false;
+  if (!(await reserveLinePush(env.DB, now))) return true;
+  try {
+    await deps.lineReplyClient(env).push(to, [
+      {
+        type: "flex",
+        altText: `航班雷達 · 降價通知 ${match.intent.origin} → ${match.intent.destination} · ${formatAmount(match.price, match.intent.currency)}`,
+        contents: { type: "carousel", contents: [flightBubble(match)] },
+      },
+    ]);
+    return true;
+  } catch {
+    await releaseLinePush(env.DB, now);
+    return false;
   }
 }

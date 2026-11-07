@@ -25,6 +25,8 @@ export interface FakeApi {
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];
+  /** Whether LINE Push alerts can be chosen: a linked LINE Identity and room left this month. */
+  linePushAvailable: boolean;
   flightPromptIntent: FlightSearchIntent | null;
   flightAdvice: FlightAdviceReply;
   /** Every request seen, as "METHOD /path". */
@@ -131,6 +133,7 @@ export function createFakeApi(): FakeApi {
     flightHighlights: [],
     flightHistory: null,
     flightWatches: [],
+    linePushAvailable: true,
     flightPromptIntent: null,
     flightAdvice: {
       commentary: "Example Air is the cheapest option.",
@@ -257,6 +260,10 @@ export function createFakeApi(): FakeApi {
         return authed === undefined
           ? error("UNAUTHORIZED", 401)
           : new Response(null, { status: 204 });
+      case "GET /api/v1/flights/line-push":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ available: api.linePushAvailable });
       case "GET /api/v1/flights/watches":
         return authed === undefined
           ? error("UNAUTHORIZED", 401)

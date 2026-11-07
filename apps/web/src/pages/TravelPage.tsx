@@ -12,17 +12,21 @@ import {
   type FlightSearchReply,
   type FlightHighlightsReply,
 } from "@split/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
-import { ScreenHeader, input, primaryButton } from "../groups/ui.js";
+import { ScreenHeader, failureMessage, input, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 
-import { FlightPriceWatchButton, FlightPriceWatches } from "../flights/FlightPriceWatches.js";
+import {
+  FlightPriceWatchButton,
+  FlightPriceWatches,
+  useCreateWatch,
+} from "../flights/FlightPriceWatches.js";
 
 export function TravelPage() {
   const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
@@ -77,10 +81,27 @@ export function TravelPage() {
   // The LINE portal bubble opens /travel with its search in the query: run it once, no parse.
   const [params] = useSearchParams();
   const portalIntent = useRef(intentFromQuery(params));
+  // A LINE chat tap by someone not yet signed up adds `watch=line&fare=`: finish it now, as this User.
+  const pendingFare = useRef(params.get("watch") === "line" ? Number(params.get("fare")) : 0);
+  const queryClient = useQueryClient();
+  const createWatch = useCreateWatch();
+  const lineWatch = useMutation({
+    mutationFn: (pending: { intent: FlightSearchIntent; fare: number }) =>
+      createWatch({
+        intent: pending.intent,
+        baselineFare: pending.fare,
+        targetFare: Math.max(1, Math.floor(pending.fare * 0.85)),
+        channel: "line_push",
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flights", "watches"] }),
+  });
   useEffect(() => {
     const intent = portalIntent.current;
+    const fare = pendingFare.current;
     portalIntent.current = null;
+    pendingFare.current = 0;
     if (intent) runIntent(intent); // once, on arrival
+    if (intent && Number.isInteger(fare) && fare > 0) lineWatch.mutate({ intent, fare });
   }, []);
 
   const reply = search.data;
@@ -161,6 +182,16 @@ export function TravelPage() {
         onSearch={runIntent}
         formRef={formRef}
       />
+      {lineWatch.isSuccess && (
+        <p role="status" className="mt-5 font-bold">
+          {t("flight.lineWatchSet")}
+        </p>
+      )}
+      {lineWatch.isError && (
+        <p role="alert" className="mt-5">
+          {failureMessage(lineWatch.error)}
+        </p>
+      )}
       {search.isPending && (
         <p role="status" className="mt-5 text-ink-muted">
           {t("flight.searching")}

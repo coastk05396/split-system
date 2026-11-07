@@ -5,7 +5,7 @@ import { createApp } from "../src/app.js";
 import { productionDeps } from "../src/deps.js";
 import { purgeExpired } from "../src/maintenance.js";
 import type { LineMessage, LineReplyClient } from "../src/line/reply-client.js";
-import { clock } from "./auth-harness.js";
+import { bearer, call, clock, signIn, uniqueSub } from "./auth-harness.js";
 
 const secret = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
   b.toString(16).padStart(2, "0"),
@@ -73,6 +73,7 @@ function harness(
       loading.push(userId);
       return Promise.resolve();
     },
+    push: () => Promise.reject(new Error("chat replies never push")),
   };
   const app = createApp({
     ...productionDeps,
@@ -187,6 +188,115 @@ describe("one-on-one LINE flight chat", () => {
     expect(JSON.stringify(bubbles[0])).toContain(
       "https://www.google.com/travel/flights/search?tfs=",
     );
+  });
+
+  it("adds a 降價叫醒我 postback beside 查看航班 on every flight bubble, keeping one height", async () => {
+    const { post, sent } = harness();
+
+    await post(text("機票 沖繩"));
+
+    const flex = sent[0]?.messages.at(-1);
+    if (flex?.type !== "flex") throw new Error("expected a Flex message");
+    const footers = flex.contents.contents.map((b) =>
+      b.footer.type === "box" ? b.footer.contents : [],
+    );
+    expect(new Set(footers.map((f) => f.length))).toEqual(new Set([2]));
+    for (const footer of footers.slice(0, 4)) {
+      expect(footer[0]).toMatchObject({ action: { type: "uri", label: "查看航班 ↗" } });
+      const watch = footer[1];
+      if (watch?.type !== "button" || watch.action.type !== "postback")
+        throw new Error("expected a postback button");
+      expect(watch.action.label).toBe("降價叫醒我");
+      expect(watch.action.data).toMatch(/^action=watch&origin=TPE&destination=OKA&.*fare=\d+$/);
+      expect(watch.action.data.length).toBeLessThanOrEqual(300);
+    }
+    expect(JSON.stringify(flex)).not.toContain("🌱");
+  });
+
+  it("creates a line_push Price Watch in one tap for a linked sender, listed in /travel's watches", async () => {
+    const { post, sent, loading } = harness();
+    const sub = uniqueSub("U-linked");
+    const user = await signIn("line", sub);
+    await post({ ...text("機票 沖繩", "r-search"), source: { type: "user", userId: sub } });
+    const flex = sent[0]?.messages.at(-1);
+    if (flex?.type !== "flex") throw new Error("expected a Flex message");
+    const footer = flex.contents.contents[0]?.footer;
+    const button = footer?.type === "box" ? footer.contents[1] : undefined;
+    if (button?.type !== "button" || button.action.type !== "postback")
+      throw new Error("expected a postback button");
+
+    await post({
+      type: "postback",
+      replyToken: "r-watch",
+      source: { type: "user", userId: sub },
+      postback: { data: button.action.data },
+    });
+
+    expect(sent.at(-1)?.replyToken).toBe("r-watch");
+    expect(JSON.stringify(sent.at(-1)?.messages)).toContain("降價提醒");
+    expect(JSON.stringify(sent.at(-1)?.messages)).not.toContain("🌱");
+    expect(loading).toEqual([sub]);
+    const listed = await call("/flights/watches", { headers: bearer(user.accessToken) });
+    expect((await listed.json<{ watches: object[] }>()).watches).toMatchObject([
+      {
+        channel: "line_push",
+        status: "active",
+        baselineFare: 7000,
+        targetFare: 5950,
+        intent: { origin: "TPE", destination: "OKA" },
+      },
+    ]);
+  });
+
+  it("keeps at most 2 active line_push watches per User", async () => {
+    const { post, sent } = harness();
+    const sub = uniqueSub("U-capped");
+    const user = await signIn("line", sub);
+    const tap = (destination: string, n: number) =>
+      post({
+        type: "postback",
+        replyToken: `r-cap-${n}`,
+        source: { type: "user", userId: sub },
+        postback: {
+          data: `action=watch&origin=TPE&destination=${destination}&departureDate=2026-12-04&returnDate=2026-12-07&currency=TWD&excludeRedEye=0&directOnly=0&fare=7000`,
+        },
+      });
+
+    await tap("OKA", 1);
+    await tap("NRT", 2);
+    await tap("ICN", 3);
+
+    expect(JSON.stringify(sent.at(-1)?.messages)).toContain("最多同時 2 個");
+    const rows = await env.DB.prepare(
+      "SELECT channel FROM flight_price_watches WHERE user_id=? AND status='active'",
+    )
+      .bind(user.userId)
+      .all<{ channel: string }>();
+    expect(rows.results).toEqual([{ channel: "line_push" }, { channel: "line_push" }]);
+  });
+
+  it("routes an unlinked sender through LIFF /travel with the pending watch, creating nothing", async () => {
+    const { post, sent } = harness();
+    const sub = uniqueSub("U-never-signed-in");
+
+    await post({
+      type: "postback",
+      replyToken: "r-unlinked",
+      source: { type: "user", userId: sub },
+      postback: {
+        data: "action=watch&origin=TPE&destination=OKA&departureDate=2026-12-04&returnDate=2026-12-07&currency=TWD&excludeRedEye=0&directOnly=0&fare=7000",
+      },
+    });
+
+    const reply = JSON.stringify(sent.at(-1)?.messages);
+    expect(reply).toContain("https://split.test/travel?origin=TPE&destination=OKA");
+    expect(reply).toContain("watch=line&fare=7000");
+    expect(reply).not.toContain("🌱");
+    expect(reply).not.toContain(sub);
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM identities WHERE provider_sub=?")
+      .bind(sub)
+      .first<{ n: number }>();
+    expect(count?.n).toBe(0);
   });
 
   it("pivots the search from a Quick Reply chip without parsing a prompt", async () => {

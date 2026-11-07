@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
 
@@ -56,3 +56,71 @@ it.each(["en", "zh-TW"] as const)(
     });
   },
 );
+
+async function searchNrt() {
+  await screen.findByRole("heading", { name: "航班雷達" });
+  fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
+  fireEvent.change(screen.getByLabelText("出發日期"), { target: { value: "2027-01-08" } });
+  fireEvent.change(screen.getByLabelText("回程日期"), { target: { value: "2027-01-11" } });
+  fireEvent.click(screen.getByRole("button", { name: "搜尋航班" }));
+  fireEvent.click(await screen.findByRole("button", { name: "降價叫醒我" }));
+  return screen.findByRole("dialog", { name: "降價叫醒我" });
+}
+
+describe("Price Watch inside LIFF", () => {
+  it("defaults to a LINE alert, without browser push, when the monthly quota permits", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: makeUser("Rick"),
+      insideLine: { idToken: null },
+    });
+    const drawer = await searchNrt();
+
+    fireEvent.click(await within(drawer).findByRole("button", { name: "開啟 LINE 提醒" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    const posted = api.requests.find((r) => r.route === "POST /api/v1/flights/watches");
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({ channel: "line_push" });
+    expect(api.requests.some((r) => r.route.includes("push-subscriptions"))).toBe(false);
+  });
+
+  it("guides to the phone's external browser for free Web Push when LINE alerts are unavailable", async () => {
+    const { api, lineExternalOpens } = renderApp({
+      path: "/travel",
+      cookieUser: makeUser("Rick"),
+      insideLine: { idToken: null },
+    });
+    api.linePushAvailable = false;
+    const drawer = await searchNrt();
+
+    fireEvent.click(await within(drawer).findByRole("button", { name: "用手機瀏覽器開啟" }));
+
+    await waitFor(() => {
+      expect(lineExternalOpens).toHaveLength(1);
+    });
+    expect(lineExternalOpens[0]).toContain("/travel?origin=TPE&destination=NRT");
+    expect(within(drawer).queryByRole("button", { name: "開啟 LINE 提醒" })).toBeNull();
+    expect(api.requests.some((r) => r.route === "POST /api/v1/flights/watches")).toBe(false);
+  });
+
+  it("completes a pending LINE watch from the chat after silent sign-in", async () => {
+    const { api } = renderApp({
+      path: "/travel?origin=TPE&destination=OKA&departureDate=2027-01-08&returnDate=2027-01-11&currency=TWD&excludeRedEye=0&directOnly=0&watch=line&fare=7000",
+      insideLine: { idToken: "fake|line-1|阿芽" },
+    });
+
+    expect(await screen.findByText("已設定降價提醒，會用 LINE 通知你一次。")).toBeVisible();
+    const posted = api.requests.find((r) => r.route === "POST /api/v1/flights/watches");
+    expect(JSON.parse(posted?.body ?? "{}")).toMatchObject({
+      channel: "line_push",
+      baselineFare: 7000,
+      targetFare: 5950,
+      intent: { destination: "OKA" },
+    });
+    fireEvent.click(screen.getByText("我的降價雷達"));
+    const list = screen.getByRole("region", { name: "我的降價雷達" });
+    expect(await within(list).findByText(/TPE → OKA/)).toBeVisible();
+  });
+});

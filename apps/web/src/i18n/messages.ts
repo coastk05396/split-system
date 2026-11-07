@@ -50,6 +50,11 @@ const zhTW = {
   "flight.pushUnavailable": "此瀏覽器尚無法啟用通知，請在支援通知的外部瀏覽器開啟。",
   "flight.pushFailed": "無法開啟通知，請確認瀏覽器通知權限後再試一次。",
   "flight.invalidTarget": "請輸入有效目標票價。",
+  "flight.enableLine": "開啟 LINE 提醒",
+  "flight.lineFull":
+    "LINE 提醒目前無法使用（本月額度已滿，或帳號尚未連結 LINE）。請在手機的外部瀏覽器開啟，使用免費網頁通知。",
+  "flight.openBrowser": "用手機瀏覽器開啟",
+  "flight.lineWatchSet": "已設定降價提醒，會用 LINE 通知你一次。",
   "flight.prompt": "想去哪裡？",
   "flight.explore": "探索航班",
   "flight.recipes": "靈感配方",

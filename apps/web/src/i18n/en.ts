@@ -48,6 +48,11 @@ export const en: Record<MessageId, string> = {
   "flight.pushFailed":
     "Could not enable alerts. Check browser notification permission and try again.",
   "flight.invalidTarget": "Enter a valid target fare.",
+  "flight.enableLine": "Enable LINE alert",
+  "flight.lineFull":
+    "LINE alerts are unavailable right now (this month's LINE quota is full, or your account has no LINE link). Open this page in your phone's browser for free Web Push.",
+  "flight.openBrowser": "Open in phone browser",
+  "flight.lineWatchSet": "Price Watch set. You will get one LINE alert.",
   "flight.prompt": "Where would you like to go?",
   "flight.explore": "Explore flights",
   "flight.recipes": "Vibe Recipes",

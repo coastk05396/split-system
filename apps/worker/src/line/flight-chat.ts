@@ -2,18 +2,27 @@ import {
   applyIntentPatch,
   FLIGHT_DESTINATIONS,
   flightSearchIntentSchema,
+  formatAmount,
   intentFromQuery,
+  intentToQuery,
   type FlightSearchIntent,
 } from "@split/shared";
 import type { AppDeps } from "../deps.js";
 import type { Bindings } from "../env.js";
 import { adviseFlights } from "../flights/advice.js";
 import { productionFlightAI } from "../flights/ai.js";
+import { linePushHasQuota, userOfLineUser } from "../flights/line-push.js";
 import { executeFlightSearch } from "../flights/search.js";
+import { createFlightWatch } from "../flights/watches.js";
 import { ApiError } from "../errors.js";
 import { consumeSenderRateLimit } from "../rate-limit.js";
 import type { WebhookEvent } from "./events.js";
-import { flightBubble, MAX_FLIGHT_BUBBLES, portalBubble, serializeIntent } from "./flight-flex.js";
+import {
+  flightBubble,
+  MAX_FLIGHT_BUBBLES,
+  portalBubble,
+  WATCH_POSTBACK_PREFIX,
+} from "./flight-flex.js";
 import type { LineMessage, LineReplyClient, QuickReplyItem } from "./reply-client.js";
 
 /** Postback data of a Quick Reply chip: `action=flight&` plus the whole pivoted search. */
@@ -21,6 +30,9 @@ export const FLIGHT_POSTBACK_PREFIX = "action=flight&";
 
 export const FLIGHT_HINT_TEXT = "還不確定你想飛去哪，試試「下個月週末去沖繩，預算 15000」";
 export const FLIGHT_BUSY_TEXT = "查詢太頻繁了，請稍等一下再試";
+export const WATCH_FAILED_TEXT = "暫時無法設定降價提醒，請稍後再試";
+export const WATCH_LIMIT_TEXT = "LINE 降價提醒最多同時 2 個，請先到小芽機票雷達取消一個";
+
 export const FLIGHT_EMPTY_TEXT = "目前查不到即時票價，可以直接到 Google 航班看看：";
 
 /** Words that mark a flight or travel question; anything else keeps the Rich Menu pointer. */
@@ -35,7 +47,8 @@ const FLIGHT_WORDS = new RegExp(
 
 export type FlightChatRequest =
   | { kind: "prompt"; userId: string; prompt: string }
-  | { kind: "intent"; userId: string; intent: FlightSearchIntent };
+  | { kind: "intent"; userId: string; intent: FlightSearchIntent }
+  | { kind: "watch"; userId: string; intent: FlightSearchIntent; fare: number };
 
 /** A one-on-one flight question or chip tap; null for everything else. */
 export function flightChatRequest(event: WebhookEvent): FlightChatRequest | null {
@@ -48,6 +61,14 @@ export function flightChatRequest(event: WebhookEvent): FlightChatRequest | null
       : null;
   }
   const data = event.type === "postback" ? event.postback?.data : undefined;
+  if (data?.startsWith(WATCH_POSTBACK_PREFIX) === true) {
+    const params = new URLSearchParams(data.slice(WATCH_POSTBACK_PREFIX.length));
+    const watched = intentFromQuery(params);
+    const fare = Number(params.get("fare"));
+    return watched !== null && Number.isInteger(fare) && fare > 0 && fare <= 99_999_999
+      ? { kind: "watch", userId, intent: watched, fare }
+      : null;
+  }
   if (data?.startsWith(FLIGHT_POSTBACK_PREFIX) !== true) return null;
   const params = new URLSearchParams(data.slice(FLIGHT_POSTBACK_PREFIX.length));
   const intent = intentFromQuery(params);
@@ -71,6 +92,40 @@ async function senderKey(secret: string, userId: string): Promise<string> {
 
 const text = (message: string): LineMessage[] => [{ type: "text", text: message }];
 
+/** One tap: a linked sender gets a line_push Price Watch; anyone else is sent through LIFF. */
+async function watchReply(
+  env: Bindings,
+  deps: AppDeps,
+  request: Extract<FlightChatRequest, { kind: "watch" }>,
+  portalBase: string,
+): Promise<LineMessage[]> {
+  const { intent, fare } = request;
+  const portal = `${portalBase}/travel?${intentToQuery(intent)}`;
+  try {
+    const userId = await userOfLineUser(env.DB, request.userId);
+    if (userId === null)
+      return text(`先登入小芽才能設定降價提醒，點這裡繼續：\n${portal}&watch=line&fare=${fare}`);
+    if (!(await linePushHasQuota(env.DB, deps.now())))
+      return text(`本月 LINE 提醒額度已滿，改用免費網頁通知，請在手機瀏覽器開啟：\n${portal}`);
+    const targetFare = Math.max(1, Math.floor(fare * 0.85));
+    await createFlightWatch(
+      env,
+      userId,
+      { intent, baselineFare: fare, targetFare, channel: "line_push" },
+      deps.now(),
+    );
+    return text(
+      `已設定降價提醒：${intent.origin} → ${intent.destination}，出現超值好價或降到 ${formatAmount(targetFare, intent.currency)} 時，用 LINE 通知你一次。`,
+    );
+  } catch (error) {
+    return text(
+      error instanceof ApiError && error.code === "FLIGHT_WATCH_LIMIT"
+        ? WATCH_LIMIT_TEXT
+        : WATCH_FAILED_TEXT,
+    );
+  }
+}
+
 /** The reply for a flight chat request; never throws, so a failure cannot break the webhook. */
 export async function flightChatReply(
   env: Bindings,
@@ -79,6 +134,7 @@ export async function flightChatReply(
   portalBase: string,
   secret: string,
 ): Promise<LineMessage[]> {
+  if (request.kind === "watch") return watchReply(env, deps, request, portalBase);
   try {
     const key = await senderKey(secret, request.userId);
     await consumeSenderRateLimit(env.DB, key, "flights_minute", deps.now());
@@ -107,7 +163,7 @@ export async function flightChatReply(
         type: "postback",
         // LINE caps a Quick Reply label at 20 characters.
         label: move.label.slice(0, 20),
-        data: `${FLIGHT_POSTBACK_PREFIX}${serializeIntent(applyIntentPatch(reply.intent, move.patch))}`,
+        data: `${FLIGHT_POSTBACK_PREFIX}${intentToQuery(applyIntentPatch(reply.intent, move.patch))}`,
         displayText: move.label,
       },
     }));
@@ -120,7 +176,7 @@ export async function flightChatReply(
           type: "carousel",
           contents: [
             ...reply.cards.slice(0, MAX_FLIGHT_BUBBLES).map(flightBubble),
-            portalBubble(`${portalBase}/travel?${serializeIntent(reply.intent)}`),
+            portalBubble(`${portalBase}/travel?${intentToQuery(reply.intent)}`),
           ],
         },
         quickReply: { items: chips },
@@ -142,6 +198,6 @@ export async function handleFlightChat(
   portalBase: string,
   secret: string,
 ): Promise<void> {
-  await client.startLoading(request.userId).catch(() => undefined);
+  if (request.kind !== "watch") await client.startLoading(request.userId).catch(() => undefined);
   await client.reply(replyToken, await flightChatReply(env, deps, request, portalBase, secret));
 }
