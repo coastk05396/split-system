@@ -73,7 +73,7 @@ describe("sharing a new Expense", () => {
       });
       const release = api.holdResponses(`POST /api/v1/groups/${id()}/invite/ensure`);
       try {
-        await screen.findByRole("checkbox", { name: /LINE 對話框/ });
+        await screen.findByRole("checkbox", { name: /發送當前對話框/ });
         await recordDinner(user);
         await waitFor(() => {
           expect(router.state.location.pathname).toBe(`/groups/${id()}`);
@@ -122,7 +122,7 @@ describe("sharing a new Expense", () => {
     });
     const releaseInvite = api.holdResponses(`POST /api/v1/groups/${id()}/invite/ensure`);
     try {
-      await screen.findByRole("checkbox", { name: /LINE 對話框/ });
+      await screen.findByRole("checkbox", { name: /發送當前對話框/ });
       await recordDinner(user);
       await waitFor(() => {
         expect(router.state.location.pathname).toBe(`/groups/${id()}`);
@@ -256,7 +256,7 @@ describe("posting into the current LINE chat", () => {
   it("shows the checkbox only in a chat, ticked by default", async () => {
     openNewExpense({ insideLine: { idToken: null }, lineChat: true });
 
-    const box = await screen.findByRole("checkbox", { name: /同時發送至當前 LINE 對話框/ });
+    const box = await screen.findByRole("checkbox", { name: /發送當前對話框/ });
     expect(box).toBeChecked();
   });
 
@@ -264,14 +264,14 @@ describe("posting into the current LINE chat", () => {
     openNewExpense({ insideLine: { idToken: null }, lineChat: false });
 
     await screen.findByLabelText("名稱");
-    expect(screen.queryByRole("checkbox", { name: /LINE 對話框/ })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /發送當前對話框/ })).toBeNull();
   });
 
   it("posts the card into the chat by default", async () => {
     const user = userEvent.setup();
     const { lineChatMessages } = openNewExpense({ insideLine: { idToken: null }, lineChat: true });
 
-    await screen.findByRole("checkbox", { name: /LINE 對話框/ });
+    await screen.findByRole("checkbox", { name: /發送當前對話框/ });
     await recordDinner(user);
 
     expect(await screen.findByText("已新增，並發送到對話框 ✓")).toBeVisible();
@@ -283,7 +283,7 @@ describe("posting into the current LINE chat", () => {
     const user = userEvent.setup();
     const { lineChatMessages } = openNewExpense({ insideLine: { idToken: null }, lineChat: true });
 
-    await user.click(await screen.findByRole("checkbox", { name: /LINE 對話框/ }));
+    await user.click(await screen.findByRole("checkbox", { name: /發送當前對話框/ }));
     await recordDinner(user);
 
     expect(await screen.findByText(/已新增 ✓/)).toBeVisible();
@@ -299,7 +299,7 @@ describe("posting into the current LINE chat", () => {
       lineChatFails: true,
     });
 
-    await screen.findByRole("checkbox", { name: /LINE 對話框/ });
+    await screen.findByRole("checkbox", { name: /發送當前對話框/ });
     await recordDinner(user);
 
     expect(await screen.findByText(/沒能發送到對話框/)).toBeVisible();
