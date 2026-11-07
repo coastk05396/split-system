@@ -4,6 +4,8 @@ import {
   type FlightFare,
   type FlightCard,
   type FareHistoryStats,
+  createFlightWatchSchema,
+  type FlightPriceWatch,
 } from "@split/shared";
 import type { CurrencyCode, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
@@ -18,6 +20,7 @@ export interface FakeApi {
   flightsDegraded: boolean;
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
+  flightWatches: FlightPriceWatch[];
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -121,6 +124,7 @@ export function createFakeApi(): FakeApi {
     flightsDegraded: false,
     flightHighlights: [],
     flightHistory: null,
+    flightWatches: [],
     flightFares: [
       {
         price: 25000,
@@ -214,7 +218,34 @@ export function createFakeApi(): FakeApi {
       return error(failure.code, failure.status);
     }
 
+    if (method === "DELETE" && url.pathname.startsWith("/api/v1/flights/watches/")) {
+      if (authed === undefined) return error("UNAUTHORIZED", 401);
+      api.flightWatches = api.flightWatches.filter(
+        (watch) => watch.id !== url.pathname.split("/").at(-1),
+      );
+      return new Response(null, { status: 204 });
+    }
     switch (`${method} ${url.pathname}`) {
+      case "GET /api/v1/flights/vapid-public-key":
+        return json({ publicKey: "test-vapid-key" });
+      case "POST /api/v1/flights/push-subscriptions":
+        return new Response(null, { status: 204 });
+      case "GET /api/v1/flights/watches":
+        return json({ watches: api.flightWatches });
+      case "POST /api/v1/flights/watches": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const input = createFlightWatchSchema.parse(await readJson(init));
+        const watch: FlightPriceWatch = {
+          ...input,
+          id: crypto.randomUUID(),
+          status: "active",
+          latestFare: null,
+          checkedAt: null,
+          createdAt: Date.now(),
+        };
+        api.flightWatches.push(watch);
+        return json(watch, 201);
+      }
       case "GET /api/v1/flights/highlights":
         return authed === undefined
           ? error("UNAUTHORIZED", 401)

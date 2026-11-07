@@ -8,9 +8,11 @@ import { detectLocale } from "./i18n/detect.js";
 import { setLocale } from "./i18n/messages.js";
 import { createGoogleSignIn } from "./platform/google.js";
 import { createLineSignIn } from "./platform/line.js";
+import { browserPush } from "./platform/web-push.js";
 import "./styles.css";
 
 const deps: AppDeps = {
+  webPush: browserPush,
   fetch: (input, init) => fetch(input, init),
   line: createLineSignIn(import.meta.env.VITE_LIFF_ID),
   google: createGoogleSignIn(import.meta.env.VITE_GOOGLE_CLIENT_ID),
