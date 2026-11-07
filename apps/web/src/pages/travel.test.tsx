@@ -246,4 +246,46 @@ describe("Flight Radar", () => {
     expect(screen.queryByRole("region", { name: "Deal commentary" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("runs the search carried by the LINE portal link without parsing a prompt", async () => {
+    const query = new URLSearchParams({
+      origin: "TPE",
+      destination: "NRT",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      currency: "TWD",
+      budget: "15000",
+      excludeRedEye: "1",
+      directOnly: "0",
+    });
+    const { api } = renderApp({
+      path: `/travel?${query.toString()}`,
+      cookieUser: makeUser("Rick"),
+    });
+
+    expect(await screen.findByRole("link", { name: "查看航班" })).toBeVisible();
+    const requests = api.requests.filter((r) => r.route === "POST /api/v1/flights/search");
+    expect(requests).toHaveLength(1);
+    const body: unknown = JSON.parse(requests[0]?.body ?? "{}");
+    expect(body).toMatchObject({
+      origin: "TPE",
+      destination: "NRT",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      budget: 15000,
+      excludeRedEye: true,
+      directOnly: false,
+    });
+    expect(body).not.toHaveProperty("prompt");
+  });
+
+  it("ignores a malformed portal link and shows the starter view", async () => {
+    const { api } = renderApp({
+      path: "/travel?destination=nowhere&departureDate=soon",
+      cookieUser: makeUser("Rick"),
+    });
+
+    expect(await screen.findByRole("heading", { name: "航班雷達" })).toBeVisible();
+    expect(api.requests.some((r) => r.route === "POST /api/v1/flights/search")).toBe(false);
+  });
 });

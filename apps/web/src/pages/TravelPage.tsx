@@ -3,6 +3,7 @@ import {
   defaultFlightIntent,
   flightRecipes,
   formatAmount,
+  intentFromQuery,
   type FlightAdviceReply,
   type FlightAdviceRequest,
   type FlightCard,
@@ -12,7 +13,8 @@ import {
   type FlightHighlightsReply,
 } from "@split/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { useAuth } from "../auth/AuthProvider.js";
@@ -71,6 +73,15 @@ export function TravelPage() {
     setActive(intent);
     search.mutate(intent);
   }
+
+  // The LINE portal bubble opens /travel with its search in the query: run it once, no parse.
+  const [params] = useSearchParams();
+  const portalIntent = useRef(intentFromQuery(params));
+  useEffect(() => {
+    const intent = portalIntent.current;
+    portalIntent.current = null;
+    if (intent) runIntent(intent); // once, on arrival
+  }, []);
 
   const reply = search.data;
   return (

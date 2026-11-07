@@ -19,6 +19,9 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
   const db = createDb(env.DB);
   try {
     await env.DB.prepare("DELETE FROM flight_search_cache WHERE expires_at <= ?").bind(now).run();
+    await env.DB.prepare("DELETE FROM line_sender_counters WHERE window_start < ?")
+      .bind(now - RATE_COUNTER_RETENTION_MS)
+      .run();
     await db.batch([
       db.delete(sessions).where(lt(sessions.expiresAt, now)),
       db.delete(linkCodes).where(lt(linkCodes.expiresAt, now)),

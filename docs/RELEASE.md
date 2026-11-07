@@ -29,7 +29,7 @@ In Google Cloud, configure OAuth branding/consent, then create a **Web applicati
 
 ## LINE Login and bot
 
-In LINE Developers, create or select a provider and LINE Login channel. Add a LIFF app with endpoint `https://split.rickchen.si/` and `openid` scope. Put its LIFF ID in the web build as `VITE_LIFF_ID`, and the Login channel ID in the Worker as `LINE_LOGIN_CHANNEL_ID`. Keep staging on a separate LIFF app/endpoint if testing sign-in there.
+In LINE Developers, create or select a provider and LINE Login channel. Add a LIFF app with endpoint `https://split.rickchen.si/` and `openid` scope. Put its LIFF ID in the web build as `VITE_LIFF_ID`, the Login channel ID in the Worker as `LINE_LOGIN_CHANNEL_ID`, and the same LIFF ID as the Worker variable `LIFF_ID` (the chat carousel's portal link). Keep staging on a separate LIFF app/endpoint if testing sign-in there.
 
 Create or select a Messaging API channel for the bot. Set the webhook URL to `https://split.rickchen.si/api/v1/line/webhook`, verify it, and enable **Use webhook**. Store the channel secret as the Worker secret `LINE_CHANNEL_SECRET` and its channel access token as `LINE_CHANNEL_ACCESS_TOKEN`. Test with a LINE account that has added the official account as a friend. Do not enable the production webhook until the production Worker is deployed and the secret is set.
 

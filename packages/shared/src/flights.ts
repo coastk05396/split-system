@@ -20,6 +20,24 @@ export const flightSearchIntentSchema = flightSearchFields.refine(
   { path: ["returnDate"], message: "DATE_INVALID" },
 );
 export type FlightSearchIntent = z.infer<typeof flightSearchIntentSchema>;
+/**
+ * A search carried in a query string (the LINE postback and the LIFF portal link share it);
+ * null when anything is missing or invalid.
+ */
+export function intentFromQuery(params: URLSearchParams): FlightSearchIntent | null {
+  const parsed = flightSearchIntentSchema.safeParse({
+    origin: params.get("origin") ?? undefined,
+    destination: params.get("destination") ?? undefined,
+    departureDate: params.get("departureDate") ?? undefined,
+    returnDate: params.get("returnDate") ?? undefined,
+    currency: params.get("currency") ?? undefined,
+    budget: params.has("budget") ? Number(params.get("budget")) : undefined,
+    excludeRedEye: params.get("excludeRedEye") === "1",
+    directOnly: params.get("directOnly") === "1",
+    theme: params.get("theme") ?? undefined,
+  });
+  return parsed.success ? parsed.data : null;
+}
 export type DealSignal = "strong_buy" | "buy" | "hold";
 export const flightFareSchema = z.object({
   price: z.number().int().positive().max(99_999_999),

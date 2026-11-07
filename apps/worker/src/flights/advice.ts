@@ -92,7 +92,7 @@ const DAY = 86_400_000;
 const shift = (date: string, days: number) =>
   new Date(Date.parse(date) + days * DAY).toISOString().slice(0, 10);
 const SIGNAL_RANK = { strong_buy: 0, buy: 1, hold: 2 } as const;
-const SIGNAL_LABEL = {
+export const SIGNAL_LABEL = {
   strong_buy: ["非常值得買", "Strong Buy"],
   buy: ["可以買", "Buy"],
   hold: ["再等等", "Hold"],
@@ -191,7 +191,7 @@ export function eligibleFocuses({ cards }: FlightAdviceRequest): AdviceFocus[] {
   ];
 }
 
-const time = (value: string) => /\d{2}:\d{2}/.exec(value)?.[0] ?? value;
+export const time = (value: string) => /\d{2}:\d{2}/.exec(value)?.[0] ?? value;
 
 /** Wording comes from verified facts only; a model contributes a focus, never text or numbers. */
 export function renderAdvice(
