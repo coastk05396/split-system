@@ -18,6 +18,7 @@ import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearch
 import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { FareResults } from "../flights/FareResults.js";
+import { PriceStrip, priceStrip } from "../flights/PriceStrip.js";
 import { RouteGlobe } from "../flights/RouteGlobe.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
@@ -39,6 +40,9 @@ export function TravelPage() {
   const [lastSearch] = useState(() => (intentFromQuery(params) ? null : readLastSearch()));
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
+  // The date picked on the strip belongs to the reply it was picked on; the legend is first-touch.
+  const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
+  const [stripTouched, setStripTouched] = useState(false);
   const [active, setIntent] = useState(
     () => lastSearch ?? defaultFlightIntent(Date.now(), currency),
   );
@@ -122,6 +126,7 @@ export function TravelPage() {
   }, []);
 
   const reply = search.data;
+  const strip = priceStrip(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
       <ScreenHeader
@@ -266,7 +271,26 @@ export function TravelPage() {
           </div>
         </section>
       )}
-      <FareResults pending={search.isPending} reply={reply} onWatch={setWatchCard} />
+      <FareResults
+        pending={search.isPending}
+        reply={reply}
+        date={strip?.selected}
+        onWatch={setWatchCard}
+      />
+      {!panelOpen && reply && strip && (
+        <StickyBar label={t("flight.priceStrip")}>
+          <PriceStrip
+            strip={strip}
+            touched={stripTouched}
+            onTouch={() => {
+              setStripTouched(true);
+            }}
+            onSelect={(date) => {
+              setPicked({ reply, date });
+            }}
+          />
+        </StickyBar>
+      )}
       {panelOpen && (
         <StickyBar>
           <button

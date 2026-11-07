@@ -48,6 +48,10 @@ _Avoid_: Subscription, price tracker
 One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the current search, and tapping one opens the editing panel.
 _Avoid_: Tag, search parameter
 
+**Price Strip**:
+The row of bars, one per priced departure date of the current Flight Radar search, used to switch the date the fare cards show; height is price and colour is cheap, normal or pricey.
+_Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
+
 **Adaptive Next-Move Chip**:
 One tappable follow-up under a finished Flight Radar search—such as leaving Thursday or allowing stops—chosen from the actual results and carrying a structured edit of the Entity Pills, so one tap re-runs the search without parsing a prompt.
 _Avoid_: Suggestion, quick reply

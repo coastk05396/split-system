@@ -20,7 +20,8 @@ import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
  */
 export interface FakeApi {
   fetch: typeof fetch;
-  flightFares: FlightFare[];
+  /** A fare may sit on another departure date than the searched one, as the neighbour days do. */
+  flightFares: (FlightFare & { departureDate?: string; returnDate?: string })[];
   flightsDegraded: boolean;
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
@@ -308,7 +309,11 @@ export function createFakeApi(): FakeApi {
             : api.flightFares.map((fare) => ({
                 ...fare,
                 history: api.flightHistory,
-                intent,
+                intent: {
+                  ...intent,
+                  departureDate: fare.departureDate ?? intent.departureDate,
+                  returnDate: fare.returnDate ?? intent.returnDate,
+                },
                 url,
                 overBudget: Math.max(0, fare.price - (intent.budget ?? fare.price)),
                 signal:

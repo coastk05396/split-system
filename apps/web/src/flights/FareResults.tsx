@@ -4,6 +4,7 @@ import { primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
+import { cardsOnDate } from "./PriceStrip.js";
 import { SplitFlap } from "./SplitFlap.js";
 
 /**
@@ -13,10 +14,13 @@ import { SplitFlap } from "./SplitFlap.js";
 export function FareResults({
   pending,
   reply,
+  date,
   onWatch,
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
+  /** Shows only the fares departing on this date (the Price Strip's selection). */
+  date?: string | undefined;
   onWatch: (card: FlightCard) => void;
 }) {
   if (!pending && !reply) return null;
@@ -46,7 +50,13 @@ export function FareResults({
         </div>
       )}
       {reply && reply.cards.length > 0 && (
-        <FareCarousel cards={reply.cards} motion={motion} onWatch={onWatch} />
+        // Keyed by date so a switch starts at the first card and the numbers roll again.
+        <FareCarousel
+          key={date}
+          cards={cardsOnDate(reply.cards, date)}
+          motion={motion}
+          onWatch={onWatch}
+        />
       )}
     </section>
   );
