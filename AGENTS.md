@@ -36,11 +36,11 @@
 
 ### Issue tracker
 
-Local markdown under the gitignored `.scratch/<feature>/`: a working spec plus one file per ticket. User-visible rules still go in `docs/SPEC.md`. See `docs/agents/issue-tracker.md`.
+GitHub issues on `coastk05396/split-system` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The five default roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), kept in each ticket's `status:`. See `docs/agents/triage-labels.md`.
+The five default roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
