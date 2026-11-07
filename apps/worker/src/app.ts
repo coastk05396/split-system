@@ -1,3 +1,4 @@
+import { flightRoutes } from "./flights/routes.js";
 import { newApi } from "./api.js";
 import { bearerToken } from "./auth/bearer-token.js";
 import { authRoutes } from "./auth/routes.js";
@@ -52,6 +53,7 @@ export function createApp(deps: AppDeps) {
     .route("/", expenseRoutes(deps))
     .route("/", settlementRoutes(deps))
     .route("/", rateRoutes(deps))
+    .route("/", flightRoutes(deps))
     .route("/", stopRoutes(deps))
     .route("/", lineRoutes(deps));
 }

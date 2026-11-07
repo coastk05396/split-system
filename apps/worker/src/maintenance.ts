@@ -15,6 +15,7 @@ const STALE_RESERVATION_MS = 24 * 60 * 60 * 1000;
 export async function purgeExpired(env: Bindings, now: number): Promise<void> {
   const db = createDb(env.DB);
   try {
+    await env.DB.prepare("DELETE FROM flight_search_cache WHERE expires_at <= ?").bind(now).run();
     await db.batch([
       db.delete(sessions).where(lt(sessions.expiresAt, now)),
       db.delete(linkCodes).where(lt(linkCodes.expiresAt, now)),

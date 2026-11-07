@@ -13,3 +13,5 @@ export * from "./groups.js";
 export * from "./stops.js";
 export * from "./payment-plan.js";
 export * from "./payment-plan-worker.js";
+
+export * from "./flights.js";

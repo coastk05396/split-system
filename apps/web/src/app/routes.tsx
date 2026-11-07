@@ -117,6 +117,8 @@ export const routes: RouteObject[] = [
     ErrorBoundary: RouteError,
     children: [
       { index: true, Component: HomePage },
+      { path: "travel", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
+      { path: "trips/latest", loader: () => redirect("/travel") },
       { path: "groups", lazy: page(() => import("../pages/GroupsPage.js"), "GroupsPage") },
       { path: "groups/new", lazy: page(() => import("../pages/NewGroupPage.js"), "NewGroupPage") },
       { path: "groups/:id", lazy: page(() => import("../pages/GroupPage.js"), "GroupPage") },

@@ -1,0 +1,13 @@
+[
+  {
+    "price": 7000,
+    "airlines": ["Test Air"],
+    "flights": [
+      {
+        "departure": { "date": [2026, 12, 4], "time": [8, 0] },
+        "arrival": { "date": [2026, 12, 4], "time": [12, 0] },
+        "duration": 180
+      }
+    ]
+  }
+]

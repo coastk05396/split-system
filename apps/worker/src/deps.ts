@@ -1,3 +1,4 @@
+import type { FlightSource } from "./flights/source.js";
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
 import type { Bindings } from "./env.js";
 import {
@@ -9,6 +10,7 @@ import { productionRateSource, type RateSource } from "./rates/rate-source.js";
 
 /** Outside services and the clock, swapped for fakes in tests. */
 export interface AppDeps {
+  flightSource?: FlightSource;
   verifier: (env: Bindings) => IdentityVerifier;
   now: () => number;
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
