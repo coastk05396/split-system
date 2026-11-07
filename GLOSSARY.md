@@ -32,6 +32,22 @@ _Avoid_: Journey, tour
 One planned place or activity on one day of a Trip, with a time range, category, text location and note; an Expense may link to it.
 _Avoid_: Itinerary item, activity, waypoint
 
+**Flight Radar**:
+A standalone flight deal discovery experience, opened from the Travel tab or asked of 小芽 in a one-on-one LINE chat, separate from any Group's Trip.
+_Avoid_: Trip (that is a Group with Stops), travel module
+
+**Deal Signal**:
+The buy-timing rating on a flight option—Strong Buy, Buy, or Hold—judged from how the live fare compares against historical norms and the User's budget.
+_Avoid_: Price score, recommendation tier
+
+**Price Watch**:
+A standing alert a User sets on a route and date window so 小芽 wakes them once its fare reaches Strong Buy or drops below a target amount.
+_Avoid_: Subscription, price tracker
+
+**Entity Pill**:
+One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons and editable in place.
+_Avoid_: Tag, search parameter
+
 **User**:
 One real person, who may sign in through more than one Identity.
 _Avoid_: Account, member (when meaning the person outside a Group)
