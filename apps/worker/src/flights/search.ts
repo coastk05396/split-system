@@ -1,5 +1,7 @@
+import { loadFareHistory, recordFareHistory } from "./history.js";
 import {
   googleFlightsUrl,
+  evaluateDealSignal,
   type FlightFare,
   type FlightSearchIntent,
   type FlightSearchReply,
@@ -23,6 +25,17 @@ export async function searchFlights(
   const db = createDb(env.DB);
   await consumeRateLimit(db, userId, "flights_minute", now);
   await consumeRateLimit(db, userId, "flights_hour", now);
+  const { fares, degraded } = await lookupFares(env, deps, intent);
+  return buildFlightReply(env, intent, fares, degraded, now);
+}
+
+/** Shared source/cache lookup for user searches and scheduled route/watch refreshes. */
+export async function lookupFares(
+  env: Bindings,
+  deps: AppDeps,
+  intent: FlightSearchIntent,
+): Promise<{ fares: FlightFare[]; degraded: boolean }> {
+  const now = deps.now();
   const { budget: _budget, ...sourceIntent } = intent;
   const key = JSON.stringify(sourceIntent);
   const cached = await env.DB.prepare(
@@ -39,6 +52,7 @@ export async function searchFlights(
       fares = await (deps.flightSource ?? containerFlightSource)(intent, env);
       // The DI port is also a trust boundary: no unvalidated upstream money is displayed.
       fares = z.array(flightFareSchema).max(20).parse(fares);
+      await recordFareHistory(env.DB, intent, fares, now);
       await env.DB.prepare(
         "INSERT INTO flight_search_cache(cache_key,response,expires_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET response=excluded.response,expires_at=excluded.expires_at",
       )
@@ -49,20 +63,30 @@ export async function searchFlights(
       degraded = true;
     }
   }
+  return { fares, degraded };
+}
+
+export async function buildFlightReply(
+  env: Bindings,
+  intent: FlightSearchIntent,
+  fares: FlightFare[],
+  degraded: boolean,
+  now: number,
+): Promise<FlightSearchReply> {
   const url = googleFlightsUrl(intent);
+  const history = await loadFareHistory(env.DB, intent, now);
   const cards = fares
-    .map((fare) => {
-      const overBudget = Math.max(0, fare.price - (intent.budget ?? fare.price));
-      const signal =
-        overBudget > 0 || fare.priceLevel === "high"
-          ? "hold"
-          : fare.priceLevel === "low"
-            ? "strong_buy"
-            : fare.priceLevel === "typical"
-              ? "buy"
-              : "hold";
-      return { ...fare, intent, signal, overBudget, url } as const;
-    })
+    .map((fare) => ({
+      ...fare,
+      intent,
+      ...evaluateDealSignal({
+        price: fare.price,
+        priceLevel: fare.priceLevel,
+        ...(intent.budget === undefined ? {} : { budget: intent.budget }),
+        history,
+      }),
+      url,
+    }))
     .sort(
       (a, b) =>
         ({ strong_buy: 0, buy: 1, hold: 2 })[a.signal] -

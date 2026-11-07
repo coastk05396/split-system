@@ -15,3 +15,6 @@ export * from "./payment-plan.js";
 export * from "./payment-plan-worker.js";
 
 export * from "./flights.js";
+
+export * from "./flight-signals.js";
+export * from "./flight-catalog.js";

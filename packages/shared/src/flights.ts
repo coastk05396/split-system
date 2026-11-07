@@ -31,6 +31,7 @@ export type FlightFare = z.infer<typeof flightFareSchema>;
 export interface FlightCard extends FlightFare {
   intent: FlightSearchIntent;
   signal: DealSignal;
+  history?: import("./flight-signals.js").FareHistoryStats | null;
   overBudget: number;
   url: string;
 }
@@ -83,4 +84,8 @@ export function googleFlightsUrl(
     .replace(/\//g, "_")
     .replace(/=+$/, "");
   return `https://www.google.com/travel/flights/search?tfs=${tfs}&curr=${intent.currency}`;
+}
+
+export interface FlightHighlightsReply {
+  highlights: FlightCard[];
 }

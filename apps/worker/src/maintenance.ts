@@ -1,3 +1,5 @@
+import { maintainFlightHistory } from "./flights/history.js";
+import type { AppDeps } from "./deps.js";
 import { and, asc, eq, lt } from "drizzle-orm";
 import { createDb } from "./db/client.js";
 import { commitAccountCleanups } from "./auth/account-cleanup.js";
@@ -78,9 +80,14 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
 }
 
 /** Daily maintenance keeps account cleanup ahead of the reference-rate refresh. */
-export async function dailyMaintenance(env: Bindings, now: number): Promise<void> {
+export async function dailyMaintenance(
+  env: Bindings,
+  now: number,
+  deps: AppDeps = productionDeps,
+): Promise<void> {
   const db = createDb(env.DB);
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
-  await refreshRates(db, productionDeps.rateSource, now);
+  await refreshRates(db, deps.rateSource, now);
+  await maintainFlightHistory(env, { ...deps, now: () => now });
 }
