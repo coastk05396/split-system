@@ -168,14 +168,11 @@ function getToastTopOffset(toast: HTMLElement): number {
   const computed = typeof window !== "undefined" ? window.getComputedStyle(toast) : null;
   const parsedBottom = computed ? parseFloat(computed.bottom) : NaN;
   const baseBottom = Number.isFinite(parsedBottom) ? parsedBottom : isDesktop ? 32 : 96;
-  const layoutHeight =
-    toast.offsetHeight ||
-    (toast.getBoundingClientRect ? toast.getBoundingClientRect().height : 0) ||
-    68;
+  const layoutHeight = toast.offsetHeight || toast.getBoundingClientRect().height || 68;
 
   let distFromBottom = baseBottom + layoutHeight;
 
-  if (typeof window !== "undefined" && toast.getBoundingClientRect && computed) {
+  if (typeof window !== "undefined" && computed) {
     const rect = toast.getBoundingClientRect();
     if (rect.height > 0 && rect.top !== 0) {
       let translateY = 0;
@@ -223,9 +220,7 @@ function useExistingToastOffset(active: boolean, triggerKey: number): number | n
     let observedToast: HTMLElement | null = null;
 
     function sync() {
-      const otherToast = document.querySelector(
-        ".saved-toast:not(.trip-notice)",
-      ) as HTMLElement | null;
+      const otherToast = document.querySelector<HTMLElement>(".saved-toast:not(.trip-notice)");
 
       if (!otherToast) {
         setOffset(null);
@@ -255,7 +250,7 @@ function useExistingToastOffset(active: boolean, triggerKey: number): number | n
     window.addEventListener("resize", sync);
 
     let mutationObserver: MutationObserver | null = null;
-    if (typeof MutationObserver !== "undefined" && document.body) {
+    if (typeof MutationObserver !== "undefined") {
       mutationObserver = new MutationObserver(() => {
         sync();
       });

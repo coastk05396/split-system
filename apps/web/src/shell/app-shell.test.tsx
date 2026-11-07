@@ -211,15 +211,15 @@ describe("AppShell BottomBar", () => {
       toJSON: () => {},
     });
 
-    const origGetComputedStyle = window.getComputedStyle;
+    const origGetComputedStyle = window.getComputedStyle.bind(window);
     vi.spyOn(window, "getComputedStyle").mockImplementation((elt) => {
       const style = origGetComputedStyle(elt);
       if (elt === expenseToast) {
         return new Proxy(style, {
-          get(target, prop) {
+          get(target, prop, receiver) {
             if (prop === "bottom") return "96px";
             if (prop === "transform") return "matrix(1, 0, 0, 1, 0, 12)";
-            return Reflect.get(target, prop);
+            return Reflect.get(target, prop, receiver) as unknown;
           },
         });
       }
@@ -244,7 +244,12 @@ describe("AppShell BottomBar", () => {
       const [showToast, setShowToast] = useState(false);
       return (
         <AppShell>
-          <button type="button" onClick={() => setShowToast(true)}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowToast(true);
+            }}
+          >
             Add Toast
           </button>
           {showToast && <ExpenseSavedToast saved={sampleSavedShare} />}
