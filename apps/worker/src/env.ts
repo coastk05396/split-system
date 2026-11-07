@@ -2,6 +2,9 @@ import type { GroupLedger } from "./ledger.js";
 
 /** Bindings declared in wrangler.jsonc, plus Worker secrets and local `.dev.vars`. */
 export interface Bindings {
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
   AI?: {
     run(
       model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",

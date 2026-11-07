@@ -2,6 +2,7 @@ import {
   defaultFlightIntent,
   flightRecipes,
   formatAmount,
+  type FlightCard,
   type FlightSearchIntent,
   type FlightSearchRequest,
   type FlightSearchReply,
@@ -16,7 +17,10 @@ import { readWithRev } from "../groups/data.js";
 import { ScreenHeader, input, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 
+import { FlightPriceWatchButton, FlightPriceWatches } from "../flights/FlightPriceWatches.js";
+
 export function TravelPage() {
+  const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
   const { state, session } = useAuth();
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   const [active, setActive] = useState(() => defaultFlightIntent(Date.now(), currency));
@@ -208,10 +212,17 @@ export function TravelPage() {
               >
                 {t("flight.view")}
               </a>
+              <FlightPriceWatchButton card={card} onWatch={setWatchCard} />
             </article>
           ))}
         </section>
       )}
+      <FlightPriceWatches
+        card={watchCard}
+        onClose={() => {
+          setWatchCard(null);
+        }}
+      />
     </>
   );
 }

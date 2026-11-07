@@ -1,3 +1,4 @@
+import type { WebPushSender } from "./flights/web-push.js";
 import type { FlightAI } from "./flights/ai.js";
 import type { FlightSource } from "./flights/source.js";
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
@@ -12,6 +13,7 @@ import { productionRateSource, type RateSource } from "./rates/rate-source.js";
 /** Outside services and the clock, swapped for fakes in tests. */
 export interface AppDeps {
   flightSource?: FlightSource;
+  webPushSender?: WebPushSender;
   flightAI?: FlightAI;
   verifier: (env: Bindings) => IdentityVerifier;
   now: () => number;

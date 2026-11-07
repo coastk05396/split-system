@@ -248,3 +248,49 @@ export const flightFareHistory = sqliteTable(
     check("flight_fare_history_price_positive", sql`${table.price}>0`),
   ],
 );
+
+export const flightPriceWatches = sqliteTable(
+  "flight_price_watches",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    intentJson: text("intent_json").notNull(),
+    baselineFare: integer("baseline_fare").notNull(),
+    targetFare: integer("target_fare").notNull(),
+    channel: text("channel", { enum: ["web_push", "line_push"] }).notNull(),
+    status: text("status", { enum: ["active", "triggered", "expired", "cancelled"] })
+      .notNull()
+      .default("active"),
+    latestFare: integer("latest_fare"),
+    checkedAt: integer("checked_at"),
+    createdAt: integer("created_at").notNull(),
+    departureDate: text("departure_date").notNull(),
+    claimToken: text("claim_token"),
+    claimUntil: integer("claim_until").notNull().default(0),
+  },
+  (t) => [
+    index("flight_watches_user_status").on(t.userId, t.status, t.channel),
+    index("flight_watches_status").on(t.status, t.claimUntil),
+    uniqueIndex("flight_watch_active_route")
+      .on(t.userId, t.intentJson, t.channel)
+      .where(sql`${t.status}='active'`),
+    check("flight_watch_baseline_positive", sql`${t.baselineFare}>0`),
+    check("flight_watch_target_positive", sql`${t.targetFare}>0`),
+  ],
+);
+
+export const webPushSubscriptions = sqliteTable(
+  "web_push_subscriptions",
+  {
+    endpoint: text("endpoint").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("web_push_subscriptions_user").on(t.userId)],
+);

@@ -4,6 +4,7 @@ import { AuthProvider } from "../auth/AuthProvider.js";
 import type { CacheStorage } from "../groups/cache-persistence.js";
 import { LocaleProvider } from "../i18n/LocaleProvider.js";
 import type { GoogleSignIn } from "../platform/google.js";
+import type { BrowserPush } from "../platform/web-push.js";
 import type { LineSignIn } from "../platform/line.js";
 
 /** Everything the SPA reaches outside the browser; tests pass fakes. */
@@ -13,6 +14,7 @@ export interface AppDeps {
   google: GoogleSignIn;
   /** Shows the dev test sign-in form (local and browser tests only). */
   testSignIn: boolean;
+  webPush?: BrowserPush;
   /** Injectable WebSocket constructor for live sync (decision 15). */
   webSocket?: typeof WebSocket;
   /** Injectable CacheStorage for query cache persistence (Ticket 10). */
