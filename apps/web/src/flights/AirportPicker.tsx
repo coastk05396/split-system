@@ -72,12 +72,15 @@ export function AirportPicker({
   text,
   value,
   popular,
+  className = "",
   onChange,
 }: {
   name: string;
   text: string;
   value: string;
   popular: readonly string[];
+  /** Grid placement inside the form. */
+  className?: string;
   onChange: (code: string) => void;
 }) {
   const id = useId();
@@ -124,7 +127,7 @@ export function AirportPicker({
   }
 
   return (
-    <div className="relative min-w-0">
+    <div className={`relative min-w-0 ${className}`}>
       <label className="grid gap-1 text-sm font-bold">
         {text}
         <input
@@ -197,11 +200,13 @@ export function AirportPicker({
                       onClick={() => {
                         pick(code);
                       }}
-                      className={`grid cursor-pointer grid-cols-[3rem_1fr_auto] items-baseline gap-2 rounded-xl px-3 py-2 text-sm font-normal ${index === active ? "bg-sprout-100" : "hover:bg-sprout-50"}`}
+                      className={`grid min-h-11 cursor-pointer grid-cols-[3rem_1fr] items-center gap-2 rounded-xl px-3 py-2 text-sm font-normal ${index === active ? "bg-sprout-100" : "hover:bg-sprout-50"}`}
                     >
                       <b className="text-sprout-700">{code}</b>
-                      <span>{airport.zhTW}</span>
-                      <small className="text-ink-muted">{airport.en}</small>
+                      <span>
+                        {airport.zhTW}
+                        <small className="block text-ink-muted">{airport.en}</small>
+                      </span>
                     </li>
                   );
                 })}

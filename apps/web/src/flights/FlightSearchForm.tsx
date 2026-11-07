@@ -111,11 +111,13 @@ export function FlightSearchForm({
       className="ticket-panel grid gap-4 rounded-3xl border border-sprout-200 p-5 sm:grid-cols-2"
       aria-busy={pending}
     >
-      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 sm:col-span-2">
+      {/* Phone width stacks the two fields (their names do not fit side by side), swap on the right. */}
+      <div className="grid grid-cols-[1fr_2.75rem] items-end gap-x-2 gap-y-3 sm:col-span-2 sm:grid-cols-[1fr_auto_1fr]">
         <AirportPicker
           name="origin"
           text={t("flight.origin")}
           value={draft.origin}
+          className="col-start-1 row-start-1"
           popular={POPULAR_ORIGINS}
           onChange={(origin) => {
             set({ origin });
@@ -127,7 +129,7 @@ export function FlightSearchForm({
           onClick={() => {
             set({ origin: draft.destination, destination: draft.origin });
           }}
-          className="press-pill mb-1 grid size-10 place-items-center rounded-full border border-sprout-200 bg-sprout-50 font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+          className="press-pill col-start-2 row-span-2 row-start-1 grid size-11 place-items-center self-center rounded-full sm:row-span-1 sm:mb-0.5 sm:self-end border border-sprout-200 bg-sprout-50 font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
         >
           <span aria-hidden="true">⇄</span>
         </button>
@@ -135,6 +137,7 @@ export function FlightSearchForm({
           name="destination"
           text={t("flight.destination")}
           value={draft.destination}
+          className="col-start-1 row-start-2 sm:col-start-3 sm:row-start-1"
           popular={POPULAR_DESTINATIONS}
           onChange={(destination) => {
             set({ destination });
@@ -202,7 +205,7 @@ export function FlightSearchForm({
         </select>
       </label>
       <div className="flex flex-col justify-center gap-2 text-sm">
-        <label className="flex items-center gap-2">
+        <label className="flex min-h-11 items-center gap-2">
           <input
             type="checkbox"
             name="excludeRedEye"
@@ -213,7 +216,7 @@ export function FlightSearchForm({
           />
           {t("flight.excludes")}
         </label>
-        <label className="flex items-center gap-2">
+        <label className="flex min-h-11 items-center gap-2">
           <input
             type="checkbox"
             name="directOnly"

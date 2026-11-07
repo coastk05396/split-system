@@ -19,7 +19,7 @@ import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { FareResults } from "../flights/FareResults.js";
 import { PriceStrip, priceStrip } from "../flights/PriceStrip.js";
-import { RouteGlobe } from "../flights/RouteGlobe.js";
+import { RouteGlobe, RouteLeg } from "../flights/RouteGlobe.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -132,9 +132,10 @@ export function TravelPage() {
       <ScreenHeader
         title={t("flight.title")}
         action={<RouteGlobe origin={active.origin} destination={active.destination} />}
+        subtitle={<RouteLeg origin={active.origin} destination={active.destination} />}
       />
       <form
-        className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4"
+        className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-sprout-700"
         onSubmit={(event) => {
           event.preventDefault();
           const prompt = new FormData(event.currentTarget).get("prompt");
@@ -145,7 +146,7 @@ export function TravelPage() {
         <label className="min-w-0 flex-1">
           <span className="sr-only">{t("flight.prompt")}</span>
           <input
-            className="w-full bg-transparent py-2 outline-none placeholder:text-ink-muted"
+            className="min-h-11 w-full bg-transparent py-2 outline-none placeholder:text-ink-muted"
             name="prompt"
             placeholder={t("flight.prompt")}
             required
@@ -155,7 +156,7 @@ export function TravelPage() {
         <button
           type="submit"
           disabled={search.isPending}
-          className="press-pill rounded-full bg-sprout-500 px-4 py-2 font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
+          className="press-pill min-h-11 rounded-full bg-sprout-500 px-4 py-2 font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
         >
           {t("flight.explore")}
         </button>
@@ -260,7 +261,7 @@ export function TravelPage() {
                 key={move.id}
                 type="button"
                 disabled={search.isPending}
-                className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+                className="press-pill min-h-11 rounded-full border border-sprout-200 bg-sprout-50 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
                 onClick={() => {
                   runIntent(applyIntentPatch(reply.intent, move.patch));
                 }}
@@ -276,6 +277,13 @@ export function TravelPage() {
         reply={reply}
         date={strip?.selected}
         onWatch={setWatchCard}
+      />
+      {/* Last in the page flow before the bar, whose spacer must be the final element. */}
+      <FlightPriceWatches
+        card={watchCard}
+        onClose={() => {
+          setWatchCard(null);
+        }}
       />
       {!panelOpen && reply && strip && (
         <StickyBar label={t("flight.priceStrip")}>
@@ -303,12 +311,6 @@ export function TravelPage() {
           </button>
         </StickyBar>
       )}
-      <FlightPriceWatches
-        card={watchCard}
-        onClose={() => {
-          setWatchCard(null);
-        }}
-      />
     </>
   );
 }

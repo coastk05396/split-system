@@ -81,16 +81,15 @@ function midpoint(a: Point, b: Point): Point {
 }
 
 /**
- * A small decorative globe that turns to face the route, with its distance and rough flight time.
- * Renders nothing unless both airports have known coordinates. Reduced motion shows it already
- * turned; the canvas is described by one label and the figures are real text.
+ * A small decorative globe that turns to face the route. Renders nothing unless both airports
+ * have known coordinates. Reduced motion shows it already turned; the canvas is described by one
+ * label (the figures are real text in `RouteLeg`).
  */
 export function RouteGlobe({ origin, destination }: { origin: string; destination: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const centre = useRef<Point | null>(null);
   const from = airportCoordinates(origin);
   const to = airportCoordinates(destination);
-  const estimate = routeEstimate(origin, destination);
 
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
@@ -121,25 +120,32 @@ export function RouteGlobe({ origin, destination }: { origin: string; destinatio
     };
   }, [from, to]);
 
-  if (!from || !to || !estimate) return null;
+  if (!from || !to) return null;
+  return (
+    <canvas
+      ref={canvas}
+      role="img"
+      aria-label={t("flight.globeLabel", { route: `${origin} → ${destination}` })}
+      width={SIZE * 2}
+      height={SIZE * 2}
+      style={{ width: SIZE, height: SIZE }}
+      className="shrink-0"
+    />
+  );
+}
+
+/** The route's distance and rough flight time, a line under the title (it does not fit beside it on a phone). */
+export function RouteLeg({ origin, destination }: { origin: string; destination: string }) {
+  const estimate = routeEstimate(origin, destination);
+  if (!estimate) return null;
   const hours = Math.floor(estimate.minutes / 60);
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <p className="text-right text-xs font-bold tabular-nums text-ink-muted">
-        {t("flight.globeLeg", {
-          km: estimate.km.toLocaleString(getLocale()),
-          hours,
-          minutes: estimate.minutes - hours * 60,
-        })}
-      </p>
-      <canvas
-        ref={canvas}
-        role="img"
-        aria-label={t("flight.globeLabel", { route: `${origin} → ${destination}` })}
-        width={SIZE * 2}
-        height={SIZE * 2}
-        style={{ width: SIZE, height: SIZE }}
-      />
-    </div>
+    <p className="text-xs font-bold tabular-nums">
+      {t("flight.globeLeg", {
+        km: estimate.km.toLocaleString(getLocale()),
+        hours,
+        minutes: estimate.minutes - hours * 60,
+      })}
+    </p>
   );
 }

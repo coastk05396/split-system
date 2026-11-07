@@ -87,7 +87,7 @@ export function EntityPills({
             disabled={pending}
             aria-expanded={open}
             onClick={onToggle}
-            className="press-pill px-3 py-2 font-bold tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700"
+            className="press-pill min-h-11 px-3 py-2 font-bold tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700"
           >
             {pill.text}
           </button>
@@ -97,7 +97,7 @@ export function EntityPills({
               disabled={pending}
               aria-label={pill.removeLabel}
               onClick={pill.remove}
-              className="px-3 py-2 hover:bg-sprout-150 focus-visible:outline-2 focus-visible:outline-sprout-700"
+              className="min-h-11 min-w-11 px-3 py-2 hover:bg-sprout-150 focus-visible:outline-2 focus-visible:outline-sprout-700"
             >
               ×
             </button>

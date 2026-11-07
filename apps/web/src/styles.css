@@ -1340,7 +1340,7 @@ body::before {
   display: none;
 }
 .fare-card {
-  flex: 0 0 82%;
+  flex: 0 0 100%;
   scroll-snap-align: center;
 }
 @media (min-width: 640px) {
@@ -1376,12 +1376,12 @@ body::before {
   }
 }
 
-/* The dots: a 24px tap target around a 6px dot; the current one stretches into a pill. */
+/* The dots: a 44px tap target around a 6px dot; the current one stretches into a pill. */
 .fare-dot {
   display: grid;
   place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
 }
 .fare-dot::before {
   content: "";
@@ -1478,7 +1478,7 @@ body::before {
 }
 .strip-bar[data-tone="cheap"],
 .strip-key[data-tone="cheap"] {
-  background: var(--color-sprout-400);
+  background: var(--color-sprout-500);
 }
 .strip-bar[data-tone="pricey"],
 .strip-key[data-tone="pricey"] {
