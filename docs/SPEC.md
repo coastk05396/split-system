@@ -377,3 +377,13 @@ CREATE TABLE fx_rates (
   - 執行 Playwright E2E 測試與手動發布檢核表 (Release Checklist)。
 
 群組成員開啟邀請時，使用 `POST /groups/:id/invite/ensure` 取得現有有效邀請，或在沒有有效邀請時產生 12 小時邀請。已發出的邀請依照各自儲存的到期時間失效。
+
+## Flight Radar — live single-route discovery
+
+- `/travel` is a signed-in standalone Flight Radar screen in both navigation bars. Sign-in returns visitors to that URL. `/trips/latest` redirects to `/travel`; Group Trip remains disabled.
+- Traditional Chinese and English labels follow the User's Language. TPE is the default origin with TSA, RMQ and KHH quick choices or an explicit airport code. Searches price one adult in round-trip economy using Preferred currency and exact departure/return dates, with an optional budget.
+- `POST /api/v1/flights/search` validates airport/date/currency inputs and refuses past departures. It returns source fares with airline, outbound times, stops, duration, deterministic Deal Signals and Google Flights `?tfs=` links. Fare and budget amounts use integer currency minor units.
+- Current `fast-flights` round-trip quotes describe outbound choices before the user selects a return. Unavailable return times are explicitly labelled as selected on Google Flights, never invented. Native `low`/`typical`/`high` is accepted only from Google's price indicator when present; absent indicators stay `unknown` and conservatively show Hold. This is an upstream limitation against the original complete-inbound-summary goal.
+- Initial signals: over budget or native high → Hold; native low within budget → Strong Buy; native typical within budget → Buy; unknown → Hold. Over-budget deltas are explicit. No historical percentages are claimed by this slice.
+- Source facts are shared in D1 for 30 minutes, with budget-specific signals recomputed per request. User limits are 10 searches/minute and 40/hour; cached requests still respect these limits but never start the container. Expired cache entries are removed by daily maintenance. Counters cascade on account deletion.
+- Timeout, rate limit, challenge, empty and invalid upstream responses return a direct-link fallback with exact route/dates. Challenges are never bypassed. The source runs in a private Cloudflare Container with a ten-minute idle sleep and one maximum instance.

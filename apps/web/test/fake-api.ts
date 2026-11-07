@@ -1,3 +1,4 @@
+import { flightSearchIntentSchema, googleFlightsUrl, type FlightFare } from "@split/shared";
 import type { CurrencyCode, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
@@ -7,6 +8,8 @@ import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
  */
 export interface FakeApi {
   fetch: typeof fetch;
+  flightFares: FlightFare[];
+  flightsDegraded: boolean;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -107,6 +110,20 @@ export function createFakeApi(): FakeApi {
   }
 
   const api: FakeApi = {
+    flightsDegraded: false,
+    flightFares: [
+      {
+        price: 25000,
+        airline: "Example Air",
+        outboundDeparture: "08:00",
+        outboundArrival: "12:00",
+        inboundDeparture: "18:00",
+        inboundArrival: "20:00",
+        stops: 0,
+        durationMinutes: 180,
+        priceLevel: "low",
+      },
+    ],
     calls,
     groups: createFakeGroups(),
     failNext(route, code = "INTERNAL", status = 500) {
@@ -188,6 +205,34 @@ export function createFakeApi(): FakeApi {
     }
 
     switch (`${method} ${url.pathname}`) {
+      case "POST /api/v1/flights/search": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const parsed = flightSearchIntentSchema.safeParse(await readJson(init));
+        if (!parsed.success) return error("VALIDATION_FAILED", 400);
+        const intent = parsed.data;
+        const url = googleFlightsUrl(intent);
+        return json({
+          intent,
+          url,
+          degraded: api.flightsDegraded,
+          cards: api.flightsDegraded
+            ? []
+            : api.flightFares.map((fare) => ({
+                ...fare,
+                intent,
+                url,
+                overBudget: Math.max(0, fare.price - (intent.budget ?? fare.price)),
+                signal:
+                  intent.budget !== undefined && fare.price > intent.budget
+                    ? "hold"
+                    : fare.priceLevel === "low"
+                      ? "strong_buy"
+                      : fare.priceLevel === "typical"
+                        ? "buy"
+                        : "hold",
+              })),
+        });
+      }
       case "GET /api/v1/stats/spending":
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.spendingStats);
       case "GET /api/v1/stats/expenses":

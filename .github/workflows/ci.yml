@@ -22,6 +22,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - name: Offline flight container fixture
+        run: python3 -m unittest discover -s apps/worker/flight-container
       - run: pnpm test
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium

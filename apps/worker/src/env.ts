@@ -2,6 +2,7 @@ import type { GroupLedger } from "./ledger.js";
 
 /** Bindings declared in wrangler.jsonc, plus Worker secrets and local `.dev.vars`. */
 export interface Bindings {
+  FLIGHT_CONTAINER?: DurableObjectNamespace;
   MAINTENANCE?: string;
   DB: D1Database;
   GROUP_LEDGER: DurableObjectNamespace<GroupLedger>;
