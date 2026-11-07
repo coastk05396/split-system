@@ -163,7 +163,54 @@ function Sidebar({ onTripClick }: { onTripClick: () => void }) {
   );
 }
 
-function useExistingToastOffset(active: boolean): number | null {
+function getToastTopOffset(toast: HTMLElement): number {
+  const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
+  const computed = typeof window !== "undefined" ? window.getComputedStyle(toast) : null;
+  const parsedBottom = computed ? parseFloat(computed.bottom) : NaN;
+  const baseBottom = Number.isFinite(parsedBottom) ? parsedBottom : isDesktop ? 32 : 96;
+  const layoutHeight =
+    toast.offsetHeight ||
+    (toast.getBoundingClientRect ? toast.getBoundingClientRect().height : 0) ||
+    68;
+
+  let distFromBottom = baseBottom + layoutHeight;
+
+  if (typeof window !== "undefined" && toast.getBoundingClientRect && computed) {
+    const rect = toast.getBoundingClientRect();
+    if (rect.height > 0 && rect.top !== 0) {
+      let translateY = 0;
+      if (computed.transform && computed.transform !== "none") {
+        try {
+          if (typeof DOMMatrixReadOnly !== "undefined") {
+            const matrix = new DOMMatrixReadOnly(computed.transform);
+            translateY = matrix.m42 || matrix.f || 0;
+          } else {
+            const match = computed.transform.match(/matrix\(([^)]+)\)/);
+            const inner = match?.[1];
+            if (inner) {
+              const parts = inner.split(",").map((s) => parseFloat(s.trim()));
+              const dy = parts[5];
+              if (typeof dy === "number" && Number.isFinite(dy)) {
+                translateY = dy;
+              }
+            }
+          }
+        } catch {
+          // ignore matrix parsing errors and fall back to layout geometry
+        }
+      }
+      const settledTop = rect.top - translateY;
+      const measuredDist = window.innerHeight - settledTop;
+      if (Number.isFinite(measuredDist) && measuredDist > 0) {
+        distFromBottom = Math.max(distFromBottom, measuredDist);
+      }
+    }
+  }
+
+  return distFromBottom + 8;
+}
+
+function useExistingToastOffset(active: boolean, triggerKey: number): number | null {
   const [offset, setOffset] = useState<number | null>(null);
 
   useEffect(() => {
@@ -172,43 +219,60 @@ function useExistingToastOffset(active: boolean): number | null {
       return;
     }
 
-    function calculate() {
+    let resizeObserver: ResizeObserver | null = null;
+    let observedToast: HTMLElement | null = null;
+
+    function sync() {
       const otherToast = document.querySelector(
         ".saved-toast:not(.trip-notice)",
       ) as HTMLElement | null;
+
       if (!otherToast) {
         setOffset(null);
+        if (observedToast && resizeObserver) {
+          resizeObserver.unobserve(observedToast);
+          observedToast = null;
+        }
         return;
       }
-      const rect = otherToast.getBoundingClientRect();
-      const isDesktop = window.innerWidth >= 768;
-      const baseBottom = isDesktop ? 32 : 96;
 
-      if (rect.height > 0 && rect.top !== 0) {
-        const distFromBottom = window.innerHeight - rect.top;
-        setOffset(distFromBottom + 8);
-      } else {
-        const height = otherToast.offsetHeight || 68;
-        setOffset(baseBottom + height + 8);
+      if (otherToast !== observedToast) {
+        if (observedToast && resizeObserver) {
+          resizeObserver.unobserve(observedToast);
+        }
+        observedToast = otherToast;
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = resizeObserver ?? new ResizeObserver(sync);
+          resizeObserver.observe(otherToast);
+        }
       }
+
+      setOffset(getToastTopOffset(otherToast));
     }
 
-    calculate();
-    const otherToast = document.querySelector(".saved-toast:not(.trip-notice)");
-    if (!otherToast) return;
+    sync();
 
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(calculate);
-      observer.observe(otherToast);
+    window.addEventListener("resize", sync);
+
+    let mutationObserver: MutationObserver | null = null;
+    if (typeof MutationObserver !== "undefined" && document.body) {
+      mutationObserver = new MutationObserver(() => {
+        sync();
+      });
+      mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class", "style"],
+      });
     }
-    window.addEventListener("resize", calculate);
 
     return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", calculate);
+      window.removeEventListener("resize", sync);
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
     };
-  }, [active]);
+  }, [active, triggerKey]);
 
   return offset;
 }
@@ -217,15 +281,17 @@ function useExistingToastOffset(active: boolean): number | null {
 export function AppShell({ children }: { children: ReactNode }) {
   const [showTripNotice, setShowTripNotice] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [triggerKey, setTriggerKey] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const toastOffset = useExistingToastOffset(showTripNotice);
+  const toastOffset = useExistingToastOffset(showTripNotice, triggerKey);
 
   const triggerTripNotice = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
     setIsLeaving(false);
     setShowTripNotice(true);
+    setTriggerKey((k) => k + 1);
 
     timerRef.current = setTimeout(() => {
       setIsLeaving(true);

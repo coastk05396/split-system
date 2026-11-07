@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExpenseSavedToast } from "../expenses/ExpenseSavedToast.js";
@@ -176,5 +177,110 @@ describe("AppShell BottomBar", () => {
       vi.advanceTimersByTime(3300);
     });
     expect(expenseToast).toHaveClass("is-leaving");
+  });
+
+  it("accounts for transient translateY transform during toast entrance and calculates settled top with 8px clearance", () => {
+    Object.defineProperty(window, "innerHeight", {
+      value: 800,
+      writable: true,
+      configurable: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppShell>
+          <ExpenseSavedToast saved={sampleSavedShare} />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const expenseToast = screen.getByRole("status");
+    expect(expenseToast).toBeVisible();
+
+    // Simulate entrance animation: rect.top is at 620px due to translateY(12px)
+    // Settled top should be 620 - 12 = 608px
+    vi.spyOn(expenseToast, "getBoundingClientRect").mockReturnValue({
+      top: 620,
+      bottom: 716,
+      left: 20,
+      right: 300,
+      width: 280,
+      height: 96,
+      x: 20,
+      y: 620,
+      toJSON: () => {},
+    });
+
+    const origGetComputedStyle = window.getComputedStyle;
+    vi.spyOn(window, "getComputedStyle").mockImplementation((elt) => {
+      const style = origGetComputedStyle(elt);
+      if (elt === expenseToast) {
+        return new Proxy(style, {
+          get(target, prop) {
+            if (prop === "bottom") return "96px";
+            if (prop === "transform") return "matrix(1, 0, 0, 1, 0, 12)";
+            return Reflect.get(target, prop);
+          },
+        });
+      }
+      return style;
+    });
+
+    const bottomNav = screen.getByRole("navigation", { name: "底部導覽" });
+    const tripButton = within(bottomNav).getByRole("button", { name: /旅遊/ });
+    fireEvent.click(tripButton);
+
+    const tripNotice = screen.getByTestId("trip-notice");
+    expect(tripNotice).toBeVisible();
+    expect(tripNotice).toHaveClass("is-stacked");
+
+    // Settled dist from bottom: 800 - (620 - 12) = 192px.
+    // With 8px clearance: 192 + 8 = 200px.
+    expect(tripNotice).toHaveStyle({ bottom: "200px" });
+  });
+
+  it("dynamically detects later toast insertion via MutationObserver while trip notice is already visible", async () => {
+    function Host() {
+      const [showToast, setShowToast] = useState(false);
+      return (
+        <AppShell>
+          <button type="button" onClick={() => setShowToast(true)}>
+            Add Toast
+          </button>
+          {showToast && <ExpenseSavedToast saved={sampleSavedShare} />}
+        </AppShell>
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Host />
+      </MemoryRouter>,
+    );
+
+    const bottomNav = screen.getByRole("navigation", { name: "底部導覽" });
+    const tripButton = within(bottomNav).getByRole("button", { name: /旅遊/ });
+
+    // Step 1: Open trip notice FIRST when no expense toast exists
+    fireEvent.click(tripButton);
+    const tripNotice = screen.getByTestId("trip-notice");
+    expect(tripNotice).toBeVisible();
+    expect(tripNotice).not.toHaveClass("is-stacked");
+    expect(tripNotice).toHaveClass("bottom-24");
+
+    // Step 2: Later, an expense toast is added to the DOM while trip notice is still visible
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Add Toast" }));
+    });
+    expect(screen.getByRole("button", { name: "分享" })).toBeVisible();
+
+    // Verify trip notice dynamically stacks above the newly added toast via MutationObserver
+    await waitFor(() => {
+      expect(tripNotice).toHaveClass("is-stacked");
+    });
+
+    // Step 3: Clicking trip button again re-triggers and maintains proper stacking
+    fireEvent.click(tripButton);
+    expect(tripNotice).toHaveClass("is-stacked");
   });
 });
