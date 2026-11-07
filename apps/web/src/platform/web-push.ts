@@ -1,4 +1,4 @@
-import { pushSubscriptionSchema, type WebPushSubscription } from "@split/shared";
+import type { WebPushSubscription } from "@split/shared";
 
 export interface BrowserPush {
   subscribe(publicKey: string): Promise<WebPushSubscription>;
@@ -33,6 +33,9 @@ export const browserPush: BrowserPush = {
       userVisibleOnly: true,
       applicationServerKey: key,
     });
-    return pushSubscriptionSchema.parse(subscription.toJSON());
+    // The Worker validates the subscription; importing the Zod schema here would put Zod in first load.
+    const { endpoint, keys } = subscription.toJSON();
+    if (!endpoint || !keys?.p256dh || !keys.auth) throw new Error("Push unavailable");
+    return { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } };
   },
 };
