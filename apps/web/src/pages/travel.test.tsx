@@ -1,3 +1,4 @@
+import { googleFlightsUrl, type FlightCard } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
@@ -61,5 +62,50 @@ describe("Flight Radar", () => {
       await screen.findByText("暫時無法取得即時票價，請直接到 Google 航班查看。"),
     ).toBeVisible();
     expect(screen.getByRole("link", { name: "查看航班" }).getAttribute("href")).toContain("?tfs=");
+  });
+  it("runs a verified highlight in one tap and shows history only after 14 observed days", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
+    });
+    const intent = {
+      origin: "TPE",
+      destination: "NRT",
+      departureDate: "2027-01-08",
+      returnDate: "2027-01-11",
+      currency: "USD" as const,
+      excludeRedEye: false,
+      directOnly: false,
+    };
+    const card: FlightCard = {
+      price: 25000,
+      airline: "Example Air",
+      outboundDeparture: "08:00",
+      outboundArrival: "12:00",
+      inboundDeparture: null,
+      inboundArrival: null,
+      stops: 0,
+      durationMinutes: 180,
+      priceLevel: "low",
+      intent,
+      signal: "strong_buy",
+      overBudget: 0,
+      url: googleFlightsUrl(intent),
+    };
+    api.flightHighlights.push(card);
+    api.flightHistory = { days: 13, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
+    const ticker = await screen.findByRole("region", { name: "Today's Strong Buy fares" });
+    fireEvent.click(await within(ticker).findByRole("button", { name: /TPE → NRT/ }));
+    expect(await screen.findByText("Example Air")).toBeVisible();
+    expect(screen.queryByText(/rolling average/)).toBeNull();
+    const request = api.requests.find((r) => r.route === "POST /api/v1/flights/search");
+    expect(JSON.parse(request?.body ?? "{}")).toEqual(intent);
+    expect(api.requests.find((r) => r.route === "GET /api/v1/flights/highlights")).toBeDefined();
+    api.flightHistory = { days: 14, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
+    fireEvent.click(within(ticker).getByRole("button", { name: /TPE → NRT/ }));
+    expect(
+      await screen.findByText("20% below the rolling average · 14 observed days"),
+    ).toBeVisible();
+    expect(screen.getByText("Price percentile: 7")).toBeVisible();
   });
 });

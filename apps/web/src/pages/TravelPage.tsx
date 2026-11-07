@@ -5,8 +5,9 @@ import {
   parseAmount,
   type FlightSearchIntent,
   type FlightSearchReply,
+  type FlightHighlightsReply,
 } from "@split/shared";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -17,6 +18,13 @@ export function TravelPage() {
   const { state, session } = useAuth();
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   const [invalid, setInvalid] = useState(false);
+  const highlights = useQuery({
+    queryKey: ["flights", "highlights", currency],
+    queryFn: ({ signal }) =>
+      readWithRev<FlightHighlightsReply>(
+        session.fetch(`/api/v1/flights/highlights?currency=${currency}`, { signal }),
+      ),
+  });
   const search = useMutation({
     mutationFn: (intent: FlightSearchIntent) =>
       readWithRev<FlightSearchReply>(
@@ -56,6 +64,36 @@ export function TravelPage() {
   return (
     <>
       <ScreenHeader title={t("flight.title")} subtitle={t("flight.subtitle")} />
+      <section aria-label={t("flight.highlights")} className="mb-6">
+        <h2 className="mb-3 font-bold">{t("flight.highlights")}</h2>
+        {highlights.data?.highlights.length ? (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {highlights.data.highlights.map((card) => (
+              <button
+                key={card.url}
+                type="button"
+                onClick={() => {
+                  search.mutate(card.intent);
+                }}
+                className="press-pill shrink-0 rounded-2xl border border-sprout-200 bg-sprout-50 px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-sprout-700"
+              >
+                <span className="block font-bold">
+                  {card.intent.origin} → {card.intent.destination}
+                </span>
+                <span className="text-sm">
+                  {formatAmount(card.price, card.intent.currency)} · {card.intent.departureDate}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          !highlights.isPending && (
+            <p className="text-sm text-ink-muted">
+              {t(highlights.isError ? "flight.highlightsUnavailable" : "flight.noHighlights")}
+            </p>
+          )
+        )}
+      </section>
       <form
         onSubmit={submit}
         className="surface-card grid gap-4 rounded-3xl border border-sprout-200 bg-white p-5 sm:grid-cols-2"
@@ -190,6 +228,19 @@ export function TravelPage() {
               <p className="text-sm text-ink-muted">
                 {t("flight.summary", { stops: card.stops, minutes: card.durationMinutes })}
               </p>
+              {card.history && card.history.days >= 14 && (
+                <div className="text-sm text-ink-muted">
+                  <p>
+                    {t(
+                      card.history.percentBelowMean >= 0
+                        ? "flight.historyBelow"
+                        : "flight.historyAbove",
+                      { percent: Math.abs(card.history.percentBelowMean), days: card.history.days },
+                    )}
+                  </p>
+                  <p>{t("flight.percentile", { percentile: card.history.percentile })}</p>
+                </div>
+              )}
               {card.overBudget > 0 && (
                 <p className="text-sm text-red-700">
                   {t("flight.overBudget", {

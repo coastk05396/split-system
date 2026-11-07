@@ -211,3 +211,40 @@ export const personalSpending = sqliteTable(
     index("personal_spending_user_date_idx").on(t.userId, t.expenseDate),
   ],
 );
+
+/** Shared Flight Radar source cache and one minimum per route/window/day. */
+export const flightSearchCache = sqliteTable(
+  "flight_search_cache",
+  {
+    cacheKey: text("cache_key").primaryKey(),
+    response: text("response").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [index("flight_search_cache_expiry").on(table.expiresAt)],
+);
+
+export const flightFareHistory = sqliteTable(
+  "flight_fare_history",
+  {
+    origin: text("origin").notNull(),
+    destination: text("destination").notNull(),
+    currency: currency("currency").notNull(),
+    advanceWindow: text("advance_window").notNull(),
+    observedDay: text("observed_day").notNull(),
+    price: integer("price").notNull(),
+    cardJson: text("card_json").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.origin,
+        table.destination,
+        table.currency,
+        table.advanceWindow,
+        table.observedDay,
+      ],
+    }),
+    index("flight_fare_history_day").on(table.observedDay),
+    check("flight_fare_history_price_positive", sql`${table.price}>0`),
+  ],
+);

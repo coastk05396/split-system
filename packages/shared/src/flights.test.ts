@@ -13,7 +13,10 @@ describe("Google Flights handoff", () => {
     );
     expect(url.hostname).toBe("www.google.com");
     expect(url.searchParams.get("curr")).toBe("TWD");
-    const bytes = atob(url.searchParams.get("tfs")!.replace(/-/g, "+").replace(/_/g, "/"));
+    const tfs = url.searchParams.get("tfs");
+    expect(tfs).not.toBeNull();
+    if (tfs === null) throw new Error("Missing flight query");
+    const bytes = atob(tfs.replace(/-/g, "+").replace(/_/g, "/"));
     expect(bytes).toContain("2026-12-04");
     expect(bytes).toContain("2026-12-07");
     expect(bytes).toContain("TPE");

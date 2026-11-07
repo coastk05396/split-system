@@ -1,4 +1,10 @@
-import { flightSearchIntentSchema, googleFlightsUrl, type FlightFare } from "@split/shared";
+import {
+  flightSearchIntentSchema,
+  googleFlightsUrl,
+  type FlightFare,
+  type FlightCard,
+  type FareHistoryStats,
+} from "@split/shared";
 import type { CurrencyCode, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
@@ -10,6 +16,8 @@ export interface FakeApi {
   fetch: typeof fetch;
   flightFares: FlightFare[];
   flightsDegraded: boolean;
+  flightHighlights: FlightCard[];
+  flightHistory: FareHistoryStats | null;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -111,6 +119,8 @@ export function createFakeApi(): FakeApi {
 
   const api: FakeApi = {
     flightsDegraded: false,
+    flightHighlights: [],
+    flightHistory: null,
     flightFares: [
       {
         price: 25000,
@@ -205,6 +215,10 @@ export function createFakeApi(): FakeApi {
     }
 
     switch (`${method} ${url.pathname}`) {
+      case "GET /api/v1/flights/highlights":
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ highlights: api.flightHighlights });
       case "POST /api/v1/flights/search": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const parsed = flightSearchIntentSchema.safeParse(await readJson(init));
@@ -219,6 +233,7 @@ export function createFakeApi(): FakeApi {
             ? []
             : api.flightFares.map((fare) => ({
                 ...fare,
+                history: api.flightHistory,
                 intent,
                 url,
                 overBudget: Math.max(0, fare.price - (intent.budget ?? fare.price)),
