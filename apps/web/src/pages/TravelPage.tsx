@@ -14,7 +14,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { FlightSearchForm } from "../flights/FlightSearchForm.js";
+import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
+import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
@@ -346,6 +347,18 @@ export function TravelPage() {
             </article>
           ))}
         </section>
+      )}
+      {panelOpen && (
+        <StickyBar>
+          <button
+            type="submit"
+            form={FLIGHT_SEARCH_FORM_ID}
+            disabled={search.isPending}
+            className={`${primaryButton} w-full`}
+          >
+            {t("flight.search")}
+          </button>
+        </StickyBar>
       )}
       <FlightPriceWatches
         card={watchCard}

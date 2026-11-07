@@ -62,6 +62,7 @@ export const en: Record<MessageId, string> = {
   "flight.dates": "Dates",
   "flight.route": "Route",
   "flight.lastSearch": "Last search",
+  "flight.searchBar": "Search bar",
   "flight.pastDate": "Departure cannot be in the past.",
   "flight.budgetShort": "Budget cap",
   "flight.theme": "Travel theme",
