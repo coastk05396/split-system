@@ -187,6 +187,17 @@ describe("Flight Radar Price Strip", () => {
     },
   );
 
+  it("jumps to the first and last date with Home and End", async () => {
+    setup("en");
+    const slider = await explore("en");
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(slider).toHaveAttribute("aria-valuenow", "2");
+    expect(shownAirlines("en")).toEqual(["Late Air"]);
+    fireEvent.keyDown(slider, { key: "Home" });
+    expect(slider).toHaveAttribute("aria-valuenow", "0");
+    expect(shownAirlines("en")).toEqual(["Early Air", "Cheapest Early Air"]);
+  });
+
   it("switches the cards by tapping and dragging along the strip", async () => {
     setup("en");
     const slider = await explore("en");
@@ -220,6 +231,17 @@ describe("Flight Radar Price Strip", () => {
       expect(strip.querySelector("[data-ghost]")).toBeNull();
     },
   );
+
+  it("has the live note region in place before the first touch, empty until a difference", async () => {
+    setup("en");
+    const slider = await explore("en");
+    const strip = screen.getByRole("region", { name: text.en.bar });
+    const note = within(strip).getByRole("status");
+    expect(note).toBeEmptyDOMElement();
+    fireEvent.keyDown(slider, { key: "ArrowLeft" });
+    expect(within(strip).getByRole("status")).toBe(note);
+    expect(note).toHaveTextContent(text.en.cheaper);
+  });
 
   it("keeps the legend but draws no ghost finger under reduced motion", async () => {
     setup("en");

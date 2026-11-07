@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { openSearchPanel } from "../../test/flight-panel.js";
@@ -30,8 +30,9 @@ async function chooseDestination(language: Language, query: string) {
   const field = await screen.findByRole("combobox", { name: words[language].destination });
   fireEvent.focus(field);
   fireEvent.change(field, { target: { value: query } });
-  const option = screen.queryAllByRole("option")[0];
+  const option = within(screen.getByRole("listbox")).queryAllByRole("option")[0];
   if (option) fireEvent.click(option);
+  else fireEvent.blur(field); // tapping Search moves focus, which commits a typed code
   fireEvent.click(screen.getByRole("button", { name: words[language].search }));
   await screen.findByText("Example Air");
 }

@@ -49,7 +49,7 @@ One tappable filter chip in Flight Radar—such as destination vibe, dates, budg
 _Avoid_: Tag, search parameter
 
 **Price Strip**:
-The row of bars, one per priced departure date of the current Flight Radar search, used to switch the date the fare cards show; height is price and colour is cheap, normal or pricey.
+The priced departure dates of the current Flight Radar search, side by side, so the User can compare what each date costs and switch which date's fares are shown.
 _Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
 
 **Adaptive Next-Move Chip**:

@@ -127,6 +127,9 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
     fireEvent.focus(destination);
     fireEvent.change(destination, { target: { value: "lhr" } });
     expect(within(screen.getByRole("listbox")).queryByRole("option")).toBeNull();
+    fireEvent.keyDown(destination, { key: "Enter" });
+    expect(destination).toHaveValue("LHR");
+    expect(screen.queryByRole("listbox")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: w.search }));
     await screen.findByText("Example Air");
     expect(searches(api)[0]).toMatchObject({ destination: "LHR" });
@@ -135,6 +138,30 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
     fireEvent.change(reopened, { target: { value: "zzzz" } });
     fireEvent.blur(reopened);
     expect(reopened).toHaveValue("LHR");
+  });
+
+  it("commits a typed code on Enter or blur, but a catalog code at once", async () => {
+    const { api, field, w } = open(language);
+    const destination = await field("destination");
+    fireEvent.focus(destination);
+    // "osa" is a well-formed code, yet mid-typing for Osaka: it waits for Enter or blur.
+    fireEvent.change(destination, { target: { value: "osa" } });
+    fireEvent.click(screen.getByRole("button", { name: w.swap }));
+    expect(screen.getByRole("combobox", { name: w.origin })).not.toHaveDisplayValue(/OSA/);
+    fireEvent.click(screen.getByRole("button", { name: w.swap }));
+    fireEvent.focus(destination);
+    fireEvent.change(destination, { target: { value: "osa" } });
+    fireEvent.blur(destination);
+    expect(destination).toHaveValue("OSA");
+    // A code the catalog lists needs no confirmation.
+    fireEvent.focus(destination);
+    fireEvent.change(destination, { target: { value: "nrt" } });
+    fireEvent.click(screen.getByRole("button", { name: w.swap }));
+    expect(screen.getByRole("combobox", { name: w.origin })).toHaveValue(`${w.tokyo} (NRT)`);
+    fireEvent.click(screen.getByRole("button", { name: w.swap }));
+    fireEvent.click(screen.getByRole("button", { name: w.search }));
+    await screen.findByText("Example Air");
+    expect(searches(api)[0]).toMatchObject({ destination: "NRT" });
   });
 
   it("offers popular choices when empty, then recent searches", async () => {

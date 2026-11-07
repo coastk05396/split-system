@@ -110,6 +110,8 @@ export function AirportPicker({
     setOpen(false);
     setActive(-1);
   }
+  /** A typed, well-formed code waiting for Enter or blur (a catalog code commits as it is typed). */
+  const pendingCode = query !== null && CODE.test(query) ? query.toUpperCase() : null;
   function keyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -120,6 +122,9 @@ export function AirportPicker({
     } else if (event.key === "Enter" && open && options[active] !== undefined) {
       event.preventDefault();
       pick(options[active]);
+    } else if (event.key === "Enter" && pendingCode !== null && pendingCode !== value) {
+      event.preventDefault();
+      pick(pendingCode);
     } else if (event.key === "Escape" && open) {
       event.preventDefault();
       setOpen(false);
@@ -152,14 +157,16 @@ export function AirportPicker({
             setOpen(true);
           }}
           onBlur={() => {
+            if (pendingCode !== null) onChange(pendingCode);
             setTyped(null);
             setOpen(false);
           }}
           onKeyDown={keyDown}
           onChange={(event) => {
             const next = event.target.value;
-            setTyped({ text: next, forValue: CODE.test(next) ? next.toUpperCase() : value });
-            if (CODE.test(next)) onChange(next.toUpperCase());
+            const listed = CODE.test(next) && AIRPORTS.some((a) => a.code === next.toUpperCase());
+            setTyped({ text: next, forValue: listed ? next.toUpperCase() : value });
+            if (listed) onChange(next.toUpperCase());
             setOpen(true);
             setActive(-1);
           }}

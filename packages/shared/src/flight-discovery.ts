@@ -21,6 +21,9 @@ export type FlightTiming = "next_weekend" | "next_month_weekend";
 const DAY = 86_400_000;
 const day = (time: number) => new Date(time).toISOString().slice(0, 10);
 
+/** Taiwan's calendar date (UTC+8) at `now`, as YYYY-MM-DD. */
+export const taiwanDate = (now: number) => day(now + 8 * 3_600_000);
+
 /** Calendar decisions use Taiwan's date, independent of either provider's interpretation. */
 export function anchorFlightDates(
   timing: FlightTiming,

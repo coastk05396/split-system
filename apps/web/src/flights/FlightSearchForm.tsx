@@ -2,6 +2,7 @@ import {
   CURRENCIES,
   flightSearchIntentSchema,
   parseAmount,
+  taiwanDate,
   FLIGHT_THEMES,
   type FlightSearchIntent,
 } from "@split/shared";
@@ -59,7 +60,7 @@ export function FlightSearchForm({
 }) {
   const currency = active.currency;
   const [problem, setProblem] = useState<"fields" | "past" | null>(null);
-  const today = new Date(Date.now()).toISOString().slice(0, 10);
+  const today = taiwanDate(Date.now());
   // The fields follow the active intent: a prompt, pill, chip, highlight or portal link redraws them.
   const key = `${revision}${JSON.stringify(active)}`;
   const [seen, setSeen] = useState(key);

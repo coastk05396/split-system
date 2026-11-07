@@ -138,11 +138,11 @@ export function PriceStrip({
 
   return (
     <div className="grid gap-1.5">
-      {touched ? (
-        <p role="status" className="min-h-5 text-sm font-bold">
-          {note}
-        </p>
-      ) : (
+      {/* Mounted from the first render so a screen reader announces even the first change. */}
+      <p role="status" className={touched ? "min-h-5 text-sm font-bold" : "sr-only"}>
+        {note}
+      </p>
+      {!touched && (
         <div className="grid gap-1 text-sm text-ink-muted">
           <p>{t("flight.stripHint")}</p>
           <p aria-hidden="true" className="flex gap-3">

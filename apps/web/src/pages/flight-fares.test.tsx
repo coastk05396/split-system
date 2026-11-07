@@ -118,6 +118,16 @@ describe("Flight Radar fare carousel", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
+    "shows no page dots for a single fare in %s",
+    async (language) => {
+      const { api } = setup(language);
+      await explore(api, language);
+      expect(await screen.findByText("Example Air")).toBeVisible();
+      expect(screen.queryByRole("group", { name: text[language].pages })).toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
     "shows one sentence of commentary and no helper hints in %s",
     async (language) => {
       const { api } = setup(language);

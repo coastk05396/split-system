@@ -1,11 +1,12 @@
 import {
   flightSearchRequestSchema,
   googleFlightsUrl,
+  taiwanDate,
   type FlightCard,
   type FlightSearchIntent,
 } from "@split/shared";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
 import { openSearchPanel } from "../../test/flight-panel.js";
@@ -280,14 +281,73 @@ describe("Flight Radar", () => {
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     await openSearchPanel();
-    const today = new Date().toISOString().slice(0, 10);
     const departure = screen.getByLabelText("Departure date");
-    expect(departure).toHaveAttribute("min", today);
+    expect(departure).toHaveAttribute("min", taiwanDate(Date.now()));
     fireEvent.change(departure, { target: { value: "2020-01-01" } });
     fireEvent.change(screen.getByLabelText("Return date"), { target: { value: "2020-01-05" } });
     fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
     expect(await screen.findByRole("alert")).toBeVisible();
     expect(api.requests.some((r) => r.route === "POST /api/v1/flights/search")).toBe(false);
+  });
+
+  describe("when the browser blocks flight storage", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+    it("still opens, picks airports and searches without remembering anything", async () => {
+      const blocked = (key: string) => key.startsWith("split.flight");
+      // The originals are called back with their own `this` below.
+      /* eslint-disable @typescript-eslint/unbound-method */
+      const getItem = Storage.prototype.getItem;
+      const setItem = Storage.prototype.setItem;
+      /* eslint-enable @typescript-eslint/unbound-method */
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (this: Storage, key) {
+        if (blocked(key)) throw new DOMException("blocked", "SecurityError");
+        return getItem.call(this, key);
+      });
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+        this: Storage,
+        key,
+        value,
+      ) {
+        if (blocked(key)) throw new DOMException("blocked", "SecurityError");
+        setItem.call(this, key, value);
+      });
+      const { api } = renderApp({
+        path: "/travel",
+        cookieUser: { ...makeUser("Rick"), language: "en" },
+      });
+      await openSearchPanel();
+      const destination = screen.getByRole("combobox", { name: "Destination airport" });
+      fireEvent.focus(destination);
+      expect(within(screen.getByRole("listbox")).getAllByRole("option").length).toBeGreaterThan(0);
+      fireEvent.change(destination, { target: { value: "KIX" } });
+      fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+      expect(await screen.findByText("Example Air")).toBeVisible();
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(1);
+    });
+  });
+
+  describe("on Taiwan's calendar", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    it("treats the Taiwan date as today when UTC is still the day before", async () => {
+      // 2026-12-03T17:00Z is 2026-12-04 01:00 in Taiwan.
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-03T17:00:00Z") });
+      const { api } = renderApp({
+        path: "/travel",
+        cookieUser: { ...makeUser("Rick"), language: "en" },
+      });
+      await openSearchPanel();
+      const departure = screen.getByLabelText("Departure date");
+      expect(departure).toHaveAttribute("min", "2026-12-04");
+      fireEvent.change(departure, { target: { value: "2026-12-03" } });
+      fireEvent.change(screen.getByLabelText("Return date"), { target: { value: "2026-12-06" } });
+      fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+      expect(await screen.findByRole("alert")).toBeVisible();
+      expect(api.requests.some((r) => r.route === "POST /api/v1/flights/search")).toBe(false);
+    });
   });
 
   it("no longer shows the Vibe Recipe deck", async () => {
