@@ -80,6 +80,8 @@ const zhTW = {
   "flight.airportPopular": "熱門",
   "flight.airportNone": "找不到符合的機場，可直接輸入三碼機場代碼。",
   "flight.swap": "對調出發與目的地",
+  "flight.globeLeg": "{km} 公里・約 {hours} 小時 {minutes} 分",
+  "flight.globeLabel": "地球轉向 {route}",
   "flight.title": "航班雷達",
   "app.name": "小芽分帳",
   "app.loading": "載入中…",

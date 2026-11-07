@@ -421,6 +421,7 @@ CREATE TABLE fx_rates (
 - The panel holds the airport pickers, the swap button, departure and return calendars, budget, theme and the red-eye and direct-only rules. The calendars disable past dates and a past departure date is rejected on search with a message. Searching submits the displayed canonical intent directly, with no prompt-parse request.
 - The last submitted search is kept in this browser (search conditions only) and restored into the pills and fields, labelled "last search", when `/travel` opens without a LINE portal link. Opening `/travel` never starts a search by itself; the label disappears when a new search starts.
 - A failed search shows its error below the panel, since the panel has closed.
+- The header holds a small decorative globe that turns to face the active route, with the great-circle distance and a rough flight time beside it (`655 km · ≈ 1 h 19 min`; the time is 30 minutes plus the distance at 800 km/h, so approximate). It shows only when both airports are in the catalog, which carries approximate coordinates for every airport; an unlisted code shows no globe and no error. The canvas has one text label (`Globe turned to TPE → OKA`) and nothing else for assistive tech. With reduced motion the globe is drawn already turned.
 
 ### Flight Radar — progressive deal commentary and Adaptive Next-Move Chips
 

@@ -79,6 +79,8 @@ export const en: Record<MessageId, string> = {
   "flight.airportPopular": "Popular",
   "flight.airportNone": "No match. Type a three-letter airport code to use it.",
   "flight.swap": "Swap origin and destination",
+  "flight.globeLeg": "{km} km · ≈ {hours} h {minutes} min",
+  "flight.globeLabel": "Globe turned to {route}",
   "flight.title": "Flight Radar",
   "app.name": "Sprout Split",
   "app.loading": "Loading…",

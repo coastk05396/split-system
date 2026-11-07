@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { EntityPills } from "../flights/EntityPills.js";
+import { RouteGlobe } from "../flights/RouteGlobe.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -122,7 +123,11 @@ export function TravelPage() {
   const reply = search.data;
   return (
     <>
-      <ScreenHeader title={t("flight.title")} subtitle={t("flight.subtitle")} />
+      <ScreenHeader
+        title={t("flight.title")}
+        subtitle={t("flight.subtitle")}
+        action={<RouteGlobe origin={active.origin} destination={active.destination} />}
+      />
       <form
         className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4"
         onSubmit={(event) => {
