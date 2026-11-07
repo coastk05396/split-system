@@ -426,6 +426,8 @@ CREATE TABLE fx_rates (
 - While a search runs the results area is a skeleton of three cards (marked busy) with the "checking live fares" status. Empty and degraded results keep their message and direct Google Flights link and show no carousel.
 - The advice shows only the first sentence of the server's grounded commentary; the Adaptive Next-Move Chips are unchanged. The screen has no helper-hint text (the subtitle under the title is removed).
 - With the device set to reduced motion the roll, glide, depth effect, smooth dot scrolling and skeleton pulse are all off: cards show their final state.
+- The header holds a small decorative globe that turns to face the active route, with the great-circle distance and a rough flight time beside it (`655 km · ≈ 1 h 19 min`; the time is 30 minutes plus the distance at 800 km/h, so approximate). It shows only when both airports are in the catalog, which carries approximate coordinates for every airport; an unlisted code shows no globe and no error. The canvas has one text label (`Globe turned to TPE → OKA`) and nothing else for assistive tech. With reduced motion the globe is drawn already turned.
+- A sticky bottom bar (labelled "Search bar") is fixed above the mobile tab bar (beside the sidebar on desktop), with matching space at the end of the page so it never covers content, and respects the safe-area insets. It exists only while the editing panel is open and holds the Search button, which submits the displayed intent; closing the panel or starting a search removes it. The bar is also where the Price Strip will live when the panel is closed.
 
 ### Flight Radar — progressive deal commentary and Adaptive Next-Move Chips
 

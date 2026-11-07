@@ -2,6 +2,8 @@
 export const FLIGHT_DESTINATIONS = [
   {
     airport: "NRT",
+    lat: 35.77,
+    lng: 140.39,
     en: "Tokyo",
     zhTW: "東京",
     climate: "temperate",
@@ -10,6 +12,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "HND",
+    lat: 35.55,
+    lng: 139.78,
     en: "Tokyo Haneda",
     zhTW: "東京羽田",
     climate: "temperate",
@@ -18,6 +22,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "KIX",
+    lat: 34.43,
+    lng: 135.24,
     en: "Osaka",
     zhTW: "大阪",
     climate: "temperate",
@@ -26,6 +32,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "OKA",
+    lat: 26.2,
+    lng: 127.65,
     en: "Okinawa",
     zhTW: "沖繩",
     climate: "warm",
@@ -34,6 +42,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "FUK",
+    lat: 33.59,
+    lng: 130.45,
     en: "Fukuoka",
     zhTW: "福岡",
     climate: "temperate",
@@ -42,6 +52,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "CTS",
+    lat: 42.78,
+    lng: 141.69,
     en: "Sapporo",
     zhTW: "札幌",
     climate: "cold",
@@ -50,6 +62,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "NGO",
+    lat: 34.86,
+    lng: 136.81,
     en: "Nagoya",
     zhTW: "名古屋",
     climate: "temperate",
@@ -58,6 +72,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "SDJ",
+    lat: 38.14,
+    lng: 140.92,
     en: "Sendai",
     zhTW: "仙台",
     climate: "temperate",
@@ -66,6 +82,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "HIJ",
+    lat: 34.44,
+    lng: 132.92,
     en: "Hiroshima",
     zhTW: "廣島",
     climate: "temperate",
@@ -74,6 +92,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "KMJ",
+    lat: 32.84,
+    lng: 130.86,
     en: "Kumamoto",
     zhTW: "熊本",
     climate: "temperate",
@@ -82,6 +102,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "ICN",
+    lat: 37.46,
+    lng: 126.44,
     en: "Seoul",
     zhTW: "首爾",
     climate: "temperate",
@@ -90,6 +112,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "PUS",
+    lat: 35.18,
+    lng: 128.94,
     en: "Busan",
     zhTW: "釜山",
     climate: "temperate",
@@ -98,6 +122,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "CJU",
+    lat: 33.51,
+    lng: 126.49,
     en: "Jeju",
     zhTW: "濟州",
     climate: "temperate",
@@ -106,6 +132,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "BKK",
+    lat: 13.69,
+    lng: 100.75,
     en: "Bangkok",
     zhTW: "曼谷",
     climate: "warm",
@@ -114,6 +142,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "CNX",
+    lat: 18.77,
+    lng: 98.96,
     en: "Chiang Mai",
     zhTW: "清邁",
     climate: "warm",
@@ -122,6 +152,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "HKT",
+    lat: 8.11,
+    lng: 98.32,
     en: "Phuket",
     zhTW: "普吉島",
     climate: "warm",
@@ -130,6 +162,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "SIN",
+    lat: 1.36,
+    lng: 103.99,
     en: "Singapore",
     zhTW: "新加坡",
     climate: "warm",
@@ -138,6 +172,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "KUL",
+    lat: 2.75,
+    lng: 101.71,
     en: "Kuala Lumpur",
     zhTW: "吉隆坡",
     climate: "warm",
@@ -146,6 +182,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "PEN",
+    lat: 5.3,
+    lng: 100.28,
     en: "Penang",
     zhTW: "檳城",
     climate: "warm",
@@ -154,6 +192,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "BKI",
+    lat: 5.94,
+    lng: 116.05,
     en: "Kota Kinabalu",
     zhTW: "亞庇",
     climate: "warm",
@@ -162,6 +202,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "DPS",
+    lat: -8.75,
+    lng: 115.17,
     en: "Bali",
     zhTW: "峇里島",
     climate: "warm",
@@ -170,6 +212,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "MNL",
+    lat: 14.51,
+    lng: 121.02,
     en: "Manila",
     zhTW: "馬尼拉",
     climate: "warm",
@@ -178,6 +222,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "CEB",
+    lat: 10.31,
+    lng: 123.98,
     en: "Cebu",
     zhTW: "宿霧",
     climate: "warm",
@@ -186,6 +232,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "DAD",
+    lat: 16.04,
+    lng: 108.2,
     en: "Da Nang",
     zhTW: "峴港",
     climate: "warm",
@@ -194,6 +242,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "SGN",
+    lat: 10.82,
+    lng: 106.66,
     en: "Ho Chi Minh City",
     zhTW: "胡志明市",
     climate: "warm",
@@ -202,6 +252,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "HKG",
+    lat: 22.31,
+    lng: 113.91,
     en: "Hong Kong",
     zhTW: "香港",
     climate: "warm",
@@ -210,6 +262,8 @@ export const FLIGHT_DESTINATIONS = [
   },
   {
     airport: "MFM",
+    lat: 22.15,
+    lng: 113.59,
     en: "Macau",
     zhTW: "澳門",
     climate: "warm",
@@ -221,8 +275,33 @@ export type FlightDestination = (typeof FLIGHT_DESTINATIONS)[number];
 
 /** Taiwan departure airports offered as quick origin choices. */
 export const FLIGHT_ORIGINS = [
-  { airport: "TPE", en: "Taipei Taoyuan", zhTW: "台北桃園" },
-  { airport: "TSA", en: "Taipei Songshan", zhTW: "台北松山" },
-  { airport: "RMQ", en: "Taichung", zhTW: "台中" },
-  { airport: "KHH", en: "Kaohsiung", zhTW: "高雄" },
+  { airport: "TPE", lat: 25.08, lng: 121.23, en: "Taipei Taoyuan", zhTW: "台北桃園" },
+  { airport: "TSA", lat: 25.07, lng: 121.55, en: "Taipei Songshan", zhTW: "台北松山" },
+  { airport: "RMQ", lat: 24.26, lng: 120.62, en: "Taichung", zhTW: "台中" },
+  { airport: "KHH", lat: 22.57, lng: 120.35, en: "Kaohsiung", zhTW: "高雄" },
 ] as const;
+
+const AIRPORT_COORDINATES = new Map<string, { lat: number; lng: number }>(
+  [...FLIGHT_ORIGINS, ...FLIGHT_DESTINATIONS].map((a) => [a.airport, { lat: a.lat, lng: a.lng }]),
+);
+
+/** Approximate position of a catalog airport; undefined for any other code. */
+export function airportCoordinates(code: string): { lat: number; lng: number } | undefined {
+  return AIRPORT_COORDINATES.get(code);
+}
+
+/** Great-circle distance and a rough flight time (taxi and climb plus 800 km/h); undefined if either airport is unknown. */
+export function routeEstimate(
+  origin: string,
+  destination: string,
+): { km: number; minutes: number } | undefined {
+  const a = airportCoordinates(origin);
+  const b = airportCoordinates(destination);
+  if (!a || !b) return undefined;
+  const rad = Math.PI / 180;
+  const h =
+    Math.sin(((b.lat - a.lat) * rad) / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(((b.lng - a.lng) * rad) / 2) ** 2;
+  const km = Math.round(2 * 6371 * Math.asin(Math.sqrt(h)));
+  return { km, minutes: Math.round(30 + (km / 800) * 60) };
+}

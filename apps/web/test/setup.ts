@@ -23,6 +23,9 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// jsdom has no canvas: drawing is skipped (and its "not implemented" noise with it).
+HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as never;
+
 // jsdom has no scrollIntoView; focus handlers that scroll a field into view call it.
 Element.prototype.scrollIntoView = vi.fn();
 

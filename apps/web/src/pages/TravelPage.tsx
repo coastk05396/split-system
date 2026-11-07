@@ -14,9 +14,11 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { FlightSearchForm } from "../flights/FlightSearchForm.js";
+import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
+import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { FareResults } from "../flights/FareResults.js";
+import { RouteGlobe } from "../flights/RouteGlobe.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -122,7 +124,10 @@ export function TravelPage() {
   const reply = search.data;
   return (
     <>
-      <ScreenHeader title={t("flight.title")} />
+      <ScreenHeader
+        title={t("flight.title")}
+        action={<RouteGlobe origin={active.origin} destination={active.destination} />}
+      />
       <form
         className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4"
         onSubmit={(event) => {
@@ -262,6 +267,18 @@ export function TravelPage() {
         </section>
       )}
       <FareResults pending={search.isPending} reply={reply} onWatch={setWatchCard} />
+      {panelOpen && (
+        <StickyBar>
+          <button
+            type="submit"
+            form={FLIGHT_SEARCH_FORM_ID}
+            disabled={search.isPending}
+            className={`${primaryButton} w-full`}
+          >
+            {t("flight.search")}
+          </button>
+        </StickyBar>
+      )}
       <FlightPriceWatches
         card={watchCard}
         onClose={() => {
