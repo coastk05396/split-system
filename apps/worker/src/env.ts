@@ -5,6 +5,7 @@ export interface Bindings {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  /** Staging and production only: local dev and tests have no Workers AI binding. */
   AI?: {
     run(
       model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
@@ -15,6 +16,7 @@ export interface Bindings {
     ): Promise<unknown>;
   };
   GROQ_API_KEY?: string;
+  /** Staging and production only: locally there is no container, so searches degrade to deep links. */
   FLIGHT_CONTAINER?: DurableObjectNamespace;
   MAINTENANCE?: string;
   DB: D1Database;

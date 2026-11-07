@@ -23,6 +23,10 @@ Do not put tokens or secrets in GitHub issues, chat, `wrangler.jsonc`, or Vite `
 5. Before production deployment, add the custom domain `split.rickchen.si` to the production Worker. The zone must be active in the same Cloudflare account, and that hostname must not have an existing CNAME record. Cloudflare creates DNS and TLS for the Worker custom domain.
 6. Create a Cloudflare API token scoped to this account for Worker deployment and D1 migrations. Put it and the account ID in GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Set a rate-limit/WAF rule for `/api/v1/auth/*` before production traffic.
 
+### Flight Radar bindings (Workers AI and container)
+
+The `ai` binding, the `FLIGHT_CONTAINER` Durable Object binding, the `v2` migration and the `containers` block (ADR 0006) live only in `env.staging` and `env.production`. Keep them out of the top level of `wrangler.jsonc`: `wrangler dev` and the Vitest pool read the top level, the AI binding always runs remotely (it needs a Cloudflare login), and `containers` makes `wrangler dev` build a Docker image. Keep the `migrations` list in each environment consistent with the exported Durable Object classes. `wrangler deploy --env staging|production` builds the container image, so the machine needs Docker (GitHub-hosted runners have it). To validate the configuration without Docker or credentials, run `pnpm --filter @split/worker exec wrangler deploy --dry-run --containers-rollout=none --env staging` (and `--env production`).
+
 ## Google sign-in
 
 In Google Cloud, configure OAuth branding/consent, then create a **Web application** OAuth client. Add `https://split.rickchen.si` to Authorized JavaScript origins; add the staging origin if staging sign-in is needed. This app uses the Google Identity Services JavaScript callback and sends an ID token to the Worker, so an OAuth redirect URI and client secret are not required by the current code. Put the same client ID in the web build as `VITE_GOOGLE_CLIENT_ID` and in the matching Worker environment as `GOOGLE_CLIENT_ID`.

@@ -230,3 +230,30 @@ it.each([
   expect(cards.length).toBeGreaterThan(0);
   expect(cards.every((card) => card.price === 6543)).toBe(true);
 });
+
+it("degrades to deep links when local dev has no Workers AI or container binding", async () => {
+  // Local `wrangler dev` and vitest must not bind AI or FLIGHT_CONTAINER (they need Cloudflare auth and Docker).
+  expect(env.AI).toBeUndefined();
+  expect(env.FLIGHT_CONTAINER).toBeUndefined();
+  const app = createApp({ ...productionDeps, now: () => clock.now });
+  const user = await signIn("google", uniqueSub("unbound-flight"));
+  const post = (body: unknown) =>
+    app.request(
+      "https://split.test/api/v1/flights/search",
+      json(body, bearer(user.accessToken)),
+      env,
+    );
+  const search = await post({
+    origin: "TPE",
+    destination: "NRT",
+    departureDate: "2026-12-04",
+    returnDate: "2026-12-07",
+    currency: "TWD",
+  });
+  expect(search.status).toBe(200);
+  const reply = await search.json<FlightSearchReply>();
+  expect(reply).toMatchObject({ degraded: true, cards: [] });
+  expect(reply.url).toContain("?tfs=");
+  // With no model to parse it, a free-text prompt is refused cleanly instead of crashing.
+  expect((await post({ prompt: "next month weekend to LAX" })).status).toBe(400);
+});
