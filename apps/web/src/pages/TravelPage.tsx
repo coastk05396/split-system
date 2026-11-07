@@ -1,7 +1,6 @@
 import {
   applyIntentPatch,
   defaultFlightIntent,
-  flightRecipes,
   formatAmount,
   intentFromQuery,
   type FlightAdviceReply,
@@ -17,9 +16,10 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { EntityPills } from "../flights/EntityPills.js";
+import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
-import { ScreenHeader, failureMessage, input, primaryButton } from "../groups/ui.js";
+import { ScreenHeader, failureMessage, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 
 import {
@@ -32,16 +32,19 @@ export function TravelPage() {
   const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
   const { state, session } = useAuth();
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
-  const [active, setIntent] = useState(() => defaultFlightIntent(Date.now(), currency));
+  // A LINE portal link carries its own search; otherwise the last search is restored, never run.
+  const [params] = useSearchParams();
+  const [lastSearch] = useState(() => (intentFromQuery(params) ? null : readLastSearch()));
+  const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [active, setIntent] = useState(
+    () => lastSearch ?? defaultFlightIntent(Date.now(), currency),
+  );
   // Bumped on every search so the fields reset to what was searched even when the intent is equal.
   const [revision, setRevision] = useState(0);
   const setActive = (intent: FlightSearchIntent) => {
     setIntent(intent);
     setRevision((r) => r + 1);
-  };
-  const formRef = useRef<HTMLFormElement>(null);
-  const edit = (field: string) => {
-    formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus();
   };
   const highlights = useQuery({
     queryKey: ["flights", "highlights", currency],
@@ -72,9 +75,12 @@ export function TravelPage() {
       ),
     onMutate: () => {
       advise.reset();
+      setPanelOpen(false);
+      setShowLastSearch(false);
     },
     onSuccess: (reply) => {
       setActive(reply.intent);
+      writeLastSearch(reply.intent);
       if (reply.cards.length)
         advise.mutate({ language: getLocale(), intent: reply.intent, cards: reply.cards });
     },
@@ -85,7 +91,6 @@ export function TravelPage() {
   }
 
   // The LINE portal bubble opens /travel with its search in the query: run it once, no parse.
-  const [params] = useSearchParams();
   const portalIntent = useRef(intentFromQuery(params));
   // A LINE chat tap by someone not yet signed up adds `watch=line&fare=`; the User confirms it below.
   const pendingFare = useRef(params.get("watch") === "line" ? Number(params.get("fare")) : 0);
@@ -118,7 +123,54 @@ export function TravelPage() {
   return (
     <>
       <ScreenHeader title={t("flight.title")} subtitle={t("flight.subtitle")} />
-      <section aria-label={t("flight.highlights")} className="mb-6">
+      <form
+        className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const prompt = new FormData(event.currentTarget).get("prompt");
+          if (typeof prompt === "string" && prompt.trim())
+            search.mutate({ prompt: prompt.trim(), defaults: active });
+        }}
+      >
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">{t("flight.prompt")}</span>
+          <input
+            className="w-full bg-transparent py-2 outline-none placeholder:text-ink-muted"
+            name="prompt"
+            placeholder={t("flight.prompt")}
+            required
+            maxLength={1000}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={search.isPending}
+          className="press-pill rounded-full bg-sprout-500 px-4 py-2 font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
+        >
+          {t("flight.explore")}
+        </button>
+      </form>
+      <EntityPills
+        intent={active}
+        pending={search.isPending}
+        open={panelOpen}
+        onToggle={() => {
+          setPanelOpen((open) => !open);
+        }}
+        onChange={runIntent}
+      />
+      {showLastSearch && <p className="mt-2 text-sm text-ink-muted">{t("flight.lastSearch")}</p>}
+      {panelOpen && (
+        <div className="mt-3">
+          <FlightSearchForm
+            intent={active}
+            revision={revision}
+            pending={search.isPending}
+            onSearch={runIntent}
+          />
+        </div>
+      )}
+      <section aria-label={t("flight.highlights")} className="my-6">
         <h2 className="mb-3 font-bold">{t("flight.highlights")}</h2>
         {highlights.data?.highlights.length ? (
           <div className="flex gap-3 overflow-x-auto pb-2">
@@ -148,51 +200,6 @@ export function TravelPage() {
           )
         )}
       </section>
-      <section aria-label={t("flight.recipes")} className="mb-5">
-        <h2 className="mb-3 font-bold">{t("flight.recipes")}</h2>
-        <div className="flex flex-wrap gap-2">
-          {(highlights.data?.recipes ?? flightRecipes(Date.now(), currency)).map((recipe) => (
-            <button
-              key={recipe.id}
-              type="button"
-              disabled={search.isPending}
-              className="press-pill rounded-full border border-sprout-200 bg-white px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
-              onClick={() => {
-                if (recipe.id === "budget" && recipe.patch.budget === undefined) edit("budget");
-                else runIntent({ ...active, ...recipe.patch });
-              }}
-            >
-              {getLocale() === "en" ? recipe.en : recipe.zhTW}
-            </button>
-          ))}
-        </div>
-      </section>
-      <form
-        className="mb-5 flex flex-wrap gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const prompt = new FormData(event.currentTarget).get("prompt");
-          if (typeof prompt === "string" && prompt.trim())
-            search.mutate({ prompt: prompt.trim(), defaults: active });
-        }}
-      >
-        <label className="grid min-w-0 flex-1 gap-1 text-sm font-bold">
-          {t("flight.prompt")}
-          <input className={input} name="prompt" required maxLength={1000} />
-        </label>
-        <button type="submit" disabled={search.isPending} className={`${primaryButton} self-end`}>
-          {t("flight.explore")}
-        </button>
-      </form>
-      <EntityPills intent={active} pending={search.isPending} onChange={runIntent} />
-      <FlightSearchForm
-        intent={active}
-        revision={revision}
-        pending={search.isPending}
-        error={search.error}
-        onSearch={runIntent}
-        formRef={formRef}
-      />
       {pendingWatch && !lineWatch.isSuccess && (
         <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
           <p>
@@ -224,6 +231,11 @@ export function TravelPage() {
       {lineWatch.isError && (
         <p role="alert" className="mt-5">
           {failureMessage(lineWatch.error)}
+        </p>
+      )}
+      {search.isError && (
+        <p role="alert" className="mt-5 text-sm text-red-700">
+          {failureMessage(search.error)}
         </p>
       )}
       {search.isPending && (

@@ -45,7 +45,7 @@ A standing alert a User sets on a route and date window so 小芽 wakes them onc
 _Avoid_: Subscription, price tracker
 
 **Entity Pill**:
-One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons and editable in place.
+One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the current search, and tapping one opens the editing panel.
 _Avoid_: Tag, search parameter
 
 **Adaptive Next-Move Chip**:

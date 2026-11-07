@@ -2,6 +2,7 @@ import type { FlightCard, FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const languages = ["en", "zh-TW"] as const;
@@ -19,9 +20,7 @@ const words = {
     okinawa: "Okinawa",
     explore: "Explore flights",
     prompt: "Where would you like to go?",
-    pills: "Active search conditions",
     advice: "Deal commentary",
-    resetOrigin: "Reset origin airport",
     recent: "Recent",
     popular: "Popular",
   },
@@ -37,9 +36,7 @@ const words = {
     okinawa: "沖繩",
     explore: "探索航班",
     prompt: "想去哪裡？",
-    pills: "目前搜尋條件",
     advice: "票價短評",
-    resetOrigin: "重設出發機場",
     recent: "最近搜尋",
     popular: "熱門",
   },
@@ -59,8 +56,10 @@ const intent: FlightSearchIntent = {
 function open(language: Language, path = "/travel") {
   const rendered = renderApp({ path, cookieUser: { ...makeUser("Rick"), language } });
   const w = words[language];
-  const field = (name: "origin" | "destination") =>
-    screen.findByRole("combobox", { name: w[name] });
+  const field = async (name: "origin" | "destination") => {
+    await openSearchPanel();
+    return screen.findByRole("combobox", { name: w[name] });
+  };
   return { ...rendered, w, field };
 }
 const searches = (api: ReturnType<typeof open>["api"]) =>
@@ -131,10 +130,11 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
     fireEvent.click(screen.getByRole("button", { name: w.search }));
     await screen.findByText("Example Air");
     expect(searches(api)[0]).toMatchObject({ destination: "LHR" });
-    fireEvent.focus(destination);
-    fireEvent.change(destination, { target: { value: "zzzz" } });
-    fireEvent.blur(destination);
-    expect(destination).toHaveValue("LHR");
+    const reopened = await field("destination");
+    fireEvent.focus(reopened);
+    fireEvent.change(reopened, { target: { value: "zzzz" } });
+    fireEvent.blur(reopened);
+    expect(reopened).toHaveValue("LHR");
   });
 
   it("offers popular choices when empty, then recent searches", async () => {
@@ -157,8 +157,9 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
     fireEvent.click(screen.getByRole("button", { name: w.search }));
     await screen.findByText("Example Air");
 
-    fireEvent.focus(destination);
-    fireEvent.change(destination, { target: { value: "" } });
+    const reopened = await field("destination");
+    fireEvent.focus(reopened);
+    fireEvent.change(reopened, { target: { value: "" } });
     list = screen.getByRole("listbox");
     expect(within(list).getByText(w.recent)).toBeVisible();
     expect(within(list).getAllByRole("option")[0]).toHaveTextContent("KIX");
@@ -178,14 +179,13 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
   });
 
   describe("shows what was searched", () => {
-    it("after a prompt, a next-move chip and a pill reset", async () => {
+    it("after a prompt, a next-move chip and a panel search", async () => {
       const { api, field, w } = open(language);
       api.flightPromptIntent = intent;
-      await field("destination");
-      fireEvent.change(screen.getByLabelText(w.prompt), { target: { value: "okinawa" } });
+      fireEvent.change(await screen.findByLabelText(w.prompt), { target: { value: "okinawa" } });
       fireEvent.click(screen.getByRole("button", { name: w.explore }));
       await screen.findByText("Example Air");
-      expect(screen.getByRole("combobox", { name: w.origin })).toHaveDisplayValue(/TPE/);
+      expect(await field("origin")).toHaveDisplayValue(/TPE/);
       expect(screen.getByRole("combobox", { name: w.destination })).toHaveValue(
         `${w.okinawa} (OKA)`,
       );
@@ -195,6 +195,10 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
       const advice = await screen.findByRole("region", { name: w.advice });
       fireEvent.click(within(advice).getAllByRole("button")[0] as HTMLElement);
       await waitFor(() => {
+        expect(searches(api)).toHaveLength(2);
+      });
+      await field("origin");
+      await waitFor(() => {
         expect(screen.getByLabelText(w.departure)).toHaveValue("2027-01-07");
       });
       expect(screen.getByLabelText(w.ret)).toHaveValue("2027-01-10");
@@ -202,12 +206,11 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
       fireEvent.change(screen.getByRole("combobox", { name: w.origin }), {
         target: { value: "KHH" },
       });
-      const pills = screen.getByRole("region", { name: w.pills });
-      fireEvent.click(within(pills).getByRole("button", { name: w.resetOrigin }));
+      fireEvent.click(screen.getByRole("button", { name: w.search }));
       await waitFor(() => {
         expect(searches(api)).toHaveLength(3);
       });
-      expect(screen.getByRole("combobox", { name: w.origin })).toHaveDisplayValue(/TPE/);
+      expect(await field("origin")).toHaveDisplayValue(/KHH/);
     });
 
     it("after a verified highlight tap", async () => {
@@ -227,10 +230,9 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
         overBudget: 0,
         url: "https://example.test/f",
       } satisfies FlightCard);
-      await field("destination");
       fireEvent.click(await screen.findByRole("button", { name: /KHH → KIX/ }));
       await screen.findByText("Example Air");
-      expect(screen.getByRole("combobox", { name: w.origin })).toHaveDisplayValue(/KHH/);
+      expect(await field("origin")).toHaveDisplayValue(/KHH/);
       expect(screen.getByRole("combobox", { name: w.destination })).toHaveDisplayValue(/KIX/);
     });
 
@@ -244,9 +246,9 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
         excludeRedEye: "0",
         directOnly: "0",
       });
-      const { w } = open(language, `/travel?${query.toString()}`);
+      const { field, w } = open(language, `/travel?${query.toString()}`);
       await screen.findByText("Example Air");
-      expect(screen.getByRole("combobox", { name: w.origin })).toHaveDisplayValue(/KHH/);
+      expect(await field("origin")).toHaveDisplayValue(/KHH/);
       expect(screen.getByRole("combobox", { name: w.destination })).toHaveValue(`${w.tokyo} (NRT)`);
       expect(screen.getByLabelText(w.departure)).toHaveValue("2027-02-05");
     });

@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 
 it.each(["en", "zh-TW"] as const)(
   "subscribes, lists and cancels a Web Price Watch in %s",
@@ -22,6 +23,7 @@ it.each(["en", "zh-TW"] as const)(
     });
     const en = language === "en";
     await screen.findByRole("heading", { name: en ? "Flight Radar" : "航班雷達" });
+    await openSearchPanel();
     fireEvent.change(screen.getByLabelText(en ? "Destination airport" : "目的地機場"), {
       target: { value: "NRT" },
     });
@@ -59,6 +61,7 @@ it.each(["en", "zh-TW"] as const)(
 
 async function searchNrt() {
   await screen.findByRole("heading", { name: "航班雷達" });
+  await openSearchPanel();
   fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
   fireEvent.change(screen.getByLabelText("出發日期"), { target: { value: "2027-01-08" } });
   fireEvent.change(screen.getByLabelText("回程日期"), { target: { value: "2027-01-11" } });

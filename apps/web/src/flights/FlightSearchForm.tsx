@@ -5,14 +5,14 @@ import {
   FLIGHT_THEMES,
   type FlightSearchIntent,
 } from "@split/shared";
-import { useState, type RefObject, type SubmitEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import {
   AirportPicker,
   POPULAR_DESTINATIONS,
   POPULAR_ORIGINS,
   rememberAirports,
 } from "./AirportPicker.js";
-import { failureMessage, input, primaryButton } from "../groups/ui.js";
+import { input, primaryButton } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
 
 interface Draft {
@@ -46,20 +46,17 @@ export function FlightSearchForm({
   intent: active,
   revision,
   pending,
-  error,
   onSearch,
-  formRef,
 }: {
   intent: FlightSearchIntent;
   /** Changes whenever a search runs, so the fields redraw even for an identical intent. */
   revision: number;
   pending: boolean;
-  error: unknown;
   onSearch: (intent: FlightSearchIntent) => void;
-  formRef: RefObject<HTMLFormElement | null>;
 }) {
   const currency = active.currency;
-  const [invalid, setInvalid] = useState(false);
+  const [problem, setProblem] = useState<"fields" | "past" | null>(null);
+  const today = new Date(Date.now()).toISOString().slice(0, 10);
   // The fields follow the active intent: a prompt, pill, chip, highlight or portal link redraws them.
   const key = `${revision}${JSON.stringify(active)}`;
   const [seen, setSeen] = useState(key);
@@ -75,7 +72,7 @@ export function FlightSearchForm({
     event.preventDefault();
     const budget = draft.budget === "" ? undefined : parseAmount(draft.budget, currency);
     if (budget !== undefined && !budget.ok) {
-      setInvalid(true);
+      setProblem("fields");
       return;
     }
     const parsed = flightSearchIntentSchema.safeParse({
@@ -89,18 +86,25 @@ export function FlightSearchForm({
       directOnly: draft.directOnly,
       theme: draft.theme || undefined,
     });
-    setInvalid(!parsed.success);
-    if (parsed.success) {
-      rememberAirports({ origin: parsed.data.origin, destination: parsed.data.destination });
-      onSearch(parsed.data);
+    if (!parsed.success) {
+      setProblem("fields");
+      return;
     }
+    if (parsed.data.departureDate < today) {
+      setProblem("past");
+      return;
+    }
+    setProblem(null);
+    rememberAirports({ origin: parsed.data.origin, destination: parsed.data.destination });
+    onSearch(parsed.data);
   }
 
   return (
     <form
-      ref={formRef}
+      aria-label={t("flight.editCondition")}
+      noValidate
       onSubmit={submit}
-      className="surface-card grid gap-4 rounded-3xl border border-sprout-200 bg-white p-5 sm:grid-cols-2"
+      className="ticket-panel grid gap-4 rounded-3xl border border-sprout-200 p-5 sm:grid-cols-2"
       aria-busy={pending}
     >
       <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 sm:col-span-2">
@@ -138,6 +142,7 @@ export function FlightSearchForm({
         <input
           className={input}
           name="departureDate"
+          min={today}
           value={draft.departureDate}
           onChange={(e) => {
             set({ departureDate: e.target.value });
@@ -151,6 +156,7 @@ export function FlightSearchForm({
         <input
           className={input}
           name="returnDate"
+          min={draft.departureDate > today ? draft.departureDate : today}
           value={draft.returnDate}
           onChange={(e) => {
             set({ returnDate: e.target.value });
@@ -215,14 +221,9 @@ export function FlightSearchForm({
           {t("flight.direct")}
         </label>
       </div>
-      {invalid && (
+      {problem && (
         <p role="alert" className="text-sm text-red-700 sm:col-span-2">
-          {errorMessage("VALIDATION_FAILED")}
-        </p>
-      )}
-      {error != null && (
-        <p role="alert" className="text-sm text-red-700 sm:col-span-2">
-          {failureMessage(error)}
+          {problem === "past" ? t("flight.pastDate") : errorMessage("VALIDATION_FAILED")}
         </p>
       )}
       <button type="submit" className={`${primaryButton} sm:col-span-2`} disabled={pending}>
