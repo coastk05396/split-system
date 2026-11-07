@@ -63,6 +63,7 @@ const zhTW = {
   "flight.dates": "日期",
   "flight.route": "航線",
   "flight.lastSearch": "上次搜尋",
+  "flight.searchBar": "搜尋列",
   "flight.pastDate": "出發日期不能早於今天。",
   "flight.budgetShort": "預算上限",
   "flight.theme": "旅行主題",

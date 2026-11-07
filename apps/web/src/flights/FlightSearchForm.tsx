@@ -12,7 +12,7 @@ import {
   POPULAR_ORIGINS,
   rememberAirports,
 } from "./AirportPicker.js";
-import { input, primaryButton } from "../groups/ui.js";
+import { input } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
 
 interface Draft {
@@ -41,6 +41,9 @@ function toDraft(intent: FlightSearchIntent): Draft {
     directOnly: intent.directOnly,
   };
 }
+
+/** The Search button lives in the sticky bottom bar and submits this form by id. */
+export const FLIGHT_SEARCH_FORM_ID = "flight-search-form";
 
 export function FlightSearchForm({
   intent: active,
@@ -101,6 +104,7 @@ export function FlightSearchForm({
 
   return (
     <form
+      id={FLIGHT_SEARCH_FORM_ID}
       aria-label={t("flight.editCondition")}
       noValidate
       onSubmit={submit}
@@ -226,9 +230,6 @@ export function FlightSearchForm({
           {problem === "past" ? t("flight.pastDate") : errorMessage("VALIDATION_FAILED")}
         </p>
       )}
-      <button type="submit" className={`${primaryButton} sm:col-span-2`} disabled={pending}>
-        {t("flight.search")}
-      </button>
     </form>
   );
 }

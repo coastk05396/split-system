@@ -422,6 +422,7 @@ CREATE TABLE fx_rates (
 - The last submitted search is kept in this browser (search conditions only) and restored into the pills and fields, labelled "last search", when `/travel` opens without a LINE portal link. Opening `/travel` never starts a search by itself; the label disappears when a new search starts.
 - A failed search shows its error below the panel, since the panel has closed.
 - The header holds a small decorative globe that turns to face the active route, with the great-circle distance and a rough flight time beside it (`655 km · ≈ 1 h 19 min`; the time is 30 minutes plus the distance at 800 km/h, so approximate). It shows only when both airports are in the catalog, which carries approximate coordinates for every airport; an unlisted code shows no globe and no error. The canvas has one text label (`Globe turned to TPE → OKA`) and nothing else for assistive tech. With reduced motion the globe is drawn already turned.
+- A sticky bottom bar (labelled "Search bar") is fixed above the mobile tab bar (beside the sidebar on desktop), with matching space at the end of the page so it never covers content, and respects the safe-area insets. It exists only while the editing panel is open and holds the Search button, which submits the displayed intent; closing the panel or starting a search removes it. The bar is also where the Price Strip will live when the panel is closed.
 
 ### Flight Radar — progressive deal commentary and Adaptive Next-Move Chips
 

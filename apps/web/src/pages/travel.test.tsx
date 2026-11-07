@@ -196,7 +196,7 @@ describe("Flight Radar", () => {
     fireEvent.click(within(pills).getByRole("button", { name: /^Dates:/ }));
     const panel = screen.getByRole("form", { name: "Edit search condition" });
     fireEvent.change(within(panel).getByLabelText("Origin airport"), { target: { value: "KHH" } });
-    fireEvent.click(within(panel).getByRole("button", { name: "Search flights" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
     await waitFor(() => {
       expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);
     });
@@ -234,6 +234,43 @@ describe("Flight Radar", () => {
       fireEvent.click(screen.getByRole("button", { name: search }));
       await screen.findByText("Example Air");
       expect(screen.queryByText(label)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["en", "Search bar", "Search flights", "Destination airport"],
+    ["zh-TW", "搜尋列", "搜尋航班", "目的地機場"],
+  ] as const)(
+    "keeps Search in a bottom bar in %s only while the panel is open and searches the displayed intent",
+    async (language, barName, searchName, destinationName) => {
+      const { api } = renderApp({
+        path: "/travel",
+        cookieUser: { ...makeUser("Rick"), language },
+      });
+      await screen.findByRole("heading", { name: /^(Flight Radar|航班雷達)$/ });
+      expect(screen.queryByRole("region", { name: barName })).toBeNull();
+      expect(screen.queryByRole("button", { name: searchName })).toBeNull();
+
+      await openSearchPanel();
+      const bar = screen.getByRole("region", { name: barName });
+      const search = within(bar).getByRole("button", { name: searchName });
+      expect(search).toBeEnabled();
+      expect(
+        screen.getByRole("form", { name: /^(Edit search condition|修改搜尋條件)$/ }),
+      ).toBeVisible();
+
+      const destination = screen.getByRole("combobox", { name: destinationName });
+      fireEvent.focus(destination);
+      fireEvent.change(destination, { target: { value: "NRT" } });
+      fireEvent.click(await screen.findByRole("option", { name: /NRT/ }));
+      fireEvent.click(search);
+      await screen.findByText("Example Air");
+      const sent = api.requests
+        .filter((r) => r.route === "POST /api/v1/flights/search")
+        .map((r) => JSON.parse(r.body ?? "{}") as Record<string, unknown>);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ destination: "NRT" });
+      expect(screen.queryByRole("region", { name: barName })).toBeNull();
     },
   );
 
