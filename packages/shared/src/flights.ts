@@ -2,18 +2,23 @@ import { z } from "zod";
 import { currencyCodeSchema, localDateSchema } from "./schemas.js";
 
 export const airportCodeSchema = z.string().regex(/^[A-Z]{3}$/);
-export const flightSearchIntentSchema = z
-  .object({
-    origin: airportCodeSchema.default("TPE"),
-    destination: airportCodeSchema,
-    departureDate: localDateSchema,
-    returnDate: localDateSchema,
-    currency: currencyCodeSchema.default("TWD"),
-    budget: z.number().int().positive().max(99_999_999).optional(),
-    excludeRedEye: z.boolean().default(false),
-    directOnly: z.boolean().default(false),
-  })
-  .refine((i) => i.returnDate > i.departureDate, { path: ["returnDate"], message: "DATE_INVALID" });
+export const FLIGHT_THEMES = ["warm_island", "food_city", "solo"] as const;
+export const flightSearchFields = z.object({
+  origin: airportCodeSchema.default("TPE"),
+  destination: airportCodeSchema,
+  departureDate: localDateSchema,
+  returnDate: localDateSchema,
+  currency: currencyCodeSchema.default("TWD"),
+  budget: z.number().int().positive().max(99_999_999).optional(),
+  excludeRedEye: z.boolean().default(false),
+  directOnly: z.boolean().default(false),
+  theme: z.enum(FLIGHT_THEMES).optional(),
+});
+export const flightSearchDefaultsSchema = flightSearchFields.partial();
+export const flightSearchIntentSchema = flightSearchFields.refine(
+  (i) => i.returnDate > i.departureDate,
+  { path: ["returnDate"], message: "DATE_INVALID" },
+);
 export type FlightSearchIntent = z.infer<typeof flightSearchIntentSchema>;
 export type DealSignal = "strong_buy" | "buy" | "hold";
 export const flightFareSchema = z.object({
@@ -88,4 +93,5 @@ export function googleFlightsUrl(
 
 export interface FlightHighlightsReply {
   highlights: FlightCard[];
+  recipes?: import("./flight-discovery.js").VibeRecipe[];
 }

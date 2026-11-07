@@ -1,8 +1,11 @@
 import {
+  flightSearchRequestSchema,
   flightSearchIntentSchema,
+  defaultFlightIntent,
   googleFlightsUrl,
   type FlightFare,
   type FlightCard,
+  type FlightSearchIntent,
   type FareHistoryStats,
   createFlightWatchSchema,
   type FlightPriceWatch,
@@ -21,6 +24,7 @@ export interface FakeApi {
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];
+  flightPromptIntent: FlightSearchIntent | null;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -125,6 +129,7 @@ export function createFakeApi(): FakeApi {
     flightHighlights: [],
     flightHistory: null,
     flightWatches: [],
+    flightPromptIntent: null,
     flightFares: [
       {
         price: 25000,
@@ -227,11 +232,17 @@ export function createFakeApi(): FakeApi {
     }
     switch (`${method} ${url.pathname}`) {
       case "GET /api/v1/flights/vapid-public-key":
-        return json({ publicKey: "test-vapid-key" });
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ publicKey: "test-vapid-key" });
       case "POST /api/v1/flights/push-subscriptions":
-        return new Response(null, { status: 204 });
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : new Response(null, { status: 204 });
       case "GET /api/v1/flights/watches":
-        return json({ watches: api.flightWatches });
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ watches: api.flightWatches });
       case "POST /api/v1/flights/watches": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const input = createFlightWatchSchema.parse(await readJson(init));
@@ -252,9 +263,16 @@ export function createFakeApi(): FakeApi {
           : json({ highlights: api.flightHighlights });
       case "POST /api/v1/flights/search": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
-        const parsed = flightSearchIntentSchema.safeParse(await readJson(init));
+        const parsed = flightSearchRequestSchema.safeParse(await readJson(init));
         if (!parsed.success) return error("VALIDATION_FAILED", 400);
-        const intent = parsed.data;
+        const intent =
+          "prompt" in parsed.data
+            ? (api.flightPromptIntent ??
+              flightSearchIntentSchema.parse({
+                ...defaultFlightIntent(Date.now(), authed.preferredCurrency),
+                ...parsed.data.defaults,
+              }))
+            : parsed.data;
         const url = googleFlightsUrl(intent);
         return json({
           intent,

@@ -1,19 +1,21 @@
 import {
-  CURRENCIES,
-  flightSearchIntentSchema,
+  defaultFlightIntent,
+  flightRecipes,
   formatAmount,
-  parseAmount,
   type FlightCard,
   type FlightSearchIntent,
+  type FlightSearchRequest,
   type FlightSearchReply,
   type FlightHighlightsReply,
 } from "@split/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, type SubmitEvent } from "react";
+import { useRef, useState } from "react";
+import { FlightSearchForm } from "../flights/FlightSearchForm.js";
+import { EntityPills } from "../flights/EntityPills.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
-import { ScreenHeader, failureMessage, input, primaryButton } from "../groups/ui.js";
-import { errorMessage, t } from "../i18n/messages.js";
+import { ScreenHeader, input, primaryButton } from "../groups/ui.js";
+import { getLocale, t } from "../i18n/messages.js";
 
 import { FlightPriceWatchButton, FlightPriceWatches } from "../flights/FlightPriceWatches.js";
 
@@ -21,7 +23,11 @@ export function TravelPage() {
   const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
   const { state, session } = useAuth();
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
-  const [invalid, setInvalid] = useState(false);
+  const [active, setActive] = useState(() => defaultFlightIntent(Date.now(), currency));
+  const formRef = useRef<HTMLFormElement>(null);
+  const edit = (field: string) => {
+    formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus();
+  };
   const highlights = useQuery({
     queryKey: ["flights", "highlights", currency],
     queryFn: ({ signal }) =>
@@ -30,7 +36,7 @@ export function TravelPage() {
       ),
   });
   const search = useMutation({
-    mutationFn: (intent: FlightSearchIntent) =>
+    mutationFn: (intent: FlightSearchRequest) =>
       readWithRev<FlightSearchReply>(
         session.fetch("/api/v1/flights/search", {
           method: "POST",
@@ -38,30 +44,13 @@ export function TravelPage() {
           body: JSON.stringify(intent),
         }),
       ),
+    onSuccess: (reply) => {
+      setActive(reply.intent);
+    },
   });
-
-  function submit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const budgetValue = form.get("budget");
-    const budgetText = typeof budgetValue === "string" ? budgetValue : "";
-    const budget = budgetText === "" ? undefined : parseAmount(budgetText, currency);
-    if (budget !== undefined && !budget.ok) {
-      setInvalid(true);
-      return;
-    }
-    const parsed = flightSearchIntentSchema.safeParse({
-      origin: form.get("origin"),
-      destination: form.get("destination"),
-      departureDate: form.get("departureDate"),
-      returnDate: form.get("returnDate"),
-      currency,
-      budget: budget?.value,
-      excludeRedEye: form.has("excludeRedEye"),
-      directOnly: form.has("directOnly"),
-    });
-    setInvalid(!parsed.success);
-    if (parsed.success) search.mutate(parsed.data);
+  function runIntent(intent: FlightSearchIntent) {
+    setActive(intent);
+    search.mutate(intent);
   }
 
   const reply = search.data;
@@ -77,7 +66,7 @@ export function TravelPage() {
                 key={card.url}
                 type="button"
                 onClick={() => {
-                  search.mutate(card.intent);
+                  runIntent(card.intent);
                 }}
                 className="press-pill shrink-0 rounded-2xl border border-sprout-200 bg-sprout-50 px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-sprout-700"
               >
@@ -98,87 +87,50 @@ export function TravelPage() {
           )
         )}
       </section>
-      <form
-        onSubmit={submit}
-        className="surface-card grid gap-4 rounded-3xl border border-sprout-200 bg-white p-5 sm:grid-cols-2"
-        aria-busy={search.isPending}
-      >
-        <label className="grid gap-1 text-sm font-bold">
-          {t("flight.origin")}
-          <input
-            className={input}
-            name="origin"
-            defaultValue="TPE"
-            list="origin-airports"
-            required
-            pattern="[A-Z]{3}"
-            maxLength={3}
-            autoCapitalize="characters"
-          />
-          <datalist id="origin-airports">
-            {["TPE", "TSA", "RMQ", "KHH"].map((code) => (
-              <option key={code} value={code} />
-            ))}
-          </datalist>
-        </label>
-        <label className="grid gap-1 text-sm font-bold">
-          {t("flight.destination")}
-          <input
-            className={input}
-            name="destination"
-            required
-            pattern="[A-Z]{3}"
-            maxLength={3}
-            autoCapitalize="characters"
-            placeholder="NRT"
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-bold">
-          {t("flight.departure")}
-          <input className={input} name="departureDate" type="date" required />
-        </label>
-        <label className="grid gap-1 text-sm font-bold">
-          {t("flight.return")}
-          <input className={input} name="returnDate" type="date" required />
-        </label>
-        <label className="grid gap-1 text-sm font-bold">
-          {t("flight.budget")} · {currency}
-          <input
-            className={input}
-            name="budget"
-            type="number"
-            min="1"
-            step={10 ** -CURRENCIES[currency].decimals}
-          />
-        </label>
-        <div className="flex flex-col justify-center gap-2 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" name="excludeRedEye" />
-            {t("flight.excludes")}
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" name="directOnly" />
-            {t("flight.direct")}
-          </label>
+      <section aria-label={t("flight.recipes")} className="mb-5">
+        <h2 className="mb-3 font-bold">{t("flight.recipes")}</h2>
+        <div className="flex flex-wrap gap-2">
+          {(highlights.data?.recipes ?? flightRecipes(Date.now(), currency)).map((recipe) => (
+            <button
+              key={recipe.id}
+              type="button"
+              disabled={search.isPending}
+              className="press-pill rounded-full border border-sprout-200 bg-white px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+              onClick={() => {
+                if (recipe.id === "budget" && recipe.patch.budget === undefined) edit("budget");
+                else runIntent({ ...active, ...recipe.patch });
+              }}
+            >
+              {getLocale() === "en" ? recipe.en : recipe.zhTW}
+            </button>
+          ))}
         </div>
-        {invalid && (
-          <p role="alert" className="text-sm text-red-700 sm:col-span-2">
-            {errorMessage("VALIDATION_FAILED")}
-          </p>
-        )}
-        {search.isError && (
-          <p role="alert" className="text-sm text-red-700 sm:col-span-2">
-            {failureMessage(search.error)}
-          </p>
-        )}
-        <button
-          type="submit"
-          className={`${primaryButton} sm:col-span-2`}
-          disabled={search.isPending}
-        >
-          {t("flight.search")}
+      </section>
+      <form
+        className="mb-5 flex flex-wrap gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const prompt = new FormData(event.currentTarget).get("prompt");
+          if (typeof prompt === "string" && prompt.trim())
+            search.mutate({ prompt: prompt.trim(), defaults: active });
+        }}
+      >
+        <label className="grid min-w-0 flex-1 gap-1 text-sm font-bold">
+          {t("flight.prompt")}
+          <input className={input} name="prompt" required maxLength={1000} />
+        </label>
+        <button type="submit" disabled={search.isPending} className={`${primaryButton} self-end`}>
+          {t("flight.explore")}
         </button>
       </form>
+      <EntityPills intent={active} pending={search.isPending} onChange={runIntent} />
+      <FlightSearchForm
+        intent={active}
+        pending={search.isPending}
+        error={search.error}
+        onSearch={runIntent}
+        formRef={formRef}
+      />
       {search.isPending && (
         <p role="status" className="mt-5 text-ink-muted">
           {t("flight.searching")}

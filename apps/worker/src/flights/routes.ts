@@ -1,12 +1,12 @@
 import { flightHighlights } from "./history.js";
-import { currencyCodeSchema, flightSearchIntentSchema } from "@split/shared";
+import { currencyCodeSchema, flightSearchRequestSchema, flightRecipes } from "@split/shared";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
 import { requireUser } from "../auth/require-user.js";
 import type { AppDeps } from "../deps.js";
 import { parseBody } from "../request-guards.js";
 import { ApiError } from "../errors.js";
-import { searchFlights } from "./search.js";
+import { searchFlightRequest } from "./search.js";
 
 export function flightRoutes(deps: AppDeps) {
   return new Hono<AppEnv>()
@@ -14,14 +14,15 @@ export function flightRoutes(deps: AppDeps) {
       const currency = currencyCodeSchema.safeParse(c.req.query("currency") ?? "TWD");
       if (!currency.success) throw new ApiError("VALIDATION_FAILED");
       return c.json(
-        { highlights: await flightHighlights(c.env.DB, currency.data, deps.now()) },
+        {
+          highlights: await flightHighlights(c.env.DB, currency.data, deps.now()),
+          recipes: flightRecipes(deps.now(), currency.data),
+        },
         200,
       );
     })
     .post("/flights/search", requireUser(deps.now), async (c) => {
-      const intent = await parseBody(c, flightSearchIntentSchema);
-      if (intent.departureDate < new Date(deps.now()).toISOString().slice(0, 10))
-        throw new ApiError("VALIDATION_FAILED");
-      return c.json(await searchFlights(c.env, deps, c.var.userId, intent), 200);
+      const request = await parseBody(c, flightSearchRequestSchema);
+      return c.json(await searchFlightRequest(c.env, deps, c.var.userId, request), 200);
     });
 }

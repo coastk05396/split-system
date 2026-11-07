@@ -1,4 +1,5 @@
 import type { WebPushSender } from "./flights/web-push.js";
+import type { FlightAI } from "./flights/ai.js";
 import type { FlightSource } from "./flights/source.js";
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
 import type { Bindings } from "./env.js";
@@ -13,6 +14,7 @@ import { productionRateSource, type RateSource } from "./rates/rate-source.js";
 export interface AppDeps {
   flightSource?: FlightSource;
   webPushSender?: WebPushSender;
+  flightAI?: FlightAI;
   verifier: (env: Bindings) => IdentityVerifier;
   now: () => number;
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
