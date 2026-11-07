@@ -191,7 +191,9 @@ export function PriceStrip({
               className="strip-bar"
               data-tone={day.tone}
               data-selected={day.date === selected ? "true" : undefined}
-              style={{ height: `${String(Math.max(20, (day.price / highest) * 100))}%` }}
+              style={{
+                height: `calc((100% - 1.5rem) * ${String(Math.max(0.2, day.price / highest))})`,
+              }}
             />
             <span className="text-xs text-ink-muted">{day.date.slice(5)}</span>
           </div>

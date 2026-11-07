@@ -1471,6 +1471,8 @@ body::before {
   min-width: 0;
 }
 .strip-bar {
+  /* flex: none keeps the price-proportional height; shrinking it to fit the date label made every bar equal. */
+  flex: none;
   width: 100%;
   max-width: 3rem;
   border-radius: 0.375rem 0.375rem 0.125rem 0.125rem;
