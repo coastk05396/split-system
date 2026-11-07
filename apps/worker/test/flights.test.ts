@@ -11,9 +11,9 @@ describe("Flight Radar HTTP", () => {
     const app = createApp({
       ...productionDeps,
       now: () => clock.now,
-      flightSource: async () => {
+      flightSource: () => {
         calls++;
-        return [
+        return Promise.resolve([
           {
             price: 7000,
             airline: "Test Air",
@@ -25,7 +25,7 @@ describe("Flight Radar HTTP", () => {
             durationMinutes: 180,
             priceLevel: "low",
           },
-        ];
+        ]);
       },
     });
     const user = await signIn("google", uniqueSub("flight"));
@@ -46,13 +46,17 @@ describe("Flight Radar HTTP", () => {
     expect(first.status).toBe(200);
     expect(await first.json<FlightSearchReply>()).toMatchObject({
       degraded: false,
-      cards: [{ price: 7000, signal: "strong_buy", overBudget: 0 }],
+      cards: Array.from({ length: 3 }, () => ({
+        price: 7000,
+        signal: "strong_buy",
+        overBudget: 0,
+      })),
     });
     const second = await search({ ...intent, budget: 6000 });
     expect(await second.json<FlightSearchReply>()).toMatchObject({
-      cards: [{ signal: "hold", overBudget: 1000 }],
+      cards: Array.from({ length: 3 }, () => ({ signal: "hold", overBudget: 1000 })),
     });
-    expect(calls).toBe(1);
+    expect(calls).toBe(3);
   });
 });
 
@@ -61,9 +65,9 @@ it("rejects past departures before reaching the source", async () => {
   const app = createApp({
     ...productionDeps,
     now: () => clock.now,
-    flightSource: async () => {
+    flightSource: () => {
       calls++;
-      return [];
+      return Promise.resolve([]);
     },
   });
   const user = await signIn("google", uniqueSub("past-flight"));
@@ -91,9 +95,9 @@ it("degrades blocked sources to deterministic route/date links and refreshes exp
   const app = createApp({
     ...productionDeps,
     now: () => now,
-    flightSource: async () => {
+    flightSource: () => {
       calls++;
-      throw new Error("consent wall");
+      return Promise.reject(new Error("consent wall"));
     },
   });
   const user = await signIn("google", uniqueSub("blocked-flight"));
@@ -112,15 +116,13 @@ it("degrades blocked sources to deterministic route/date links and refreshes exp
     );
   const response = await request();
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({
-    degraded: true,
-    cards: [],
-    url: expect.stringContaining("?tfs="),
-  });
-  expect(calls).toBe(1);
+  const reply = await response.json<FlightSearchReply>();
+  expect(reply).toMatchObject({ degraded: true, cards: [] });
+  expect(reply.url).toContain("?tfs=");
+  expect(calls).toBe(3);
   now += 30 * 60_000;
   await request();
-  expect(calls).toBe(2);
+  expect(calls).toBe(6);
 });
 
 it("enforces both minute and hour limits, including cached requests", async () => {
@@ -129,9 +131,9 @@ it("enforces both minute and hour limits, including cached requests", async () =
   const app = createApp({
     ...productionDeps,
     now: () => now,
-    flightSource: async () => {
+    flightSource: () => {
       calls++;
-      return [
+      return Promise.resolve([
         {
           price: 5000,
           airline: "Test",
@@ -143,7 +145,7 @@ it("enforces both minute and hour limits, including cached requests", async () =
           durationMinutes: 120,
           priceLevel: "typical",
         },
-      ];
+      ]);
     },
   });
   const user = await signIn("google", uniqueSub("limit-flight"));
@@ -172,5 +174,5 @@ it("enforces both minute and hour limits, including cached requests", async () =
   const blocked = await request();
   expect(blocked.status).toBe(429);
   expect(await blocked.json()).toEqual({ error: { code: "RATE_LIMITED" } });
-  expect(calls).toBe(1);
+  expect(calls).toBe(3);
 });

@@ -18,3 +18,5 @@ export * from "./flights.js";
 
 export * from "./flight-signals.js";
 export * from "./flight-catalog.js";
+
+export * from "./flight-discovery.js";
