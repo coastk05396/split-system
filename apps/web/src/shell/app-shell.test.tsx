@@ -1,7 +1,24 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ExpenseSavedToast } from "../expenses/ExpenseSavedToast.js";
+import type { SavedShare } from "../expenses/expense-sharing.js";
 import { AppShell } from "./AppShell.js";
+
+const sampleSavedShare: SavedShare = {
+  chat: "failed",
+  card: {
+    groupName: "Weekend Trip",
+    title: "Dinner",
+    emoji: "🍲",
+    amount: "NT$ 1200",
+    split: "3 people",
+    payer: "Rick",
+    each: null,
+    url: "https://example.com",
+    lineUrl: "https://example.com",
+  },
+};
 
 function setVibrate(fn: (pattern: VibratePattern) => boolean): void {
   Object.defineProperty(navigator, "vibrate", { value: fn, configurable: true, writable: true });
@@ -96,18 +113,32 @@ describe("AppShell BottomBar", () => {
     expect(screen.getByRole("status")).toHaveTextContent("旅遊功能即將推出，敬請期待！");
   });
 
-  it("stacks trip notice above an existing saved-toast without collision or timer interference", () => {
+  it("stacks trip notice dynamically above real ExpenseSavedToast based on actual height with zero overlap and independent timers", () => {
     vi.useFakeTimers();
 
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppShell>
-          <div className="saved-toast" role="status">
-            Existing expense saved toast
-          </div>
+          <ExpenseSavedToast saved={sampleSavedShare} />
         </AppShell>
       </MemoryRouter>,
     );
+
+    const expenseToast = screen.getByRole("status");
+    expect(expenseToast).toBeVisible();
+
+    // Mock real measured geometry: height = 76px, top = 628px on 800px viewport
+    vi.spyOn(expenseToast, "getBoundingClientRect").mockReturnValue({
+      top: 628,
+      bottom: 704,
+      left: 20,
+      right: 300,
+      width: 280,
+      height: 76,
+      x: 20,
+      y: 628,
+      toJSON: () => {},
+    });
 
     const bottomNav = screen.getByRole("navigation", { name: "底部導覽" });
     const tripButton = within(bottomNav).getByRole("button", { name: /旅遊/ });
@@ -117,25 +148,33 @@ describe("AppShell BottomBar", () => {
     const tripNotice = screen.getByTestId("trip-notice");
     expect(tripNotice).toBeVisible();
     expect(tripNotice).toHaveClass("is-stacked");
-    expect(tripNotice).toHaveClass("bottom-38");
+
+    // Dynamic calculated bottom: (768 - 628) + 8 = 148px (jsdom default window.innerHeight = 768)
+    const expectedBottom = `${window.innerHeight - 628 + 8}px`;
+    expect(tripNotice).toHaveStyle({ bottom: expectedBottom });
 
     // Both notices coexist in the document
     const statuses = screen.getAllByRole("status");
     expect(statuses).toHaveLength(2);
-    expect(screen.getByText("Existing expense saved toast")).toBeVisible();
 
-    // Fast-forward 2500ms: trip notice starts leaving while existing toast is untouched
+    // Fast-forward 2500ms: trip notice starts leaving while expense toast is untouched
     act(() => {
       vi.advanceTimersByTime(2500);
     });
     expect(tripNotice).toHaveClass("is-leaving");
-    expect(screen.getByText("Existing expense saved toast")).toBeVisible();
+    expect(expenseToast).not.toHaveClass("is-leaving");
 
-    // Fast-forward 200ms: trip notice is removed, existing toast remains
+    // Fast-forward 200ms: trip notice is removed, expense toast remains
     act(() => {
       vi.advanceTimersByTime(200);
     });
     expect(screen.queryByTestId("trip-notice")).toBeNull();
-    expect(screen.getByText("Existing expense saved toast")).toBeVisible();
+    expect(expenseToast).toBeVisible();
+
+    // Fast-forward to 6000ms: expense toast now starts leaving independently
+    act(() => {
+      vi.advanceTimersByTime(3300);
+    });
+    expect(expenseToast).toHaveClass("is-leaving");
   });
 });

@@ -163,21 +163,67 @@ function Sidebar({ onTripClick }: { onTripClick: () => void }) {
   );
 }
 
+function useExistingToastOffset(active: boolean): number | null {
+  const [offset, setOffset] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!active || typeof document === "undefined") {
+      setOffset(null);
+      return;
+    }
+
+    function calculate() {
+      const otherToast = document.querySelector(
+        ".saved-toast:not(.trip-notice)",
+      ) as HTMLElement | null;
+      if (!otherToast) {
+        setOffset(null);
+        return;
+      }
+      const rect = otherToast.getBoundingClientRect();
+      const isDesktop = window.innerWidth >= 768;
+      const baseBottom = isDesktop ? 32 : 96;
+
+      if (rect.height > 0 && rect.top !== 0) {
+        const distFromBottom = window.innerHeight - rect.top;
+        setOffset(distFromBottom + 8);
+      } else {
+        const height = otherToast.offsetHeight || 68;
+        setOffset(baseBottom + height + 8);
+      }
+    }
+
+    calculate();
+    const otherToast = document.querySelector(".saved-toast:not(.trip-notice)");
+    if (!otherToast) return;
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(calculate);
+      observer.observe(otherToast);
+    }
+    window.addEventListener("resize", calculate);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", calculate);
+    };
+  }, [active]);
+
+  return offset;
+}
+
 /** Mobile: content above a five-tab bottom bar. Desktop: a sidebar beside the content. */
 export function AppShell({ children }: { children: ReactNode }) {
   const [showTripNotice, setShowTripNotice] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
-  const [isStacked, setIsStacked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastOffset = useExistingToastOffset(showTripNotice);
 
   const triggerTripNotice = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
-    const hasOtherToast =
-      typeof document !== "undefined" &&
-      Boolean(document.querySelector(".saved-toast:not(.trip-notice)"));
-    setIsStacked(hasOtherToast);
     setIsLeaving(false);
     setShowTripNotice(true);
 
@@ -186,7 +232,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       exitTimerRef.current = setTimeout(() => {
         setShowTripNotice(false);
         setIsLeaving(false);
-        setIsStacked(false);
       }, 200);
     }, 2500);
   }, []);
@@ -210,7 +255,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           role="status"
           aria-live="polite"
           data-testid="trip-notice"
-          className={`saved-toast trip-notice ${isStacked ? "is-stacked bottom-38 md:bottom-22" : "bottom-24 md:bottom-8"} ${isLeaving ? "is-leaving" : ""} fixed inset-x-0 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-sprout-900 px-5 py-3 text-sm font-bold text-white shadow-lg transition-[bottom] duration-200`}
+          style={toastOffset != null ? { bottom: `${toastOffset}px` } : undefined}
+          className={`saved-toast trip-notice ${toastOffset != null ? "is-stacked" : "bottom-24 md:bottom-8"} ${isLeaving ? "is-leaving" : ""} fixed inset-x-0 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-sprout-900 px-5 py-3 text-sm font-bold text-white shadow-lg transition-[bottom] duration-200`}
         >
           <SproutMascot className="size-5 shrink-0" mood="cheer" interactive={false} />
           <span>{t("nav.tripComingSoon")}</span>

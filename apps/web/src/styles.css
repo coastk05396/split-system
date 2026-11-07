@@ -1000,16 +1000,12 @@ body::before {
   transform: translateY(12px);
 }
 
-/* Stack trip notice above other toasts when another toast is present */
-body:has(.saved-toast:not(.trip-notice)) .trip-notice,
-.trip-notice.is-stacked {
-  bottom: 9.5rem;
-}
-@media (min-width: 768px) {
-  body:has(.saved-toast:not(.trip-notice)) .trip-notice,
-  .trip-notice.is-stacked {
-    bottom: 5.5rem;
-  }
+/* Smooth positioning transition when stacked above other notifications */
+.trip-notice {
+  transition:
+    opacity 180ms var(--ease-out-expo),
+    transform 180ms var(--ease-out-expo),
+    bottom 200ms var(--ease-out-expo);
 }
 
 /* Category selection micro-bloom stamp */
