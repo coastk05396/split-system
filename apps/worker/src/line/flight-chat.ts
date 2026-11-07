@@ -46,10 +46,20 @@ const DESTINATION = new RegExp(
 const INTENT_VERB = /[去飛玩]|\b(to|go|visit)\b/i;
 /** Expense-like text: a 3+ digit amount without a flight noun/verb or a budget marker. */
 const FLIGHT_NOUN = /機票|航班|班機|飛|flight|fly|airfare/i;
-const BUDGET_MARKER = /預算|budget|NT\$|以內/i;
+const BUDGET_MARKER = /預算|budget|NT\$|以內|\d\s*(?:以下|內)|\b(?:under|within|below)\b/i;
+/** An intent verb directly followed by a catalog destination ("去沖繩", "to Seoul") is a trip, whatever digits surround it. */
+const GOING = new RegExp(
+  `(?:[去飛玩]|\\b(?:to|visit)\\b)\\s*(?:${FLIGHT_DESTINATIONS.flatMap((d) => [d.zhTW, `\\b${d.en}\\b`]).join("|")})`,
+  "i",
+);
 
 function isFlightText(message: string): boolean {
-  if (/\d{3,}/.test(message) && !FLIGHT_NOUN.test(message) && !BUDGET_MARKER.test(message))
+  if (
+    /\d{3,}/.test(message) &&
+    !FLIGHT_NOUN.test(message) &&
+    !BUDGET_MARKER.test(message) &&
+    !GOING.test(message)
+  )
     return false;
   return FLIGHT_WORDS.test(message) || (DESTINATION.test(message) && INTENT_VERB.test(message));
 }

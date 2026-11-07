@@ -126,6 +126,6 @@ export function createLineReplyClient(
 export const silentReplyClient: LineReplyClient = {
   reply: () => Promise.resolve(),
   startLoading: () => Promise.resolve(),
-  // Throws so a watch is never marked delivered when no channel token is configured.
-  push: () => Promise.reject(new Error("LINE push is not configured")),
+  // A definite rejection: the watch is never marked delivered and its reserved quota slot is released.
+  push: () => Promise.reject(new LinePushRejectedError(0)),
 };

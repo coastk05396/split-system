@@ -380,23 +380,30 @@ describe("one-on-one LINE flight chat", () => {
     expect(calls.count).toBe(0);
   });
 
-  it.each(["東京 晚餐 2160", "旅行 住宿 3000", "Seoul dinner 800", "trip dinner 500", "東京 晚餐"])(
-    "keeps the menu pointer for expense-like text %j",
-    async (message) => {
-      const calls = { count: 0 };
-      const prompts: string[] = [];
-      const { post, sent, loading } = harness({ sourceCalls: calls, prompts });
+  it.each([
+    "東京 晚餐 2160",
+    "旅行 住宿 3000",
+    "Seoul dinner 800",
+    "trip dinner 500",
+    "東京 晚餐",
+    "東京 玩 門票 1200",
+    "東京 計程車 去機場 1200",
+    "東京 住宿 去年 3000",
+    "晚餐 2160，四人均分",
+  ])("keeps the menu pointer for expense-like text %j", async (message) => {
+    const calls = { count: 0 };
+    const prompts: string[] = [];
+    const { post, sent, loading } = harness({ sourceCalls: calls, prompts });
 
-      await post({ ...text(message), source: { type: "user", userId: uniqueSub("U-spender") } });
+    await post({ ...text(message), source: { type: "user", userId: uniqueSub("U-spender") } });
 
-      expect(sent.map((s) => s.messages)).toEqual([
-        [{ type: "text", text: "點下方選單就能記帳 🌱" }],
-      ]);
-      expect(loading).toEqual([]);
-      expect(prompts).toEqual([]);
-      expect(calls.count).toBe(0);
-    },
-  );
+    expect(sent.map((s) => s.messages)).toEqual([
+      [{ type: "text", text: "點下方選單就能記帳 🌱" }],
+    ]);
+    expect(loading).toEqual([]);
+    expect(prompts).toEqual([]);
+    expect(calls.count).toBe(0);
+  });
 
   it.each([
     "機票 預算 15000",
@@ -406,6 +413,10 @@ describe("one-on-one LINE flight chat", () => {
     "go to Seoul",
     "下個月去沖繩 NT$ 15000",
     "去沖繩 15000 以內",
+    "12月4號 2026 去沖繩",
+    "下個月去沖繩 15000",
+    "兩個人去東京 5000內",
+    "to Seoul on Dec 24 2026",
   ])("still runs a flight search for %j", async (message) => {
     const prompts: string[] = [];
     const { post, loading } = harness({ prompts });

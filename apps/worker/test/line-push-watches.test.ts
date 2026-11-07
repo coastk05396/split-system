@@ -6,6 +6,7 @@ import { dailyMaintenance } from "../src/maintenance.js";
 import {
   LinePushRejectedError,
   type LineMessage,
+  silentReplyClient,
   type LineReplyClient,
 } from "../src/line/reply-client.js";
 import { bearer, clock, json, offlineRateSource, signIn, uniqueSub } from "./auth-harness.js";
@@ -156,6 +157,19 @@ describe("LINE Push Price Watch alerts", () => {
       expect(await watches(user.accessToken)).toMatchObject([{ status: "active" }]);
     },
   );
+
+  it("keeps the monthly slot and the watch active when no LINE channel is configured", async () => {
+    const { deps, linkedWatch, watches } = setup();
+    const before = await used(clock.now);
+    const { user } = await linkedWatch();
+    const unconfigured = { ...deps, lineReplyClient: () => silentReplyClient };
+
+    await dailyMaintenance(env, clock.now, unconfigured);
+    await dailyMaintenance(env, clock.now, unconfigured);
+
+    expect(await used(clock.now)).toBe(before);
+    expect(await watches(user.accessToken)).toMatchObject([{ status: "active" }]);
+  });
 
   it("sends the same UUID retry key for one watch on every attempt", async () => {
     const { deps, linkedWatch } = setup();
