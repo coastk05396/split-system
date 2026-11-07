@@ -7,7 +7,6 @@ import { en, enErrors } from "./en.js";
  * same type (en.ts), so a missing translation fails the type check; there is no i18n library.
  */
 const zhTW = {
-  "flight.subtitle": "一位成人・來回經濟艙，票價以偏好幣別顯示。",
   "flight.origin": "出發機場",
   "flight.destination": "目的地機場",
   "flight.departure": "出發日期",
@@ -30,6 +29,9 @@ const zhTW = {
   "flight.direct": "只看直飛",
   "flight.advice": "票價短評",
   "flight.results": "搜尋結果",
+  "flight.fares": "票價選項",
+  "flight.farePages": "票價分頁",
+  "flight.farePage": "第 {n} / {total} 個票價",
   "flight.highlights": "今日值得買的航班",
   "flight.noHighlights": "今天還沒有已確認的優惠航班。",
   "flight.highlightsUnavailable": "暫時無法載入優惠航班。",

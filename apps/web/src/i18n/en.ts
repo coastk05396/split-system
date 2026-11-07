@@ -3,7 +3,6 @@ import type { MessageId } from "./messages.js";
 
 /** The English catalog: every ID of the zh-TW one, checked by the type. */
 export const en: Record<MessageId, string> = {
-  "flight.subtitle": "One adult · round-trip economy, in your Preferred currency.",
   "flight.origin": "Origin airport",
   "flight.destination": "Destination airport",
   "flight.departure": "Departure date",
@@ -26,6 +25,9 @@ export const en: Record<MessageId, string> = {
   "flight.direct": "Direct flights only",
   "flight.advice": "Deal commentary",
   "flight.results": "Search results",
+  "flight.fares": "Fares",
+  "flight.farePages": "Fare pages",
+  "flight.farePage": "Fare {n} of {total}",
   "flight.highlights": "Today's Strong Buy fares",
   "flight.noHighlights": "No verified Strong Buy fares today yet.",
   "flight.highlightsUnavailable": "Highlights are temporarily unavailable.",

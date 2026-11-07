@@ -16,17 +16,17 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { EntityPills } from "../flights/EntityPills.js";
+import { FareResults } from "../flights/FareResults.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
 import { ScreenHeader, failureMessage, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 
-import {
-  FlightPriceWatchButton,
-  FlightPriceWatches,
-  useCreateWatch,
-} from "../flights/FlightPriceWatches.js";
+import { FlightPriceWatches, useCreateWatch } from "../flights/FlightPriceWatches.js";
+
+/** The advice is one short sentence on screen; the rest of the grounded commentary is dropped. */
+const firstSentence = (text: string) => /^.*?(?:[。！？]|[.!?](?=\s|$))/s.exec(text)?.[0] ?? text;
 
 export function TravelPage() {
   const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
@@ -122,7 +122,7 @@ export function TravelPage() {
   const reply = search.data;
   return (
     <>
-      <ScreenHeader title={t("flight.title")} subtitle={t("flight.subtitle")} />
+      <ScreenHeader title={t("flight.title")} />
       <form
         className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4"
         onSubmit={(event) => {
@@ -238,17 +238,12 @@ export function TravelPage() {
           {failureMessage(search.error)}
         </p>
       )}
-      {search.isPending && (
-        <p role="status" className="mt-5 text-ink-muted">
-          {t("flight.searching")}
-        </p>
-      )}
       {reply && advise.data && (
         <section
           aria-label={t("flight.advice")}
           className="rise surface-card mt-6 grid gap-3 rounded-3xl border border-sprout-200 bg-white p-5"
         >
-          <p>{advise.data.commentary}</p>
+          <p>{firstSentence(advise.data.commentary)}</p>
           <div className="flex flex-wrap gap-2">
             {advise.data.moves.map((move) => (
               <button
@@ -266,87 +261,7 @@ export function TravelPage() {
           </div>
         </section>
       )}
-      {reply && (
-        <section aria-label={t("flight.results")} className="mt-6 grid gap-4 sm:grid-cols-2">
-          {(reply.degraded || reply.cards.length === 0) && (
-            <div className="surface-card rounded-3xl border border-sprout-200 bg-white p-5 sm:col-span-2">
-              <p className="mb-4 text-ink-muted">
-                {t(reply.degraded ? "flight.degraded" : "flight.empty")}
-              </p>
-              <a
-                href={reply.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={primaryButton}
-              >
-                {t("flight.view")}
-              </a>
-            </div>
-          )}
-          {reply.cards.map((card) => (
-            <article
-              key={`${card.url}-${card.airline}-${card.outboundDeparture}-${card.price}`}
-              className="surface-card flex flex-col gap-3 rounded-3xl border border-sprout-200 bg-white p-5"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-bold">
-                  {card.intent.origin} → {card.intent.destination}
-                </h2>
-                <span className="rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold">
-                  {t(`flight.${card.signal}`)}
-                </span>
-              </div>
-              <p className="text-sm text-ink-muted">
-                {card.intent.departureDate} – {card.intent.returnDate}
-              </p>
-              <p className="text-3xl font-bold tabular-nums">
-                {formatAmount(card.price, card.intent.currency)}
-              </p>
-              <p className="font-bold">{card.airline}</p>
-              <p className="text-sm">
-                {t("flight.outbound")}: {card.outboundDeparture} → {card.outboundArrival}
-              </p>
-              <p className="text-sm">
-                {card.inboundDeparture !== null && card.inboundArrival !== null
-                  ? `${t("flight.inbound")}: ${card.inboundDeparture} → ${card.inboundArrival}`
-                  : t("flight.returnOnGoogle")}
-              </p>
-              <p className="text-sm text-ink-muted">
-                {t("flight.summary", { stops: card.stops, minutes: card.durationMinutes })}
-              </p>
-              {card.history && card.history.days >= 14 && (
-                <div className="text-sm text-ink-muted">
-                  <p>
-                    {t(
-                      card.history.percentBelowMean >= 0
-                        ? "flight.historyBelow"
-                        : "flight.historyAbove",
-                      { percent: Math.abs(card.history.percentBelowMean), days: card.history.days },
-                    )}
-                  </p>
-                  <p>{t("flight.percentile", { percentile: card.history.percentile })}</p>
-                </div>
-              )}
-              {card.overBudget > 0 && (
-                <p className="text-sm text-red-700">
-                  {t("flight.overBudget", {
-                    amount: formatAmount(card.overBudget, card.intent.currency),
-                  })}
-                </p>
-              )}
-              <a
-                href={card.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${primaryButton} mt-auto`}
-              >
-                {t("flight.view")}
-              </a>
-              <FlightPriceWatchButton card={card} onWatch={setWatchCard} />
-            </article>
-          ))}
-        </section>
-      )}
+      <FareResults pending={search.isPending} reply={reply} onWatch={setWatchCard} />
       <FlightPriceWatches
         card={watchCard}
         onClose={() => {
