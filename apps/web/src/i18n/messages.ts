@@ -28,6 +28,7 @@ const zhTW = {
   "flight.overBudget": "超出預算 {amount}",
   "flight.excludes": "排除紅眼航班",
   "flight.direct": "只看直飛",
+  "flight.advice": "票價短評",
   "flight.results": "搜尋結果",
   "flight.highlights": "今日值得買的航班",
   "flight.noHighlights": "今天還沒有已確認的優惠航班。",

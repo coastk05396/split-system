@@ -21,3 +21,5 @@ export * from "./flight-catalog.js";
 export * from "./flight-watches.js";
 
 export * from "./flight-discovery.js";
+
+export * from "./flight-advice.js";

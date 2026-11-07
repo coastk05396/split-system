@@ -1,7 +1,10 @@
 import {
+  applyIntentPatch,
   defaultFlightIntent,
   flightRecipes,
   formatAmount,
+  type FlightAdviceReply,
+  type FlightAdviceRequest,
   type FlightCard,
   type FlightSearchIntent,
   type FlightSearchRequest,
@@ -35,6 +38,17 @@ export function TravelPage() {
         session.fetch(`/api/v1/flights/highlights?currency=${currency}`, { signal }),
       ),
   });
+  // Advice is progressive: cards render from the search reply, and this never blocks or errors them.
+  const advise = useMutation({
+    mutationFn: (request: FlightAdviceRequest) =>
+      readWithRev<FlightAdviceReply>(
+        session.fetch("/api/v1/flights/advise", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        }),
+      ),
+  });
   const search = useMutation({
     mutationFn: (intent: FlightSearchRequest) =>
       readWithRev<FlightSearchReply>(
@@ -44,8 +58,13 @@ export function TravelPage() {
           body: JSON.stringify(intent),
         }),
       ),
+    onMutate: () => {
+      advise.reset();
+    },
     onSuccess: (reply) => {
       setActive(reply.intent);
+      if (reply.cards.length)
+        advise.mutate({ language: getLocale(), intent: reply.intent, cards: reply.cards });
     },
   });
   function runIntent(intent: FlightSearchIntent) {
@@ -135,6 +154,29 @@ export function TravelPage() {
         <p role="status" className="mt-5 text-ink-muted">
           {t("flight.searching")}
         </p>
+      )}
+      {reply && advise.data && (
+        <section
+          aria-label={t("flight.advice")}
+          className="rise surface-card mt-6 grid gap-3 rounded-3xl border border-sprout-200 bg-white p-5"
+        >
+          <p>{advise.data.commentary}</p>
+          <div className="flex flex-wrap gap-2">
+            {advise.data.moves.map((move) => (
+              <button
+                key={move.id}
+                type="button"
+                disabled={search.isPending}
+                className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+                onClick={() => {
+                  runIntent(applyIntentPatch(reply.intent, move.patch));
+                }}
+              >
+                {move.label}
+              </button>
+            ))}
+          </div>
+        </section>
       )}
       {reply && (
         <section aria-label={t("flight.results")} className="mt-6 grid gap-4 sm:grid-cols-2">

@@ -158,7 +158,7 @@ export async function buildFlightReply(
 }
 
 /** Check source facts once for searches, scheduled snapshots and Price Watches alike. */
-function fareMatchesIntent(fare: FlightFare, intent: FlightSearchIntent): boolean {
+export function fareMatchesIntent(fare: FlightFare, intent: FlightSearchIntent): boolean {
   if (intent.directOnly && fare.stops !== 0) return false;
   if (!intent.excludeRedEye) return true;
   return [fare.outboundDeparture, fare.inboundDeparture].every((time) => {

@@ -1,5 +1,13 @@
 import { flightHighlights } from "./history.js";
-import { currencyCodeSchema, flightSearchRequestSchema, flightRecipes } from "@split/shared";
+import {
+  currencyCodeSchema,
+  flightAdviceRequestSchema,
+  flightSearchRequestSchema,
+  flightRecipes,
+} from "@split/shared";
+import { createDb } from "../db/client.js";
+import { consumeRateLimit } from "../rate-limit.js";
+import { adviseFlights } from "./advice.js";
 import { Hono } from "hono";
 import type { AppEnv } from "../api.js";
 import { requireUser } from "../auth/require-user.js";
@@ -24,5 +32,10 @@ export function flightRoutes(deps: AppDeps) {
     .post("/flights/search", requireUser(deps.now), async (c) => {
       const request = await parseBody(c, flightSearchRequestSchema);
       return c.json(await searchFlightRequest(c.env, deps, c.var.userId, request), 200);
+    })
+    .post("/flights/advise", requireUser(deps.now), async (c) => {
+      const request = await parseBody(c, flightAdviceRequestSchema);
+      await consumeRateLimit(createDb(c.env.DB), c.var.userId, "flights_advise", deps.now());
+      return c.json(await adviseFlights(c.env, deps, request), 200);
     });
 }

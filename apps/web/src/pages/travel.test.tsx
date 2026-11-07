@@ -174,4 +174,76 @@ describe("Flight Radar", () => {
     expect(requests[1]).toMatchObject({ origin: "KHH", theme: "warm_island" });
     expect(requests.every((request) => !("prompt" in request))).toBe(true);
   });
+
+  it("renders fares immediately, then reveals commentary and Adaptive Next-Move Chips", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    const release = api.holdResponses("POST /api/v1/flights/advise");
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    expect(await screen.findByText("Example Air")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View Flights" })).toBeVisible();
+    await waitFor(() => {
+      expect(api.requests.some((r) => r.route === "POST /api/v1/flights/advise")).toBe(true);
+    });
+    expect(screen.queryByRole("region", { name: "Deal commentary" })).toBeNull();
+    release();
+    const advice = await screen.findByRole("region", { name: "Deal commentary" });
+    expect(within(advice).getByText("Example Air is the cheapest option.")).toBeVisible();
+    expect(
+      within(advice)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Leave Thursday 2027-01-07", "Allow stops", "One week later"]);
+    const request = api.requests.find((r) => r.route === "POST /api/v1/flights/advise");
+    expect(JSON.parse(request?.body ?? "{}")).toMatchObject({
+      language: "en",
+      cards: [{ airline: "Example Air", price: 25000 }],
+    });
+  });
+
+  it("applies a chip's intent patch to the pills and searches directly without a prompt parse", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    const advice = await screen.findByRole("region", { name: "Deal commentary" });
+    fireEvent.click(within(advice).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
+    const pills = screen.getByRole("region", { name: "Active search conditions" });
+    expect(
+      await within(pills).findByRole("button", { name: "Dates: 2027-01-07 – 2027-01-10" }),
+    ).toBeVisible();
+    await waitFor(() => {
+      expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);
+    });
+    const searches = api.requests
+      .filter((r) => r.route === "POST /api/v1/flights/search")
+      .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
+    expect(searches[1]).toMatchObject({
+      departureDate: "2027-01-07",
+      returnDate: "2027-01-10",
+      theme: "warm_island",
+    });
+    expect(searches.every((request) => !("prompt" in request))).toBe(true);
+  });
+
+  it("keeps fares and shows no error when advice fails", async () => {
+    const { api } = renderApp({
+      path: "/travel",
+      cookieUser: { ...makeUser("Rick"), language: "en" },
+    });
+    api.failNext("POST /api/v1/flights/advise", "INTERNAL", 500);
+    const recipes = await screen.findByRole("region", { name: "Vibe Recipes" });
+    fireEvent.click(within(recipes).getByRole("button", { name: "Warm island" }));
+    expect(await screen.findByText("Example Air")).toBeVisible();
+    await waitFor(() => {
+      expect(api.requests.some((r) => r.route === "POST /api/v1/flights/advise")).toBe(true);
+    });
+    expect(screen.queryByRole("region", { name: "Deal commentary" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });

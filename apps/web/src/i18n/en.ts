@@ -24,6 +24,7 @@ export const en: Record<MessageId, string> = {
   "flight.overBudget": "Over budget by {amount}",
   "flight.excludes": "Exclude red-eye flights",
   "flight.direct": "Direct flights only",
+  "flight.advice": "Deal commentary",
   "flight.results": "Search results",
   "flight.highlights": "Today's Strong Buy fares",
   "flight.noHighlights": "No verified Strong Buy fares today yet.",

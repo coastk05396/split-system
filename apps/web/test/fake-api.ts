@@ -4,6 +4,7 @@ import {
   defaultFlightIntent,
   googleFlightsUrl,
   type FlightFare,
+  type FlightAdviceReply,
   type FlightCard,
   type FlightSearchIntent,
   type FareHistoryStats,
@@ -25,6 +26,7 @@ export interface FakeApi {
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];
   flightPromptIntent: FlightSearchIntent | null;
+  flightAdvice: FlightAdviceReply;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
   /** Changes the User on the server only, as another device would; this device is not told. */
@@ -130,6 +132,22 @@ export function createFakeApi(): FakeApi {
     flightHistory: null,
     flightWatches: [],
     flightPromptIntent: null,
+    flightAdvice: {
+      commentary: "Example Air is the cheapest option.",
+      moves: [
+        {
+          id: "thursday",
+          label: "Leave Thursday 2027-01-07",
+          patch: { departureDate: "2027-01-07", returnDate: "2027-01-10" },
+        },
+        { id: "relax_direct", label: "Allow stops", patch: { directOnly: false } },
+        {
+          id: "later_week",
+          label: "One week later",
+          patch: { departureDate: "2027-01-15", returnDate: "2027-01-18" },
+        },
+      ],
+    },
     flightFares: [
       {
         price: 25000,
@@ -297,6 +315,8 @@ export function createFakeApi(): FakeApi {
               })),
         });
       }
+      case "POST /api/v1/flights/advise":
+        return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.flightAdvice);
       case "GET /api/v1/stats/spending":
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.spendingStats);
       case "GET /api/v1/stats/expenses":
