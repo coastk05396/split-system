@@ -204,6 +204,20 @@ describe("home", () => {
     expect(screen.queryByRole("link", { name: /查看全部群組/ })).toBeNull();
   });
 
+  it("renders '我的群組' link to the right of '待結算的群組' heading", async () => {
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "欠錢群組B", settlementCurrency: "TWD", myBalance: -500 });
+      },
+    });
+
+    const pendingSection = await screen.findByRole("region", { name: "待結算的群組" });
+    const myGroupsLink = within(pendingSection).getByRole("link", { name: /我的群組/ });
+    expect(myGroupsLink).toBeVisible();
+    expect(myGroupsLink).toHaveAttribute("href", "/groups");
+  });
+
   it("keeps the start cards below the pending groups", async () => {
     renderApp({
       cookieUser: me,
