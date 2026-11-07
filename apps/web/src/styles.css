@@ -1000,6 +1000,14 @@ body::before {
   transform: translateY(12px);
 }
 
+/* Smooth positioning transition when stacked above other notifications */
+.trip-notice {
+  transition:
+    opacity 180ms var(--ease-out-expo),
+    transform 180ms var(--ease-out-expo),
+    bottom 200ms var(--ease-out-expo);
+}
+
 /* Category selection micro-bloom stamp */
 @keyframes category-bloom {
   0% {

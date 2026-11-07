@@ -205,9 +205,21 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
 
   return (
     <section aria-labelledby="active-groups" className="flex flex-col gap-4">
-      <h2 id="active-groups" className="text-xl font-bold">
-        {t("home.pendingGroups")}
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 id="active-groups" className="text-xl font-bold">
+          {t("home.pendingGroups")}
+        </h2>
+        <Link
+          to="/groups"
+          className="group flex items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700 active:scale-95 transition-transform"
+        >
+          <span>{t("home.myGroups")}</span>
+          <ChevronRight
+            aria-hidden="true"
+            className="size-4 transition-transform group-hover:translate-x-0.5"
+          />
+        </Link>
+      </div>
 
       {pending.length === 0 ? (
         <div className="surface-card flex items-center gap-4 rounded-3xl border border-sprout-200 bg-sprout-150/75 p-5 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)]">
