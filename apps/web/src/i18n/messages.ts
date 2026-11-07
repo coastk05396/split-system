@@ -245,7 +245,7 @@ const zhTW = {
   "expenseShare.alt": "{title} {amount}",
   "expenseShare.copy": "複製訊息",
   "expenseShare.copied": "已複製訊息",
-  "expenseShare.sendToChat": "同時發送至當前 LINE 對話框",
+  "expenseShare.sendToChat": "發送當前對話框",
   "expenseShare.savedToast": "已新增 ✓",
   "expenseShare.savedSent": "已新增，並發送到對話框 ✓",
   "expenseShare.savedSendFailed": "已新增，但沒能發送到對話框，可以改用分享",

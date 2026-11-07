@@ -1,6 +1,6 @@
 import { type CurrencyCode, formatAmount, type SplitMethod } from "@split/shared";
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { ShareBar } from "./ShareRing.js";
@@ -55,6 +55,7 @@ export function SplitEditor({
   payerIds,
   value,
   onChange,
+  headerExtra,
 }: {
   members: readonly SplitMember[];
   amountMinor: number | null;
@@ -62,6 +63,7 @@ export function SplitEditor({
   payerIds: readonly string[];
   value: SplitDraft;
   onChange: (next: SplitDraft) => void;
+  headerExtra?: ReactNode;
 }) {
   const order = members.map((m) => m.id);
   const { amounts, status } = evaluateSplit(value, amountMinor, currency, order, payerIds);
@@ -123,8 +125,11 @@ export function SplitEditor({
   );
 
   return (
-    <fieldset className="flex flex-col gap-4">
-      <legend className="mb-3 text-lg font-bold">{t("split.title")}</legend>
+    <fieldset aria-label={t("split.title")} className="flex flex-col gap-4">
+      <legend className="flex w-full items-center justify-between mb-3 text-lg font-bold">
+        <span>{t("split.title")}</span>
+        {headerExtra}
+      </legend>
       <div className="grid grid-cols-3 gap-2">
         {METHODS.map((method) => (
           <label

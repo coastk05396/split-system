@@ -247,7 +247,7 @@ export const en: Record<MessageId, string> = {
   "expenseShare.alt": "{title} {amount}",
   "expenseShare.copy": "Copy message",
   "expenseShare.copied": "Message copied",
-  "expenseShare.sendToChat": "Also send to this LINE chat",
+  "expenseShare.sendToChat": "Send to chat",
   "expenseShare.savedToast": "Added ✓",
   "expenseShare.savedSent": "Added and sent to the chat ✓",
   "expenseShare.savedSendFailed": "Added, but it couldn't be sent to the chat; try Share",

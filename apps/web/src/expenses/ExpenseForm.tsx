@@ -171,6 +171,50 @@ export function ExpenseForm({
       </Tabs.Content>
       <Tabs.Content value="spend" className="tab-panel">
         <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+          <details className="metadata-ticket rounded-2xl border border-sprout-200 bg-white/70">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-sprout-700">
+              <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
+              <span className="flex-1 font-bold">{t("expense.metadata")}</span>
+              <span className="text-xs tabular-nums">{draft.date}</span>
+              <ChevronDown aria-hidden="true" className="metadata-chevron size-4" />
+            </summary>
+            <div className="border-t border-dashed border-sprout-200 px-4 pt-3 pb-4">
+              <p className="mb-3 text-xs text-ink-muted">{t("expense.metadataHint")}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <PickerPill text={t("expense.date")} icon={CalendarDays}>
+                  <input
+                    type="date"
+                    required
+                    className={pillInput}
+                    value={draft.date}
+                    onChange={(e) => {
+                      update({ date: e.target.value, stopId: null });
+                    }}
+                  />
+                </PickerPill>
+                <PickerPill text={t("expense.time")} icon={Clock}>
+                  <input
+                    type="time"
+                    className={pillInput}
+                    value={draft.time}
+                    onChange={(e) => {
+                      update({ time: e.target.value });
+                    }}
+                  />
+                </PickerPill>
+              </div>
+              {group.isTrip && TRIP_ENABLED && (
+                <StopPicker
+                  groupId={group.id}
+                  day={draft.date}
+                  value={draft.stopId}
+                  onChange={(stopId) => {
+                    update({ stopId });
+                  }}
+                />
+              )}
+            </div>
+          </details>
           <AmountSection
             draft={draft}
             evaluation={evaluation}
@@ -247,65 +291,23 @@ export function ExpenseForm({
             onChange={(split) => {
               update({ split });
             }}
+            headerExtra={
+              chatAvailable ? (
+                <label className="press-pill inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-sprout-200 bg-sprout-50 px-2.5 py-1 text-xs font-bold text-sprout-800 transition-colors hover:border-sprout-400">
+                  <input
+                    type="checkbox"
+                    checked={sendToChat}
+                    onChange={(e) => {
+                      setSendToChat(e.target.checked);
+                    }}
+                    className="size-3.5 accent-sprout-600 rounded"
+                  />
+                  <MessageCircle aria-hidden="true" className="size-3.5 text-sprout-600 shrink-0" />
+                  <span>{t("expenseShare.sendToChat")}</span>
+                </label>
+              ) : undefined
+            }
           />
-          <details className="metadata-ticket rounded-2xl border border-sprout-200 bg-white/70">
-            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-sprout-700">
-              <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
-              <span className="flex-1 font-bold">{t("expense.metadata")}</span>
-              <span className="text-xs tabular-nums">{draft.date}</span>
-              <ChevronDown aria-hidden="true" className="metadata-chevron size-4" />
-            </summary>
-            <div className="border-t border-dashed border-sprout-200 px-4 pt-3 pb-4">
-              <p className="mb-3 text-xs text-ink-muted">{t("expense.metadataHint")}</p>
-              <div className="grid grid-cols-2 gap-3">
-                <PickerPill text={t("expense.date")} icon={CalendarDays}>
-                  <input
-                    type="date"
-                    required
-                    className={pillInput}
-                    value={draft.date}
-                    onChange={(e) => {
-                      update({ date: e.target.value, stopId: null });
-                    }}
-                  />
-                </PickerPill>
-                <PickerPill text={t("expense.time")} icon={Clock}>
-                  <input
-                    type="time"
-                    className={pillInput}
-                    value={draft.time}
-                    onChange={(e) => {
-                      update({ time: e.target.value });
-                    }}
-                  />
-                </PickerPill>
-              </div>
-              {group.isTrip && TRIP_ENABLED && (
-                <StopPicker
-                  groupId={group.id}
-                  day={draft.date}
-                  value={draft.stopId}
-                  onChange={(stopId) => {
-                    update({ stopId });
-                  }}
-                />
-              )}
-            </div>
-          </details>
-          {chatAvailable && (
-            <label className="press-card flex cursor-pointer items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3 font-bold">
-              <input
-                type="checkbox"
-                checked={sendToChat}
-                onChange={(e) => {
-                  setSendToChat(e.target.checked);
-                }}
-                className="size-5 accent-sprout-500"
-              />
-              <MessageCircle aria-hidden="true" className="size-5 text-sprout-600" />
-              {t("expenseShare.sendToChat")}
-            </label>
-          )}
           <button
             type="submit"
             className={`${primaryButton} justify-between`}
@@ -351,43 +353,41 @@ function AmountSection({
               }}
             />
           </div>
-          <div className="flex items-center justify-between gap-2">
-            <input
-              id="expense-amount"
-              inputMode="decimal"
-              autoComplete="off"
-              className={`w-full min-w-0 bg-transparent text-left font-bold tabular-nums text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
-              placeholder={t("expense.amountPlaceholder")}
-              value={draft.amountText}
-              onChange={(e) => {
-                update({ amountText: e.target.value });
-              }}
-            />
-            <div className="flex gap-2">
-              {[100, 500].map((increment) => {
-                const next =
-                  (amount.kind === "ok" ? amount.amountMinor : 0) +
-                  increment * 10 ** CURRENCIES[draft.currency].decimals;
-                return (
-                  <button
-                    key={increment}
-                    type="button"
-                    aria-label={t("expense.addAmount", { amount: increment })}
-                    disabled={
-                      (draft.amountText.trim() !== "" && amount.kind !== "ok") ||
-                      next > MAX_AMOUNT_MINOR
-                    }
-                    onClick={() => {
-                      hapticTick(10);
-                      update({ amountText: minorToDecimal(next, draft.currency) });
-                    }}
-                    className="press-pill rounded-full border border-sprout-200 bg-sprout-50 px-3 py-1 text-xs font-bold text-sprout-700 tabular-nums disabled:opacity-40"
-                  >
-                    +{increment}
-                  </button>
-                );
-              })}
-            </div>
+          <input
+            id="expense-amount"
+            inputMode="decimal"
+            autoComplete="off"
+            className={`w-full min-w-0 bg-transparent text-left font-bold tabular-nums text-sprout-900 outline-none ${amountSize(draft.amountText)}`}
+            placeholder={t("expense.amountPlaceholder")}
+            value={draft.amountText}
+            onChange={(e) => {
+              update({ amountText: e.target.value });
+            }}
+          />
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+            {[1000, 500, 100, 50, 10, 5, 1].map((increment) => {
+              const next =
+                (amount.kind === "ok" ? amount.amountMinor : 0) +
+                increment * 10 ** CURRENCIES[draft.currency].decimals;
+              return (
+                <button
+                  key={increment}
+                  type="button"
+                  aria-label={t("expense.addAmount", { amount: increment })}
+                  disabled={
+                    (draft.amountText.trim() !== "" && amount.kind !== "ok") ||
+                    next > MAX_AMOUNT_MINOR
+                  }
+                  onClick={() => {
+                    hapticTick(10);
+                    update({ amountText: minorToDecimal(next, draft.currency) });
+                  }}
+                  className="press-pill shrink-0 rounded-full border border-sprout-200 bg-sprout-50 px-2.5 py-1 text-xs font-bold text-sprout-700 tabular-nums disabled:opacity-40"
+                >
+                  +{increment}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

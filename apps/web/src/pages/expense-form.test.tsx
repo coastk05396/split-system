@@ -165,6 +165,42 @@ describe("add Expense form", () => {
     expect(submit()).toBeDisabled();
   });
 
+  it("provides quick increment presets (+1000, +500, +100, +50, +10, +5, +1)", async () => {
+    const user = userEvent.setup();
+    openForm();
+
+    const presets = [1000, 500, 100, 50, 10, 5, 1];
+    for (const p of presets) {
+      expect(await screen.findByRole("button", { name: `金額加 ${p}` })).toBeVisible();
+    }
+
+    const amount = screen.getByLabelText("金額");
+    expect(amount).toHaveValue("");
+
+    await user.click(screen.getByRole("button", { name: "金額加 1000" }));
+    expect(amount).toHaveValue("1000");
+
+    await user.click(screen.getByRole("button", { name: "金額加 50" }));
+    expect(amount).toHaveValue("1050");
+
+    await user.click(screen.getByRole("button", { name: "金額加 5" }));
+    expect(amount).toHaveValue("1055");
+
+    await user.click(screen.getByRole("button", { name: "金額加 1" }));
+    expect(amount).toHaveValue("1056");
+  });
+
+  it("places date and itinerary ticket above amount section", async () => {
+    openForm();
+
+    const dateTicket = await screen.findByText("日期與行程");
+    const amountLabel = screen.getByText("金額");
+
+    expect(
+      dateTicket.compareDocumentPosition(amountLabel) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("shows the maintenance message when saving is blocked", async () => {
     const user = userEvent.setup();
     const { api, id } = openForm();
