@@ -32,7 +32,13 @@ export function TravelPage() {
   const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
   const { state, session } = useAuth();
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
-  const [active, setActive] = useState(() => defaultFlightIntent(Date.now(), currency));
+  const [active, setIntent] = useState(() => defaultFlightIntent(Date.now(), currency));
+  // Bumped on every search so the fields reset to what was searched even when the intent is equal.
+  const [revision, setRevision] = useState(0);
+  const setActive = (intent: FlightSearchIntent) => {
+    setIntent(intent);
+    setRevision((r) => r + 1);
+  };
   const formRef = useRef<HTMLFormElement>(null);
   const edit = (field: string) => {
     formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`)?.focus();
@@ -181,6 +187,7 @@ export function TravelPage() {
       <EntityPills intent={active} pending={search.isPending} onChange={runIntent} />
       <FlightSearchForm
         intent={active}
+        revision={revision}
         pending={search.isPending}
         error={search.error}
         onSearch={runIntent}

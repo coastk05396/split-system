@@ -6,17 +6,53 @@ import {
   type FlightSearchIntent,
 } from "@split/shared";
 import { useState, type RefObject, type SubmitEvent } from "react";
+import {
+  AirportPicker,
+  POPULAR_DESTINATIONS,
+  POPULAR_ORIGINS,
+  rememberAirports,
+} from "./AirportPicker.js";
 import { failureMessage, input, primaryButton } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
 
+interface Draft {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate: string;
+  budget: string;
+  theme: string;
+  excludeRedEye: boolean;
+  directOnly: boolean;
+}
+
+function toDraft(intent: FlightSearchIntent): Draft {
+  return {
+    origin: intent.origin,
+    destination: intent.destination,
+    departureDate: intent.departureDate,
+    returnDate: intent.returnDate,
+    budget:
+      intent.budget === undefined
+        ? ""
+        : String(intent.budget / 10 ** CURRENCIES[intent.currency].decimals),
+    theme: intent.theme ?? "",
+    excludeRedEye: intent.excludeRedEye,
+    directOnly: intent.directOnly,
+  };
+}
+
 export function FlightSearchForm({
   intent: active,
+  revision,
   pending,
   error,
   onSearch,
   formRef,
 }: {
   intent: FlightSearchIntent;
+  /** Changes whenever a search runs, so the fields redraw even for an identical intent. */
+  revision: number;
   pending: boolean;
   error: unknown;
   onSearch: (intent: FlightSearchIntent) => void;
@@ -24,76 +60,88 @@ export function FlightSearchForm({
 }) {
   const currency = active.currency;
   const [invalid, setInvalid] = useState(false);
+  // The fields follow the active intent: a prompt, pill, chip, highlight or portal link redraws them.
+  const key = `${revision}${JSON.stringify(active)}`;
+  const [seen, setSeen] = useState(key);
+  const [draft, setDraft] = useState(() => toDraft(active));
+  if (seen !== key) {
+    setSeen(key);
+    setDraft(toDraft(active));
+  }
+  const set = (patch: Partial<Draft>) => {
+    setDraft((d) => ({ ...d, ...patch }));
+  };
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const budgetValue = form.get("budget");
-    const budgetText = typeof budgetValue === "string" ? budgetValue : "";
-    const budget = budgetText === "" ? undefined : parseAmount(budgetText, currency);
+    const budget = draft.budget === "" ? undefined : parseAmount(draft.budget, currency);
     if (budget !== undefined && !budget.ok) {
       setInvalid(true);
       return;
     }
     const parsed = flightSearchIntentSchema.safeParse({
-      origin: form.get("origin"),
-      destination: form.get("destination"),
-      departureDate: form.get("departureDate"),
-      returnDate: form.get("returnDate"),
+      origin: draft.origin,
+      destination: draft.destination,
+      departureDate: draft.departureDate,
+      returnDate: draft.returnDate,
       currency,
       budget: budget?.value,
-      excludeRedEye: form.has("excludeRedEye"),
-      directOnly: form.has("directOnly"),
-      theme: form.get("theme") || undefined,
+      excludeRedEye: draft.excludeRedEye,
+      directOnly: draft.directOnly,
+      theme: draft.theme || undefined,
     });
     setInvalid(!parsed.success);
-    if (parsed.success) onSearch(parsed.data);
+    if (parsed.success) {
+      rememberAirports({ origin: parsed.data.origin, destination: parsed.data.destination });
+      onSearch(parsed.data);
+    }
   }
 
   return (
     <form
-      key={JSON.stringify(active)}
       ref={formRef}
       onSubmit={submit}
       className="surface-card grid gap-4 rounded-3xl border border-sprout-200 bg-white p-5 sm:grid-cols-2"
       aria-busy={pending}
     >
-      <label className="grid gap-1 text-sm font-bold">
-        {t("flight.origin")}
-        <input
-          className={input}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 sm:col-span-2">
+        <AirportPicker
           name="origin"
-          defaultValue={active.origin}
-          list="origin-airports"
-          required
-          pattern="[A-Z]{3}"
-          maxLength={3}
-          autoCapitalize="characters"
+          text={t("flight.origin")}
+          value={draft.origin}
+          popular={POPULAR_ORIGINS}
+          onChange={(origin) => {
+            set({ origin });
+          }}
         />
-        <datalist id="origin-airports">
-          {["TPE", "TSA", "RMQ", "KHH"].map((code) => (
-            <option key={code} value={code} />
-          ))}
-        </datalist>
-      </label>
-      <label className="grid gap-1 text-sm font-bold">
-        {t("flight.destination")}
-        <input
-          className={input}
+        <button
+          type="button"
+          aria-label={t("flight.swap")}
+          onClick={() => {
+            set({ origin: draft.destination, destination: draft.origin });
+          }}
+          className="press-pill mb-1 grid size-10 place-items-center rounded-full border border-sprout-200 bg-sprout-50 font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+        >
+          <span aria-hidden="true">⇄</span>
+        </button>
+        <AirportPicker
           name="destination"
-          defaultValue={active.destination}
-          required
-          pattern="[A-Z]{3}"
-          maxLength={3}
-          autoCapitalize="characters"
-          placeholder="NRT"
+          text={t("flight.destination")}
+          value={draft.destination}
+          popular={POPULAR_DESTINATIONS}
+          onChange={(destination) => {
+            set({ destination });
+          }}
         />
-      </label>
+      </div>
       <label className="grid gap-1 text-sm font-bold">
         {t("flight.departure")}
         <input
           className={input}
           name="departureDate"
-          defaultValue={active.departureDate}
+          value={draft.departureDate}
+          onChange={(e) => {
+            set({ departureDate: e.target.value });
+          }}
           type="date"
           required
         />
@@ -103,7 +151,10 @@ export function FlightSearchForm({
         <input
           className={input}
           name="returnDate"
-          defaultValue={active.returnDate}
+          value={draft.returnDate}
+          onChange={(e) => {
+            set({ returnDate: e.target.value });
+          }}
           type="date"
           required
         />
@@ -113,9 +164,10 @@ export function FlightSearchForm({
         <input
           className={input}
           name="budget"
-          defaultValue={
-            active.budget === undefined ? "" : active.budget / 10 ** CURRENCIES[currency].decimals
-          }
+          value={draft.budget}
+          onChange={(e) => {
+            set({ budget: e.target.value });
+          }}
           type="number"
           min="1"
           step={10 ** -CURRENCIES[currency].decimals}
@@ -123,7 +175,14 @@ export function FlightSearchForm({
       </label>
       <label className="grid gap-1 text-sm font-bold">
         {t("flight.theme")}
-        <select name="theme" defaultValue={active.theme ?? ""} className={input}>
+        <select
+          name="theme"
+          value={draft.theme}
+          onChange={(e) => {
+            set({ theme: e.target.value });
+          }}
+          className={input}
+        >
           <option value="">{t("flight.theme.none")}</option>
           {FLIGHT_THEMES.map((theme) => (
             <option key={theme} value={theme}>
@@ -134,11 +193,25 @@ export function FlightSearchForm({
       </label>
       <div className="flex flex-col justify-center gap-2 text-sm">
         <label className="flex items-center gap-2">
-          <input type="checkbox" name="excludeRedEye" defaultChecked={active.excludeRedEye} />
+          <input
+            type="checkbox"
+            name="excludeRedEye"
+            checked={draft.excludeRedEye}
+            onChange={(e) => {
+              set({ excludeRedEye: e.target.checked });
+            }}
+          />
           {t("flight.excludes")}
         </label>
         <label className="flex items-center gap-2">
-          <input type="checkbox" name="directOnly" defaultChecked={active.directOnly} />
+          <input
+            type="checkbox"
+            name="directOnly"
+            checked={draft.directOnly}
+            onChange={(e) => {
+              set({ directOnly: e.target.checked });
+            }}
+          />
           {t("flight.direct")}
         </label>
       </div>

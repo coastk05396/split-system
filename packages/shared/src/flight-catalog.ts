@@ -218,3 +218,11 @@ export const FLIGHT_DESTINATIONS = [
   },
 ] as const;
 export type FlightDestination = (typeof FLIGHT_DESTINATIONS)[number];
+
+/** Taiwan departure airports offered as quick origin choices. */
+export const FLIGHT_ORIGINS = [
+  { airport: "TPE", en: "Taipei Taoyuan", zhTW: "台北桃園" },
+  { airport: "TSA", en: "Taipei Songshan", zhTW: "台北松山" },
+  { airport: "RMQ", en: "Taichung", zhTW: "台中" },
+  { airport: "KHH", en: "Kaohsiung", zhTW: "高雄" },
+] as const;
