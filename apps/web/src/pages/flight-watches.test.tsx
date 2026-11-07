@@ -105,11 +105,17 @@ describe("Price Watch inside LIFF", () => {
     expect(api.requests.some((r) => r.route === "POST /api/v1/flights/watches")).toBe(false);
   });
 
-  it("completes a pending LINE watch from the chat after silent sign-in", async () => {
+  it("creates the LINE watch from the chat link only after an explicit confirm tap", async () => {
     const { api } = renderApp({
       path: "/travel?origin=TPE&destination=OKA&departureDate=2027-01-08&returnDate=2027-01-11&currency=TWD&excludeRedEye=0&directOnly=0&watch=line&fare=7000",
       insideLine: { idToken: "fake|line-1|阿芽" },
     });
+
+    // Arriving through a link must not create anything by itself.
+    await screen.findByRole("region", { name: "搜尋結果" });
+    const confirm = await screen.findByRole("button", { name: "確認設定 LINE 降價提醒" });
+    expect(api.requests.some((r) => r.route === "POST /api/v1/flights/watches")).toBe(false);
+    fireEvent.click(confirm);
 
     expect(await screen.findByText("已設定降價提醒，會用 LINE 通知你一次。")).toBeVisible();
     const posted = api.requests.find((r) => r.route === "POST /api/v1/flights/watches");

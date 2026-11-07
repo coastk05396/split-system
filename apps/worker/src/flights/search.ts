@@ -101,11 +101,16 @@ export async function lookupFares(
   )
     .bind(key, now)
     .first<{ response: string }>();
-  let fares: FlightFare[];
+  let fares: FlightFare[] | undefined;
   let degraded = false;
   if (cached) {
-    fares = z.array(flightFareSchema).parse(JSON.parse(cached.response));
-  } else {
+    try {
+      fares = z.array(flightFareSchema).parse(JSON.parse(cached.response));
+    } catch {
+      /* A corrupt or old-schema row is a cache miss: look up live and overwrite it. */
+    }
+  }
+  if (!fares) {
     try {
       fares = await (deps.flightSource ?? containerFlightSource)(intent, env);
       // The DI port is also a trust boundary: no unvalidated upstream money is displayed.

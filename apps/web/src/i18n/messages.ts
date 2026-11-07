@@ -55,6 +55,8 @@ const zhTW = {
     "LINE 提醒目前無法使用（本月額度已滿，或帳號尚未連結 LINE）。請在手機的外部瀏覽器開啟，使用免費網頁通知。",
   "flight.openBrowser": "用手機瀏覽器開啟",
   "flight.lineWatchSet": "已設定降價提醒，會用 LINE 通知你一次。",
+  "flight.lineWatchConfirm": "確認設定 LINE 降價提醒",
+  "flight.lineWatchAsk": "{route} 降到 {amount} 或出現超值好價時，用 LINE 通知你一次。要設定嗎？",
   "flight.prompt": "想去哪裡？",
   "flight.explore": "探索航班",
   "flight.recipes": "靈感配方",

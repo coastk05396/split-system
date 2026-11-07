@@ -53,6 +53,9 @@ export const en: Record<MessageId, string> = {
     "LINE alerts are unavailable right now (this month's LINE quota is full, or your account has no LINE link). Open this page in your phone's browser for free Web Push.",
   "flight.openBrowser": "Open in phone browser",
   "flight.lineWatchSet": "Price Watch set. You will get one LINE alert.",
+  "flight.lineWatchConfirm": "Confirm LINE price alert",
+  "flight.lineWatchAsk":
+    "Get one LINE alert when {route} drops to {amount} or a Strong Buy appears. Set it up?",
   "flight.prompt": "Where would you like to go?",
   "flight.explore": "Explore flights",
   "flight.recipes": "Vibe Recipes",

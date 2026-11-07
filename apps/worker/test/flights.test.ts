@@ -176,3 +176,57 @@ it("enforces both minute and hour limits, including cached requests", async () =
   expect(await blocked.json()).toEqual({ error: { code: "RATE_LIMITED" } });
   expect(calls).toBe(3);
 });
+
+it.each([
+  ["unparseable JSON", "{not json"],
+  ["an old-schema row", JSON.stringify([{ price: 1 }])],
+])("falls back to a live lookup when the cached row is %s", async (_name, response) => {
+  const user = await signIn("google", uniqueSub("corrupt-cache"));
+  let live = 0;
+  const app = createApp({
+    ...productionDeps,
+    now: () => clock.now,
+    flightSource: () => {
+      live++;
+      return Promise.resolve([
+        {
+          price: 6543,
+          airline: "Live Air",
+          outboundDeparture: "08:00",
+          outboundArrival: "11:00",
+          inboundDeparture: null,
+          inboundArrival: null,
+          stops: 0,
+          durationMinutes: 180,
+          priceLevel: "typical" as const,
+        },
+      ]);
+    },
+  });
+  const search = () =>
+    app.request(
+      "https://split.test/api/v1/flights/search",
+      json(
+        {
+          origin: "TPE",
+          destination: "BKK",
+          departureDate: "2026-12-04",
+          returnDate: "2026-12-07",
+          currency: "TWD",
+        },
+        bearer(user.accessToken),
+      ),
+      env,
+    );
+  await search();
+  const warm = live;
+  await env.DB.prepare("UPDATE flight_search_cache SET response=?").bind(response).run();
+
+  const res = await search();
+
+  expect(res.status).toBe(200);
+  expect(live).toBeGreaterThan(warm);
+  const { cards } = await res.json<FlightSearchReply>();
+  expect(cards.length).toBeGreaterThan(0);
+  expect(cards.every((card) => card.price === 6543)).toBe(true);
+});

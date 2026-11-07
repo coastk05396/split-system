@@ -110,12 +110,14 @@ it("uses fourteen distinct days, ignoring another currency and observations outs
 it("daily maintenance rotates four verified routes and purges history older than sixty days", async () => {
   const { dailyMaintenance } = await import("../src/maintenance.js");
   const calls: string[] = [];
+  const filters: boolean[] = [];
   const deps = {
     ...productionDeps,
     now: () => clock.now,
     rateSource: { fetchRate: () => Promise.reject(new Error("offline")) },
     flightSource: (intent: import("@split/shared").FlightSearchIntent) => {
       calls.push(intent.destination);
+      filters.push(intent.directOnly || intent.excludeRedEye);
       return Promise.resolve([
         {
           price: 7777,
@@ -134,6 +136,12 @@ it("daily maintenance rotates four verified routes and purges history older than
   await dailyMaintenance(env, clock.now, deps);
   expect(calls).toHaveLength(4);
   expect(new Set(calls).size).toBe(4);
+  // The 60-day baseline compares unfiltered populations only.
+  expect(filters).toEqual([false, false, false, false]);
+  const recorded = await env.DB.prepare(
+    "SELECT count(*) n FROM flight_fare_history WHERE price=7777",
+  ).first<{ n: number }>();
+  expect(recorded?.n).toBe(4);
   const old = await env.DB.prepare(
     "SELECT count(*) n FROM flight_fare_history WHERE observed_day<?",
   )
@@ -144,4 +152,50 @@ it("daily maintenance rotates four verified routes and purges history older than
     "SELECT price FROM flight_fare_history WHERE origin='TPE' AND price=7777",
   ).all();
   expect(rows.results).toHaveLength(4);
+});
+
+it("records only unfiltered searches in the fare history", async () => {
+  const user = await signIn("google", uniqueSub("filtered-history"));
+  const app = createApp({
+    ...productionDeps,
+    now: () => clock.now,
+    flightSource: () =>
+      Promise.resolve([
+        {
+          price: 4321,
+          airline: "Test Air",
+          outboundDeparture: "08:00",
+          outboundArrival: "12:00",
+          inboundDeparture: null,
+          inboundArrival: null,
+          stops: 0,
+          durationMinutes: 180,
+          priceLevel: "low" as const,
+        },
+      ]),
+  });
+  const base = {
+    origin: "KHH",
+    destination: "MNL",
+    departureDate: "2026-12-04",
+    returnDate: "2026-12-07",
+    currency: "TWD",
+  };
+  const search = (extra: object) =>
+    app.request(
+      "https://split.test/api/v1/flights/search",
+      json({ ...base, ...extra }, bearer(user.accessToken)),
+      env,
+    );
+  const stored = () =>
+    env.DB.prepare("SELECT price FROM flight_fare_history WHERE origin='KHH' AND destination='MNL'")
+      .all<{ price: number }>()
+      .then((rows) => rows.results.length);
+
+  await search({ directOnly: true });
+  await search({ excludeRedEye: true });
+  expect(await stored()).toBe(0);
+
+  await search({});
+  expect(await stored()).toBeGreaterThan(0);
 });

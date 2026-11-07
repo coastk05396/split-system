@@ -203,5 +203,6 @@ it("excludes red-eye and connecting fares before they can become verified highli
   const stored = await env.DB.prepare(
     "SELECT price FROM flight_fare_history WHERE origin='TSA' AND destination='SDJ'",
   ).all<{ price: number }>();
-  expect(stored.results).toEqual([{ price: 3000 }]);
+  // Filtered searches never feed the unfiltered baseline, so nothing is stored.
+  expect(stored.results).toEqual([]);
 });

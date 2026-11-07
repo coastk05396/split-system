@@ -380,6 +380,43 @@ describe("one-on-one LINE flight chat", () => {
     expect(calls.count).toBe(0);
   });
 
+  it.each(["東京 晚餐 2160", "旅行 住宿 3000", "Seoul dinner 800", "trip dinner 500", "東京 晚餐"])(
+    "keeps the menu pointer for expense-like text %j",
+    async (message) => {
+      const calls = { count: 0 };
+      const prompts: string[] = [];
+      const { post, sent, loading } = harness({ sourceCalls: calls, prompts });
+
+      await post({ ...text(message), source: { type: "user", userId: uniqueSub("U-spender") } });
+
+      expect(sent.map((s) => s.messages)).toEqual([
+        [{ type: "text", text: "點下方選單就能記帳 🌱" }],
+      ]);
+      expect(loading).toEqual([]);
+      expect(prompts).toEqual([]);
+      expect(calls.count).toBe(0);
+    },
+  );
+
+  it.each([
+    "機票 預算 15000",
+    "東京 機票 3000",
+    "flight to Seoul 800",
+    "想去東京",
+    "go to Seoul",
+    "下個月去沖繩 NT$ 15000",
+    "去沖繩 15000 以內",
+  ])("still runs a flight search for %j", async (message) => {
+    const prompts: string[] = [];
+    const { post, loading } = harness({ prompts });
+
+    const userId = uniqueSub("U-gate");
+    await post({ ...text(message), source: { type: "user", userId } });
+
+    expect(loading).toEqual([userId]);
+    expect(prompts).toEqual([message]);
+  });
+
   it("ignores group and room events, flight questions included", async () => {
     const { post, sent, loading } = harness();
     const group = { type: "group", groupId: "C-1", userId: "U-flyer" };

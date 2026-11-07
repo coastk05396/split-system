@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { intentFromQuery } from "@split/shared";
 import { expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { productionDeps } from "../src/deps.js";
@@ -354,11 +355,21 @@ it("sends a decryptable aes128gcm notification with a verifiable VAPID signature
   );
   expect(plaintext.at(-1)).toBe(2);
   const notification: unknown = JSON.parse(new TextDecoder().decode(plaintext.slice(0, -1)));
-  const intentLink: unknown = expect.stringContaining("/travel?intent=");
   expect(notification).toMatchObject({
     title: "航班雷達 · 降價通知",
     body: "TSA → GMP · NT$ 5,000",
-    url: intentLink,
+  });
+  // /travel reads flat query params once on arrival, so the link must round-trip through them.
+  const link = new URL((notification as { url: string }).url, "https://split.test");
+  expect(link.pathname).toBe("/travel");
+  expect(intentFromQuery(link.searchParams)).toEqual({
+    origin: "TSA",
+    destination: "GMP",
+    departureDate: "2026-12-04",
+    returnDate: "2026-12-07",
+    currency: "TWD",
+    excludeRedEye: false,
+    directOnly: false,
   });
 });
 

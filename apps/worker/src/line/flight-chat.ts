@@ -35,15 +35,24 @@ export const WATCH_LIMIT_TEXT = "LINE 降價提醒最多同時 2 個，請先到
 
 export const FLIGHT_EMPTY_TEXT = "目前查不到即時票價，可以直接到 Google 航班看看：";
 
-/** Words that mark a flight or travel question; anything else keeps the Rich Menu pointer. */
-const FLIGHT_WORDS = new RegExp(
-  [
-    "機票|航班|班機|飛[往去到]|飛機|出國|旅行|旅遊|度假|來回|便宜.{0,6}去",
-    "\\b(flights?|fly|airfare|airfares|trip|travel|vacation|getaway)\\b",
-    ...FLIGHT_DESTINATIONS.flatMap((d) => [d.zhTW, `\\b${d.en}\\b`]),
-  ].join("|"),
+/** Words that mark a flight or travel question on their own. */
+const FLIGHT_WORDS =
+  /機票|航班|班機|飛[往去到]|飛機|出國|旅行|旅遊|度假|來回|便宜.{0,6}去|\b(flights?|fly|airfare|airfares|trip|travel|vacation|getaway)\b/i;
+/** A catalog destination is a flight question only together with an intent verb ("去沖繩", "to Seoul"). */
+const DESTINATION = new RegExp(
+  FLIGHT_DESTINATIONS.flatMap((d) => [d.zhTW, `\\b${d.en}\\b`]).join("|"),
   "i",
 );
+const INTENT_VERB = /[去飛玩]|\b(to|go|visit)\b/i;
+/** Expense-like text: a 3+ digit amount without a flight noun/verb or a budget marker. */
+const FLIGHT_NOUN = /機票|航班|班機|飛|flight|fly|airfare/i;
+const BUDGET_MARKER = /預算|budget|NT\$|以內/i;
+
+function isFlightText(message: string): boolean {
+  if (/\d{3,}/.test(message) && !FLIGHT_NOUN.test(message) && !BUDGET_MARKER.test(message))
+    return false;
+  return FLIGHT_WORDS.test(message) || (DESTINATION.test(message) && INTENT_VERB.test(message));
+}
 
 export type FlightChatRequest =
   | { kind: "prompt"; userId: string; prompt: string }
@@ -56,7 +65,7 @@ export function flightChatRequest(event: WebhookEvent): FlightChatRequest | null
   if (userId === undefined || event.replyToken === undefined) return null;
   if (event.type === "message") {
     const text = event.message?.type === "text" ? event.message.text : undefined;
-    return text !== undefined && FLIGHT_WORDS.test(text)
+    return text !== undefined && isFlightText(text)
       ? { kind: "prompt", userId, prompt: text.slice(0, 1000) }
       : null;
   }

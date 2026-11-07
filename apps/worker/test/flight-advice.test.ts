@@ -154,11 +154,14 @@ it("still offers at least three chips when few conditions apply", async () => {
     returnDate: "2025-06-21",
     excludeRedEye: true,
   } as const;
-  const response = await advise({
-    language: "en",
-    intent: sparse,
-    cards: [{ ...fare, intent: sparse, stops: 1 }],
-  });
+  const response = await advise(
+    {
+      language: "en",
+      intent: sparse,
+      cards: [{ ...fare, intent: sparse, stops: 1 }],
+    },
+    { flightAdvisor: { select: () => Promise.resolve(null) } }, // never reach the real AI binding
+  );
   const reply = await response.json<FlightAdviceReply>();
   expect(reply.moves.map((move) => move.id)).toEqual(["later_week", "longer_stay", "shorter_stay"]);
 });

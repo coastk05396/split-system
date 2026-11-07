@@ -1,9 +1,13 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { productionDeps } from "../src/deps.js";
 import { dailyMaintenance } from "../src/maintenance.js";
-import type { LineMessage, LineReplyClient } from "../src/line/reply-client.js";
+import {
+  LinePushRejectedError,
+  type LineMessage,
+  type LineReplyClient,
+} from "../src/line/reply-client.js";
 import { bearer, clock, json, offlineRateSource, signIn, uniqueSub } from "./auth-harness.js";
 
 const intent = {
@@ -87,6 +91,8 @@ const used = async (now: number) =>
 describe("LINE Push Price Watch alerts", () => {
   beforeEach(async () => {
     await setUsed(0);
+    // dailyMaintenance visits every active watch, so earlier tests' leftovers must not count.
+    await env.DB.prepare("DELETE FROM flight_price_watches").run();
   });
 
   it("pushes one sprout-free alert, counts it for the month and marks the watch triggered", async () => {
@@ -124,23 +130,86 @@ describe("LINE Push Price Watch alerts", () => {
     expect(await watches(user.accessToken)).toMatchObject([{ status: "triggered" }]);
   });
 
-  it("keeps the watch active and frees the slot when LINE refuses the push", async () => {
-    const { deps, linkedWatch, watches } = setup();
-    const before = await used(clock.now);
-    const { user } = await linkedWatch();
-    const failing = {
+  it.each([
+    ["a definite 4xx rejection", 0, new LinePushRejectedError(400)],
+    ["a 5xx", 1, new Error("LINE push failed with 500")],
+    ["a timeout", 1, new DOMException("timed out", "TimeoutError")],
+    ["a network error", 1, new TypeError("network")],
+  ])(
+    "keeps the watch active after %s and leaves %d slot(s) used",
+    async (_name, slots, failure) => {
+      const { deps, linkedWatch, watches } = setup();
+      const before = await used(clock.now);
+      const { user } = await linkedWatch();
+      const failing = {
+        ...deps,
+        lineReplyClient: () => ({
+          reply: () => Promise.resolve(),
+          startLoading: () => Promise.resolve(),
+          push: () => Promise.reject(failure),
+        }),
+      };
+
+      await dailyMaintenance(env, clock.now, failing);
+
+      expect(await used(clock.now)).toBe(before + slots);
+      expect(await watches(user.accessToken)).toMatchObject([{ status: "active" }]);
+    },
+  );
+
+  it("sends the same UUID retry key for one watch on every attempt", async () => {
+    const { deps, linkedWatch } = setup();
+    await linkedWatch();
+    const keys: (string | undefined)[] = [];
+    const flaky = {
       ...deps,
       lineReplyClient: () => ({
         reply: () => Promise.resolve(),
         startLoading: () => Promise.resolve(),
-        push: () => Promise.reject(new Error("LINE push failed with 500")),
+        push: (_to: string, _messages: LineMessage[], retryKey?: string) => {
+          keys.push(retryKey);
+          return keys.length === 1 ? Promise.reject(new Error("timeout")) : Promise.resolve();
+        },
       }),
     };
 
-    await dailyMaintenance(env, clock.now, failing);
+    await dailyMaintenance(env, clock.now, flaky);
+    await dailyMaintenance(env, clock.now, flaky);
 
-    expect(await used(clock.now)).toBe(before);
-    expect(await watches(user.accessToken)).toMatchObject([{ status: "active" }]);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("keeps checking the remaining watches when one watch's processing throws, logging only an error class", async () => {
+    const { deps, pushes, linkedWatch, watches } = setup();
+    const first = await linkedWatch();
+    const second = await linkedWatch();
+    const poisoned = await env.DB.prepare(
+      "SELECT id FROM flight_price_watches ORDER BY created_at LIMIT 1",
+    ).first<{ id: string }>();
+    await env.DB.exec(
+      `CREATE TRIGGER test_poison_watch BEFORE UPDATE ON flight_price_watches WHEN NEW.id='${poisoned?.id ?? ""}' AND NEW.claim_token IS NOT NULL BEGIN SELECT RAISE(ABORT, 'injected D1 outage for ${first.sub}'); END`,
+    );
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    try {
+      await dailyMaintenance(env, clock.now, deps);
+    } finally {
+      spy.mockRestore();
+      await env.DB.exec("DROP TRIGGER IF EXISTS test_poison_watch");
+    }
+
+    expect(pushes.map((p) => p.to)).toEqual([second.sub]);
+    expect(await watches(first.user.accessToken)).toMatchObject([{ status: "active" }]);
+    expect(await watches(second.user.accessToken)).toMatchObject([{ status: "triggered" }]);
+    const failure = logged.find((line) => line.includes("flight_watch_failed"));
+    expect(failure).toBeDefined();
+    expect(failure).not.toContain("injected");
+    expect(failure).not.toContain(first.sub);
+    expect(failure).not.toContain(poisoned?.id ?? "?");
   });
 
   it("offers LINE alerts only to a linked User while the month has room", async () => {

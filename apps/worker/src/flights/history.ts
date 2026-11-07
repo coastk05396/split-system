@@ -41,13 +41,17 @@ export async function loadFareHistory(
   return rows.results.map((row) => row.price);
 }
 
-/** A repeated search can lower a day's minimum, but can never manufacture another historical day. */
+/**
+ * A repeated search can lower a day's minimum, but can never manufacture another historical day.
+ * Only unfiltered searches count: a direct-only or no-red-eye minimum is a different population.
+ */
 export async function recordFareHistory(
   db: D1Database,
   intent: FlightSearchIntent,
   fares: FlightFare[],
   now: number,
 ): Promise<void> {
+  if (intent.directOnly || intent.excludeRedEye) return;
   const minimum = fares.reduce<FlightFare | undefined>(
     (best, fare) => (!best || fare.price < best.price ? fare : best),
     undefined,
@@ -120,7 +124,7 @@ export async function maintainFlightHistory(env: Bindings, deps: AppDeps): Promi
         returnDate: isoDay(departure.getTime() + 3 * DAY),
         currency: "TWD",
         excludeRedEye: false,
-        directOnly: true,
+        directOnly: false,
       };
       try {
         await lookupFares(env, deps, intent);
