@@ -10,10 +10,10 @@ const icon =
 function Place({ code }: { code: string }) {
   const name = airportName(code);
   return (
-    <>
+    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
       <span className="text-[22px] font-black leading-tight">{name}</span>
       {name !== code && <span className="text-xs font-bold text-ink-muted">{code}</span>}
-    </>
+    </span>
   );
 }
 
@@ -61,7 +61,7 @@ export function SearchSummary({
           {t("flight.edit")}
         </button>
       </div>
-      <p className="-mt-1 text-sm text-ink-muted">
+      <p className="-mt-1 text-sm text-ink-muted [font-feature-settings:'palt']">
         {t("flight.summaryDates", {
           dates: friendlyRange(intent.departureDate, intent.returnDate),
         })}

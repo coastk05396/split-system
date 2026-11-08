@@ -172,9 +172,9 @@ function FareRow({ card, onWatch }: { card: FlightCard; onWatch: (card: FlightCa
               )
             )}
           </span>
-          <span className="flex flex-wrap gap-x-1 text-[13px] text-ink-muted">
+          <span className="flex flex-wrap gap-x-2 text-[13px] text-ink-muted">
             <span className="whitespace-nowrap">
-              {card.outboundDeparture} – {card.outboundArrival}・
+              {card.outboundDeparture} – {card.outboundArrival}
             </span>
             <span className="whitespace-nowrap">
               {card.stops === 0

@@ -509,7 +509,12 @@ it("fires a watch for a top fare in the cheapest third even with no history and 
   )
     .bind(user.userId)
     .all<{ status: string; intent: string }>();
-  expect(results.map((row) => [JSON.parse(row.intent).destination, row.status])).toEqual([
+  expect(
+    results.map((row) => [
+      (JSON.parse(row.intent) as { destination: string }).destination,
+      row.status,
+    ]),
+  ).toEqual([
     ["FUK", "active"],
     ["NGO", "triggered"],
   ]);
