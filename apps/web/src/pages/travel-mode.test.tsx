@@ -44,6 +44,11 @@ describe("Travel mode", () => {
           "page",
         );
       }
+      expect(
+        within(screen.getByRole("navigation", { name: n.bottom })).getByRole("link", {
+          name: n.travel[1],
+        }),
+      ).not.toHaveAttribute("aria-current");
       expect(screen.queryByRole("link", { name: n.split[2] })).toBeNull();
       expect(screen.queryByRole("link", { name: n.split[3] })).toBeNull();
       const bottom = within(screen.getByRole("navigation", { name: n.bottom }));

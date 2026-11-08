@@ -133,7 +133,7 @@ export function SettingsLink() {
     <Link
       to="/settings"
       aria-label={t("nav.settings")}
-      className="press-pill flex size-12 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+      className="press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
     >
       <Settings aria-hidden="true" className="size-[22px] stroke-sprout-900" strokeWidth={2} />
     </Link>
@@ -151,15 +151,15 @@ export function TravelHeader({
   return (
     <header className="mb-5 flex items-start justify-between gap-3 px-1">
       <div className="grid min-w-0 gap-1">
-        <h1 className="text-[32px] leading-[1.15] font-black">{headline(intent)}</h1>
+        <h1 className="text-[28px] leading-[1.15] font-black">{headline(intent)}</h1>
         <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>
       </div>
-      <div className="flex shrink-0 gap-2">
+      <div className="flex shrink-0 gap-1.5">
         <button
           type="button"
           aria-label={t("flight.radar")}
           onClick={onRadar}
-          className="press-pill flex size-12 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+          className="press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
         >
           <svg
             viewBox="0 0 24 24"

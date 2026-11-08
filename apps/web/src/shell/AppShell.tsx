@@ -63,7 +63,7 @@ function BottomBar() {
           <li key={tab.label} className="flex">
             <NavLink
               to={tab.to}
-              end={tab.to === "/"}
+              end={tab.to === "/" || tab.to.startsWith("/travel")}
               onPointerDown={tab.to === "/new" ? () => hapticTick(15) : undefined}
               className={({ isActive }) =>
                 `group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
@@ -122,7 +122,7 @@ function Sidebar() {
             <li key={tab.label}>
               <NavLink
                 to={tab.to}
-                end={tab.to === "/"}
+                end={tab.to === "/" || tab.to.startsWith("/travel")}
                 className={({ isActive }) =>
                   `press-pill relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
                     isActive ? "font-bold" : "text-white/85 hover:bg-white/10"
