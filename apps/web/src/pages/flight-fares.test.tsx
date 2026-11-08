@@ -37,6 +37,11 @@ const text = {
     results: "Search results",
     advice: "Deal commentary",
     price: "NT$ 25,000",
+    top: "Top",
+    cheapest: "Cheapest",
+    sort: "Sort fares",
+    caption: "Round-trip total · 1 adult",
+    dates: "Jan 8 – Jan 11",
     subtitle: "One adult · round-trip economy, in your Preferred currency.",
     watch: "Price Watch",
   },
@@ -49,6 +54,11 @@ const text = {
     results: "搜尋結果",
     advice: "票價短評",
     price: "NT$ 25,000",
+    top: "熱門",
+    cheapest: "最低價",
+    sort: "排序方式",
+    caption: "來回總價・1 位成人",
+    dates: "1/8（五）– 1/11（一）",
     subtitle: "一位成人・來回經濟艙，票價以偏好幣別顯示。",
     watch: "降價叫醒我",
   },
@@ -97,8 +107,8 @@ describe("Flight Radar fare carousel", () => {
       expect(carousel).toHaveAttribute("tabindex", "0");
       const cards = within(carousel).getAllByRole("article");
       expect(cards.map((card) => within(card).getByText(/Air$/).textContent)).toEqual([
-        "Example Air",
         "Second Air",
+        "Example Air",
         "Third Air",
       ]);
       const dots = within(screen.getByRole("group", { name: text[language].pages })).getAllByRole(
@@ -214,6 +224,66 @@ describe("Flight Radar fare carousel", () => {
       expect(carousel).toHaveAttribute("data-motion", "reduced");
       const price = within(carousel).getByText(text[language].price);
       expect(price.parentElement?.querySelector("[data-rolling]")).toBeNull();
+    },
+  );
+
+  const mixed = [
+    { ...fare("Plain Air", 18000) },
+    { ...fare("Top Dear Air", 30000), top: true },
+    { ...fare("Top Mid Air", 26000), top: true },
+    { ...fare("Other Air", 22000) },
+  ];
+  const order = (language: Language) =>
+    within(screen.getByRole("group", { name: text[language].fares }))
+      .getAllByRole("article")
+      .map((card) => within(card).getByText(/Air$/).textContent);
+
+  it.each(["en", "zh-TW"] as const)(
+    "lists top fares first, then switches to every fare by price and back in %s",
+    async (language) => {
+      const { api } = setup(language, mixed);
+      await explore(api, language);
+      await screen.findByRole("group", { name: text[language].fares });
+      const toggle = screen.getByRole("group", { name: text[language].sort });
+      const top = within(toggle).getByRole("button", { name: text[language].top });
+      const cheapest = within(toggle).getByRole("button", { name: text[language].cheapest });
+      expect(top).toHaveAttribute("aria-pressed", "true");
+      expect(order(language)).toEqual(["Top Dear Air", "Top Mid Air", "Plain Air", "Other Air"]);
+      fireEvent.click(cheapest);
+      expect(cheapest).toHaveAttribute("aria-pressed", "true");
+      expect(order(language)).toEqual(["Plain Air", "Other Air", "Top Mid Air", "Top Dear Air"]);
+      fireEvent.click(top);
+      expect(order(language)).toEqual(["Top Dear Air", "Top Mid Air", "Plain Air", "Other Air"]);
+    },
+  );
+
+  it("treats fares without top as not top, opens on the top view again after a new search", async () => {
+    const { api } = setup("en", threeFares);
+    await explore(api, "en");
+    await screen.findByRole("group", { name: text.en.fares });
+    expect(order("en")).toEqual(["Second Air", "Example Air", "Third Air"]);
+    fireEvent.click(screen.getByRole("button", { name: text.en.cheapest }));
+    await explore(api, "en");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: text.en.top })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "captions every card price and shows friendly dates, never ISO ones, in %s",
+    async (language) => {
+      const { api } = setup(language, threeFares);
+      await explore(api, language);
+      const carousel = await screen.findByRole("group", { name: text[language].fares });
+      const cards = within(carousel).getAllByRole("article");
+      for (const card of cards) {
+        expect(within(card).getByText(text[language].caption)).toBeVisible();
+        expect(within(card).getByText(text[language].dates)).toBeVisible();
+      }
+      expect(within(carousel).queryByText(/2027-01/)).toBeNull();
     },
   );
 });

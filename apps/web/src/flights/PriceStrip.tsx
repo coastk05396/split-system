@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
+import { friendlyDate, shortDate } from "./dates.js";
 
 type Tone = "cheap" | "normal" | "pricey";
 export interface StripDay {
@@ -14,6 +15,8 @@ export interface StripDay {
   /** The date's cheapest fare. */
   price: number;
   tone: Tone;
+  /** No other shown date is cheaper (a tie marks every cheapest date). */
+  lowest: boolean;
 }
 export interface PriceStripModel {
   days: StripDay[];
@@ -48,7 +51,7 @@ export function priceStrip(
   };
   const days = [...cheapest]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, price]) => ({ date, price, tone: tone(price) }));
+    .map(([date, price]) => ({ date, price, tone: tone(price), lowest: price === low }));
   const start = days.find((day) => day.date === reply.intent.departureDate);
   const cheapestDay = days.reduce((best, day) => (day.price < best.price ? day : best));
   const selected = days.find((day) => day.date === picked)?.date ?? (start ?? cheapestDay).date;
@@ -164,7 +167,7 @@ export function PriceStrip({
         aria-valuenow={index}
         aria-valuetext={
           current
-            ? `${current.date} · ${formatAmount(current.price, currency)} · ${toneLabel(current.tone)}`
+            ? `${friendlyDate(current.date)} · ${formatAmount(current.price, currency)} · ${toneLabel(current.tone)}${current.lowest ? ` · ${t("flight.stripLowest")}` : ""}`
             : undefined
         }
         data-motion={motion ? "full" : "reduced"}
@@ -187,15 +190,19 @@ export function PriceStrip({
       >
         {days.map((day) => (
           <div key={day.date} aria-hidden="true" className="strip-col">
+            <span className="strip-label">{day.lowest ? t("flight.stripLowest") : ""}</span>
+            <span className="strip-label">
+              {day.date === selected ? formatAmount(day.price, currency) : ""}
+            </span>
             <span
               className="strip-bar"
               data-tone={day.tone}
               data-selected={day.date === selected ? "true" : undefined}
               style={{
-                height: `calc((100% - 1.5rem) * ${String(Math.max(0.2, day.price / highest))})`,
+                height: `calc((100% - 3.75rem) * ${String(Math.max(0.2, day.price / highest))})`,
               }}
             />
-            <span className="text-xs text-ink-muted">{day.date.slice(5)}</span>
+            <span className="text-xs text-ink-muted">{shortDate(day.date)}</span>
           </div>
         ))}
         {!touched && motion && <span data-ghost aria-hidden="true" className="strip-ghost" />}

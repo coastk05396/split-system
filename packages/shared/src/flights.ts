@@ -64,6 +64,8 @@ export const flightFareSchema = z.object({
   stops: z.number().int().min(0).max(8),
   durationMinutes: z.number().int().positive().max(10_080),
   priceLevel: z.enum(["low", "typical", "high", "unknown"]),
+  /** Google listed it among its top flights; a source or cached fare without it is not top. */
+  top: z.boolean().optional(),
 });
 export type FlightFare = z.infer<typeof flightFareSchema>;
 export interface FlightCard extends FlightFare {

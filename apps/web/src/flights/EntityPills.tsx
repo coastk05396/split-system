@@ -1,5 +1,6 @@
 import { formatAmount, type FlightSearchIntent } from "@split/shared";
 import { t } from "../i18n/messages.js";
+import { shortDate } from "./dates.js";
 
 /**
  * The summary of the current search. Every pill opens or closes the editing panel; the optional
@@ -21,10 +22,9 @@ export function EntityPills({
   const { budget: _budget, ...withoutBudget } = intent;
   const { theme: _theme, ...withoutTheme } = intent;
   const pills: { id: string; text: string; remove?: () => void; removeLabel?: string }[] = [
-    { id: "route", text: `${t("flight.route")}: ${intent.origin} → ${intent.destination}` },
     {
-      id: "dates",
-      text: `${t("flight.dates")}: ${intent.departureDate} – ${intent.returnDate}`,
+      id: "route",
+      text: `${intent.origin} → ${intent.destination} ・ ${shortDate(intent.departureDate)}–${shortDate(intent.returnDate)}`,
     },
     ...(intent.budget !== undefined
       ? [

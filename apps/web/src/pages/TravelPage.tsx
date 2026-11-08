@@ -17,6 +17,7 @@ import { useSearchParams } from "react-router";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
+import { friendlyDate } from "../flights/dates.js";
 import { FareResults } from "../flights/FareResults.js";
 import { PriceStrip, priceStrip } from "../flights/PriceStrip.js";
 import { RouteGlobe, RouteLeg } from "../flights/RouteGlobe.js";
@@ -198,7 +199,8 @@ export function TravelPage() {
                   {card.intent.origin} → {card.intent.destination}
                 </span>
                 <span className="text-sm">
-                  {formatAmount(card.price, card.intent.currency)} · {card.intent.departureDate}
+                  {formatAmount(card.price, card.intent.currency)} ·{" "}
+                  {friendlyDate(card.intent.departureDate)}
                 </span>
               </button>
             ))}

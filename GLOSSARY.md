@@ -52,6 +52,10 @@ _Avoid_: Tag, search parameter
 The priced departure dates of the current Flight Radar search, side by side, so the User can compare what each date costs and switch which date's fares are shown.
 _Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
 
+**熱門 / 最低價 (Top / Cheapest)**:
+The two ways Flight Radar orders a search's fares. 熱門 puts the flights Google itself lists as top first and the rest by price; 最低價 puts every fare by price, cheapest first.
+_Avoid_: Recommended, sort by price
+
 **Adaptive Next-Move Chip**:
 One tappable follow-up under a finished Flight Radar search—such as leaving Thursday or allowing stops—chosen from the actual results and carrying a structured edit of the Entity Pills, so one tap re-runs the search without parsing a prompt.
 _Avoid_: Suggestion, quick reply

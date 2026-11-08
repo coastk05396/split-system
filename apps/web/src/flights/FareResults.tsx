@@ -4,6 +4,7 @@ import { primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
+import { friendlyRange } from "./dates.js";
 import { cardsOnDate } from "./PriceStrip.js";
 import { SplitFlap } from "./SplitFlap.js";
 
@@ -23,7 +24,10 @@ export function FareResults({
   date?: string | undefined;
   onWatch: (card: FlightCard) => void;
 }) {
+  // The view belongs to the reply it was chosen on, so a new search opens on 熱門 again.
+  const [view, setView] = useState<{ reply: FlightSearchReply; mode: SortMode } | null>(null);
   if (!pending && !reply) return null;
+  const mode = view && view.reply === reply ? view.mode : "top";
   const motion = !prefersReducedMotion();
   return (
     <section
@@ -50,15 +54,55 @@ export function FareResults({
         </div>
       )}
       {reply && reply.cards.length > 0 && (
-        // Keyed by date so a switch starts at the first card and the numbers roll again.
-        <FareCarousel
-          key={date}
-          cards={cardsOnDate(reply.cards, date)}
-          motion={motion}
-          onWatch={onWatch}
-        />
+        <>
+          <SortToggle
+            mode={mode}
+            onChange={(next) => {
+              setView({ reply, mode: next });
+            }}
+          />
+          {/* Keyed by date and view so a switch starts at the first card and the numbers roll again. */}
+          <FareCarousel
+            key={`${date ?? ""}-${mode}`}
+            cards={sortFares(cardsOnDate(reply.cards, date), mode)}
+            motion={motion}
+            onWatch={onWatch}
+          />
+        </>
       )}
     </section>
+  );
+}
+
+type SortMode = "top" | "cheapest";
+
+/** 熱門: Google's top fares first, then the rest by price. 最低價: everything by price. */
+export function sortFares(cards: FlightCard[], mode: SortMode): FlightCard[] {
+  const byPrice = (a: FlightCard, b: FlightCard) => a.price - b.price;
+  if (mode === "cheapest") return [...cards].sort(byPrice);
+  return [
+    ...cards.filter((card) => card.top === true),
+    ...cards.filter((card) => card.top !== true).sort(byPrice),
+  ];
+}
+
+function SortToggle({ mode, onChange }: { mode: SortMode; onChange: (mode: SortMode) => void }) {
+  return (
+    <div role="group" aria-label={t("flight.sort")} className="flex gap-2">
+      {(["top", "cheapest"] as const).map((key) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={mode === key}
+          onClick={() => {
+            onChange(key);
+          }}
+          className="press-pill min-h-11 min-w-20 rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 aria-pressed:border-sprout-900 aria-pressed:bg-sprout-900 aria-pressed:text-white"
+        >
+          {t(key === "top" ? "flight.sortTop" : "flight.sortCheapest")}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -186,11 +230,14 @@ function FareFace({
         </span>
       </div>
       <p className="text-sm text-ink-muted">
-        {card.intent.departureDate} – {card.intent.returnDate}
+        {friendlyRange(card.intent.departureDate, card.intent.returnDate)}
       </p>
-      <p className="text-3xl font-bold">
-        <SplitFlap text={formatAmount(card.price, card.intent.currency)} roll={roll} />
-      </p>
+      <div>
+        <p className="text-3xl font-bold">
+          <SplitFlap text={formatAmount(card.price, card.intent.currency)} roll={roll} />
+        </p>
+        <p className="text-sm text-ink-muted">{t("flight.priceCaption")}</p>
+      </div>
       <p className="font-bold">{card.airline}</p>
       <p className="text-sm">
         {t("flight.outbound")}: <SplitFlap text={card.outboundDeparture} roll={roll} /> →{" "}

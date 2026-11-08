@@ -156,7 +156,7 @@ describe("Flight Radar", () => {
     fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
     const pills = await screen.findByRole("region", { name: "目前搜尋條件" });
     expect(
-      await within(pills).findByRole("button", { name: "日期: 2027-01-08 – 2027-01-11" }),
+      await within(pills).findByRole("button", { name: "TPE → OKA ・ 1/8–1/11" }),
     ).toBeVisible();
     fireEvent.click(within(pills).getByRole("button", { name: "移除預算上限" }));
     await waitFor(() => {
@@ -188,13 +188,13 @@ describe("Flight Radar", () => {
     expect(prompt.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
     await explore(api, "en");
-    const route = within(pills).getByRole("button", { name: "Route: TPE → OKA" });
+    const route = within(pills).getByRole("button", { name: "TPE → OKA ・ Jan 8–Jan 11" });
     expect(route).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(route);
     expect(route).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(route);
     expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
-    fireEvent.click(within(pills).getByRole("button", { name: /^Dates:/ }));
+    fireEvent.click(route);
     const panel = screen.getByRole("form", { name: "Edit search condition" });
     fireEvent.change(within(panel).getByLabelText("Origin airport"), { target: { value: "KHH" } });
     fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
@@ -209,8 +209,8 @@ describe("Flight Radar", () => {
     expect(requests[1]).not.toHaveProperty("prompt");
   });
   it.each([
-    ["en", "Last search", "Route: TPE → OKA", "Search flights"],
-    ["zh-TW", "上次搜尋", "航線: TPE → OKA", "搜尋航班"],
+    ["en", "Last search", "TPE → OKA ・ Jan 8–Jan 11", "Search flights"],
+    ["zh-TW", "上次搜尋", "TPE → OKA ・ 1/8–1/11", "搜尋航班"],
   ] as const)(
     "restores the last search in %s without searching, until a new search runs",
     async (language, label, route, search) => {
@@ -395,7 +395,7 @@ describe("Flight Radar", () => {
     fireEvent.click(within(advice).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
     const pills = screen.getByRole("region", { name: "Active search conditions" });
     expect(
-      await within(pills).findByRole("button", { name: "Dates: 2027-01-07 – 2027-01-10" }),
+      await within(pills).findByRole("button", { name: "TPE → OKA ・ Jan 7–Jan 10" }),
     ).toBeVisible();
     await waitFor(() => {
       expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);

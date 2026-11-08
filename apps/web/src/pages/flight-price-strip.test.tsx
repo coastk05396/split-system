@@ -48,9 +48,9 @@ const text = {
     hint: "Shorter bars are cheaper. Swipe or tap to pick a departure date.",
     cheaper: "▼ NT$ 4,000 cheaper",
     pricier: "▲ NT$ 5,000 pricier",
-    startValue: "2027-01-08 · NT$ 25,000 · Normal",
-    firstValue: "2027-01-07 · NT$ 21,000 · Cheap",
-    lastValue: "2027-01-09 · NT$ 30,000 · Pricey",
+    startValue: "Jan 8 · NT$ 25,000 · Normal",
+    firstValue: "Jan 7 · NT$ 21,000 · Cheap · Lowest",
+    lastValue: "Jan 9 · NT$ 30,000 · Pricey",
   },
   "zh-TW": {
     prompt: "想去哪裡？",
@@ -62,9 +62,9 @@ const text = {
     hint: "越矮越便宜，左右滑動或點一下選出發日。",
     cheaper: "▼ 便宜 NT$ 4,000",
     pricier: "▲ 貴 NT$ 5,000",
-    startValue: "2027-01-08 · NT$ 25,000 · 普通",
-    firstValue: "2027-01-07 · NT$ 21,000 · 便宜",
-    lastValue: "2027-01-09 · NT$ 30,000 · 偏貴",
+    startValue: "1/8（五） · NT$ 25,000 · 普通",
+    firstValue: "1/7（四） · NT$ 21,000 · 便宜 · 最低",
+    lastValue: "1/9（六） · NT$ 30,000 · 偏貴",
   },
 } as const;
 
@@ -159,7 +159,7 @@ describe("Flight Radar Price Strip", () => {
       fireEvent.keyDown(slider, { key: "ArrowLeft" });
       expect(slider).toHaveAttribute("aria-valuenow", "0");
       expect(slider).toHaveAttribute("aria-valuetext", text[language].firstValue);
-      expect(shownAirlines(language)).toEqual(["Early Air", "Cheapest Early Air"]);
+      expect(shownAirlines(language)).toEqual(["Cheapest Early Air", "Early Air"]);
       expect(await screen.findByText(text[language].cheaper)).toBeVisible();
 
       fireEvent.keyDown(slider, { key: "ArrowRight" });
@@ -195,7 +195,7 @@ describe("Flight Radar Price Strip", () => {
     expect(shownAirlines("en")).toEqual(["Late Air"]);
     fireEvent.keyDown(slider, { key: "Home" });
     expect(slider).toHaveAttribute("aria-valuenow", "0");
-    expect(shownAirlines("en")).toEqual(["Early Air", "Cheapest Early Air"]);
+    expect(shownAirlines("en")).toEqual(["Cheapest Early Air", "Early Air"]);
   });
 
   it("switches the cards by tapping and dragging along the strip", async () => {
@@ -204,7 +204,7 @@ describe("Flight Radar Price Strip", () => {
     layOut(slider);
     fireEvent.pointerDown(slider, { clientX: 10, pointerId: 1 });
     expect(slider).toHaveAttribute("aria-valuenow", "0");
-    expect(shownAirlines("en")).toEqual(["Early Air", "Cheapest Early Air"]);
+    expect(shownAirlines("en")).toEqual(["Cheapest Early Air", "Early Air"]);
     fireEvent.pointerMove(slider, { clientX: 150, pointerId: 1 });
     expect(slider).toHaveAttribute("aria-valuenow", "1");
     fireEvent.pointerMove(slider, { clientX: 290, pointerId: 1 });
@@ -277,5 +277,34 @@ describe("Flight Radar Price Strip", () => {
     });
     expect(screen.getByRole("slider")).toHaveAttribute("aria-valuenow", "0");
     expect(shownAirlines("en")).toEqual(["Only Air"]);
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "shows the selected bar's price and labels only the cheapest date in %s",
+    async (language) => {
+      const lowest = language === "en" ? "Lowest" : "最低";
+      const slider = (setup(language), await explore(language));
+      const strip = screen.getByRole("region", { name: text[language].bar });
+      expect(within(strip).getAllByText(lowest)).toHaveLength(1);
+      expect(within(strip).getByText("NT$ 25,000")).toBeVisible();
+      expect(within(strip).queryByText("NT$ 21,000")).toBeNull();
+      fireEvent.keyDown(slider, { key: "ArrowLeft" });
+      expect(within(strip).getByText("NT$ 21,000")).toBeVisible();
+      expect(within(strip).queryByText("NT$ 25,000")).toBeNull();
+      expect(within(strip).getAllByText(lowest)).toHaveLength(1);
+    },
+  );
+
+  it("labels every cheapest date on a tie", async () => {
+    setup("en", [
+      fare("A Air", 20000, "2027-01-07", "2027-01-10"),
+      fare("B Air", 25000, "2027-01-08", "2027-01-11"),
+      fare("C Air", 20000, "2027-01-09", "2027-01-12"),
+    ]);
+    const slider = await explore("en");
+    const strip = screen.getByRole("region", { name: text.en.bar });
+    expect(within(strip).getAllByText("Lowest")).toHaveLength(2);
+    fireEvent.keyDown(slider, { key: "End" });
+    expect(slider).toHaveAttribute("aria-valuetext", "Jan 9 · NT$ 20,000 · Cheap · Lowest");
   });
 });
