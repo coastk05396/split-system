@@ -23,6 +23,9 @@ export interface FakeApi {
   /** A fare may sit on another departure date than the searched one, as the neighbour days do. */
   flightFares: (FlightFare & { departureDate?: string; returnDate?: string })[];
   flightsDegraded: boolean;
+  /** Fare Snapshots the Price Strip reads, and the query strings it asked with. */
+  flightPriceStrip: { date: string; price: number; fetchedAt: number }[];
+  flightPriceStripQueries: string[];
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];
@@ -131,6 +134,8 @@ export function createFakeApi(): FakeApi {
 
   const api: FakeApi = {
     flightsDegraded: false,
+    flightPriceStrip: [],
+    flightPriceStripQueries: [],
     flightHighlights: [],
     flightHistory: null,
     flightWatches: [],
@@ -287,6 +292,11 @@ export function createFakeApi(): FakeApi {
         return authed === undefined
           ? error("UNAUTHORIZED", 401)
           : json({ highlights: api.flightHighlights });
+      case "GET /api/v1/flights/price-strip":
+        api.flightPriceStripQueries.push(url.search);
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ days: api.flightPriceStrip });
       case "POST /api/v1/flights/search": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const parsed = flightSearchRequestSchema.safeParse(await readJson(init));

@@ -69,7 +69,7 @@ The cheapest fare found for one route and one departure day, stored with the tim
 _Avoid_: Cached search, fare history (that is the daily minimum behind Deal Signals)
 
 **Price Strip**:
-The month view of Flight Radar that shows the cheapest fare of each day, built only from Fare Snapshots and never from a live search. A route with no snapshots shows no strip. Not the same as Date Tiles, which price only the dates of the current search.
+The month view of Flight Radar that shows the cheapest fare of each day, built only from Fare Snapshots and never from a live search. A route with no snapshots shows a plain "prices unavailable" line instead of bars. Its prices are for a round trip with a 3-day stay, 1 adult, economy, so they can differ from the trip the User chose. Not the same as Date Tiles, which price only the dates of the current search.
 _Avoid_: Price calendar
 
 **熱門 (Top)**:

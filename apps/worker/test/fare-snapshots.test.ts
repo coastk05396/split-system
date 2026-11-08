@@ -97,3 +97,46 @@ it("never fetches snapshots for a signed-in user's request", async () => {
   expect(res.status).toBe(200);
   expect(await count()).toEqual(before);
 });
+
+const seed = (destination: string, date: string, price: number, currency = "TWD") =>
+  env.DB.prepare(
+    "INSERT INTO flight_fare_snapshots(origin,destination,currency,departure_date,price,fetched_at) VALUES('TPE',?,?,?,?,?)",
+  )
+    .bind(destination, currency, date, price, 1_700_000_000_000)
+    .run();
+
+it("serves a month of snapshots with their fetch time to a signed-in user, without fetching", async () => {
+  const user = await signIn("google", uniqueSub("strip"));
+  let fetched = 0;
+  const app = createApp(
+    deps(() => {
+      fetched++;
+      return Promise.resolve([]);
+    }),
+  );
+  await seed("OKA", "2031-03-05", 4100);
+  await seed("OKA", "2031-03-02", 5200);
+  await seed("OKA", "2031-04-01", 3000);
+  await seed("OKA", "2031-03-09", 3900, "USD");
+  await seed("KIX", "2031-03-03", 3000);
+  const get = (query: string, headers: HeadersInit = bearer(user.accessToken)) =>
+    app.request(`https://split.test/api/v1/flights/price-strip?${query}`, { headers }, env);
+
+  const res = await get("origin=TPE&destination=OKA&currency=TWD&month=2031-03");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({
+    days: [
+      { date: "2031-03-02", price: 5200, fetchedAt: 1_700_000_000_000 },
+      { date: "2031-03-05", price: 4100, fetchedAt: 1_700_000_000_000 },
+    ],
+  });
+  const none = await get("origin=TPE&destination=NRT&currency=TWD&month=2031-03");
+  expect(await none.json()).toEqual({ days: [] });
+  expect(fetched).toBe(0);
+
+  expect((await get("origin=TPE&destination=OKA&currency=TWD&month=2031-3")).status).toBe(400);
+  expect((await get("origin=TPE&destination=oka&currency=TWD&month=2031-03")).status).toBe(400);
+  expect((await get("origin=TPE&destination=OKA&currency=XXX&month=2031-03")).status).toBe(400);
+  expect((await get("origin=TPE&destination=OKA&currency=TWD&month=2031-13")).status).toBe(400);
+  expect((await get("origin=TPE&destination=OKA&currency=TWD&month=2031-03", {})).status).toBe(401);
+});

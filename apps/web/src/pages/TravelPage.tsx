@@ -20,6 +20,7 @@ import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { friendlyDate } from "../flights/dates.js";
 import { FareResults } from "../flights/FareResults.js";
 import { DateTiles, dateTiles } from "../flights/DateTiles.js";
+import { PriceStrip } from "../flights/PriceStrip.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -237,6 +238,7 @@ export function TravelPage() {
           />
         </div>
       )}
+      {!panelOpen && <PriceStrip intent={active} />}
       {!searched && highlightsSection}
       {pendingWatch && !lineWatch.isSuccess && (
         <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">

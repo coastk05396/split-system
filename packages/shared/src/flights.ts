@@ -130,3 +130,8 @@ export interface FlightHighlightsReply {
   highlights: FlightCard[];
   recipes?: import("./flight-discovery.js").VibeRecipe[];
 }
+
+/** Fare Snapshots of one route and month, read by the Price Strip; `fetchedAt` is epoch ms. */
+export interface FlightPriceStripReply {
+  days: { date: string; price: number; fetchedAt: number }[];
+}
