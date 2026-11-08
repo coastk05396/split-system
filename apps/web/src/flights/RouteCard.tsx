@@ -105,7 +105,7 @@ export function RouteCard({
                 onClick={() => {
                   onSort(key);
                 }}
-                className={`press-pill flex min-h-11 items-center gap-0.5 rounded-full border-[1.5px] border-sprout-700 px-2.5 text-xs font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-sprout-700 ${active ? "bg-sprout-600 text-white" : "bg-white text-sprout-900 hover:bg-sprout-100"}`}
+                className={`press-pill flex min-h-11 items-center rounded-full border-[1.5px] border-sprout-700 px-1 text-xs font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-sprout-700 ${active ? "bg-sprout-600 text-white" : "bg-white text-sprout-900 hover:bg-sprout-100"}`}
               >
                 {t(`flight.sort${label}`)}
                 <span aria-hidden="true" className={active ? "" : "invisible"}>
