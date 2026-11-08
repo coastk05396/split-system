@@ -57,12 +57,19 @@ export function FlightPriceWatchButton({
     </button>
   );
 }
+export const RADAR_ID = "price-watch-radar";
+
 export function FlightPriceWatches({
   card,
   onClose,
+  open,
+  onOpenChange,
 }: {
   card: FlightCard | null;
   onClose: () => void;
+  /** The radar list is expanded (the header bell opens it). */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const { session, state } = useAuth();
   const userId = state.status === "signedIn" ? state.user.id : null;
@@ -86,7 +93,14 @@ export function FlightPriceWatches({
   });
   return (
     <>
-      <details className="mt-6 surface-card rounded-3xl border border-sprout-200 bg-white p-5">
+      <details
+        id={RADAR_ID}
+        open={open}
+        onToggle={(event) => {
+          onOpenChange(event.currentTarget.open);
+        }}
+        className="mt-6 scroll-mt-4 surface-card rounded-3xl border border-sprout-200 bg-white p-5"
+      >
         <summary className="cursor-pointer font-bold">{t("flight.myWatches")}</summary>
         <section aria-label={t("flight.myWatches")} className="mt-4 grid gap-3">
           {watches.isPending && <p role="status">{t("app.loading")}</p>}

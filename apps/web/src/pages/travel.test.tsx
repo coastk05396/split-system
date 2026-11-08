@@ -44,7 +44,7 @@ async function explore(
 describe("Flight Radar", () => {
   it("opens from both Travel links and redirects the old Rich Menu address", async () => {
     const { router } = renderApp({ path: "/trips/latest", cookieUser: makeUser("Rick") });
-    expect(await screen.findByRole("heading", { name: "航班雷達" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "下一站，沖繩！" })).toBeVisible();
     expect(router.state.location.pathname).toBe("/travel");
     for (const name of ["底部導覽", "側邊導覽"]) {
       expect(
@@ -58,7 +58,7 @@ describe("Flight Radar", () => {
       path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
     });
-    expect(await screen.findByRole("heading", { name: "Flight Radar" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Next stop, Okinawa!" })).toBeVisible();
     await openSearchPanel();
     fireEvent.change(screen.getByLabelText("Destination airport"), { target: { value: "NRT" } });
     fireEvent.change(screen.getByLabelText("Departure date"), { target: { value: "2027-01-08" } });
@@ -91,7 +91,7 @@ describe("Flight Radar", () => {
   it("offers a direct Google link when live pricing is blocked", async () => {
     const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     api.flightsDegraded = true;
-    await screen.findByRole("heading", { name: "航班雷達" });
+    await screen.findByRole("heading", { name: "下一站，沖繩！" });
     await openSearchPanel();
     fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
     fireEvent.change(screen.getByLabelText("出發日期"), { target: { value: "2027-01-08" } });
@@ -255,10 +255,13 @@ describe("Flight Radar", () => {
         path: "/travel",
         cookieUser: { ...makeUser("Rick"), language },
       });
-      await screen.findByRole("heading", { name: /^(Flight Radar|航班雷達)$/ });
+      await screen.findByRole("heading", { name: /^(Next stop, Okinawa!|下一站，沖繩！)$/ });
       expect(screen.queryByRole("region", { name: barName })).toBeNull();
-      // Only the summary card's own one-tap Search exists until the panel opens.
-      expect(screen.getAllByRole("button", { name: searchName })).toHaveLength(1);
+      // Only the route card's own one-tap search exists until the panel opens.
+      expect(screen.queryByRole("button", { name: searchName })).toBeNull();
+      expect(
+        screen.getAllByRole("button", { name: /^(Explore flights again|重新探索航班)$/ }),
+      ).toHaveLength(1);
 
       await openSearchPanel();
       const bar = screen.getByRole("region", { name: barName });
@@ -360,7 +363,7 @@ describe("Flight Radar", () => {
 
   it("no longer shows the Vibe Recipe deck", async () => {
     renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language: "en" } });
-    await screen.findByRole("heading", { name: "Flight Radar" });
+    await screen.findByRole("heading", { name: "Next stop, Okinawa!" });
     expect(screen.queryByRole("region", { name: "Vibe Recipes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Warm island" })).toBeNull();
   });
@@ -473,7 +476,7 @@ describe("Flight Radar", () => {
       cookieUser: makeUser("Rick"),
     });
 
-    expect(await screen.findByRole("heading", { name: "航班雷達" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "下一站，沖繩！" })).toBeVisible();
     expect(api.requests.some((r) => r.route === "POST /api/v1/flights/search")).toBe(false);
   });
 });

@@ -17,19 +17,18 @@ import { useSearchParams } from "react-router";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
-import { SearchSummary } from "../flights/SearchSummary.js";
+import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { friendlyDate } from "../flights/dates.js";
 import { FareResults } from "../flights/FareResults.js";
 import { PriceStrip, priceStrip } from "../flights/PriceStrip.js";
-import { RouteGlobe, RouteLeg } from "../flights/RouteGlobe.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
-import { ScreenHeader, failureMessage, primaryButton } from "../groups/ui.js";
+import { failureMessage, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 
-import { FlightPriceWatches, useCreateWatch } from "../flights/FlightPriceWatches.js";
+import { FlightPriceWatches, RADAR_ID, useCreateWatch } from "../flights/FlightPriceWatches.js";
 
 /** The advice is one short sentence on screen; the rest of the grounded commentary is dropped. */
 const firstSentence = (text: string) => /^.*?(?:[。！？]|[.!?](?=\s|$))/s.exec(text)?.[0] ?? text;
@@ -43,6 +42,7 @@ export function TravelPage() {
   const [lastSearch] = useState(() => (intentFromQuery(params) ? null : readLastSearch()));
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [radarOpen, setRadarOpen] = useState(false);
   // The date picked on the strip belongs to the reply it was picked on; the ghost finger is first-touch.
   const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
   const [stripTouched, setStripTouched] = useState(false);
@@ -175,10 +175,14 @@ export function TravelPage() {
   const strip = priceStrip(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
-      <ScreenHeader
-        title={t("flight.title")}
-        action={<RouteGlobe origin={active.origin} destination={active.destination} />}
-        subtitle={<RouteLeg origin={active.origin} destination={active.destination} />}
+      <TravelHeader
+        intent={active}
+        onRadar={() => {
+          setRadarOpen(true);
+          document
+            .getElementById(RADAR_ID)
+            ?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth" });
+        }}
       />
       <form
         className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-sprout-700"
@@ -207,7 +211,7 @@ export function TravelPage() {
           {t("flight.explore")}
         </button>
       </form>
-      <SearchSummary
+      <RouteCard
         intent={active}
         pending={search.isPending}
         open={panelOpen}
@@ -330,6 +334,8 @@ export function TravelPage() {
       {searched && highlightsSection}
       {/* Last in the page flow before the bar, whose spacer must be the final element. */}
       <FlightPriceWatches
+        open={radarOpen}
+        onOpenChange={setRadarOpen}
         card={watchCard}
         onClose={() => {
           setWatchCard(null);

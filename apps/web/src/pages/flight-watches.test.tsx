@@ -22,7 +22,7 @@ it.each(["en", "zh-TW"] as const)(
       },
     });
     const en = language === "en";
-    await screen.findByRole("heading", { name: en ? "Flight Radar" : "航班雷達" });
+    await screen.findByRole("heading", { name: en ? "Next stop, Okinawa!" : "下一站，沖繩！" });
     await openSearchPanel();
     fireEvent.change(screen.getByLabelText(en ? "Destination airport" : "目的地機場"), {
       target: { value: "NRT" },
@@ -62,7 +62,7 @@ it.each(["en", "zh-TW"] as const)(
 );
 
 async function searchNrt() {
-  await screen.findByRole("heading", { name: "航班雷達" });
+  await screen.findByRole("heading", { name: "下一站，沖繩！" });
   await openSearchPanel();
   fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
   fireEvent.change(screen.getByLabelText("出發日期"), { target: { value: "2027-01-08" } });
