@@ -24,6 +24,12 @@ function find(code: string): Airport {
   return AIRPORTS.find((a) => a.code === code) ?? { code, en: code, zhTW: code };
 }
 
+/** The airport's name in the current language; an unknown airport is its own code. */
+export function airportName(code: string): string {
+  const airport = find(code);
+  return getLocale() === "en" ? airport.en : airport.zhTW;
+}
+
 function label(code: string): string {
   const airport = AIRPORTS.find((a) => a.code === code);
   if (!airport) return code;

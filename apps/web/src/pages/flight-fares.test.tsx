@@ -337,7 +337,7 @@ describe("Flight Radar results first", () => {
   );
 
   it("scrolls to the results when a search finishes, jumping under reduced motion", async () => {
-    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
     scroll.mockClear();
     const { api } = setup("en", threeFares);
     await explore(api, "en");
@@ -353,7 +353,7 @@ describe("Flight Radar results first", () => {
 
   it("glides to the results when motion is allowed", async () => {
     window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
-    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
     scroll.mockClear();
     const { api } = setup("en", threeFares);
     await explore(api, "en");

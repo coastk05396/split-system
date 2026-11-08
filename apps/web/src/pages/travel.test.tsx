@@ -161,7 +161,9 @@ describe("Flight Radar", () => {
     fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
     const pills = await screen.findByRole("region", { name: "目前搜尋條件" });
     expect(
-      await within(pills).findByRole("button", { name: "TPE → OKA ・ 1/8–1/11" }),
+      await within(screen.getByRole("region", { name: "搜尋摘要" })).findByText(
+        "1/8（五）– 1/11（一）・1 位成人",
+      ),
     ).toBeVisible();
     fireEvent.click(within(pills).getByRole("button", { name: "移除預算上限" }));
     await waitFor(() => {
@@ -189,11 +191,11 @@ describe("Flight Radar", () => {
     });
     // The prompt bar comes first; the panel is closed until a pill is tapped.
     const prompt = await screen.findByLabelText("Where would you like to go?");
-    const pills = screen.getByRole("region", { name: "Active search conditions" });
+    const pills = screen.getByRole("region", { name: "Search summary" });
     expect(prompt.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
     await explore(api, "en");
-    const route = within(pills).getByRole("button", { name: "TPE → OKA ・ Jan 8–Jan 11" });
+    const route = within(pills).getByRole("button", { name: "Edit" });
     expect(route).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(route);
     expect(route).toHaveAttribute("aria-expanded", "true");
@@ -214,8 +216,8 @@ describe("Flight Radar", () => {
     expect(requests[1]).not.toHaveProperty("prompt");
   });
   it.each([
-    ["en", "Last search", "TPE → OKA ・ Jan 8–Jan 11", "Search flights"],
-    ["zh-TW", "上次搜尋", "TPE → OKA ・ 1/8–1/11", "搜尋航班"],
+    ["en", "Last search", "Edit", "Search flights"],
+    ["zh-TW", "上次搜尋", "修改", "搜尋航班"],
   ] as const)(
     "restores the last search in %s without searching, until a new search runs",
     async (language, label, route, search) => {
@@ -227,7 +229,7 @@ describe("Flight Radar", () => {
 
       const { api } = renderApp({ path: "/travel", cookieUser: user });
       const pills = await screen.findByRole("region", {
-        name: /^(Active search conditions|目前搜尋條件)$/,
+        name: /^(Search summary|搜尋摘要)$/,
       });
       expect(await within(pills).findByRole("button", { name: route })).toBeVisible();
       expect(screen.getByText(label)).toBeVisible();
@@ -255,7 +257,8 @@ describe("Flight Radar", () => {
       });
       await screen.findByRole("heading", { name: /^(Flight Radar|航班雷達)$/ });
       expect(screen.queryByRole("region", { name: barName })).toBeNull();
-      expect(screen.queryByRole("button", { name: searchName })).toBeNull();
+      // Only the summary card's own one-tap Search exists until the panel opens.
+      expect(screen.getAllByRole("button", { name: searchName })).toHaveLength(1);
 
       await openSearchPanel();
       const bar = screen.getByRole("region", { name: barName });
@@ -398,9 +401,10 @@ describe("Flight Radar", () => {
     await explore(api, "en");
     const ideas = await screen.findByRole("region", { name: "Ideas to try" });
     fireEvent.click(within(ideas).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
-    const pills = screen.getByRole("region", { name: "Active search conditions" });
     expect(
-      await within(pills).findByRole("button", { name: "TPE → OKA ・ Jan 7–Jan 10" }),
+      await within(screen.getByRole("region", { name: "Search summary" })).findByText(
+        "Jan 7 – Jan 10 · 1 adult",
+      ),
     ).toBeVisible();
     await waitFor(() => {
       expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);

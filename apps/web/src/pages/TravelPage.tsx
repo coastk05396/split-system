@@ -17,6 +17,7 @@ import { useSearchParams } from "react-router";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
+import { SearchSummary } from "../flights/SearchSummary.js";
 import { friendlyDate } from "../flights/dates.js";
 import { FareResults } from "../flights/FareResults.js";
 import { PriceStrip, priceStrip } from "../flights/PriceStrip.js";
@@ -206,6 +207,17 @@ export function TravelPage() {
           {t("flight.explore")}
         </button>
       </form>
+      <SearchSummary
+        intent={active}
+        pending={search.isPending}
+        open={panelOpen}
+        onToggle={() => {
+          setPanelOpen((open) => !open);
+        }}
+        onSearch={() => {
+          runIntent(active);
+        }}
+      />
       <EntityPills
         intent={active}
         pending={search.isPending}

@@ -1,6 +1,5 @@
 import { formatAmount, type FlightSearchIntent } from "@split/shared";
 import { t } from "../i18n/messages.js";
-import { shortDate } from "./dates.js";
 
 /**
  * The summary of the current search. Every pill opens or closes the editing panel; the optional
@@ -22,10 +21,6 @@ export function EntityPills({
   const { budget: _budget, ...withoutBudget } = intent;
   const { theme: _theme, ...withoutTheme } = intent;
   const pills: { id: string; text: string; remove?: () => void; removeLabel?: string }[] = [
-    {
-      id: "route",
-      text: `${intent.origin} → ${intent.destination} ・ ${shortDate(intent.departureDate)}–${shortDate(intent.returnDate)}`,
-    },
     ...(intent.budget !== undefined
       ? [
           {
@@ -75,6 +70,7 @@ export function EntityPills({
         ]
       : []),
   ];
+  if (pills.length === 0) return null;
   return (
     <section aria-label={t("flight.conditions")} className="flex flex-wrap gap-2">
       {pills.map((pill) => (
