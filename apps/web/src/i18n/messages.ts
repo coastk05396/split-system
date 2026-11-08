@@ -113,6 +113,7 @@ const zhTW = {
   "nav.split": "分帳",
   "nav.explore": "探索",
   "nav.flights": "航班",
+  "nav.watches": "追蹤",
   "nav.new": "新增",
   "nav.newExpense": "新增一筆",
   "nav.stats": "統計",

@@ -116,17 +116,13 @@ describe("Flight Radar header and route card", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "opens the Price Watch radar from a 44 px bell in %s",
+    "links a 44 px bell to the Price Watch page in %s",
     async (language) => {
       setup(language);
-      const bell = await screen.findByRole("button", { name: text[language].bell });
+      const bell = await screen.findByRole("link", { name: text[language].bell });
       expect(bell).toHaveClass("min-h-11", "min-w-11");
+      expect(bell).toHaveAttribute("href", "/travel/watches");
       expect(bell.querySelector("svg")).not.toBeNull();
-      const radar = screen.getByText(text[language].watches).closest("details");
-      expect(radar).not.toHaveAttribute("open");
-      fireEvent.click(bell);
-      expect(radar).toHaveAttribute("open");
-      expect(screen.getByRole("region", { name: text[language].watches })).toBeVisible();
     },
   );
 

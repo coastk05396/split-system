@@ -1,4 +1,4 @@
-import { Compass, Plus } from "lucide-react";
+import { Bell, Compass, Plus } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
@@ -42,6 +42,11 @@ const TRAVEL_TABS: readonly Tab[] = [
     label: "nav.flights",
     icon: ({ active: _a, ...props }) => <CuteTripPlaneIcon {...props} />,
   },
+  {
+    to: "/travel/watches",
+    label: "nav.watches",
+    icon: ({ active: _a, ...props }) => <Bell {...props} />,
+  },
 ];
 
 /** The tabs of the current mode: [bottom bar, sidebar]. */
@@ -58,7 +63,7 @@ function BottomBar() {
       aria-label={t("nav.bottom")}
       className="glass-nav fixed inset-x-0 bottom-0 z-10 border-t border-sprout-200/80 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <ul className={`mx-auto grid h-17 max-w-md ${travel ? "grid-cols-3" : "grid-cols-5"}`}>
+      <ul className={`mx-auto grid h-17 max-w-md ${travel ? "grid-cols-4" : "grid-cols-5"}`}>
         {bottom.map((tab) => (
           <li key={tab.label} className="flex">
             <NavLink

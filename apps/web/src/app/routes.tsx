@@ -126,6 +126,7 @@ export const routes: RouteObject[] = [
             loader: ({ request }) => redirect(`/travel/flights${new URL(request.url).search}`),
           },
           { path: "flights", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
+          { path: "watches", lazy: page(() => import("../pages/WatchesPage.js"), "WatchesPage") },
         ],
       },
       { path: "trips/latest", loader: () => redirect("/travel/flights") },
