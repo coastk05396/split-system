@@ -161,9 +161,9 @@ describe("Flight Radar", () => {
     fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
     const pills = await screen.findByRole("region", { name: "目前搜尋條件" });
     expect(
-      await within(screen.getByRole("region", { name: "搜尋摘要" })).findByText(
-        "1/8（五）– 1/11（一）・1 位成人",
-      ),
+      await within(screen.getByRole("region", { name: "搜尋摘要" })).findByRole("button", {
+        name: /1\/8（五）– 1\/11（一）$/,
+      }),
     ).toBeVisible();
     fireEvent.click(within(pills).getByRole("button", { name: "移除預算上限" }));
     await waitFor(() => {
@@ -195,7 +195,7 @@ describe("Flight Radar", () => {
     expect(prompt.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
     await explore(api, "en");
-    const route = within(pills).getByRole("button", { name: "Edit" });
+    const route = within(pills).getByRole("button", { name: /Jan 8 – Jan 11$/ });
     expect(route).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(route);
     expect(route).toHaveAttribute("aria-expanded", "true");
@@ -216,8 +216,8 @@ describe("Flight Radar", () => {
     expect(requests[1]).not.toHaveProperty("prompt");
   });
   it.each([
-    ["en", "Last search", "Edit", "Search flights"],
-    ["zh-TW", "上次搜尋", "修改", "搜尋航班"],
+    ["en", "Last search", /Jan 8 – Jan 11$/, "Search flights"],
+    ["zh-TW", "上次搜尋", /1\/8（五）– 1\/11（一）$/, "搜尋航班"],
   ] as const)(
     "restores the last search in %s without searching, until a new search runs",
     async (language, label, route, search) => {
@@ -405,9 +405,9 @@ describe("Flight Radar", () => {
     const ideas = await screen.findByRole("region", { name: "Ideas to try" });
     fireEvent.click(within(ideas).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
     expect(
-      await within(screen.getByRole("region", { name: "Search summary" })).findByText(
-        "Jan 7 – Jan 10 · 1 adult",
-      ),
+      await within(screen.getByRole("region", { name: "Search summary" })).findByRole("button", {
+        name: /Jan 7 – Jan 10$/,
+      }),
     ).toBeVisible();
     await waitFor(() => {
       expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);

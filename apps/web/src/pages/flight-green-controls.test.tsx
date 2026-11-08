@@ -85,7 +85,9 @@ describe("Flight Radar green controls", () => {
       // Dimming with opacity would drag the label under 4.5:1.
       expect(button.className).not.toMatch(/opacity/);
     }
-    expect(screen.getByRole("button", { name: "修改" }).className).not.toMatch(/opacity/);
+    expect(
+      screen.getByRole("button", { name: /^台北桃園 → .* 1\/8（五）– 1\/11（一）$/ }).className,
+    ).not.toMatch(/opacity/);
   });
 
   it("colours tiles, fare cards and tags green, with amber only on 最低 and 強烈買", async () => {

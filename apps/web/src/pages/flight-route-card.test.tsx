@@ -21,7 +21,8 @@ const text = {
     card: "Search summary",
     origin: "Taipei Taoyuan",
     destination: "Okinawa",
-    dates: "Jan 8 – Jan 11 · 1 adult",
+    dates: "Jan 8 – Jan 11",
+    chip: "Taipei Taoyuan → Okinawa Jan 8 – Jan 11",
     edit: "Edit",
     search: "Search again",
     prompt: "Where would you like to go?",
@@ -39,7 +40,8 @@ const text = {
     card: "搜尋摘要",
     origin: "台北桃園",
     destination: "沖繩",
-    dates: "1/8（五）– 1/11（一）・1 位成人",
+    dates: "1/8（五）– 1/11（一）",
+    chip: "台北桃園 → 沖繩 1/8（五）– 1/11（一）",
     edit: "修改",
     search: "重新探索航班",
     prompt: "想去哪裡？",
@@ -85,7 +87,7 @@ describe("Flight Radar header and route card", () => {
       expect(within(card).getByText("OKA")).toBeVisible();
       expect(within(card).getByText("TPE")).toHaveClass("text-[40px]");
       expect(within(card).getByText(text[language].leg)).toBeVisible();
-      expect(within(card).getByText(text[language].dates)).toBeVisible();
+      expect(within(card).getByRole("button", { name: text[language].chip })).toBeVisible();
       // The route-and-dates pill is gone; the other pills stay below the card.
       expect(screen.queryByRole("button", { name: /^TPE → OKA ・/ })).toBeNull();
       const pills = screen.getByRole("region", { name: text[language].pills });
@@ -143,22 +145,38 @@ describe("Flight Radar header and route card", () => {
   });
 
   it.each(["en", "zh-TW"] as const)(
-    "opens and closes the editing panel with the edit button in %s",
+    "opens and closes the editing panel with the route chip in %s",
     async (language) => {
       setup(language);
-      const card = await screen.findByRole("region", { name: text[language].card });
-      const edit = within(card).getByRole("button", { name: text[language].edit });
-      expect(edit).toHaveAttribute("aria-expanded", "false");
-      expect(edit.querySelector("svg")).not.toBeNull();
-      fireEvent.click(edit);
-      expect(edit).toHaveAttribute("aria-expanded", "true");
+      await explore(language);
+      const card = screen.getByRole("region", { name: text[language].card });
+      const chip = within(card).getByRole("button", { name: text[language].chip });
+      expect(chip).toHaveAttribute("aria-expanded", "false");
+      expect(chip.querySelector("svg")).not.toBeNull();
+      expect(within(card).queryByRole("button", { name: text[language].edit })).toBeNull();
+      fireEvent.click(chip);
+      expect(chip).toHaveAttribute("aria-expanded", "true");
       expect(
         screen.getByRole("form", { name: /^(Edit search condition|修改搜尋條件)$/ }),
       ).toBeVisible();
-      fireEvent.click(edit);
+      fireEvent.click(chip);
       expect(
         screen.queryByRole("form", { name: /^(Edit search condition|修改搜尋條件)$/ }),
       ).toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "keeps the route chip on one line with a 44 px target and no unknown trip facts in %s",
+    async (language) => {
+      setup(language);
+      await explore(language);
+      const card = screen.getByRole("region", { name: text[language].card });
+      const chip = within(card).getByRole("button", { name: text[language].chip });
+      expect(chip).toHaveClass("min-h-11", "max-w-full", "whitespace-nowrap");
+      expect(chip.className).not.toMatch(/opacity|break-/);
+      // One-way and passenger count are not part of the search yet, so they are never shown.
+      expect(chip).not.toHaveTextContent(/單程|One-way|人|passenger/);
     },
   );
 
@@ -179,13 +197,10 @@ describe("Flight Radar header and route card", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "gives both buttons 44 px targets and wraps long names in %s",
+    "gives the search button a 48 px target in %s",
     async (language) => {
       setup(language);
       const card = await screen.findByRole("region", { name: text[language].card });
-      expect(within(card).getByRole("button", { name: text[language].edit })).toHaveClass(
-        "min-h-11",
-      );
       expect(within(card).getByRole("button", { name: text[language].search })).toHaveClass(
         "min-h-12",
       );

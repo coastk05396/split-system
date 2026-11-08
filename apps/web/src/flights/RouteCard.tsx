@@ -41,9 +41,9 @@ function leg(origin: string, destination: string): string | undefined {
 
 /**
  * The route hero card of the current search: large codes with city names, a plane line carrying
- * the distance and flight time, the dates and travellers, 修改 to open the editing panel and a
- * one-tap 重新探索航班. While the panel is open its own Search button takes over, so the card
- * shows only 修改.
+ * the distance and flight time, the Route Chip (route and dates, a pencil, opens the editing panel) and
+ * a one-tap 重新探索航班. While the panel is open its own Search button takes over, so the card
+ * shows only the chip.
  */
 export function RouteCard({
   intent,
@@ -64,11 +64,27 @@ export function RouteCard({
       aria-label={t("flight.summaryCard")}
       className="mb-4 grid gap-3.5 rounded-[28px] border border-[#c4e4d3] bg-sprout-100 p-[18px]"
     >
-      <p className="text-sm font-medium text-sprout-700 [font-feature-settings:'palt']">
-        {t("flight.summaryDates", {
-          dates: friendlyRange(intent.departureDate, intent.returnDate),
-        })}
-      </p>
+      <button
+        type="button"
+        disabled={pending}
+        aria-expanded={open}
+        onClick={onToggle}
+        className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 justify-self-start rounded-full border-[1.5px] border-sprout-700 bg-white px-3.5 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
+      >
+        <span className="min-w-0 truncate">
+          {t("flight.routeChip", {
+            route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
+            dates: friendlyRange(intent.departureDate, intent.returnDate),
+          })}
+        </span>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
+        >
+          <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
+        </svg>
+      </button>
       <div className="flex items-center justify-between gap-2">
         <Place code={intent.origin} />
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
@@ -107,22 +123,6 @@ export function RouteCard({
             {t("flight.exploreAgain")}
           </button>
         )}
-        <button
-          type="button"
-          disabled={pending}
-          aria-expanded={open}
-          onClick={onToggle}
-          className="press-pill flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-sprout-900 bg-white px-3.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
-          >
-            <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
-          </svg>
-          {t("flight.edit")}
-        </button>
       </div>
     </section>
   );
