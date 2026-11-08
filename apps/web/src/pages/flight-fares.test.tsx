@@ -295,12 +295,12 @@ describe("Flight Radar compact price list", () => {
     rows(language).map((row) => within(row).getByText(/Air$/).textContent);
 
   it.each(["en", "zh-TW"] as const)(
-    "lists every fare in one list by price, tagging top fares, with no toggle in %s",
+    "lists every fare in one list by price, tagging top fares without reordering in %s",
     async (language) => {
       const { api } = setup(language, mixed);
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
-      expect(screen.queryByRole("group", { name: text[language].sort })).toBeNull();
+      expect(screen.getByRole("group", { name: text[language].sort })).toBeVisible();
       expect(screen.queryByRole("button", { name: text[language].cheapest })).toBeNull();
       expect(order(language)).toEqual(["Plain Air", "Other Air", "Top Mid Air", "Top Dear Air"]);
       expect(

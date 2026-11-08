@@ -18,7 +18,7 @@ import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { friendlyDate } from "../flights/dates.js";
-import { FareResults } from "../flights/FareResults.js";
+import { DEFAULT_SORT, FareResults, type FareSort } from "../flights/FareResults.js";
 import { DateTiles, dateTiles } from "../flights/DateTiles.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
@@ -42,6 +42,7 @@ export function TravelPage() {
   const [lastSearch] = useState(() => (intentFromQuery(params) ? null : readLastSearch()));
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [sort, setSort] = useState<FareSort>(DEFAULT_SORT);
   // The date picked on a tile belongs to the reply it was picked on.
   const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
   const [active, setIntent] = useState(
@@ -216,6 +217,11 @@ export function TravelPage() {
         onSearch={() => {
           runIntent(active);
         }}
+        sort={sort}
+        onSort={(key) => {
+          // A second tap on the active button reverses it; a new button starts ascending.
+          setSort((s) => ({ key, descending: s.key === key && !s.descending }));
+        }}
       />
       <EntityPills
         intent={active}
@@ -295,6 +301,7 @@ export function TravelPage() {
           pending={search.isPending}
           reply={reply}
           date={tiles?.selected}
+          sort={sort}
           onWatch={setWatchCard}
         />
       </div>

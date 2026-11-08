@@ -5,6 +5,7 @@ import { getLocale, t } from "../i18n/messages.js";
 import { travelButton } from "../groups/ui.js";
 import { airportName } from "./AirportPicker.js";
 import { friendlyRange } from "./dates.js";
+import type { FareSort } from "./FareResults.js";
 
 const plane =
   "M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z";
@@ -51,12 +52,16 @@ export function RouteCard({
   open,
   onToggle,
   onSearch,
+  sort,
+  onSort,
 }: {
   intent: FlightSearchIntent;
   pending: boolean;
   open: boolean;
   onToggle: () => void;
   onSearch: () => void;
+  sort: FareSort;
+  onSort: (key: FareSort["key"]) => void;
 }) {
   const estimate = leg(intent.origin, intent.destination);
   return (
@@ -64,27 +69,53 @@ export function RouteCard({
       aria-label={t("flight.summaryCard")}
       className="mb-4 grid gap-3.5 rounded-[28px] border border-[#c4e4d3] bg-sprout-100 p-[18px]"
     >
-      <button
-        type="button"
-        disabled={pending}
-        aria-expanded={open}
-        onClick={onToggle}
-        className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 justify-self-start rounded-full border-[1.5px] border-sprout-700 bg-white px-3.5 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
-      >
-        <span className="min-w-0 truncate">
-          {t("flight.routeChip", {
-            route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
-            dates: friendlyRange(intent.departureDate, intent.returnDate),
-          })}
-        </span>
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
+      <div className="flex min-w-0 items-center gap-1.5">
+        <button
+          type="button"
+          disabled={pending}
+          aria-expanded={open}
+          onClick={onToggle}
+          className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 rounded-full border-[1.5px] border-sprout-700 bg-white px-3.5 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
         >
-          <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
-        </svg>
-      </button>
+          <span className="min-w-0 truncate">
+            {t("flight.routeChip", {
+              route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
+              dates: friendlyRange(intent.departureDate, intent.returnDate),
+            })}
+          </span>
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
+          >
+            <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
+          </svg>
+        </button>
+        <div role="group" aria-label={t("flight.sort")} className="flex shrink-0 gap-1">
+          {(["price", "time"] as const).map((key) => {
+            const active = sort.key === key;
+            const label = key === "price" ? "Price" : "Time";
+            const state = active && sort.descending ? "Desc" : "Asc";
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                aria-label={t(`flight.sort${label}${state}`)}
+                onClick={() => {
+                  onSort(key);
+                }}
+                className={`press-pill flex min-h-11 items-center gap-0.5 rounded-full border-[1.5px] border-sprout-700 px-2.5 text-xs font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-sprout-700 ${active ? "bg-sprout-600 text-white" : "bg-white text-sprout-900 hover:bg-sprout-100"}`}
+              >
+                {t(`flight.sort${label}`)}
+                <span aria-hidden="true" className={active ? "" : "invisible"}>
+                  {sort.descending && active ? "↓" : "↑"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div className="flex items-center justify-between gap-2">
         <Place code={intent.origin} />
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
