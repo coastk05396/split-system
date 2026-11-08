@@ -120,10 +120,14 @@ export const routes: RouteObject[] = [
       {
         path: "travel",
         children: [
-          // 探索 is a placeholder until the explore page lands; old links keep their search.
+          // Old /travel?... links (bookmarks, LINE portal, Price Watch) keep their search on 航班.
           {
             index: true,
-            loader: ({ request }) => redirect(`/travel/flights${new URL(request.url).search}`),
+            loader: ({ request }) => {
+              const { search } = new URL(request.url);
+              return search ? redirect(`/travel/flights${search}`) : null;
+            },
+            lazy: page(() => import("../pages/ExplorePage.js"), "ExplorePage"),
           },
           { path: "flights", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
         ],

@@ -48,6 +48,10 @@ _Avoid_: Subscription, price tracker
 The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to the travel buttons (分帳, 探索, 航班) and drop the expense-splitting ones. The URL is its only state, and 分帳 leaves it for 首頁.
 _Avoid_: Travel tab, trip mode (Trip is the disabled Group feature)
 
+**探索 (Explore page)**:
+The landing at `/travel` with no search parameters: a destination hero showing today's lowest direct fare, and a 小芽 prompt card that hands a sentence to 航班's prompt search. Amber marks only its 最低 pill.
+_Avoid_: Home, discover
+
 **Entity Pill**:
 One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the current search, and tapping one opens the editing panel.
 _Avoid_: Tag, search parameter

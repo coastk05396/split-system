@@ -73,7 +73,7 @@ const text = {
 type Language = keyof typeof text;
 
 function setup(language: Language, fares = threeDays, intent = exact) {
-  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
+  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightFares = fares;
   app.api.flightPromptIntent = intent;
   return app;

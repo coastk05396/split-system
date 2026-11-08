@@ -89,7 +89,7 @@ function setup(
   language: Language,
   fares: (ReturnType<typeof fare> & { top?: boolean })[] = [fare("Example Air", 25000)],
 ) {
-  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
+  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightFares = fares;
   return app;
 }

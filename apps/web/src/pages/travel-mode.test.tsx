@@ -64,7 +64,7 @@ describe("Travel mode", () => {
     expect(labels(bottom)).toEqual(["首頁", "旅遊", "新增", "統計", "設定"]);
     fireEvent.click(within(bottom).getByRole("link", { name: "旅遊" }));
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
-    expect(router.state.location.pathname).toBe("/travel/flights");
+    expect(router.state.location.pathname).toBe("/travel");
     expect(labels(screen.getByRole("navigation", { name: "底部導覽" }))).toEqual([
       "分帳",
       "探索",
@@ -90,12 +90,6 @@ describe("Travel mode", () => {
       "統計",
       "設定",
     ]);
-  });
-
-  it("sends 探索 and a bare /travel to the Flight Radar until the explore page exists", async () => {
-    const { router } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
-    expect(await screen.findByRole("heading", { name: "下一站，沖繩！" })).toBeVisible();
-    expect(router.state.location.pathname).toBe("/travel/flights");
   });
 
   it("redirects an old /travel?... link to /travel/flights keeping every parameter", async () => {

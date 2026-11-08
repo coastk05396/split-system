@@ -9,11 +9,10 @@ import {
   type FlightSearchIntent,
   type FlightSearchRequest,
   type FlightSearchReply,
-  type FlightHighlightsReply,
 } from "@split/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
@@ -28,6 +27,7 @@ import { failureMessage, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 
+import { useHighlights } from "../flights/use-highlights.js";
 import { FlightPriceWatches, RADAR_ID, useCreateWatch } from "../flights/FlightPriceWatches.js";
 
 /** The advice is one short sentence on screen; the rest of the grounded commentary is dropped. */
@@ -54,13 +54,7 @@ export function TravelPage() {
     setIntent(intent);
     setRevision((r) => r + 1);
   };
-  const highlights = useQuery({
-    queryKey: ["flights", "highlights", currency],
-    queryFn: ({ signal }) =>
-      readWithRev<FlightHighlightsReply>(
-        session.fetch(`/api/v1/flights/highlights?currency=${currency}`, { signal }),
-      ),
-  });
+  const highlights = useHighlights(currency);
   // Advice is progressive: cards render from the search reply, and this never blocks or errors them.
   const advise = useMutation({
     mutationFn: (request: FlightAdviceRequest) =>
@@ -101,6 +95,9 @@ export function TravelPage() {
   // The LINE portal bubble opens /travel with its search in the query: run it once, no parse.
   const portalIntent = useRef(intentFromQuery(params));
   // A LINE chat tap by someone not yet signed up adds `watch=line&fare=`; the User confirms it below.
+  const navigate = useNavigate();
+  const stateOf = useLocation().state as { prompt?: unknown } | null;
+  const handedPrompt = useRef(typeof stateOf?.prompt === "string" ? stateOf.prompt : "");
   const pendingFare = useRef(params.get("watch") === "line" ? Number(params.get("fare")) : 0);
   const [pendingWatch, setPendingWatch] = useState<{
     intent: FlightSearchIntent;
@@ -123,7 +120,13 @@ export function TravelPage() {
     const fare = pendingFare.current;
     portalIntent.current = null;
     pendingFare.current = 0;
-    if (intent) runIntent(intent); // once, on arrival
+    if (intent)
+      runIntent(intent); // once, on arrival
+    else if (handedPrompt.current) {
+      // 探索 hands its 小芽 prompt over in the history state; a refresh must not repeat it.
+      search.mutate({ prompt: handedPrompt.current, defaults: active });
+      navigate(".", { replace: true, state: null });
+    }
     if (intent && Number.isInteger(fare) && fare > 0) setPendingWatch({ intent, fare });
   }, []);
 

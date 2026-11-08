@@ -55,7 +55,7 @@ describe("Flight Radar", () => {
   });
   it("prices an English round trip in the Preferred currency and shows the Google handoff", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
     });
     expect(await screen.findByRole("heading", { name: "Next stop, Okinawa!" })).toBeVisible();
@@ -81,7 +81,7 @@ describe("Flight Radar", () => {
   });
 
   it("returns signed-out visitors to Flight Radar after sign-in", async () => {
-    const { router } = renderApp({ path: "/travel" });
+    const { router } = renderApp({ path: "/travel/flights" });
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/sign-in");
     });
@@ -89,7 +89,7 @@ describe("Flight Radar", () => {
   });
 
   it("offers a direct Google link when live pricing is blocked", async () => {
-    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
+    const { api } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
     api.flightsDegraded = true;
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     await openSearchPanel();
@@ -104,7 +104,7 @@ describe("Flight Radar", () => {
   });
   it("runs a verified highlight in one tap and shows history only after 14 observed days", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
     });
     const intent = {
@@ -153,7 +153,7 @@ describe("Flight Radar", () => {
     expect(screen.getByText("Price percentile: 7")).toBeVisible();
   });
   it("mixes the last result with a Soul Prompt and edits Entity Pills without another prompt parse", async () => {
-    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
+    const { api } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
     await explore(api, "zh-TW");
     fireEvent.change(screen.getByLabelText("想去哪裡？"), {
       target: { value: "下個月週末四天，一萬五以內不要紅眼" },
@@ -186,7 +186,7 @@ describe("Flight Radar", () => {
   });
   it("summarises the search in pills and edits the route in a panel that opens and closes", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     // The prompt bar comes first; the panel is closed until a pill is tapped.
@@ -222,12 +222,12 @@ describe("Flight Radar", () => {
     "restores the last search in %s without searching, until a new search runs",
     async (language, label, route, search) => {
       const user = { ...makeUser("Rick"), language };
-      const first = renderApp({ path: "/travel", cookieUser: user });
+      const first = renderApp({ path: "/travel/flights", cookieUser: user });
       await explore(first.api, language);
       expect(screen.queryByText(label)).toBeNull();
       cleanup();
 
-      const { api } = renderApp({ path: "/travel", cookieUser: user });
+      const { api } = renderApp({ path: "/travel/flights", cookieUser: user });
       const pills = await screen.findByRole("region", {
         name: /^(Search summary|搜尋摘要)$/,
       });
@@ -252,7 +252,7 @@ describe("Flight Radar", () => {
     "keeps Search in a bottom bar in %s only while the panel is open and searches the displayed intent",
     async (language, barName, searchName, destinationName) => {
       const { api } = renderApp({
-        path: "/travel",
+        path: "/travel/flights",
         cookieUser: { ...makeUser("Rick"), language },
       });
       await screen.findByRole("heading", { name: /^(Next stop, Okinawa!|下一站，沖繩！)$/ });
@@ -288,7 +288,7 @@ describe("Flight Radar", () => {
 
   it("rejects a past departure date in the calendar and in the search", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     await openSearchPanel();
@@ -325,7 +325,7 @@ describe("Flight Radar", () => {
         setItem.call(this, key, value);
       });
       const { api } = renderApp({
-        path: "/travel",
+        path: "/travel/flights",
         cookieUser: { ...makeUser("Rick"), language: "en" },
       });
       await openSearchPanel();
@@ -347,7 +347,7 @@ describe("Flight Radar", () => {
       // 2026-12-03T17:00Z is 2026-12-04 01:00 in Taiwan.
       vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-03T17:00:00Z") });
       const { api } = renderApp({
-        path: "/travel",
+        path: "/travel/flights",
         cookieUser: { ...makeUser("Rick"), language: "en" },
       });
       await openSearchPanel();
@@ -362,7 +362,7 @@ describe("Flight Radar", () => {
   });
 
   it("no longer shows the Vibe Recipe deck", async () => {
-    renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language: "en" } });
+    renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language: "en" } });
     await screen.findByRole("heading", { name: "Next stop, Okinawa!" });
     expect(screen.queryByRole("region", { name: "Vibe Recipes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Warm island" })).toBeNull();
@@ -370,7 +370,7 @@ describe("Flight Radar", () => {
 
   it("renders fares immediately, then reveals commentary and Adaptive Next-Move Chips", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     const release = api.holdResponses("POST /api/v1/flights/advise");
@@ -398,7 +398,7 @@ describe("Flight Radar", () => {
 
   it("applies a chip's intent patch to the pills and searches directly without a prompt parse", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     await explore(api, "en");
@@ -425,7 +425,7 @@ describe("Flight Radar", () => {
 
   it("keeps fares and shows no error when advice fails", async () => {
     const { api } = renderApp({
-      path: "/travel",
+      path: "/travel/flights",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     api.failNext("POST /api/v1/flights/advise", "INTERNAL", 500);

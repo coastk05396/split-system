@@ -55,7 +55,7 @@ const intent: FlightSearchIntent = {
   directOnly: false,
 };
 
-function open(language: Language, path = "/travel") {
+function open(language: Language, path = "/travel/flights") {
   const rendered = renderApp({ path, cookieUser: { ...makeUser("Rick"), language } });
   const w = words[language];
   const field = async (name: "origin" | "destination") => {
