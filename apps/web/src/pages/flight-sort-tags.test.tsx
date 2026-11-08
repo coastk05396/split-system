@@ -34,14 +34,14 @@ const fare = (
   top,
 });
 
-// Cheapest: Noon. Fastest: Dawn. Red-eye: Dawn (02:30), Late (22:00), Edge (04:59); not Five (05:00) or Early (21:59).
+// Departures use the container's real "YYYY-MM-DDTHH:MM" format. Cheapest: Noon. Fastest: Dawn. Red-eye: Dawn (02:30), Late (22:00), Edge (04:59); not Five (05:00) or Early (21:59).
 const fares = [
-  fare("Noon Air", 20000, "12:00", 200),
-  fare("Dawn Air", 25000, "02:30", 150),
-  fare("Late Air", 30000, "22:00", 180, true),
-  fare("Edge Air", 31000, "04:59", 190),
-  fare("Five Air", 32000, "05:00", 210),
-  fare("Early Air", 33000, "21:59", 220),
+  fare("Noon Air", 20000, "2026-12-01T12:00", 200),
+  fare("Dawn Air", 25000, "2026-12-01T02:30", 150),
+  fare("Late Air", 30000, "2026-12-01T22:00", 180, true),
+  fare("Edge Air", 31000, "2026-12-01T04:59", 190),
+  fare("Five Air", 32000, "2026-12-01T05:00", 210),
+  fare("Early Air", 33000, "2026-12-01T21:59", 220),
 ];
 
 const text = {

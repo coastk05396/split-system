@@ -106,9 +106,9 @@ export function sortFares(cards: FlightCard[], sort: FareSort = DEFAULT_SORT): F
 
 type FareTag = "cheapest" | "fastest" | "redEye";
 
-/** Red-eye: departs before 05:00 or from 22:00. Anything that is not "HH:MM" is not red-eye. */
+/** Red-eye: departs before 05:00 or from 22:00. Reads "HH:MM" and the source's "YYYY-MM-DDTHH:MM"; anything else is not red-eye. */
 function isRedEye(departure: string): boolean {
-  const hour = /^(\d{1,2}):\d{2}/.exec(departure)?.[1];
+  const hour = /(?:T|^)(\d{1,2}):\d{2}/.exec(departure)?.[1];
   return hour !== undefined && (Number(hour) < 5 || Number(hour) >= 22);
 }
 
