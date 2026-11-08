@@ -15,6 +15,7 @@ import {
 } from "./AirportPicker.js";
 import { input } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
+import { PartyPanel, toParty, type Party } from "./PartyPanel.js";
 
 interface Draft {
   origin: string;
@@ -25,14 +26,20 @@ interface Draft {
   theme: string;
   excludeRedEye: boolean;
   directOnly: boolean;
+  party: Party;
 }
+
+const DAY = 86_400_000;
+const threeDaysAfter = (date: string) =>
+  new Date(Date.parse(date) + 3 * DAY).toISOString().slice(0, 10);
 
 function toDraft(intent: FlightSearchIntent): Draft {
   return {
     origin: intent.origin,
     destination: intent.destination,
     departureDate: intent.departureDate,
-    returnDate: intent.returnDate,
+    // A one-way search has no return date: offer a sensible one if the User switches back.
+    returnDate: intent.returnDate ?? threeDaysAfter(intent.departureDate),
     budget:
       intent.budget === undefined
         ? ""
@@ -40,6 +47,7 @@ function toDraft(intent: FlightSearchIntent): Draft {
     theme: intent.theme ?? "",
     excludeRedEye: intent.excludeRedEye,
     directOnly: intent.directOnly,
+    party: toParty(intent),
   };
 }
 
@@ -83,7 +91,12 @@ export function FlightSearchForm({
       origin: draft.origin,
       destination: draft.destination,
       departureDate: draft.departureDate,
-      returnDate: draft.returnDate,
+      // Defaults stay absent so a plain search keeps the same intent, cache key and Price Watch as before.
+      returnDate: draft.party.oneWay ? undefined : draft.returnDate,
+      tripType: draft.party.oneWay ? "one-way" : undefined,
+      adults: draft.party.adults === 1 ? undefined : draft.party.adults,
+      children: draft.party.children === 0 ? undefined : draft.party.children,
+      cabin: draft.party.cabin === "economy" ? undefined : draft.party.cabin,
       currency,
       budget: budget?.value,
       excludeRedEye: draft.excludeRedEye,
@@ -159,20 +172,28 @@ export function FlightSearchForm({
           required
         />
       </label>
-      <label className="grid gap-1 text-sm font-bold">
-        {t("flight.return")}
-        <input
-          className={input}
-          name="returnDate"
-          min={draft.departureDate > today ? draft.departureDate : today}
-          value={draft.returnDate}
-          onChange={(e) => {
-            set({ returnDate: e.target.value });
-          }}
-          type="date"
-          required
-        />
-      </label>
+      {!draft.party.oneWay && (
+        <label className="grid gap-1 text-sm font-bold">
+          {t("flight.return")}
+          <input
+            className={input}
+            name="returnDate"
+            min={draft.departureDate > today ? draft.departureDate : today}
+            value={draft.returnDate}
+            onChange={(e) => {
+              set({ returnDate: e.target.value });
+            }}
+            type="date"
+            required
+          />
+        </label>
+      )}
+      <PartyPanel
+        value={draft.party}
+        onChange={(patch) => {
+          setDraft((d) => ({ ...d, party: { ...d.party, ...patch } }));
+        }}
+      />
       <label className="grid gap-1 text-sm font-bold">
         {t("flight.budget")} · {currency}
         <input

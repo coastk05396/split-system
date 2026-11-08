@@ -99,12 +99,19 @@ export function flightBubble(card: FlightCard): FlexBubble {
     tag: `${card.stops === 0 ? "直飛" : `轉機 ${card.stops} 次`} · ${duration(card.durationMinutes)}`,
     body: [
       row(`${place ?? ""} ${intent.destination}`.trim(), { size: "md", weight: "bold" }),
-      row(`${monthDay(intent.departureDate)} – ${monthDay(intent.returnDate)}`, { color: MUTED }),
+      row(
+        intent.returnDate === undefined
+          ? monthDay(intent.departureDate)
+          : `${monthDay(intent.departureDate)} – ${monthDay(intent.returnDate)}`,
+        { color: MUTED },
+      ),
       row(formatAmount(card.price, intent.currency), { size: "xl", weight: "bold" }),
-      row("含稅來回", { color: MUTED }),
+      row(intent.returnDate === undefined ? "含稅單程" : "含稅來回", { color: MUTED }),
       { type: "separator" },
       row(`${sameLine("去", card.outboundDeparture, card.outboundArrival)} · ${card.airline}`),
-      row(sameLine("回", card.inboundDeparture, card.inboundArrival)),
+      ...(intent.returnDate === undefined
+        ? []
+        : [row(sameLine("回", card.inboundDeparture, card.inboundArrival))]),
       { type: "separator" },
       row(first, { color: MUTED }),
       row(second, { color: MUTED }),

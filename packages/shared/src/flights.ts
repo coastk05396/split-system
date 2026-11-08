@@ -3,11 +3,20 @@ import { currencyCodeSchema, localDateSchema } from "./schemas.js";
 
 export const airportCodeSchema = z.string().regex(/^[A-Z]{3}$/);
 export const FLIGHT_THEMES = ["warm_island", "food_city", "solo"] as const;
+export const FLIGHT_CABINS = ["economy", "premium-economy", "business", "first"] as const;
+export type FlightCabin = (typeof FLIGHT_CABINS)[number];
 export const flightSearchFields = z.object({
   origin: airportCodeSchema.default("TPE"),
   destination: airportCodeSchema,
   departureDate: localDateSchema,
-  returnDate: localDateSchema,
+  /** Absent for a one-way search. */
+  returnDate: localDateSchema.optional(),
+  /** Absent means round trip. */
+  tripType: z.enum(["round-trip", "one-way"]).optional(),
+  /** The party, priced as a whole by the source. Absent means 1 adult, 0 children, economy. Infants are out. */
+  adults: z.number().int().min(1).max(9).optional(),
+  children: z.number().int().min(0).max(8).optional(),
+  cabin: z.enum(FLIGHT_CABINS).optional(),
   currency: currencyCodeSchema.default("TWD"),
   budget: z.number().int().positive().max(99_999_999).optional(),
   excludeRedEye: z.boolean().default(false),
@@ -15,11 +24,46 @@ export const flightSearchFields = z.object({
   theme: z.enum(FLIGHT_THEMES).optional(),
 });
 export const flightSearchDefaultsSchema = flightSearchFields.partial();
-export const flightSearchIntentSchema = flightSearchFields.refine(
-  (i) => i.returnDate > i.departureDate,
-  { path: ["returnDate"], message: "DATE_INVALID" },
-);
+export const flightSearchIntentSchema = flightSearchFields
+  .refine(
+    (i) =>
+      i.tripType === "one-way"
+        ? i.returnDate === undefined
+        : i.returnDate !== undefined && i.returnDate > i.departureDate,
+    { path: ["returnDate"], message: "DATE_INVALID" },
+  )
+  .refine((i) => (i.adults ?? 1) + (i.children ?? 0) <= 9, {
+    path: ["children"],
+    message: "VALIDATION_FAILED",
+  });
 export type FlightSearchIntent = z.infer<typeof flightSearchIntentSchema>;
+
+/** The party and cabin of a search with the absent-means-default rules applied. */
+export function partyOf(
+  intent: Pick<FlightSearchIntent, "adults" | "children" | "cabin" | "tripType">,
+): {
+  adults: number;
+  children: number;
+  people: number;
+  cabin: FlightCabin;
+  oneWay: boolean;
+} {
+  const adults = intent.adults ?? 1;
+  const children = intent.children ?? 0;
+  return {
+    adults,
+    children,
+    people: adults + children,
+    cabin: intent.cabin ?? "economy",
+    oneWay: intent.tripType === "one-way",
+  };
+}
+
+/** True for the fixed search that Fare History and Fare Snapshots describe: 1 adult, economy, round trip. */
+export function isStandardSearch(intent: FlightSearchIntent): boolean {
+  const party = partyOf(intent);
+  return party.people === 1 && party.cabin === "economy" && !party.oneWay;
+}
 /**
  * A search carried in a query string (the LINE postback and the LIFF portal link share it);
  * null when anything is missing or invalid.
@@ -30,11 +74,15 @@ export function intentToQuery(intent: FlightSearchIntent): string {
     origin: intent.origin,
     destination: intent.destination,
     departureDate: intent.departureDate,
-    returnDate: intent.returnDate,
     currency: intent.currency,
     excludeRedEye: intent.excludeRedEye ? "1" : "0",
     directOnly: intent.directOnly ? "1" : "0",
   });
+  if (intent.returnDate !== undefined) params.set("returnDate", intent.returnDate);
+  if (intent.tripType !== undefined) params.set("tripType", intent.tripType);
+  if (intent.adults !== undefined) params.set("adults", String(intent.adults));
+  if (intent.children !== undefined) params.set("children", String(intent.children));
+  if (intent.cabin !== undefined) params.set("cabin", intent.cabin);
   if (intent.budget !== undefined) params.set("budget", String(intent.budget));
   if (intent.theme !== undefined) params.set("theme", intent.theme);
   return params.toString();
@@ -45,6 +93,10 @@ export function intentFromQuery(params: URLSearchParams): FlightSearchIntent | n
     destination: params.get("destination") ?? undefined,
     departureDate: params.get("departureDate") ?? undefined,
     returnDate: params.get("returnDate") ?? undefined,
+    tripType: params.get("tripType") ?? undefined,
+    adults: params.has("adults") ? Number(params.get("adults")) : undefined,
+    children: params.has("children") ? Number(params.get("children")) : undefined,
+    cabin: params.get("cabin") ?? undefined,
     currency: params.get("currency") ?? undefined,
     budget: params.has("budget") ? Number(params.get("budget")) : undefined,
     excludeRedEye: params.get("excludeRedEye") === "1",
@@ -84,10 +136,7 @@ export interface FlightSearchReply {
 
 /** Published fast-flights protobuf fields; URL handoff also works when the source is unavailable. */
 export function googleFlightsUrl(
-  intent: Pick<
-    FlightSearchIntent,
-    "origin" | "destination" | "departureDate" | "returnDate" | "currency"
-  > &
+  intent: Pick<FlightSearchIntent, "origin" | "destination" | "departureDate" | "currency"> &
     Partial<FlightSearchIntent>,
 ): string {
   const text = (field: number, value: string): number[] => {
@@ -108,16 +157,21 @@ export function googleFlightsUrl(
     ];
     return [26, bytes.length, ...bytes];
   };
+  // Passenger field 8 repeats (1 adult, 2 child); seat field 9 is 1 to 4; trip field 19 is 1 round trip, 2 one way.
+  const party = partyOf(intent);
+  const { oneWay } = party;
   const bytes = [
     ...leg(intent.departureDate, intent.origin, intent.destination),
-    ...leg(intent.returnDate, intent.destination, intent.origin),
+    ...(oneWay || intent.returnDate === undefined
+      ? []
+      : leg(intent.returnDate, intent.destination, intent.origin)),
     72,
-    1,
-    64,
-    1,
+    FLIGHT_CABINS.indexOf(party.cabin) + 1,
+    ...Array.from({ length: party.adults }, () => [64, 1]).flat(),
+    ...Array.from({ length: party.children }, () => [64, 2]).flat(),
     152,
     1,
-    1,
+    oneWay ? 2 : 1,
   ];
   const tfs = btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")

@@ -55,17 +55,73 @@ class TopAndOtherFlights(unittest.TestCase):
         self.assertEqual(min(f["price"] for f in fares), 6700)
 
 
+class EmptyCabin(unittest.TestCase):
+    def test_both_lists_null_is_no_fares(self):
+        payload = "data:" + json.dumps([None, None, None, None, None, None, None, [None, [[], []]]]) + ",x"
+        self.assertEqual(parse_both(payload), [])
+
+    def test_empty_lists_are_no_fares(self):
+        self.assertEqual(parse_both(js(None, [])), [])
+
+
+def decode(query) -> dict:
+    """Decode the tfs protobuf blob into (legs, seat, passengers, trip) using the library's own pb module."""
+    import base64
+    from fast_flights.pb import flights_pb2
+    info = flights_pb2.Info()
+    info.ParseFromString(base64.urlsafe_b64decode(query.params()["tfs"]))
+    return {"legs": [(leg.date, leg.from_airport.airport, leg.to_airport.airport) for leg in info.data],
+            "seat": info.seat, "passengers": list(info.passengers), "trip": info.trip}
+
+
+class QueryConstruction(unittest.TestCase):
+    base = {"origin": "TPE", "destination": "OKA", "departureDate": "2027-01-08",
+            "returnDate": "2027-01-11", "currency": "TWD"}
+
+    def test_missing_fields_stay_one_adult_economy_round_trip(self):
+        from server import build_query
+        got = decode(build_query(self.base))
+        self.assertEqual(got["passengers"], [1])
+        self.assertEqual((got["seat"], got["trip"]), (1, 1))
+        self.assertEqual([leg[1:] for leg in got["legs"]], [("TPE", "OKA"), ("OKA", "TPE")])
+
+    def test_party_and_cabin_are_carried(self):
+        from server import build_query
+        got = decode(build_query({**self.base, "adults": 2, "children": 1, "cabin": "business"}))
+        self.assertEqual(sorted(got["passengers"]), [1, 1, 2])
+        self.assertEqual(got["seat"], 3)
+
+    def test_each_cabin_has_its_own_seat(self):
+        from server import build_query
+        seats = [decode(build_query({**self.base, "cabin": c}))["seat"] for c in ("economy", "premium-economy", "business", "first")]
+        self.assertEqual(seats, [1, 2, 3, 4])
+
+    def test_one_way_has_a_single_leg_and_ignores_return_date(self):
+        from server import build_query
+        got = decode(build_query({**self.base, "tripType": "one-way"}))
+        self.assertEqual(got["trip"], 2)
+        self.assertEqual(len(got["legs"]), 1)
+        got = decode(build_query({k: v for k, v in self.base.items() if k != "returnDate"} | {"tripType": "one-way"}))
+        self.assertEqual(len(got["legs"]), 1)
+
+    def test_rejects_bad_party_and_cabin(self):
+        from server import build_query
+        for bad in ({"adults": 0}, {"adults": 5, "children": 5}, {"adults": "2"}, {"children": -1}, {"cabin": "infant"}, {"tripType": "multi"}):
+            with self.assertRaises(ValueError):
+                build_query({**self.base, **bad})
+
+
 class MissingSource(unittest.TestCase):
-    def test_page_without_the_data_script_is_503(self):
+    def post(self, html, extra=None):
         import threading
         from http.client import HTTPConnection
         from http.server import ThreadingHTTPServer
         from unittest.mock import MagicMock, patch
         from server import Handler
         client = MagicMock()
-        client.get.return_value = MagicMock(status_code=200, text="<html></html>")
+        client.get.return_value = MagicMock(status_code=200, text=html)
         body = json.dumps({"origin": "TPE", "destination": "OKA", "departureDate": "2027-01-08",
-                           "returnDate": "2027-01-11", "currency": "TWD"})
+                           "returnDate": "2027-01-11", "currency": "TWD", **(extra or {})})
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         try:
@@ -73,11 +129,25 @@ class MissingSource(unittest.TestCase):
                 conn = HTTPConnection("127.0.0.1", httpd.server_port)
                 conn.request("POST", "/search", body, {"Content-Length": str(len(body))})
                 response = conn.getresponse()
+                result = (response.status, response.reason, response.read())
                 conn.close()
-                self.assertEqual((response.status, response.reason), (503, "Flight source unavailable"))
+                return result
         finally:
             httpd.shutdown()
             httpd.server_close()
+
+    def test_page_without_the_data_script_is_503(self):
+        status, reason, _ = self.post("<html></html>")
+        self.assertEqual((status, reason), (503, "Flight source unavailable"))
+
+    def test_empty_first_class_answers_200_with_no_fares(self):
+        empty = json.dumps([None, None, None, None, None, None, None, [None, [[], []]]])
+        status, _, body = self.post(f"<html><script class='ds:1'>data:{empty},x</script></html>", {"cabin": "first"})
+        self.assertEqual((status, json.loads(body)), (200, []))
+
+    def test_invalid_party_is_503_not_a_search(self):
+        status, _, _ = self.post("<html></html>", {"adults": 0})
+        self.assertEqual(status, 503)
 
 
 if __name__ == "__main__":

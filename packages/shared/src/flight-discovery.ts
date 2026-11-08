@@ -74,7 +74,9 @@ export function flightCandidates(intent: FlightSearchIntent): FlightSearchIntent
   return [0, -1, 1].map((shift) => ({
     ...intent,
     departureDate: day(Date.parse(intent.departureDate) + shift * DAY),
-    returnDate: day(Date.parse(intent.returnDate) + shift * DAY),
+    ...(intent.returnDate === undefined
+      ? {}
+      : { returnDate: day(Date.parse(intent.returnDate) + shift * DAY) }),
   }));
 }
 

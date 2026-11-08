@@ -24,14 +24,15 @@ export function friendlyDate(date: string): string {
     : `${shortDate(date)}（${WEEKDAYS[parts(date).weekday] ?? ""}）`;
 }
 
-/** "12/4（五）– 12/7（一）", or "Dec 4 – Dec 7". */
-export function friendlyRange(from: string, to: string): string {
+/** "12/4（五）– 12/7（一）", or "Dec 4 – Dec 7"; the one date alone for a one-way search. */
+export function friendlyRange(from: string, to?: string): string {
+  if (to === undefined) return friendlyDate(from);
   // Chinese text spaces the dash only on its right, as the full-width parenthesis already pads its left.
   return `${friendlyDate(from)}${getLocale() === "en" ? " " : ""}– ${friendlyDate(to)}`;
 }
 
 /** "1/8–1/11" in both languages: the compact range for chips that must fit about 200 px. */
-export function shortRange(from: string, to: string): string {
+export function shortRange(from: string, to?: string): string {
   const numeric = (date: string) => `${String(parts(date).month)}/${String(parts(date).day)}`;
-  return `${numeric(from)}–${numeric(to)}`;
+  return to === undefined ? numeric(from) : `${numeric(from)}–${numeric(to)}`;
 }

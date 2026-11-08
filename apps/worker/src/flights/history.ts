@@ -4,6 +4,7 @@ import {
   flightFareSchema,
   flightSearchIntentSchema,
   googleFlightsUrl,
+  isStandardSearch,
   type FlightCard,
   type FlightFare,
   type FlightSearchIntent,
@@ -25,6 +26,8 @@ export async function loadFareHistory(
   intent: FlightSearchIntent,
   now: number,
 ): Promise<number[]> {
+  // History is 1 adult economy round trip; comparing another party's total against it would mislead.
+  if (!isStandardSearch(intent)) return [];
   const rows = await db
     .prepare(
       "SELECT price FROM flight_fare_history WHERE origin=? AND destination=? AND currency=? AND advance_window=? AND observed_day>=? AND observed_day<=? ORDER BY observed_day",
@@ -43,7 +46,8 @@ export async function loadFareHistory(
 
 /**
  * A repeated search can lower a day's minimum, but can never manufacture another historical day.
- * Only unfiltered searches count: a direct-only or no-red-eye minimum is a different population.
+ * Only unfiltered searches count: a direct-only or no-red-eye minimum is a different population,
+ * and so is any party, cabin or one-way search (source prices are totals for the whole party).
  */
 export async function recordFareHistory(
   db: D1Database,
@@ -51,7 +55,7 @@ export async function recordFareHistory(
   fares: FlightFare[],
   now: number,
 ): Promise<void> {
-  if (intent.directOnly || intent.excludeRedEye) return;
+  if (intent.directOnly || intent.excludeRedEye || !isStandardSearch(intent)) return;
   const minimum = fares.reduce<FlightFare | undefined>(
     (best, fare) => (!best || fare.price < best.price ? fare : best),
     undefined,

@@ -67,7 +67,10 @@ def parse_both(js: str) -> list[dict]:
     from fast_flights.parser import parse_js
     payload = json.loads(js.split("data:", 1)[1].rsplit(",", 1)[0])
     top = (payload[2] or [None])[0] or []
-    other = payload[3][0] or []
+    # An empty cabin (first class on a thin route) arrives with both lists null: no fares, not an error.
+    if not payload[3] and not top:
+        return []
+    other = (payload[3] or [None])[0] or []
     seen, merged, tops = set(), [], []
     for is_top, entries in ((True, top), (False, other)):
         for entry in entries:
@@ -76,29 +79,44 @@ def parse_both(js: str) -> list[dict]:
                 seen.add(key)
                 merged.append(entry)
                 tops.append(is_top)
-    payload[3][0] = merged
+    if not merged:
+        return []
+    payload[3] = [merged, *(payload[3] or [None])[1:]]
     results = parse_js("data:" + json.dumps(payload) + ",x")
     return [{**asdict(flight), "top": is_top} for flight, is_top in zip(results, tops)]
 
 
-def search(intent: dict) -> list[dict]:
+CABINS = ("economy", "premium-economy", "business", "first")
+
+
+def build_query(intent: dict):
+    """The Google Flights query for an intent; pure, so it is tested offline. Infants are out of scope."""
     from fast_flights import FlightQuery, Passengers, create_query
-    from selectolax.lexbor import LexborHTMLParser
-    from primp import Client
     origin, destination = intent["origin"], intent["destination"]
+    adults, children = intent.get("adults", 1), intent.get("children", 0)
+    cabin, trip = intent.get("cabin", "economy"), intent.get("tripType", "round-trip")
+    if not (type(adults) is int and type(children) is int and 1 <= adults <= 9 and 0 <= children <= 9 - adults):
+        raise ValueError("invalid passengers")
+    if cabin not in CABINS or trip not in ("round-trip", "one-way"):
+        raise ValueError("invalid request")
     filters = {}
     if intent.get("directOnly"):
         filters["max_stops"] = 0
     if intent.get("excludeRedEye"):
         filters.update(earliest_departure_hour=6, latest_departure_hour=21)
-    query = create_query(
-        flights=[
-            FlightQuery(date=intent["departureDate"], from_airport=origin, to_airport=destination, **filters),
-            FlightQuery(date=intent["returnDate"], from_airport=destination, to_airport=origin, **filters),
-        ],
-        seat="economy", trip="round-trip", passengers=Passengers(adults=1),
+    flights = [FlightQuery(date=intent["departureDate"], from_airport=origin, to_airport=destination, **filters)]
+    if trip == "round-trip":
+        flights.append(FlightQuery(date=intent["returnDate"], from_airport=destination, to_airport=origin, **filters))
+    return create_query(
+        flights=flights, seat=cabin, trip=trip, passengers=Passengers(adults=adults, children=children),
         currency=intent["currency"], language="en",
     )
+
+
+def search(intent: dict) -> list[dict]:
+    from selectolax.lexbor import LexborHTMLParser
+    from primp import Client
+    query = build_query(intent)
     client = Client(impersonate="chrome_145", impersonate_os="macos", referer=True, cookie_store=True, timeout=20)
     response = client.get("https://www.google.com/travel/flights", params=query.params())
     if response.status_code != 200:
