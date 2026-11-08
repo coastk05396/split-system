@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { renderApp } from "../../test/render-app.js";
+import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
+import { renderApp } from "../../test/render-app.js";
 
 const css = readFileSync("src/styles.css", "utf8"); // vitest runs with apps/web as cwd
 
@@ -14,17 +16,6 @@ const declarations = (block: string) =>
 const theme = declarations(/@theme\s*\{([^}]*)\}/.exec(css)?.[1] ?? "");
 const travel = declarations(/\.travel-mode\s*\{([^}]*)\}/.exec(css)?.[1] ?? "");
 const token = (name: string) => travel[name] ?? theme[name] ?? "#ffffff";
-
-const channel = (hex: string, i: number) => {
-  const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-};
-const luminance = (hex: string) =>
-  0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 1) + 0.0722 * channel(hex, 2);
-const contrast = (a: string, b: string) => {
-  const [la, lb] = [luminance(a), luminance(b)];
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-};
 
 describe("Travel mode green palette", () => {
   it("scopes the palette to the travel pages and leaves the normal palette elsewhere", async () => {
@@ -40,6 +31,81 @@ describe("Travel mode green palette", () => {
     });
     const home = await screen.findByRole("navigation", { name: "底部導覽" });
     expect(home.closest(".travel-mode")).toBeNull();
+  });
+
+  it("puts the palette on <html> so the body-mounted Price Watch dialog inherits it, and drops it on leaving", async () => {
+    const { router } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    await screen.findByRole("heading", { name: "下一站，沖繩！" });
+    await openSearchPanel();
+    fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
+    fireEvent.change(screen.getByLabelText("出發日期"), { target: { value: "2027-01-08" } });
+    fireEvent.change(screen.getByLabelText("回程日期"), { target: { value: "2027-01-11" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜尋航班" }));
+    fireEvent.click(await screen.findByRole("button", { name: "降價叫醒我" }));
+    const dialog = await screen.findByRole("dialog", { name: "降價叫醒我" });
+    expect(dialog.closest(".travel-mode")).toBe(document.documentElement);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: "底部導覽" })).getByRole("link", {
+        name: "分帳",
+      }),
+    );
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/");
+    });
+    expect(document.documentElement).not.toHaveClass("travel-mode");
+  });
+
+  it("removes the palette from <html> when the app unmounts", async () => {
+    renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    await screen.findByRole("heading", { name: "下一站，沖繩！" });
+    expect(document.documentElement).toHaveClass("travel-mode");
+    cleanup();
+    expect(document.documentElement).not.toHaveClass("travel-mode");
+  });
+
+  it("keeps a pending 取消追蹤 solid green, every pair at 4.5:1", async () => {
+    const { api } = renderApp({ path: "/travel/watches", cookieUser: makeUser("Rick") });
+    api.flightWatches = [
+      {
+        id: "w1",
+        status: "active",
+        channel: "web_push",
+        intent: {
+          origin: "TPE",
+          destination: "NRT",
+          departureDate: "2027-01-08",
+          returnDate: "2027-01-11",
+          currency: "TWD",
+          excludeRedEye: false,
+          directOnly: false,
+        },
+        baselineFare: 20000,
+        targetFare: 17000,
+        latestFare: null,
+        checkedAt: null,
+        createdAt: 1,
+      },
+    ];
+    const release = api.holdResponses("DELETE /api/v1/flights/watches/w1");
+    const cancel = await screen.findByRole("button", { name: "取消追蹤" });
+    fireEvent.click(cancel);
+    await waitFor(() => {
+      expect(cancel).toBeDisabled();
+    });
+    expect(cancel).toHaveClass(
+      "disabled:bg-travel-disabled",
+      "disabled:text-travel-disabled-ink",
+      "disabled:border-travel-disabled",
+    );
+    expect(cancel.className).not.toMatch(/opacity/);
+    expect(
+      contrast(token("--color-travel-disabled-ink"), token("--color-travel-disabled")),
+    ).toBeGreaterThanOrEqual(4.5);
+    release();
   });
 
   it("keeps every text and background pair at 4.5:1 or better", () => {

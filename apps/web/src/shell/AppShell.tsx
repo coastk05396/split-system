@@ -1,5 +1,5 @@
 import { Bell, Compass, Plus } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import { type ComponentType, type ReactNode, useEffect } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
 import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
@@ -167,8 +167,17 @@ function Sidebar() {
 /** Mobile: content above a five-tab bottom bar. Desktop: a sidebar beside the content. */
 export function AppShell({ children }: { children: ReactNode }) {
   const { travel } = useTabs();
+  // On <html>, not the shell div: Radix dialogs mount under <body> and must inherit the palette too.
+  useEffect(() => {
+    if (!travel) return;
+    const root = document.documentElement;
+    root.classList.add("travel-mode");
+    return () => {
+      root.classList.remove("travel-mode");
+    };
+  }, [travel]);
   return (
-    <div className={`min-h-dvh md:flex ${travel ? "travel-mode" : ""}`}>
+    <div className="min-h-dvh md:flex">
       <Sidebar />
       <main className="min-w-0 flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="mx-auto w-full max-w-5xl px-5 pt-4 md:px-12 md:pt-12">{children}</div>

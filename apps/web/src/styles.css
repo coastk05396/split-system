@@ -41,13 +41,16 @@
   }
 }
 
-/* Travel mode (any /travel path): the Flight Radar green glass palette. Re-points the shared tokens, so
+/* Travel mode (any /travel path; the class sits on <html> so body-mounted dialogs inherit it): the Flight Radar green glass palette. Re-points the shared tokens, so
    every sprout/ink utility under it follows; leaving /travel drops the class and the normal palette returns. */
 .travel-mode {
   --travel-page: #e9f3ec;
   --travel-nav: #f6fffa;
   --color-sprout-200: #cfe6d6;
   --color-ink-muted: #4a6f5c;
+  background-color: var(--travel-page);
+}
+.travel-mode body {
   background-color: var(--travel-page);
 }
 .travel-mode .glass-nav {

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
 import { openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
@@ -15,17 +16,6 @@ const theme = Object.fromEntries(
   ].map((m) => [m[1], m[2]]),
 ) as Record<string, string>;
 const color = (name: string) => theme[name] ?? "#ffffff";
-
-const channel = (hex: string, i: number) => {
-  const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-};
-const luminance = (hex: string) =>
-  0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 1) + 0.0722 * channel(hex, 2);
-const contrast = (a: string, b: string) => {
-  const [la, lb] = [luminance(a), luminance(b)];
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-};
 
 const intent: FlightSearchIntent = {
   origin: "TPE",
