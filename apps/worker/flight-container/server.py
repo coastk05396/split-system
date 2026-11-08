@@ -34,6 +34,7 @@ def normalize(flights: list[dict], currency: str) -> list[dict]:
                 int((datetime.fromisoformat(timestamp(nxt["departure"])) - datetime.fromisoformat(timestamp(prev["arrival"]))).total_seconds() // 60)
                 for prev, nxt in zip(legs, legs[1:])
             ),
+            "top": flight.get("top", False),
             "priceLevel": flight.get("current_price", "unknown"),
         })
     return fares[:20]
@@ -58,9 +59,28 @@ def native_price_level(html: str) -> str:
     return indicator.level
 
 
+def parse_both(js: str) -> list[dict]:
+    """Union of Google's top (payload[2][0]) and other (payload[3][0]) lists, each itinerary once, tagged `top`."""
+    from fast_flights.parser import parse_js
+    payload = json.loads(js.split("data:", 1)[1].rsplit(",", 1)[0])
+    top = (payload[2] or [None])[0] or []
+    other = payload[3][0] or []
+    seen, merged, tops = set(), [], []
+    for is_top, entries in ((True, top), (False, other)):
+        for entry in entries:
+            key = json.dumps(entry[0][1:3])  # airlines + legs
+            if key not in seen:
+                seen.add(key)
+                merged.append(entry)
+                tops.append(is_top)
+    payload[3][0] = merged
+    results = parse_js("data:" + json.dumps(payload) + ",x")
+    return [{**asdict(flight), "top": is_top} for flight, is_top in zip(results, tops)]
+
+
 def search(intent: dict) -> list[dict]:
     from fast_flights import FlightQuery, Passengers, create_query
-    from fast_flights.parser import parse
+    from selectolax.lexbor import LexborHTMLParser
     from primp import Client
     origin, destination = intent["origin"], intent["destination"]
     filters = {}
@@ -80,9 +100,10 @@ def search(intent: dict) -> list[dict]:
     response = client.get("https://www.google.com/travel/flights", params=query.params())
     if response.status_code != 200:
         raise ValueError("source unavailable")
-    results = parse(response.text)
+    script = LexborHTMLParser(response.text).css_first(r"script.ds\:1")
+    results = parse_both(script.text())
     level = native_price_level(response.text)
-    return normalize([{**asdict(flight), "current_price": level} for flight in results], intent["currency"])
+    return normalize([{**flight, "current_price": level} for flight in results], intent["currency"])
 
 
 class Handler(BaseHTTPRequestHandler):
