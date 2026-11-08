@@ -104,16 +104,6 @@ export const en: Record<MessageId, string> = {
   "flight.stripLegendCheapest": "Cheapest days",
   "flight.stripLegendOther": "Other days",
   "flight.stripNoPrice": "No price",
-  "flight.stripTitle": "Cheapest fare by day, {month}",
-  "flight.stripCheapest": "Cheapest: {date} {amount}",
-  "flight.stripLoading": "Loading prices",
-  "flight.stripUnavailable": "Prices are unavailable right now",
-  "flight.stripAge": "Updated {hours} h ago",
-  "flight.stripNote":
-    "Saved prices: round trip with a 3-day stay, 1 adult, economy, the day's lowest. They can differ from the trip you chose.",
-  "flight.stripLegendCheapest": "Cheapest days",
-  "flight.stripLegendOther": "Other days",
-  "flight.stripNoPrice": "No price",
   "flight.listTitle": "Find your flight",
   "flight.listOrder": "Cheapest first",
   "flight.footnote":
