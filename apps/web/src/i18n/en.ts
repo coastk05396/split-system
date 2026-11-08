@@ -70,6 +70,8 @@ export const en: Record<MessageId, string> = {
   "flight.airportNone": "No match. Type a three-letter airport code to use it.",
   "flight.swap": "Swap origin and destination",
   "flight.routeLeg": "{km}\u00a0km · ≈\u00a0{hours}\u00a0h {minutes}\u00a0min",
+  "flight.globe": "Globe",
+  "flight.globeLabel": "Globe turned to {place}",
   "flight.headline": "Next stop, {place}!",
   "flight.headlineAsk": "Where to next?",
   "flight.tagline": "Great flights are easy to find. Start here.",

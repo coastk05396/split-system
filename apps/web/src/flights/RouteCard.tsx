@@ -5,6 +5,7 @@ import { getLocale, t } from "../i18n/messages.js";
 import { travelButton } from "../groups/ui.js";
 import { airportName } from "./AirportPicker.js";
 import { friendlyRange, shortRange } from "./dates.js";
+import { Globe } from "./Globe.js";
 
 const plane =
   "M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z";
@@ -51,12 +52,15 @@ export function RouteCard({
   open,
   onToggle,
   onSearch,
+  globe,
 }: {
   intent: FlightSearchIntent;
   pending: boolean;
   open: boolean;
   onToggle: () => void;
   onSearch: () => void;
+  /** The catalogue airport the globe faces. */
+  globe: string | undefined;
 }) {
   const estimate = leg(intent.origin, intent.destination);
   const fullDates = friendlyRange(intent.departureDate, intent.returnDate);
@@ -116,7 +120,9 @@ export function RouteCard({
         </div>
         <Place code={intent.destination} end />
       </div>
-      <div className="flex items-center gap-2">
+      {/* The globe shares the button's row, so it costs about 50 px of height, not 114. */}
+      <div className="flex items-center gap-3">
+        <Globe code={globe} />
         {!open && (
           <button
             type="button"

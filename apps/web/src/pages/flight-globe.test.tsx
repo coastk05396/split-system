@@ -1,0 +1,140 @@
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
+import { renderApp } from "../../test/render-app.js";
+
+const languages = ["en", "zh-TW"] as const;
+type Language = (typeof languages)[number];
+const words = {
+  en: {
+    card: "Search summary",
+    destination: "Destination airport",
+    okinawa: "Globe turned to Okinawa",
+    tokyo: "Globe turned to Tokyo",
+    osaka: "Globe turned to Osaka",
+    typeTokyo: "tokyo",
+    typeOsaka: "Osaka",
+  },
+  "zh-TW": {
+    card: "搜尋摘要",
+    destination: "目的地機場",
+    okinawa: "地球儀轉向沖繩",
+    tokyo: "地球儀轉向東京",
+    osaka: "地球儀轉向大阪",
+    typeTokyo: "東京",
+    typeOsaka: "大阪",
+  },
+} as const;
+
+const reduced = window.matchMedia;
+afterEach(() => {
+  window.matchMedia = reduced;
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null as never);
+});
+const allowMotion = () => {
+  window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
+};
+
+function setup(language: Language) {
+  renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+}
+const globe = (name: string) => screen.findByRole("img", { name });
+const centre = (el: HTMLElement) => el.dataset.centre;
+
+async function typeDestination(language: Language, value: string) {
+  await openSearchPanel();
+  fireEvent.change(screen.getByRole("combobox", { name: words[language].destination }), {
+    target: { value },
+  });
+}
+
+describe("Flight Radar globe", () => {
+  it.each(languages)("sits in the route card, turned to the searched place, in %s", async (l) => {
+    setup(l);
+    const card = await screen.findByRole("region", { name: words[l].card });
+    const el = await globe(words[l].okinawa);
+    expect(card).toContainElement(el);
+    // Below the Route Chip, in the card.
+    const chip = within(card).getAllByRole("button")[0]!;
+    expect(chip.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(centre(el)).toBe("26.2,127.7");
+    expect(el).toHaveAttribute("height", "200");
+    expect(el.style.height).toBe("100px");
+  });
+
+  it.each(languages)("turns to a catalogue code, then a city name, in %s", async (l) => {
+    setup(l);
+    await globe(words[l].okinawa);
+    await typeDestination(l, "nrt");
+    expect(centre(await globe(words[l].tokyo))).toBe("35.8,140.4");
+    await typeDestination(l, words[l].typeOsaka);
+    expect(centre(await globe(words[l].osaka))).toBe("34.4,135.2");
+    await typeDestination(l, words[l].typeTokyo);
+    expect(await globe(words[l].tokyo)).toBeVisible();
+  });
+
+  it("turns when a suggestion is picked", async () => {
+    setup("en");
+    await globe(words.en.okinawa);
+    await openSearchPanel();
+    const field = screen.getByRole("combobox", { name: words.en.destination });
+    fireEvent.change(field, { target: { value: "osa" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Osaka/ }));
+    expect(centre(await globe(words.en.osaka))).toBe("34.4,135.2");
+  });
+
+  it("stays where it is for input it does not know", async () => {
+    setup("en");
+    const el = await globe(words.en.okinawa);
+    await typeDestination("en", "Atlantis");
+    await typeDestination("en", "ZZZ");
+    await typeDestination("en", "To");
+    expect(await globe(words.en.okinawa)).toBe(el);
+    expect(centre(el)).toBe("26.2,127.7");
+  });
+
+  it("jumps under reduced motion and turns smoothly otherwise", async () => {
+    setup("en");
+    await globe(words.en.okinawa);
+    await typeDestination("en", "NRT");
+    // The test environment asks for reduced motion: the end state is immediate.
+    expect(centre(await globe(words.en.tokyo))).toBe("35.8,140.4");
+
+    window.matchMedia = reduced;
+    allowMotion();
+    await typeDestination("en", "KIX");
+    const el = await globe(words.en.osaka);
+    expect(centre(el)).not.toBe("34.4,135.2");
+    await waitFor(() => {
+      expect(centre(el)).toBe("34.4,135.2");
+    });
+  });
+
+  it("draws real land outlines and a marker", async () => {
+    const calls: string[] = [];
+    const fills: unknown[] = [];
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get: (target, key: string) =>
+        key in target
+          ? target[key]
+          : (...args: unknown[]) => {
+              calls.push(key);
+              if (key === "fill") fills.push(args[0]);
+            },
+      set: (target, key: string, value: unknown) => {
+        target[key] = value;
+        return true;
+      },
+    });
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx as never);
+    setup("en");
+    await globe(words.en.okinawa);
+    // Land arrives in a lazy chunk, then the whole outline is drawn in one evenodd fill.
+    await waitFor(() => {
+      expect(fills).toContain("evenodd");
+    });
+    expect(calls.filter((c) => c === "moveTo").length).toBeGreaterThan(100);
+    expect(calls).toContain("arc");
+  });
+});

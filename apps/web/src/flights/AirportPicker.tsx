@@ -80,6 +80,7 @@ export function AirportPicker({
   popular,
   className = "",
   onChange,
+  onType,
 }: {
   name: string;
   text: string;
@@ -88,6 +89,8 @@ export function AirportPicker({
   /** Grid placement inside the form. */
   className?: string;
   onChange: (code: string) => void;
+  /** Every keystroke in the field, for feedback such as the globe; not a choice. */
+  onType?: (text: string) => void;
 }) {
   const id = useId();
   // `forValue` ties typed text to the value it produced, so a swap or new search shows the label.
@@ -170,6 +173,7 @@ export function AirportPicker({
           onKeyDown={keyDown}
           onChange={(event) => {
             const next = event.target.value;
+            onType?.(next);
             const listed = CODE.test(next) && AIRPORTS.some((a) => a.code === next.toUpperCase());
             setTyped({ text: next, forValue: listed ? next.toUpperCase() : value });
             if (listed) onChange(next.toUpperCase());

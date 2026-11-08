@@ -71,6 +71,8 @@ const zhTW = {
   "flight.airportNone": "找不到符合的機場，可直接輸入三碼機場代碼。",
   "flight.swap": "對調出發與目的地",
   "flight.routeLeg": "{km} 公里・約 {hours} 小時 {minutes} 分",
+  "flight.globe": "地球儀",
+  "flight.globeLabel": "地球儀轉向{place}",
   "flight.headline": "下一站，{place}！",
   "flight.headlineAsk": "下一站，去哪裡？",
   "flight.tagline": "好航班不難找，從這裡開始。",

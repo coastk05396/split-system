@@ -18,6 +18,7 @@ import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { friendlyDate } from "../flights/dates.js";
+import { findPlace } from "../flights/place.js";
 import { FareResults } from "../flights/FareResults.js";
 import { DateTiles, dateTiles } from "../flights/DateTiles.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
@@ -49,8 +50,11 @@ export function TravelPage() {
   );
   // Bumped on every search so the fields reset to what was searched even when the intent is equal.
   const [revision, setRevision] = useState(0);
+  // The globe faces the last place it recognised; unknown input never moves it.
+  const [globe, setGlobe] = useState(() => findPlace(active.destination));
   const setActive = (intent: FlightSearchIntent) => {
     setIntent(intent);
+    setGlobe((g) => findPlace(intent.destination) ?? g);
     setRevision((r) => r + 1);
   };
   const highlights = useHighlights(currency);
@@ -216,6 +220,7 @@ export function TravelPage() {
         onSearch={() => {
           runIntent(active);
         }}
+        globe={globe}
       />
       <EntityPills
         intent={active}
@@ -234,6 +239,9 @@ export function TravelPage() {
             revision={revision}
             pending={search.isPending}
             onSearch={runIntent}
+            onPlace={(input) => {
+              setGlobe((g) => findPlace(input) ?? g);
+            }}
           />
         </div>
       )}
