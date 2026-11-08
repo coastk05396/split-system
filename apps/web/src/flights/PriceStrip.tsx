@@ -135,7 +135,7 @@ export function PriceStrip({
     noteFor === selected && difference !== 0
       ? t(difference < 0 ? "flight.stripCheaper" : "flight.stripPricier", {
           amount: formatAmount(Math.abs(difference), currency),
-        })
+        }) + (current?.lowest ? ` · ${t("flight.stripLowest")}` : "")
       : "";
   const highest = Math.max(...days.map((day) => day.price));
 

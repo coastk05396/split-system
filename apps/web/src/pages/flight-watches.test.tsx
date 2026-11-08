@@ -52,6 +52,8 @@ it.each(["en", "zh-TW"] as const)(
     fireEvent.click(screen.getByText(en ? "My Price Watches" : "我的降價雷達"));
     const list = screen.getByRole("region", { name: en ? "My Price Watches" : "我的降價雷達" });
     expect(await within(list).findByText(/TPE → NRT/)).toBeVisible();
+    expect(within(list).getByText(en ? "Jan 8 – Jan 11" : "1/8（五）– 1/11（一）")).toBeVisible();
+    expect(within(list).queryByText(/2027-01/)).toBeNull();
     fireEvent.click(within(list).getByRole("button", { name: en ? "Cancel watch" : "取消追蹤" }));
     await waitFor(() => {
       expect(within(list).queryByText(/TPE → NRT/)).toBeNull();

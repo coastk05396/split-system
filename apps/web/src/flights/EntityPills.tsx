@@ -80,14 +80,14 @@ export function EntityPills({
       {pills.map((pill) => (
         <span
           key={pill.id}
-          className="glass-chip inline-flex overflow-hidden rounded-full border border-sprout-200 text-sm"
+          className="glass-chip inline-flex max-w-full overflow-hidden rounded-full border border-sprout-200 text-sm"
         >
           <button
             type="button"
             disabled={pending}
             aria-expanded={open}
             onClick={onToggle}
-            className="press-pill min-h-11 px-3 py-2 font-bold tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700"
+            className="press-pill min-h-11 min-w-0 truncate whitespace-nowrap px-3 py-2 font-bold tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700"
           >
             {pill.text}
           </button>

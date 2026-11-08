@@ -160,7 +160,7 @@ describe("Flight Radar Price Strip", () => {
       expect(slider).toHaveAttribute("aria-valuenow", "0");
       expect(slider).toHaveAttribute("aria-valuetext", text[language].firstValue);
       expect(shownAirlines(language)).toEqual(["Cheapest Early Air", "Early Air"]);
-      expect(await screen.findByText(text[language].cheaper)).toBeVisible();
+      expect(await screen.findByText(text[language].cheaper, { exact: false })).toBeVisible();
 
       fireEvent.keyDown(slider, { key: "ArrowRight" });
       fireEvent.keyDown(slider, { key: "ArrowRight" });
@@ -241,6 +241,14 @@ describe("Flight Radar Price Strip", () => {
     fireEvent.keyDown(slider, { key: "ArrowLeft" });
     expect(within(strip).getByRole("status")).toBe(note);
     expect(note).toHaveTextContent(text.en.cheaper);
+  });
+
+  it("adds Lowest to the live note when the selected date is the lowest", async () => {
+    setup("en");
+    const slider = await explore("en");
+    fireEvent.keyDown(slider, { key: "ArrowLeft" });
+    const note = within(screen.getByRole("region", { name: text.en.bar })).getByRole("status");
+    expect(note).toHaveTextContent(`${text.en.cheaper} · Lowest`);
   });
 
   it("keeps the legend but draws no ghost finger under reduced motion", async () => {

@@ -16,6 +16,7 @@ import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev, send } from "../groups/data.js";
 import { failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
+import { friendlyRange } from "./dates.js";
 
 /** Saves a Price Watch; the caller refreshes the watch list. */
 export function useCreateWatch() {
@@ -139,7 +140,7 @@ function WatchRow({
         {watch.intent.origin} → {watch.intent.destination}
       </p>
       <p className="text-sm">
-        {watch.intent.departureDate} – {watch.intent.returnDate}
+        {friendlyRange(watch.intent.departureDate, watch.intent.returnDate)}
       </p>
       <p className="text-sm">
         {t("flight.watchCondition", {
