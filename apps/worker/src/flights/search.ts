@@ -3,6 +3,7 @@ import { productionFlightAI } from "./ai.js";
 import { loadFareHistory, recordFareHistory } from "./history.js";
 import {
   googleFlightsUrl,
+  cheapestThirdCutoff,
   evaluateDealSignal,
   flightCandidates,
   flightSearchIntentSchema,
@@ -142,6 +143,8 @@ export async function buildFlightReply(
 ): Promise<FlightSearchReply> {
   const url = googleFlightsUrl(intent);
   const history = await loadFareHistory(env.DB, intent, now);
+  // One lookup (one route and date) is "the search" for the cheapest third; Price Watch shares it.
+  const cheapestThird = cheapestThirdCutoff(fares.map((fare) => fare.price));
   const cards = fares
     .map((fare) => ({
       ...fare,
@@ -151,6 +154,8 @@ export async function buildFlightReply(
         priceLevel: fare.priceLevel,
         ...(intent.budget === undefined ? {} : { budget: intent.budget }),
         history,
+        ...(fare.top === undefined ? {} : { top: fare.top }),
+        ...(cheapestThird === undefined ? {} : { cheapestThird }),
       }),
       url,
     }))

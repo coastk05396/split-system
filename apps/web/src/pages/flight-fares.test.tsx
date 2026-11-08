@@ -42,6 +42,7 @@ const text = {
     advice: "Deal commentary",
     price: "NT$ 25,000",
     top: "Top",
+    sticker: "Strong Buy",
     cheapest: "Cheapest",
     sort: "Sort fares",
     caption: "Round-trip total · 1 adult",
@@ -58,6 +59,7 @@ const text = {
     advice: "票價短評",
     price: "NT$ 25,000",
     top: "熱門",
+    sticker: "強烈買",
     cheapest: "最低價",
     sort: "排序方式",
     caption: "來回總價・1 位成人",
@@ -240,6 +242,35 @@ describe("Flight Radar compact price list", () => {
       expect(
         rows(language).map((row) => within(row).queryByText(text[language].top) !== null),
       ).toEqual([false, false, true, true]);
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "puts a Strong Buy sticker on raised fares, a Top tag on other top fares, nothing else in %s",
+    async (language) => {
+      const { api } = setup(language, [
+        { ...fare("Raised Air", 18000, "low"), top: true },
+        fare("History Air", 19000, "low"),
+        { ...fare("Top Air", 30000, "typical"), top: true },
+        fare("Plain Air", 31000, "typical"),
+      ]);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      const labels = rows(language).map((row) => ({
+        sticker: within(row).queryByText(text[language].sticker),
+        top: within(row).queryByText(text[language].top),
+      }));
+      expect(labels.map((l) => [l.sticker !== null, l.top !== null])).toEqual([
+        [true, false],
+        [true, false],
+        [false, true],
+        [false, false],
+      ]);
+      const sticker = labels[0]?.sticker as HTMLElement;
+      // A lightning SVG, never a glyph, and a static sticker once motion is reduced.
+      expect(sticker.querySelector("svg")).not.toBeNull();
+      expect(sticker).toHaveClass("sticker");
+      expect(sticker.textContent).toBe(text[language].sticker);
     },
   );
 

@@ -101,6 +101,56 @@ it("passes a fare's top flag through to its card, and an unflagged fare stays un
   expect(priced(8000)?.top).not.toBe(true);
 });
 
+it("raises Strong Buy for top fares in the cheapest third of the search, and not for other fares", async () => {
+  const base = {
+    airline: "Test Air",
+    outboundDeparture: "08:00",
+    outboundArrival: "12:00",
+    inboundDeparture: null,
+    inboundArrival: null,
+    stops: 0,
+    durationMinutes: 180,
+    priceLevel: "typical" as const,
+  };
+  const app = createApp({
+    ...productionDeps,
+    now: () => clock.now,
+    // Six fares: the cheapest third is the two lowest prices.
+    flightSource: () =>
+      Promise.resolve([
+        { ...base, price: 8000 },
+        { ...base, price: 8500, top: true },
+        { ...base, price: 9000, top: true },
+        { ...base, price: 9500, top: true },
+        { ...base, price: 10000 },
+        { ...base, price: 10500 },
+      ]),
+  });
+  const user = await signIn("google", uniqueSub("flight-strong"));
+  const response = await app.request(
+    "https://split.test/api/v1/flights/search",
+    json(
+      {
+        origin: "TPE",
+        destination: "OKA",
+        departureDate: "2026-12-04",
+        returnDate: "2026-12-07",
+        currency: "TWD",
+        directOnly: true,
+      },
+      bearer(user.accessToken),
+    ),
+    env,
+  );
+  const reply = await response.json<FlightSearchReply>();
+  const signalOf = (price: number) =>
+    reply.cards.find((card) => card.price === price && card.intent.departureDate === "2026-12-04")
+      ?.signal;
+  expect(signalOf(8500)).toBe("strong_buy");
+  expect(signalOf(8000)).toBe("buy");
+  expect(signalOf(9000)).toBe("buy");
+});
+
 it("rejects past departures before reaching the source", async () => {
   let calls = 0;
   const app = createApp({

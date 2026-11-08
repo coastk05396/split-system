@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import { evaluateDealSignal } from "./flight-signals.js";
+import { cheapestThirdCutoff, evaluateDealSignal } from "./flight-signals.js";
 it("unlocks actual historical comparisons only at fourteen daily snapshots", () => {
   expect(
     evaluateDealSignal({
@@ -66,4 +66,33 @@ it("never emits statistics for an immature route or approves an over-budget fare
       },
     ),
   );
+});
+
+it("raises Strong Buy for a top fare in the cheapest third of its search, and only for a top fare", () => {
+  const typical = { priceLevel: "typical" as const, history: [] };
+  // Nine fares: the cheapest third ends at the third-cheapest price (index ceil(9/3)-1 = 2).
+  const prices = [100, 110, 120, 130, 140, 150, 160, 170, 180];
+  expect(cheapestThirdCutoff(prices)).toBe(120);
+  expect(cheapestThirdCutoff([180, 100, 120])).toBe(100);
+  expect(cheapestThirdCutoff([50, 60])).toBe(50);
+  expect(cheapestThirdCutoff([])).toBeUndefined();
+  const at = (price: number, top: boolean) =>
+    evaluateDealSignal({ ...typical, price, top, cheapestThird: 120 }).signal;
+  expect(at(120, true)).toBe("strong_buy");
+  expect(at(100, true)).toBe("strong_buy");
+  expect(at(121, true)).toBe("buy");
+  expect(at(100, false)).toBe("buy");
+  // The history rule still raises it on its own, top or not.
+  expect(
+    evaluateDealSignal({
+      price: 8500,
+      priceLevel: "unknown",
+      history: Array<number>(14).fill(10000),
+    }).signal,
+  ).toBe("strong_buy");
+  // A budget the fare exceeds still wins.
+  expect(
+    evaluateDealSignal({ ...typical, price: 100, budget: 99, top: true, cheapestThird: 120 })
+      .signal,
+  ).toBe("hold");
 });

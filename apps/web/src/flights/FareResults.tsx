@@ -147,7 +147,12 @@ function FareRow({ card, onWatch }: { card: FlightCard; onWatch: (card: FlightCa
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-bold">{card.airline}</span>
             {card.signal === "strong_buy" ? (
-              <span className="text-xs font-bold">{t("flight.strong_buy")}</span>
+              <span className="sticker">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="size-3 fill-current">
+                  <path d="M13 2 4 14h6l-1 8 9-12h-6z" />
+                </svg>
+                {t("flight.sticker")}
+              </span>
             ) : (
               card.top === true && (
                 <span className="rounded-lg bg-sprout-100 px-2 py-0.5 text-xs font-bold">

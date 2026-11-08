@@ -87,6 +87,7 @@ export const en: Record<MessageId, string> = {
   "flight.historyBelow": "{percent}% below the rolling average · {days} observed days",
   "flight.historyAbove": "{percent}% above the rolling average · {days} observed days",
   "flight.percentile": "Price percentile: {percentile}",
+  "flight.sticker": "Strong Buy",
   "flight.top": "Top",
   "flight.priceCaption": "Round-trip total · 1 adult",
   "flight.stripLowest": "Lowest",
