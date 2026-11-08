@@ -55,11 +55,19 @@ it("fills one cheapest-fare snapshot per route and day with its fetch time, spac
   const rows = await env.DB.prepare(
     "SELECT destination, departure_date, price, fetched_at FROM flight_fare_snapshots",
   ).all<{ destination: string; departure_date: string; price: number; fetched_at: number }>();
-  // 3 routes x 30 days, minus the failing day on each route.
-  expect(rows.results).toHaveLength(87);
+  // 6 routes x 30 days, minus the failing day on each route.
+  expect(rows.results).toHaveLength(174);
   expect(rows.results.every((r) => r.price === 6500 && r.fetched_at === clock.now)).toBe(true);
   expect(rows.results.some((r) => r.departure_date === failing)).toBe(false);
-  expect(new Set(rows.results.map((r) => r.destination)).size).toBe(3);
+  // Every popular route is fetched on each run, whatever the day.
+  expect([...new Set(rows.results.map((r) => r.destination))].sort()).toEqual([
+    "BKK",
+    "HKG",
+    "ICN",
+    "KIX",
+    "NRT",
+    "OKA",
+  ]);
 
   // From the first snapshot request on, every request follows a pause.
   const tail = events.slice(events.indexOf("pause") - 1);
@@ -73,7 +81,7 @@ it("fills one cheapest-fare snapshot per route and day with its fetch time, spac
     clock.now + 60_000,
     deps(() => Promise.resolve([fare(5000)])),
   );
-  expect(await count()).toEqual({ n: 90 });
+  expect(await count()).toEqual({ n: 180 });
 });
 
 it("never fetches snapshots for a signed-in user's request", async () => {

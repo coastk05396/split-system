@@ -65,7 +65,7 @@ One priced departure date of the current Flight Radar search, shown as a pressab
 _Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
 
 **Fare Snapshot**:
-The cheapest fare found for one route and one departure day, stored with the time it was fetched. A scheduled background job fills them for the catalogue's popular routes, one date at a time and spaced out; a User's request never fetches one.
+The cheapest fare found for one route and one departure day, stored with the time it was fetched. A scheduled background job fills them every day for a fixed short list of popular routes from Taipei, one date at a time and spaced out; a User's request never fetches one.
 _Avoid_: Cached search, fare history (that is the daily minimum behind Deal Signals)
 
 **Price Strip**:

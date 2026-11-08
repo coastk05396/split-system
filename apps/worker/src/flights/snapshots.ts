@@ -1,4 +1,4 @@
-import { FLIGHT_DESTINATIONS, flightFareSchema, type FlightSearchIntent } from "@split/shared";
+import { flightFareSchema, type FlightSearchIntent } from "@split/shared";
 import { z } from "zod";
 import type { AppDeps } from "../deps.js";
 import type { Bindings } from "../env.js";
@@ -6,7 +6,11 @@ import { fareMatchesIntent } from "./search.js";
 import { containerFlightSource } from "./source.js";
 
 const DAY = 86_400_000;
-const ROUTES_PER_RUN = 3;
+/**
+ * Destinations from TPE whose Fare Snapshots are refreshed on every run, so each is at most a day
+ * old. 6 routes x 30 days = 180 source requests, about 4.5 minutes of spacing per run.
+ */
+export const POPULAR_SNAPSHOT_DESTINATIONS = ["NRT", "KIX", "OKA", "ICN", "BKK", "HKG"] as const;
 const DAYS_AHEAD = 30;
 /** Gap between source requests so Google is not hit in a burst. */
 export const SNAPSHOT_SPACING_MS = 1_500;
@@ -18,7 +22,7 @@ const sleep = (ms: number) =>
 
 /**
  * Scheduled only (never from a user request): refreshes the Fare Snapshots behind the Price Strip.
- * A rotating few routes, the next 30 days, one date per source request, spaced; a failing date is
+ * The fixed popular routes, the next 30 days, one date per source request, spaced; a failing date is
  * skipped. The source only does round trips, so a snapshot is the cheapest outbound fare priced
  * for a three-day stay. Does not touch the search cache or the Deal Signal fare history.
  */
@@ -29,17 +33,14 @@ export async function maintainFareSnapshots(env: Bindings, deps: AppDeps): Promi
   await env.DB.prepare("DELETE FROM flight_fare_snapshots WHERE departure_date<?")
     .bind(isoDay(now))
     .run();
-  const first = Math.floor(now / DAY) * ROUTES_PER_RUN;
   let requested = false;
-  for (let r = 0; r < ROUTES_PER_RUN; r++) {
-    const destination = FLIGHT_DESTINATIONS[(first + r) % FLIGHT_DESTINATIONS.length];
-    if (!destination) continue;
+  for (const destination of POPULAR_SNAPSHOT_DESTINATIONS) {
     for (let d = 1; d <= DAYS_AHEAD; d++) {
       if (requested) await pause(SNAPSHOT_SPACING_MS);
       requested = true;
       const intent: FlightSearchIntent = {
         origin: "TPE",
-        destination: destination.airport,
+        destination,
         departureDate: isoDay(now + d * DAY),
         returnDate: isoDay(now + (d + 3) * DAY),
         currency: "TWD",
