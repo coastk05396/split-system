@@ -6,6 +6,10 @@ import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
 import { cardsOnDate } from "./DateTiles.js";
 
+/** What the fares are ordered by and which way; the default is price, cheapest first. */
+export type FareSort = { key: "price" | "time"; descending: boolean };
+export const DEFAULT_SORT: FareSort = { key: "price", descending: false };
+
 /** Rows shown before the 顯示全部 button. */
 const FIRST_ROWS = 10;
 
@@ -17,12 +21,14 @@ export function FareResults({
   pending,
   reply,
   date,
+  sort,
   onWatch,
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
   /** Shows only the fares departing on this date (the date tile selection). */
   date?: string | undefined;
+  sort: FareSort;
   onWatch: (card: FlightCard) => void;
 }) {
   if (!pending && !reply) return null;
@@ -60,7 +66,8 @@ export function FareResults({
         // Keyed by date so a switch folds the list back to its first rows.
         <FareList
           key={date ?? ""}
-          cards={sortFares(cardsOnDate(reply.cards, date))}
+          cards={sortFares(cardsOnDate(reply.cards, date), sort)}
+          sort={sort}
           onWatch={onWatch}
         />
       )}
@@ -68,9 +75,39 @@ export function FareResults({
   );
 }
 
-/** One list, cheapest first; Array.sort is stable, so equal prices keep the reply's order. */
-export function sortFares(cards: FlightCard[]): FlightCard[] {
-  return [...cards].sort((a, b) => a.price - b.price);
+/**
+ * One list in the chosen order. Time orders by outbound departure ("HH:MM" compares as text) and
+ * breaks ties by price; Array.sort is stable, so equal fares keep the reply's order.
+ */
+export function sortFares(cards: FlightCard[], sort: FareSort = DEFAULT_SORT): FlightCard[] {
+  const sign = sort.descending ? -1 : 1;
+  const byTime = (a: FlightCard, b: FlightCard) =>
+    a.outboundDeparture < b.outboundDeparture
+      ? -1
+      : a.outboundDeparture > b.outboundDeparture
+        ? 1
+        : 0;
+  return [...cards].sort(
+    (a, b) => sign * (sort.key === "time" ? byTime(a, b) || a.price - b.price : a.price - b.price),
+  );
+}
+
+type FareTag = "cheapest" | "fastest" | "redEye";
+
+/** Red-eye: departs before 05:00 or from 22:00. Anything that is not "HH:MM" is not red-eye. */
+function isRedEye(departure: string): boolean {
+  const hour = /^(\d{1,2}):\d{2}/.exec(departure)?.[1];
+  return hour !== undefined && (Number(hour) < 5 || Number(hour) >= 22);
+}
+
+/** Tags for one fare of the shown set: fares tied at the lowest price or shortest duration all get one. */
+function fareTags(card: FlightCard, cards: FlightCard[]): FareTag[] {
+  const tags: FareTag[] = [];
+  if (card.price === Math.min(...cards.map((c) => c.price))) tags.push("cheapest");
+  if (card.durationMinutes === Math.min(...cards.map((c) => c.durationMinutes)))
+    tags.push("fastest");
+  if (isRedEye(card.outboundDeparture)) tags.push("redEye");
+  return tags;
 }
 
 /** Card-shaped placeholders; they pulse only when motion is allowed. */
@@ -111,9 +148,11 @@ function rowKeys(cards: FlightCard[]): string[] {
 
 function FareList({
   cards,
+  sort,
   onWatch,
 }: {
   cards: FlightCard[];
+  sort: FareSort;
   onWatch: (card: FlightCard) => void;
 }) {
   const [all, setAll] = useState(false);
@@ -124,12 +163,17 @@ function FareList({
       <div className="flex items-baseline justify-between gap-3 px-1">
         <h2 className="text-[22px] font-black">{t("flight.listTitle")}</h2>
         <span className="shrink-0 text-[13px] font-medium text-ink-muted">
-          {t("flight.listOrder")}
+          {t(`flight.order.${sort.key}.${sort.descending ? "desc" : "asc"}`)}
         </span>
       </div>
       <ul aria-label={t("flight.fares")} className="grid gap-2.5">
         {shown.map((card, index) => (
-          <FareCardItem key={keys[index]} card={card} onWatch={onWatch} />
+          <FareCardItem
+            key={keys[index]}
+            card={card}
+            tags={fareTags(card, cards)}
+            onWatch={onWatch}
+          />
         ))}
       </ul>
       {!all && cards.length > FIRST_ROWS && (
@@ -157,6 +201,14 @@ function FareList({
   );
 }
 
+/** Tag colours, none amber (amber is only for 最低 and 強烈買): white on #26684b, #245b41 on #e4f9e9, white on #2b3a6b. */
+const TAG_CLASS: Record<FareTag, string> = {
+  cheapest: "rounded-lg bg-sprout-600 px-2 py-0.5 text-xs font-bold text-white",
+  fastest:
+    "rounded-lg border border-sprout-700 bg-sprout-100 px-2 py-0.5 text-xs font-bold text-sprout-700",
+  redEye: "rounded-lg bg-[#2b3a6b] px-2 py-0.5 text-xs font-bold text-white",
+};
+
 const PLANE =
   "M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z";
 
@@ -178,9 +230,11 @@ function duration(minutes: number): string | undefined {
  */
 function FareCardItem({
   card,
+  tags,
   onWatch,
 }: {
   card: FlightCard;
+  tags: FareTag[];
   onWatch: (card: FlightCard) => void;
 }) {
   const strong = card.signal === "strong_buy";
@@ -217,6 +271,11 @@ function FareCardItem({
                 </span>
               )
             )}
+            {tags.map((tag) => (
+              <span key={tag} className={TAG_CLASS[tag]}>
+                {t(`flight.tag.${tag}`)}
+              </span>
+            ))}
           </span>
           <span className="shrink-0 text-[22px] font-black text-sprout-900 tabular-nums">
             {formatAmount(card.price, card.intent.currency)}

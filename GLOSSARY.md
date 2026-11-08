@@ -73,7 +73,7 @@ The month view of Flight Radar that shows the cheapest fare of each day, built o
 _Avoid_: Price calendar
 
 **熱門 (Top)**:
-The small tag on a fare Google itself lists among its top flights. Flight Radar shows every fare in one list ordered by price, cheapest first; 熱門 only marks, never reorders.
+The small tag on a fare Google itself lists among its top flights. Flight Radar shows every fare in one list, cheapest first by default; the User can sort it by price or by time, in either direction. 熱門 only marks: it never changes the order, and sorting never adds or removes it.
 _Avoid_: Recommended, featured
 
 **Adaptive Next-Move Chip**:
