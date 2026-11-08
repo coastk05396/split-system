@@ -1,6 +1,6 @@
 import { formatAmount, type FlightCard, type FlightSearchReply } from "@split/shared";
 import { useState } from "react";
-import { primaryButton } from "../groups/ui.js";
+import { travelButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
@@ -46,7 +46,12 @@ export function FareResults({
           <p className="mb-4 text-ink-muted">
             {t(reply.degraded ? "flight.degraded" : "flight.empty")}
           </p>
-          <a href={reply.url} target="_blank" rel="noopener noreferrer" className={primaryButton}>
+          <a
+            href={reply.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${travelButton} px-6 py-4`}
+          >
             {t("flight.view")}
           </a>
         </div>
@@ -207,7 +212,7 @@ function FareCardItem({
               </span>
             ) : (
               card.top === true && (
-                <span className="rounded-lg bg-sprout-100 px-2 py-0.5 text-xs font-bold">
+                <span className="rounded-lg border border-sprout-200 bg-sprout-100 px-2 py-0.5 text-xs font-bold text-sprout-700">
                   {t("flight.top")}
                 </span>
               )

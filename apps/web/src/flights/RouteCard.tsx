@@ -2,6 +2,7 @@ import { Settings } from "lucide-react";
 import { Link } from "react-router";
 import { routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
+import { travelButton } from "../groups/ui.js";
 import { airportName } from "./AirportPicker.js";
 import { friendlyRange } from "./dates.js";
 
@@ -92,7 +93,7 @@ export function RouteCard({
             type="button"
             disabled={pending}
             onClick={onSearch}
-            className="press-pill flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-sprout-700 text-[17px] font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-900 disabled:opacity-60"
+            className={`${travelButton} min-h-12 flex-1 text-[17px]`}
           >
             <svg
               viewBox="0 0 24 24"
@@ -111,7 +112,7 @@ export function RouteCard({
           disabled={pending}
           aria-expanded={open}
           onClick={onToggle}
-          className="press-pill flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-sprout-900 bg-white px-3.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
+          className="press-pill flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-sprout-900 bg-white px-3.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
         >
           <svg
             viewBox="0 0 24 24"

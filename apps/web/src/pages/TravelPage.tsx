@@ -23,7 +23,7 @@ import { DateTiles, dateTiles } from "../flights/DateTiles.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
-import { failureMessage, primaryButton } from "../groups/ui.js";
+import { failureMessage, travelButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 
@@ -201,7 +201,7 @@ export function TravelPage() {
         <button
           type="submit"
           disabled={search.isPending}
-          className="press-pill min-h-11 rounded-full bg-sprout-500 px-4 py-2 font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
+          className={`${travelButton} min-h-11 px-4 py-2`}
         >
           {t("flight.explore")}
         </button>
@@ -252,7 +252,7 @@ export function TravelPage() {
           <button
             type="button"
             disabled={lineWatch.isPending}
-            className={primaryButton}
+            className={`${travelButton} px-6 py-4`}
             onClick={() => {
               lineWatch.mutate(pendingWatch);
             }}
@@ -331,7 +331,7 @@ export function TravelPage() {
             type="submit"
             form={FLIGHT_SEARCH_FORM_ID}
             disabled={search.isPending}
-            className={`${primaryButton} w-full`}
+            className={`${travelButton} w-full px-6 py-4`}
           >
             {t("flight.search")}
           </button>

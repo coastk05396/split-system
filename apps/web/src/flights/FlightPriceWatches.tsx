@@ -14,7 +14,7 @@ import { useState, type SubmitEvent } from "react";
 import { useDeps } from "../app/AppProviders.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev, send } from "../groups/data.js";
-import { failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
+import { failureMessage, input, secondaryButton, travelButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { friendlyRange } from "./dates.js";
 
@@ -269,7 +269,7 @@ function WatchForm({
       )}
       {inLine && linePush.isSuccess && !lineMode ? (
         <button
-          className={primaryButton}
+          className={`${travelButton} px-6 py-4`}
           type="button"
           onClick={() => {
             void line.openExternal(
@@ -281,7 +281,7 @@ function WatchForm({
         </button>
       ) : (
         <button
-          className={primaryButton}
+          className={`${travelButton} px-6 py-4`}
           type="submit"
           disabled={save.isPending || (inLine ? !lineMode : !available || !publicKey)}
         >

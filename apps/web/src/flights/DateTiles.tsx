@@ -122,10 +122,10 @@ export function DateTiles({
               }}
               className={`press-pill flex h-[104px] min-w-[calc((100%-2rem)/5)] flex-1 basis-0 flex-col items-center justify-center gap-0.5 rounded-[18px] px-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-sprout-700 ${
                 isSelected
-                  ? `border-[3px] border-sprout-700 ${day.lowest ? "bg-[#fdf0d5] text-[#6b3f00]" : "bg-sprout-100 text-sprout-900"}`
+                  ? `border-[3px] border-sprout-900 ${day.lowest ? "bg-[#fdf0d5] text-[#6b3f00]" : "bg-travel-action text-white"}`
                   : day.lowest
                     ? "border-[1.5px] border-[#f0c978] bg-[#fdf0d5] text-[#6b3f00]"
-                    : "border-[1.5px] border-sprout-200 bg-white text-sprout-900"
+                    : "border-[1.5px] border-sprout-200 bg-sprout-100 text-sprout-900"
               }`}
             >
               <span aria-hidden="true" className="text-[13px] font-medium">

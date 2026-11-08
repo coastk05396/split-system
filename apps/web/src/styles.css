@@ -12,6 +12,12 @@
   --color-sprout-900: #143f2a;
   --color-ink: #163d2a;
   --color-ink-muted: #4f6b5b;
+  /* Travel mode buttons: white text on these is 7.9:1 at rest and 11.8:1 on hover; the disabled pair is 5.1:1.
+     The brighter sprout-500 is decoration only there (3.4:1 under white text). */
+  --color-travel-action: #245b41;
+  --color-travel-action-hover: #143f2a;
+  --color-travel-disabled: #cfe6d6;
+  --color-travel-disabled-ink: #3d6350;
   --color-peach: #ffe3ca;
   --color-line: #06c755;
   --color-telegram: #229ed9;
@@ -1346,7 +1352,7 @@ body::before {
   animation: fare-pulse 1.4s ease-in-out infinite;
 }
 
-/* The 強烈買 sticker: yellow with dark text (about 9:1), tilted 4 degrees. It sticks on once when
+/* The 強烈買 sticker: light amber with dark brown text (about 8:1), tilted 4 degrees. It sticks on once when
    the list appears; under reduced motion it is simply there. */
 .sticker {
   display: inline-flex;
@@ -1354,11 +1360,12 @@ body::before {
   gap: 0.1875rem;
   padding: 0.125rem 0.5625rem 0.125rem 0.375rem;
   border-radius: 0.5rem;
-  background: #ffd23f;
-  color: var(--color-sprout-900);
+  border: 1px solid #f0c978;
+  background: #fdf0d5;
+  color: #6b3f00;
   font-size: 0.75rem;
   font-weight: 900;
-  box-shadow: 0 2px 0 var(--color-sprout-900);
+  box-shadow: 0 2px 0 #f2a33a;
   transform: rotate(-4deg);
 }
 @keyframes stick-on {

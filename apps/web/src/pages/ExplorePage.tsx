@@ -16,7 +16,7 @@ import { friendlyRange } from "../flights/dates.js";
 import { TravelHeader } from "../flights/RouteCard.js";
 import { useHighlights } from "../flights/use-highlights.js";
 import { readWithRev } from "../groups/data.js";
-import { failureMessage, secondaryButton } from "../groups/ui.js";
+import { failureMessage, secondaryButton, travelButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { airportName } from "../flights/AirportPicker.js";
 
@@ -103,7 +103,7 @@ function DatesSection({ intent }: { intent: FlightSearchIntent }) {
       {cheapest && (
         <Link
           to={{ pathname: "/travel/flights", search: intentToQuery(cheapest.intent) }}
-          className="press-pill mt-3 flex min-h-12 flex-wrap items-center justify-between gap-x-3 rounded-full bg-sprout-500 px-5 py-3 font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-700"
+          className={`${travelButton} mt-3 min-h-12 flex-wrap justify-between gap-x-3 px-5 py-3`}
         >
           <span>{t("explore.cta", { count: String(cards.length) })}</span>
           <span className="tabular-nums">
@@ -207,10 +207,7 @@ export function ExplorePage() {
               maxLength={1000}
             />
           </label>
-          <button
-            type="submit"
-            className="press-pill flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-sprout-500 px-4 py-2 font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-700"
-          >
+          <button type="submit" className={`${travelButton} min-h-11 shrink-0 gap-1.5 px-4 py-2`}>
             <Send aria-hidden="true" className="size-4" />
             {t("explore.ask")}
           </button>
