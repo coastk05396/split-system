@@ -42,14 +42,14 @@ async function explore(
 }
 
 describe("Flight Radar", () => {
-  it("opens from both Travel links and redirects the old Rich Menu address", async () => {
+  it("shows Travel mode and redirects the old Rich Menu address", async () => {
     const { router } = renderApp({ path: "/trips/latest", cookieUser: makeUser("Rick") });
     expect(await screen.findByRole("heading", { name: "下一站，沖繩！" })).toBeVisible();
-    expect(router.state.location.pathname).toBe("/travel");
+    expect(router.state.location.pathname).toBe("/travel/flights");
     for (const name of ["底部導覽", "側邊導覽"]) {
       expect(
-        within(screen.getByRole("navigation", { name })).getByRole("link", { name: "旅遊" }),
-      ).toHaveAttribute("href", "/travel");
+        within(screen.getByRole("navigation", { name })).getByRole("link", { name: "航班" }),
+      ).toHaveAttribute("aria-current", "page");
     }
     expect(screen.queryByText("旅遊功能即將推出，敬請期待！")).toBeNull();
   });
@@ -85,7 +85,7 @@ describe("Flight Radar", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/sign-in");
     });
-    expect(new URLSearchParams(router.state.location.search).get("next")).toBe("/travel");
+    expect(new URLSearchParams(router.state.location.search).get("next")).toBe("/travel/flights");
   });
 
   it("offers a direct Google link when live pricing is blocked", async () => {

@@ -1,3 +1,5 @@
+import { Settings } from "lucide-react";
+import { Link } from "react-router";
 import { routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
 import { airportName } from "./AirportPicker.js";
@@ -125,6 +127,19 @@ export function RouteCard({
   );
 }
 
+/** The small gear that stands in for 設定, which Travel mode's nav does not carry. */
+export function SettingsLink() {
+  return (
+    <Link
+      to="/settings"
+      aria-label={t("nav.settings")}
+      className="press-pill flex size-12 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+    >
+      <Settings aria-hidden="true" className="size-[22px] stroke-sprout-900" strokeWidth={2} />
+    </Link>
+  );
+}
+
 /** The headline and its bell, which opens the Price Watch radar. */
 export function TravelHeader({
   intent,
@@ -139,20 +154,23 @@ export function TravelHeader({
         <h1 className="text-[32px] leading-[1.15] font-black">{headline(intent)}</h1>
         <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>
       </div>
-      <button
-        type="button"
-        aria-label={t("flight.radar")}
-        onClick={onRadar}
-        className="press-pill flex size-12 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-[22px] fill-none stroke-sprout-900 stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+      <div className="flex shrink-0 gap-2">
+        <button
+          type="button"
+          aria-label={t("flight.radar")}
+          onClick={onRadar}
+          className="press-pill flex size-12 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
         >
-          <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
-        </svg>
-      </button>
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="size-[22px] fill-none stroke-sprout-900 stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+          >
+            <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
+          </svg>
+        </button>
+        <SettingsLink />
+      </div>
     </header>
   );
 }

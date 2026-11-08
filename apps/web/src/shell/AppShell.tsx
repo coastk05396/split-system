@@ -1,6 +1,6 @@
-import { Plus } from "lucide-react";
+import { Compass, Plus } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
-import { Link, NavLink } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
 import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { hapticTick } from "./haptics.js";
@@ -29,14 +29,37 @@ const TABS: readonly Tab[] = [
 
 const SIDEBAR_TABS = TABS.filter((tab) => tab.label !== "nav.new");
 
+/** SPEC §6 Travel mode: any path under /travel swaps the nav for the travel buttons. */
+const TRAVEL_TABS: readonly Tab[] = [
+  { to: "/", label: "nav.split", icon: CuteHomeIcon },
+  {
+    to: "/travel",
+    label: "nav.explore",
+    icon: ({ active: _a, ...props }) => <Compass {...props} />,
+  },
+  {
+    to: "/travel/flights",
+    label: "nav.flights",
+    icon: ({ active: _a, ...props }) => <CuteTripPlaneIcon {...props} />,
+  },
+];
+
+/** The tabs of the current mode: [bottom bar, sidebar]. */
+function useTabs() {
+  const { pathname } = useLocation();
+  const travel = pathname === "/travel" || pathname.startsWith("/travel/");
+  return { travel, bottom: travel ? TRAVEL_TABS : TABS, side: travel ? TRAVEL_TABS : SIDEBAR_TABS };
+}
+
 function BottomBar() {
+  const { travel, bottom } = useTabs();
   return (
     <nav
       aria-label={t("nav.bottom")}
       className="glass-nav fixed inset-x-0 bottom-0 z-10 border-t border-sprout-200/80 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <ul className="mx-auto grid h-17 max-w-md grid-cols-5">
-        {TABS.map((tab) => (
+      <ul className={`mx-auto grid h-17 max-w-md ${travel ? "grid-cols-3" : "grid-cols-5"}`}>
+        {bottom.map((tab) => (
           <li key={tab.label} className="flex">
             <NavLink
               to={tab.to}
@@ -86,6 +109,7 @@ function BottomBar() {
 }
 
 function Sidebar() {
+  const { travel, side } = useTabs();
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col bg-sprout-900 px-4 py-7 text-white md:flex">
       <Link to="/" className="mb-8 flex items-center gap-3 px-2">
@@ -94,7 +118,7 @@ function Sidebar() {
       </Link>
       <nav aria-label={t("nav.side")}>
         <ul className="flex flex-col gap-1">
-          {SIDEBAR_TABS.map((tab) => (
+          {side.map((tab) => (
             <li key={tab.label}>
               <NavLink
                 to={tab.to}
@@ -122,13 +146,15 @@ function Sidebar() {
           ))}
         </ul>
       </nav>
-      <Link
-        to="/new"
-        className="press-pill mt-6 flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-4 py-3 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-500/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-      >
-        <Plus aria-hidden="true" className="size-5" />
-        {t("nav.newExpense")}
-      </Link>
+      {!travel && (
+        <Link
+          to="/new"
+          className="press-pill mt-6 flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-4 py-3 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-500/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          <Plus aria-hidden="true" className="size-5" />
+          {t("nav.newExpense")}
+        </Link>
+      )}
     </aside>
   );
 }

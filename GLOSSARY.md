@@ -44,6 +44,10 @@ _Avoid_: Price score, recommendation tier
 A standing alert a User sets on a route and date window so 小芽 wakes them once its fare reaches Strong Buy or drops below a target amount.
 _Avoid_: Subscription, price tracker
 
+**Travel mode**:
+The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to the travel buttons (分帳, 探索, 航班) and drop the expense-splitting ones. The URL is its only state, and 分帳 leaves it for 首頁.
+_Avoid_: Travel tab, trip mode (Trip is the disabled Group feature)
+
 **Entity Pill**:
 One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the current search, and tapping one opens the editing panel.
 _Avoid_: Tag, search parameter

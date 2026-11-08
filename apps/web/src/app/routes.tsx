@@ -117,8 +117,18 @@ export const routes: RouteObject[] = [
     ErrorBoundary: RouteError,
     children: [
       { index: true, Component: HomePage },
-      { path: "travel", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
-      { path: "trips/latest", loader: () => redirect("/travel") },
+      {
+        path: "travel",
+        children: [
+          // 探索 is a placeholder until the explore page lands; old links keep their search.
+          {
+            index: true,
+            loader: ({ request }) => redirect(`/travel/flights${new URL(request.url).search}`),
+          },
+          { path: "flights", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
+        ],
+      },
+      { path: "trips/latest", loader: () => redirect("/travel/flights") },
       { path: "groups", lazy: page(() => import("../pages/GroupsPage.js"), "GroupsPage") },
       { path: "groups/new", lazy: page(() => import("../pages/NewGroupPage.js"), "NewGroupPage") },
       { path: "groups/:id", lazy: page(() => import("../pages/GroupPage.js"), "GroupPage") },

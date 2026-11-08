@@ -306,8 +306,8 @@ CREATE TABLE fx_rates (
 ## 6. 前端規格與畫面校準 (Frontend & Screen Specs)
 
 - **導覽結構**：
-  - 手機端：底部五標籤（首頁、旅遊、＋記一筆、統計、設定）。點擊「旅遊」不切換路由，跳出「旅遊功能即將推出，敬請期待！」輕量通知；若畫面已存在或動態新增其他儲存結果提示（如支出儲存提示），「旅遊」通知依據現有提示的實際結算幾何高度（防禦進場 transform 瞬態干擾）動態向上堆疊（頂部保留 8px 間距，完全不遮蔽現有提示），且雙方獨立計時、互不干擾。
-  - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態，包含「旅遊」通知按鈕）。
+  - 手機端：底部五標籤（首頁、旅遊、＋記一筆、統計、設定）。點「旅遊」進入 **Travel mode**（見〈Flight Radar〉）。
+  - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態），側欄與底部列一樣依模式切換。
 - **UI 原語**：Tailwind CSS v4 + Radix UI (Dialog、Sheet、Select、Popover)。
 - **首頁呈現**：目前淨收付以使用者的偏好幣別顯示為單一數字；其他幣別依當日最新參考匯率換算後加總（僅供參考，見 ADR 0002）。取不到匯率時退回依幣別並列。群組列與結算畫面一律維持各群組的結算幣別，不換算。「待結算的群組」標題右側提供「我的群組 ›」文字連結，直接前往 `/groups`。
 - **新增開銷表單**：
@@ -390,7 +390,8 @@ CREATE TABLE fx_rates (
 
 ## Flight Radar — live single-route discovery
 
-- `/travel` is a signed-in standalone Flight Radar screen in both navigation bars. Sign-in returns visitors to that URL. `/trips/latest` redirects to `/travel`; Group Trip remains disabled.
+- **Travel mode** is on for any path under `/travel` and decided by the URL alone, so refresh and shared links keep it. The bottom nav (and the desktop sidebar) then shows three buttons, left to right: 分帳 / Split (to `/`, which leaves the mode and brings back the five-tab nav), 探索 / Explore (`/travel`) and 航班 / Flights (`/travel/flights`); there is no 新增 or 統計, and 行程 is not shown while `TRIP_ENABLED` is false. The active button carries `aria-current="page"`, every target is at least 44 px, and 設定 is reached from a small gear in the travel page header. 追蹤 (Price Watches) joins the nav with its own route in a later change.
+- `/travel/flights` is the signed-in standalone Flight Radar screen; sign-in returns visitors to it. `/travel` is the 探索 landing, a placeholder until the explore page exists: it redirects to `/travel/flights`, and any `/travel` request carrying search parameters (old bookmarks, LINE portal and Price Watch links) does the same with every parameter kept. `/trips/latest` redirects to `/travel/flights`; Group Trip remains disabled. Other `/travel` mentions below mean this screen.
 - Traditional Chinese and English labels follow the User's Language. TPE is the default origin with TSA, RMQ and KHH quick choices or an explicit airport code. Searches price one adult in round-trip economy using Preferred currency and exact departure/return dates, with an optional budget.
 - `POST /api/v1/flights/search` validates airport/date/currency inputs and refuses past departures. It returns source fares with airline, outbound times, stops, duration, deterministic Deal Signals and Google Flights `?tfs=` links. Fare and budget amounts use integer currency minor units.
 - Current `fast-flights` round-trip quotes describe outbound choices before the user selects a return. Unavailable return times are explicitly labelled as selected on Google Flights, never invented. Native `low`/`typical`/`high` is accepted only from Google's price indicator when present; absent indicators stay `unknown` and conservatively show Hold. This is an upstream limitation against the original complete-inbound-summary goal.
