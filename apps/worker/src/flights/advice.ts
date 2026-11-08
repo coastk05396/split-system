@@ -108,9 +108,12 @@ export function eligibleMoves(
   const weekday = new Date(intent.departureDate).getUTCDay();
   const toThursday = weekday === 0 ? -3 : weekday >= 5 ? 4 - weekday : 0;
   const thursday = shift(intent.departureDate, toThursday);
+  // A one-way search has no return date to move.
+  const back = (days: number) =>
+    intent.returnDate === undefined ? {} : { returnDate: shift(intent.returnDate, days) };
   if (toThursday !== 0 && thursday >= today)
     moves.set("thursday", {
-      patch: { departureDate: thursday, returnDate: shift(intent.returnDate, toThursday) },
+      patch: { departureDate: thursday, ...back(toThursday) },
       label: [`改週四出發 ${thursday}`, `Leave Thursday ${thursday}`],
     });
   if (intent.directOnly)
@@ -156,22 +159,23 @@ export function eligibleMoves(
     moves.set("earlier_week", {
       patch: {
         departureDate: shift(intent.departureDate, -7),
-        returnDate: shift(intent.returnDate, -7),
+        ...back(-7),
       },
       label: ["提早一週", "One week earlier"],
     });
   moves.set("later_week", {
     patch: {
       departureDate: shift(intent.departureDate, 7),
-      returnDate: shift(intent.returnDate, 7),
+      ...back(7),
     },
     label: ["延後一週", "One week later"],
   });
-  moves.set("longer_stay", {
-    patch: { returnDate: shift(intent.returnDate, 1) },
-    label: ["多待一天", "Stay one more day"],
-  });
-  if (shift(intent.returnDate, -1) > intent.departureDate)
+  if (intent.returnDate !== undefined)
+    moves.set("longer_stay", {
+      patch: { returnDate: shift(intent.returnDate, 1) },
+      label: ["多待一天", "Stay one more day"],
+    });
+  if (intent.returnDate !== undefined && shift(intent.returnDate, -1) > intent.departureDate)
     moves.set("shorter_stay", {
       patch: { returnDate: shift(intent.returnDate, -1) },
       label: ["少待一天", "Stay one day less"],
