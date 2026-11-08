@@ -3,8 +3,6 @@ import type { MessageId } from "./messages.js";
 
 /** The English catalog: every ID of the zh-TW one, checked by the type. */
 export const en: Record<MessageId, string> = {
-  "flight.buy": "Buy",
-  "flight.hold": "Hold",
   "flight.origin": "Origin airport",
   "flight.destination": "Destination airport",
   "flight.departure": "Departure date",

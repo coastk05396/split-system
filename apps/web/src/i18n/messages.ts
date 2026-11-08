@@ -7,8 +7,6 @@ import { en, enErrors } from "./en.js";
  * same type (en.ts), so a missing translation fails the type check; there is no i18n library.
  */
 const zhTW = {
-  "flight.buy": "可以買",
-  "flight.hold": "再等等",
   "flight.origin": "出發機場",
   "flight.destination": "目的地機場",
   "flight.departure": "出發日期",

@@ -93,6 +93,17 @@ function FareSkeleton({ motion }: { motion: boolean }) {
   );
 }
 
+/** Stable row keys from the fare itself; a repeated fare gets a "#n" suffix so keys stay unique. */
+function rowKeys(cards: FlightCard[]): string[] {
+  const seen = new Map<string, number>();
+  return cards.map((card) => {
+    const key = `${card.url}|${card.airline}|${card.outboundDeparture}|${String(card.price)}`;
+    const n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    return n === 0 ? key : `${key}#${String(n)}`;
+  });
+}
+
 function FareList({
   cards,
   onWatch,
@@ -102,6 +113,7 @@ function FareList({
 }) {
   const [all, setAll] = useState(false);
   const shown = all ? cards : cards.slice(0, FIRST_ROWS);
+  const keys = rowKeys(shown);
   return (
     <>
       <p className="mx-1 text-sm text-ink-muted">
@@ -115,11 +127,7 @@ function FareList({
         className="surface-card overflow-hidden rounded-2xl border border-sprout-200 bg-white"
       >
         {shown.map((card, index) => (
-          <FareRow
-            key={`${card.url}-${card.airline}-${card.outboundDeparture}-${card.price}-${String(index)}`}
-            card={card}
-            onWatch={onWatch}
-          />
+          <FareRow key={keys[index]} card={card} onWatch={onWatch} />
         ))}
       </ul>
       {!all && cards.length > FIRST_ROWS && (
