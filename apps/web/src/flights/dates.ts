@@ -29,3 +29,9 @@ export function friendlyRange(from: string, to: string): string {
   // Chinese text spaces the dash only on its right, as the full-width parenthesis already pads its left.
   return `${friendlyDate(from)}${getLocale() === "en" ? " " : ""}– ${friendlyDate(to)}`;
 }
+
+/** "1/8–1/11" in both languages: the compact range for chips that must fit about 200 px. */
+export function shortRange(from: string, to: string): string {
+  const numeric = (date: string) => `${String(parts(date).month)}/${String(parts(date).day)}`;
+  return `${numeric(from)}–${numeric(to)}`;
+}

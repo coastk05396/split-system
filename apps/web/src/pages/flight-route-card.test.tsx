@@ -181,6 +181,31 @@ describe("Flight Radar header and route card", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
+    "never truncates the dates and offers a compact code form for narrow cards in %s",
+    async (language) => {
+      setup(language);
+      await explore(language);
+      const card = screen.getByRole("region", { name: text[language].card });
+      const chip = within(card).getByRole("button", { name: text[language].chip });
+      // jsdom has no layout, so check what is rendered: codes and short dates are always present
+      // for the narrow form, and no date text sits inside an element that can be clipped.
+      expect(within(chip).getByText("TPE → OKA")).toBeInTheDocument();
+      const compactDates = within(chip).getByText("1/8–1/11");
+      const fullDates = within(chip).getByText(text[language].dates);
+      for (const dates of [compactDates, fullDates]) {
+        expect(dates.closest(".truncate")).toBeNull();
+        expect(dates).toHaveClass("shrink-0");
+      }
+      // Only the long city-name route may shrink.
+      expect(
+        within(chip)
+          .getByText(/Taipei Taoyuan|台北桃園/)
+          .closest(".truncate"),
+      ).not.toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
     "searches the shown search in one tap, without a prompt parse, in %s",
     async (language) => {
       const { api } = setup(language);
