@@ -1,6 +1,6 @@
 import { Settings } from "lucide-react";
 import { Link } from "react-router";
-import { routeEstimate, type FlightSearchIntent } from "@split/shared";
+import { partyOf, routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
 import { travelButton } from "../groups/ui.js";
 import { airportName } from "./AirportPicker.js";
@@ -59,6 +59,7 @@ export function RouteCard({
   onSearch: () => void;
 }) {
   const estimate = leg(intent.origin, intent.destination);
+  const party = partyOf(intent);
   return (
     <section
       aria-label={t("flight.summaryCard")}
@@ -72,10 +73,16 @@ export function RouteCard({
         className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 justify-self-start rounded-full border-[1.5px] border-sprout-700 bg-white px-3.5 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
       >
         <span className="min-w-0 truncate">
-          {t("flight.routeChip", {
-            route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
-            dates: friendlyRange(intent.departureDate, intent.returnDate),
-          })}
+          {[
+            t("flight.routeChip", {
+              route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
+              dates: friendlyRange(intent.departureDate, intent.returnDate),
+            }),
+            party.oneWay && t("flight.chipOneWay"),
+            party.people > 1 && t("flight.chipPeople", { n: party.people }),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
         <svg
           viewBox="0 0 24 24"

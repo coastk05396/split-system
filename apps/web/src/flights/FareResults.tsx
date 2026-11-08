@@ -1,10 +1,18 @@
-import { formatAmount, type FlightCard, type FlightSearchReply } from "@split/shared";
+import {
+  formatAmount,
+  isStandardSearch,
+  partyOf,
+  type FlightCard,
+  type FlightSearchIntent,
+  type FlightSearchReply,
+} from "@split/shared";
 import { useState } from "react";
 import { travelButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
 import { cardsOnDate } from "./DateTiles.js";
+import { cabinText, whoText } from "./PartyPanel.js";
 
 /** Rows shown before the 顯示全部 button. */
 const FIRST_ROWS = 10;
@@ -26,6 +34,7 @@ export function FareResults({
   onWatch: (card: FlightCard) => void;
 }) {
   if (!pending && !reply) return null;
+  const party = partyOf(reply?.intent ?? {});
   const motion = !prefersReducedMotion();
   return (
     <section
@@ -44,7 +53,9 @@ export function FareResults({
       {reply && (reply.degraded || reply.cards.length === 0) && (
         <div className="surface-card rounded-3xl border border-sprout-200 bg-white p-5">
           <p className="mb-4 text-ink-muted">
-            {t(reply.degraded ? "flight.degraded" : "flight.empty")}
+            {reply.cards.length === 0 && party.cabin !== "economy"
+              ? t("flight.emptyCabin", { cabin: cabinText(party.cabin) })
+              : t(reply.degraded ? "flight.degraded" : "flight.empty")}
           </p>
           <a
             href={reply.url}
@@ -62,6 +73,7 @@ export function FareResults({
           key={date ?? ""}
           cards={sortFares(cardsOnDate(reply.cards, date))}
           onWatch={onWatch}
+          note={footnote(reply.intent)}
         />
       )}
     </section>
@@ -109,10 +121,23 @@ function rowKeys(cards: FlightCard[]): string[] {
   });
 }
 
+/** The standard 1 adult economy round trip keeps its original note; anything else names the party. */
+function footnote(intent: FlightSearchIntent): string {
+  if (isStandardSearch(intent)) return t("flight.footnote");
+  const party = partyOf(intent);
+  return t("flight.footnoteParty", {
+    trip: t(party.oneWay ? "flight.totalOne" : "flight.totalRound"),
+    who: whoText(party.adults, party.children),
+    cabin: cabinText(party.cabin),
+  });
+}
+
 function FareList({
   cards,
   onWatch,
+  note,
 }: {
+  note: string;
   cards: FlightCard[];
   onWatch: (card: FlightCard) => void;
 }) {
@@ -150,9 +175,7 @@ function FareList({
           </svg>
         </button>
       )}
-      <p className="px-1 text-[13px] leading-normal font-medium text-ink-muted">
-        {t("flight.footnote")}
-      </p>
+      <p className="px-1 text-[13px] leading-normal font-medium text-ink-muted">{note}</p>
     </>
   );
 }
