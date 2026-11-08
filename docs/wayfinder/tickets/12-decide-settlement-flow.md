@@ -5,7 +5,13 @@ mode: HITL
 status: closed
 assignee: rick
 parent: ../map.md
-blocked_by: ["07-research-debt-simplification.md", "08-decide-money-and-split-rules.md", "11-decide-fx-rate-policy.md", "19-research-free-tier-fit.md"]
+blocked_by:
+  [
+    "07-research-debt-simplification.md",
+    "08-decide-money-and-split-rules.md",
+    "11-decide-fx-rate-policy.md",
+    "19-research-free-tier-fit.md",
+  ]
 ---
 
 ## Question

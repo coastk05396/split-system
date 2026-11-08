@@ -259,9 +259,9 @@ describe("Flight Radar", () => {
       expect(screen.queryByRole("region", { name: barName })).toBeNull();
       // Only the route card's own one-tap search exists until the panel opens.
       expect(screen.queryByRole("button", { name: searchName })).toBeNull();
-      expect(
-        screen.getAllByRole("button", { name: /^(Explore flights again|重新探索航班)$/ }),
-      ).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: /^(Search again|重新探索航班)$/ })).toHaveLength(
+        1,
+      );
 
       await openSearchPanel();
       const bar = screen.getByRole("region", { name: barName });

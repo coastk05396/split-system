@@ -208,7 +208,7 @@ describe("Flight Radar date tiles", () => {
     const row = within(section).getAllByRole("button")[0]?.parentElement;
     expect(within(section).getAllByRole("button")).toHaveLength(7);
     expect(row).toHaveClass("overflow-x-auto");
-    expect(within(section).getAllByRole("button")[0]).toHaveClass("basis-[calc((100%-2rem)/5)]");
+    expect(within(section).getAllByRole("button")[0]).toHaveClass("min-w-[calc((100%-2rem)/5)]");
   });
 
   it.each(["en", "zh-TW"] as const)(

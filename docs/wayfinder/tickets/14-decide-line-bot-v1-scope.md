@@ -5,7 +5,8 @@ mode: HITL
 status: closed
 assignee: rick
 parent: ../map.md
-blocked_by: ["02-export-design-screens.md", "05-research-line-platform.md", "19-research-free-tier-fit.md"]
+blocked_by:
+  ["02-export-design-screens.md", "05-research-line-platform.md", "19-research-free-tier-fit.md"]
 ---
 
 ## Question

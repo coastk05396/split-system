@@ -23,7 +23,7 @@ const text = {
     destination: "Okinawa",
     dates: "Jan 8 – Jan 11 · 1 adult",
     edit: "Edit",
-    search: "Explore flights again",
+    search: "Search again",
     prompt: "Where would you like to go?",
     headline: "Next stop, Okinawa!",
     asking: "Where to next?",

@@ -32,4 +32,3 @@ This is a product decision, not legal advice; the legal wording waits for **Rese
 Divergences from the designs are listed under "Screens that do not exist yet" in `docs/design-changes.md`: the privacy and terms pages, the nickname edit on Group settings, the 匯出 CSV action, and the account deletion screens.
 
 Profile pictures (added after the owner asked how the LINE picture reaches the app): the app stores only the provider's picture URL and name, read from the sign-in token with the `profile` scope and refreshed at each sign-in, never the image file. A missing or failing picture shows a coloured circle with the person's initial. If both providers are linked, the picture comes from the provider used for the most recent sign-in. v1 has no avatar upload; receipt photos are the only images people add. How long LINE's picture links stay valid is not confirmed.
-

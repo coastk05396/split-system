@@ -5,7 +5,8 @@ mode: HITL
 status: closed
 assignee: rick
 parent: ../map.md
-blocked_by: ["03-research-cloudflare-hosting.md", "14-decide-line-bot-v1-scope.md", "15-decide-data-model.md"]
+blocked_by:
+  ["03-research-cloudflare-hosting.md", "14-decide-line-bot-v1-scope.md", "15-decide-data-model.md"]
 ---
 
 ## Question

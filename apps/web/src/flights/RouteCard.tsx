@@ -61,29 +61,11 @@ export function RouteCard({
       aria-label={t("flight.summaryCard")}
       className="mb-4 grid gap-3.5 rounded-[28px] border border-[#c4e4d3] bg-sprout-100 p-[18px]"
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 text-sm font-medium text-sprout-700 [font-feature-settings:'palt']">
-          {t("flight.summaryDates", {
-            dates: friendlyRange(intent.departureDate, intent.returnDate),
-          })}
-        </p>
-        <button
-          type="button"
-          disabled={pending}
-          aria-expanded={open}
-          onClick={onToggle}
-          className="press-pill -my-1 flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-sprout-900 bg-white px-3.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
-          >
-            <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
-          </svg>
-          {t("flight.edit")}
-        </button>
-      </div>
+      <p className="text-sm font-medium text-sprout-700 [font-feature-settings:'palt']">
+        {t("flight.summaryDates", {
+          dates: friendlyRange(intent.departureDate, intent.returnDate),
+        })}
+      </p>
       <div className="flex items-center justify-between gap-2">
         <Place code={intent.origin} />
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
@@ -102,25 +84,43 @@ export function RouteCard({
         </div>
         <Place code={intent.destination} end />
       </div>
-      {!open && (
+      <div className="flex items-center gap-2">
+        {!open && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onSearch}
+            className="press-pill flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-sprout-700 text-[17px] font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-900 disabled:opacity-60"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className="size-5 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round]"
+            >
+              <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+              <circle cx="16" cy="7" r="2" />
+              <circle cx="8" cy="17" r="2" />
+            </svg>
+            {t("flight.exploreAgain")}
+          </button>
+        )}
         <button
           type="button"
           disabled={pending}
-          onClick={onSearch}
-          className="press-pill flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-sprout-700 text-[17px] font-bold text-white focus-visible:outline-2 focus-visible:outline-sprout-900 disabled:opacity-60"
+          aria-expanded={open}
+          onClick={onToggle}
+          className="press-pill flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-sprout-900 bg-white px-3.5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:opacity-60"
         >
           <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
-            className="size-5 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round]"
+            className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
           >
-            <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
-            <circle cx="16" cy="7" r="2" />
-            <circle cx="8" cy="17" r="2" />
+            <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
           </svg>
-          {t("flight.exploreAgain")}
+          {t("flight.edit")}
         </button>
-      )}
+      </div>
     </section>
   );
 }

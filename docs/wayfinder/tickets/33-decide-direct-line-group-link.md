@@ -19,4 +19,3 @@ The owner asked whether an app Group can be linked directly to a LINE group chat
 - [Research LINE group chat context and linking](32-research-line-group-chat-linking.md)
 
 Research result (from **Research LINE group chat context and linking**): a direct link does not fit; LIFF no longer reports which chat it was opened from, the group ID reaches only a Bot inside the group, and "opened from this chat" cannot prove membership or be revoked. Recommendation to the owner: keep the Invite link and rule this out of v1; a later version could add the Bot to the chat with a one-time code.
-

@@ -5,7 +5,16 @@ mode: HITL
 status: closed
 assignee: rick
 parent: ../map.md
-blocked_by: ["04-research-d1-and-kv-guarantees.md", "09-decide-identity-and-session.md", "10-decide-invite-and-membership.md", "11-decide-fx-rate-policy.md", "12-decide-settlement-flow.md", "13-decide-trip-module-scope.md", "19-research-free-tier-fit.md"]
+blocked_by:
+  [
+    "04-research-d1-and-kv-guarantees.md",
+    "09-decide-identity-and-session.md",
+    "10-decide-invite-and-membership.md",
+    "11-decide-fx-rate-policy.md",
+    "12-decide-settlement-flow.md",
+    "13-decide-trip-module-scope.md",
+    "19-research-free-tier-fit.md",
+  ]
 ---
 
 ## Question
@@ -28,21 +37,22 @@ Entities, relations and invariants for D1 covering User, Identity, Group, Member
 
 **Tables** (columns are the outline, not migrations):
 
-| Table | Key columns and constraints |
-| --- | --- |
-| `user` | id, display_name, picture_url, created_at |
-| `identity` | id, user_id, provider (`google` or `line`), provider_sub, created_at; UNIQUE (provider, provider_sub) |
-| `session` | id, user_id, token_hash UNIQUE, device_label, created_at, last_used_at, expires_at (30 days, rotating) |
-| `group` | id, name, usage (`tab` or `trip`), settlement_currency, default_expense_currency, expense_count, destination, trip_start, trip_end, trip_notes, created_at |
-| `member` | id, group_id, user_id (null once the account is deleted), role (`admin` or `member`), status (`active` or `former`), display_name (snapshot), balance_minor, joined_at, left_at; index (group_id) |
-| `invite` | id, group_id, token_hash UNIQUE, expires_at (7 days), revoked_at, created_by_member |
-| `expense` | id, group_id, created_by_member, payer_member, name, category, note, expense_date, amount_minor, currency, rate_micro, rate_date, rate_edited, converted_minor, split_method (`equal`, `exact` or `shares`), stop_id (nullable), idempotency_key, created_at, updated_at; UNIQUE (created_by_member, idempotency_key); index (group_id, expense_date) |
-| `expense_split` | expense_id, member_id, amount_minor (Settlement currency), share_weight (shares only), input_minor (exact only); PK (expense_id, member_id) |
-| `settlement` | id, group_id, from_member, to_member, amount_minor (Settlement currency), confirmed_by_member, created_at, undone_at, undone_by_member, idempotency_key; UNIQUE (confirmed_by_member, idempotency_key); index (group_id, created_at) |
-| `stop` | id, group_id, day, start_time, end_time (both nullable), name, category, location_text, note, created_by_member, created_at; index (group_id, day) |
-| `fx_rate` | date, base, quote, rate_micro, source, fetched_at; PK (date, base, quote) |
+| Table           | Key columns and constraints                                                                                                                                                                                                                                                                                                                           |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user`          | id, display_name, picture_url, created_at                                                                                                                                                                                                                                                                                                             |
+| `identity`      | id, user_id, provider (`google` or `line`), provider_sub, created_at; UNIQUE (provider, provider_sub)                                                                                                                                                                                                                                                 |
+| `session`       | id, user_id, token_hash UNIQUE, device_label, created_at, last_used_at, expires_at (30 days, rotating)                                                                                                                                                                                                                                                |
+| `group`         | id, name, usage (`tab` or `trip`), settlement_currency, default_expense_currency, expense_count, destination, trip_start, trip_end, trip_notes, created_at                                                                                                                                                                                            |
+| `member`        | id, group_id, user_id (null once the account is deleted), role (`admin` or `member`), status (`active` or `former`), display_name (snapshot), balance_minor, joined_at, left_at; index (group_id)                                                                                                                                                     |
+| `invite`        | id, group_id, token_hash UNIQUE, expires_at (7 days), revoked_at, created_by_member                                                                                                                                                                                                                                                                   |
+| `expense`       | id, group_id, created_by_member, payer_member, name, category, note, expense_date, amount_minor, currency, rate_micro, rate_date, rate_edited, converted_minor, split_method (`equal`, `exact` or `shares`), stop_id (nullable), idempotency_key, created_at, updated_at; UNIQUE (created_by_member, idempotency_key); index (group_id, expense_date) |
+| `expense_split` | expense_id, member_id, amount_minor (Settlement currency), share_weight (shares only), input_minor (exact only); PK (expense_id, member_id)                                                                                                                                                                                                           |
+| `settlement`    | id, group_id, from_member, to_member, amount_minor (Settlement currency), confirmed_by_member, created_at, undone_at, undone_by_member, idempotency_key; UNIQUE (confirmed_by_member, idempotency_key); index (group_id, created_at)                                                                                                                  |
+| `stop`          | id, group_id, day, start_time, end_time (both nullable), name, category, location_text, note, created_by_member, created_at; index (group_id, day)                                                                                                                                                                                                    |
+| `fx_rate`       | date, base, quote, rate_micro, source, fetched_at; PK (date, base, quote)                                                                                                                                                                                                                                                                             |
 
 **Invariants.**
+
 1. A Balance is stored on `member` and updated in the same batch as the write that changes it: the payer gains `converted_minor`, each split Member loses their `amount_minor`, and a confirmed Settlement of x from A to B adds x to A and subtracts x from B. Edits and deletes apply the difference. In every Group the Balances of all Members (including Former Members) sum to zero.
 2. An Expense has at least one split line, the split lines sum to `converted_minor`, and the payer and every split Member belong to the Group. A same-currency Expense has `rate_micro` of 1,000,000.
 3. Splitting runs in the Expense currency with the decided leftover rule; each split is then converted to the Settlement currency with the same leftover rule so the converted lines sum to `converted_minor` exactly. (This is a derived rule from the money and exchange rate decisions; confirm it when the spec is assembled.)

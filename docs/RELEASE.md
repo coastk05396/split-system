@@ -4,13 +4,13 @@ The production hostname is `https://split.rickchen.si`. Keep staging and product
 
 ## Values to collect
 
-| Service | Public identifier or setting | Store privately |
-| --- | --- | --- |
-| Cloudflare | Account ID; active `rickchen.si` zone; D1 IDs for `split-staging` and `split-prod`; KV namespace IDs for each environment | API token for CI |
-| Google | OAuth **Web application** client ID for `https://split.rickchen.si` | No client secret is used by this ID-token flow |
-| LINE Login | Login channel ID and LIFF app ID, with endpoint `https://split.rickchen.si/` and `openid` scope | Channel secret is not used by the LIFF ID-token flow |
-| LINE Messaging API | Messaging API channel and webhook URL `https://split.rickchen.si/api/v1/line/webhook` | Channel secret and channel access token |
-| Worker | None | A new, random `SESSION_SIGNING_KEY` for each environment |
+| Service            | Public identifier or setting                                                                                              | Store privately                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Cloudflare         | Account ID; active `rickchen.si` zone; D1 IDs for `split-staging` and `split-prod`; KV namespace IDs for each environment | API token for CI                                         |
+| Google             | OAuth **Web application** client ID for `https://split.rickchen.si`                                                       | No client secret is used by this ID-token flow           |
+| LINE Login         | Login channel ID and LIFF app ID, with endpoint `https://split.rickchen.si/` and `openid` scope                           | Channel secret is not used by the LIFF ID-token flow     |
+| LINE Messaging API | Messaging API channel and webhook URL `https://split.rickchen.si/api/v1/line/webhook`                                     | Channel secret and channel access token                  |
+| Worker             | None                                                                                                                      | A new, random `SESSION_SIGNING_KEY` for each environment |
 
 Do not put tokens or secrets in GitHub issues, chat, `wrangler.jsonc`, or Vite `VITE_` variables. Set Worker secrets with `pnpm --filter @split/worker exec wrangler secret put NAME --env staging|production`, or the Cloudflare dashboard. The `VITE_` values are shipped to every browser and must be public IDs only.
 

@@ -3,17 +3,19 @@
 > **專案名稱**：小芽分帳 (Short: 小芽)  
 > **正式網域**：`split.rickchen.si`  
 > **狀態**：Build-Ready Specification (Wayfinder Completed)  
-> **基礎設施原則**：100% Cloudflare Free Tier / Zero-Server / Local-First Development  
+> **基礎設施原則**：100% Cloudflare Free Tier / Zero-Server / Local-First Development
 
 ---
 
 ## 1. 產品概述與邊界 (Product Overview & Scope)
 
 ### 1.1 產品定位
+
 「小芽分帳」是一款專為好友、室友與團體旅遊打造的輕量化分帳與記帳工具。兼具「日常聚會累加分帳 (Running Tab)」與「旅遊行程分帳 (Trip)」，深度整合 LINE LIFF (手機端原生體驗) 與 Web App (桌面端全功能)，並以小豆芽吉祥物作為親切的系統通知角色。
 
 ### 1.2 系統邊界
-* **In-Scope (v1 發布範圍)**：
+
+- **In-Scope (v1 發布範圍)**：
   - 介面語言：繁體中文 (`zh-TW`，預設) 與英文 (`en`)；語言存在帳號上，於設定頁切換，首次依裝置語言決定。
   - 幣別支援：新台幣 (`TWD`，整數元)、美元 (`USD`，美分)、日元 (`JPY`，整數元) 與泰銖 (`THB`，satang，兩位小數)。
   - 雙軌登入：桌面端 Google SSO、手機端 LINE LIFF 靜默自動登入；支援已登入狀態下的手動身分綁定。
@@ -26,7 +28,7 @@
   - 行程模組：目的地、日期、每日時間軸站點 (自動按時間排序)、地圖文字連結搜尋。
   - 虛擬成員 (Placeholders)：未註冊好友代記，後續可認領與合併。
   - 單一響應式 SPA：桌面寬螢幕雙欄側邊欄，手機端底部五分頁導覽。
-* **Out-of-Scope (v1 排除項目)**：
+- **Out-of-Scope (v1 排除項目)**：
   - 英文以外的其他語言（日文、泰文等）；LINE Bot 回覆與圖文選單、隱私權政策與服務條款僅提供繁體中文。
   - LINE Bot 自然語言文字記帳（Bot 僅提供 Rich Menu 圖文選單與被動回覆）。
   - 金流支付或銀行轉帳（系統僅記錄與計算債務，不碰實體金流）。
@@ -54,36 +56,43 @@
 ```
 
 ### 2.1 倉庫結構 (pnpm Workspace Monorepo)
-* `apps/worker`：Cloudflare Worker (Hono REST API、認證、Drizzle ORM)。
-* `apps/web`：React 19 + Vite + Tailwind CSS v4 + Radix UI (單頁應用)。
-* `packages/shared`：前後端共享之 Zod Schemas、TypeScript 型別、純函數金流運算引擎與測試。
+
+- `apps/worker`：Cloudflare Worker (Hono REST API、認證、Drizzle ORM)。
+- `apps/web`：React 19 + Vite + Tailwind CSS v4 + Radix UI (單頁應用)。
+- `packages/shared`：前後端共享之 Zod Schemas、TypeScript 型別、純函數金流運算引擎與測試。
 
 ---
 
 ## 3. 金額模型與運算引擎 (Money & Settlement Engine)
 
 ### 3.1 最小貨幣整數儲存 (Minor Unit Integer)
-* `TWD`：`decimals = 0`，以整數「元」儲存 (例如 NT$ 2,160 存 `2160`)。
-* `USD`：`decimals = 2`，以整數「分」儲存 (例如 US$ 12.34 存 `1234`)。
-* `JPY`：`decimals = 0`，以整數「元」儲存 (例如 JP¥ 1,500 存 `1500`)，符號 `JP¥`。
-* `THB`：`decimals = 2`，以整數 satang 儲存 (例如 ฿ 1,234.50 存 `123450`)，符號 `฿`。
-* 金額限制：每筆支出 1 至 99,999,999 單位。禁止負數支出。
+
+- `TWD`：`decimals = 0`，以整數「元」儲存 (例如 NT$ 2,160 存 `2160`)。
+- `USD`：`decimals = 2`，以整數「分」儲存 (例如 US$ 12.34 存 `1234`)。
+- `JPY`：`decimals = 0`，以整數「元」儲存 (例如 JP¥ 1,500 存 `1500`)，符號 `JP¥`。
+- `THB`：`decimals = 2`，以整數 satang 儲存 (例如 ฿ 1,234.50 存 `123450`)，符號 `฿`。
+- 金額限制：每筆支出 1 至 99,999,999 單位。禁止負數支出。
 
 ### 3.2 確定性零頭分配規則 (Leftover Distribution)
+
 三個人均分 100 元 (`100 = 33 * 3 + 1`)：
+
 1. 每人先分 `floor(100 / 3) = 33`。
 2. 餘數 `1` 元分配順序：**付款人（若有參與分攤）優先得 1 元**，其餘按成員加入固定順序分配，每人最多分 1 元。
 3. 最終結果為 `34, 33, 33`。完全確定，無浮點誤差與隨機性。
-* **份數分攤 (Shares split)**：每人先得 `floor(total * weight / sum)`。若產生餘數，僅分配給產生小數零頭 (`hasRemainder`) 之成員，且付款人優先得 1 元；若某成員份額已為整除之整數，則不額外加 1，以確保所有人分得金額與數學期望值差距小於 1 單位。
+
+- **份數分攤 (Shares split)**：每人先得 `floor(total * weight / sum)`。若產生餘數，僅分配給產生小數零頭 (`hasRemainder`) 之成員，且付款人優先得 1 元；若某成員份額已為整除之整數，則不額外加 1，以確保所有人分得金額與數學期望值差距小於 1 單位。
 
 ### 3.3 匯率儲存與精度
-* 匯率以放大 `1,000,000` 倍之整數存儲於 D1（例如 31.5234 存為 `31523400`）。
-* 前端展示至小數點後 4 位。
-* 使用者輸入換算後金額時，系統自動反推匯率並設為自訂匯率標記。
+
+- 匯率以放大 `1,000,000` 倍之整數存儲於 D1（例如 31.5234 存為 `31523400`）。
+- 前端展示至小數點後 4 位。
+- 使用者輸入換算後金額時，系統自動反推匯率並設為自訂匯率標記。
 
 ### 3.4 還款計畫與債務簡化
-* **後端 Worker**：僅計算各成員的淨餘額 `Net Balance = 總支付 - 總分攤`（驗證總和恆等於 0）。
-* **前端 Web Worker**：
+
+- **後端 Worker**：僅計算各成員的淨餘額 `Net Balance = 總支付 - 總分攤`（驗證總和恆等於 0）。
+- **前端 Web Worker**：
   - 非零餘額人數 ≤ 20：執行精確圖論搜尋（Exact fewest-payments），介面標註「最少筆數」。
   - 非零餘額人數 > 20：執行貪婪演算法（Greedy），介面標註「至多 N-1 筆」。
 
@@ -246,46 +255,47 @@ CREATE TABLE fx_rates (
 ## 5. API 合約 (Typed Hono REST API)
 
 ### 5.1 認證與端點列表 (`/api/v1`)
-* **認證機制**：Header `Authorization: Bearer <access_jwt>` (效期 1 小時)。
-* **防重送與並行**：
+
+- **認證機制**：Header `Authorization: Bearer <access_jwt>` (效期 1 小時)。
+- **防重送與並行**：
   - POST 支出與結算帶 `Idempotency-Key`。
   - PATCH 帶 `If-Match: <updated_at>` 樂觀鎖校驗。
 
-| 模組 | HTTP 方法與路徑 | 說明 |
-| :--- | :--- | :--- |
-| **Auth** | `POST /auth/google` | Google ID Token 交換 Session |
-| | `POST /auth/line` | LINE LIFF ID Token 交換 Session |
-| | `POST /auth/refresh` | Cookie 輪轉換發 Access Token |
-| | `POST /auth/logout` | 登出當前裝置 |
-| | `POST /auth/link/:provider` | 綁定第二身分 |
-| | `POST /auth/link-code` & `POST /auth/link-code/redeem` | 產生連結碼 / 用連結碼加 Google ID Token 綁定 Google（見 W-8） |
-| | `DELETE /auth/identities/:provider`| 解除第三方身分綁定 |
-| | `GET /me` & `DELETE /me` | 查詢個人資料 / 刪除帳號 |
-| **Groups** | `GET /groups` & `POST /groups` | 取得群組列表 / 建立群組 |
-| | `GET, PATCH, DELETE /groups/:id` | 群組詳情 / 修改 / 刪除 |
-| **Members**| `GET /groups/:id/members` | 成員列表與即時淨餘額快照 |
-| | `PATCH /groups/:id/members/:mid` | 變更角色 (Admin/Member) 或設定暱稱 |
-| | `DELETE /groups/:id/members/:mid`| 移除成員 (餘額需歸零) |
-| | `POST /groups/:id/claim-placeholder`| 正式用戶認領虛擬成員 |
-| **Invites**| `POST /groups/:id/invite` | 管理員重新產生 12 小時邀請碼 |
-| | `GET /invites/:token` | 邀請資訊預覽 (群組名稱、成員數) |
-| | `POST /invites/:token/join` | 確認加入群組 |
-| **Expenses**| `GET, POST /groups/:id/expenses` | 開銷列表 (遊標分頁 50 筆) / 新增支出 (`D1.batch()`) |
-| | `GET, PATCH, DELETE /groups/:id/expenses/:eid` | 開銷明細 / 修改 / 刪除 |
-| **Balances**| `GET /groups/:id/balances` | 取得群組全體成員餘額 |
-| **Settlements**| `GET, POST /groups/:id/settlements`| 結算列表 / 記錄一筆付款（新建立的結算直接為已確認） |
-| | `POST /settlements/:sid/undo` | 撤銷結算 |
-| **Stops** | `GET, POST /groups/:id/stops` | 查詢每日站點 / 新增站點 |
-| | `PATCH, DELETE /groups/:id/stops/:sid` | 編輯站點 / 刪除站點 |
-| **Rates** | `GET /rates?date&base&quote` | 查詢參考匯率 (D1 命中快取或調用 Frankfurter) |
-| **LINE** | `POST /line/webhook` | 驗證簽章，被動回覆圖文引導與說明；一對一聊天的機票問題回覆 Flight Radar Flex Carousel（見〈Flight Radar — LINE chat〉） |
+| 模組            | HTTP 方法與路徑                                        | 說明                                                                                                                    |
+| :-------------- | :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| **Auth**        | `POST /auth/google`                                    | Google ID Token 交換 Session                                                                                            |
+|                 | `POST /auth/line`                                      | LINE LIFF ID Token 交換 Session                                                                                         |
+|                 | `POST /auth/refresh`                                   | Cookie 輪轉換發 Access Token                                                                                            |
+|                 | `POST /auth/logout`                                    | 登出當前裝置                                                                                                            |
+|                 | `POST /auth/link/:provider`                            | 綁定第二身分                                                                                                            |
+|                 | `POST /auth/link-code` & `POST /auth/link-code/redeem` | 產生連結碼 / 用連結碼加 Google ID Token 綁定 Google（見 W-8）                                                           |
+|                 | `DELETE /auth/identities/:provider`                    | 解除第三方身分綁定                                                                                                      |
+|                 | `GET /me` & `DELETE /me`                               | 查詢個人資料 / 刪除帳號                                                                                                 |
+| **Groups**      | `GET /groups` & `POST /groups`                         | 取得群組列表 / 建立群組                                                                                                 |
+|                 | `GET, PATCH, DELETE /groups/:id`                       | 群組詳情 / 修改 / 刪除                                                                                                  |
+| **Members**     | `GET /groups/:id/members`                              | 成員列表與即時淨餘額快照                                                                                                |
+|                 | `PATCH /groups/:id/members/:mid`                       | 變更角色 (Admin/Member) 或設定暱稱                                                                                      |
+|                 | `DELETE /groups/:id/members/:mid`                      | 移除成員 (餘額需歸零)                                                                                                   |
+|                 | `POST /groups/:id/claim-placeholder`                   | 正式用戶認領虛擬成員                                                                                                    |
+| **Invites**     | `POST /groups/:id/invite`                              | 管理員重新產生 12 小時邀請碼                                                                                            |
+|                 | `GET /invites/:token`                                  | 邀請資訊預覽 (群組名稱、成員數)                                                                                         |
+|                 | `POST /invites/:token/join`                            | 確認加入群組                                                                                                            |
+| **Expenses**    | `GET, POST /groups/:id/expenses`                       | 開銷列表 (遊標分頁 50 筆) / 新增支出 (`D1.batch()`)                                                                     |
+|                 | `GET, PATCH, DELETE /groups/:id/expenses/:eid`         | 開銷明細 / 修改 / 刪除                                                                                                  |
+| **Balances**    | `GET /groups/:id/balances`                             | 取得群組全體成員餘額                                                                                                    |
+| **Settlements** | `GET, POST /groups/:id/settlements`                    | 結算列表 / 記錄一筆付款（新建立的結算直接為已確認）                                                                     |
+|                 | `POST /settlements/:sid/undo`                          | 撤銷結算                                                                                                                |
+| **Stops**       | `GET, POST /groups/:id/stops`                          | 查詢每日站點 / 新增站點                                                                                                 |
+|                 | `PATCH, DELETE /groups/:id/stops/:sid`                 | 編輯站點 / 刪除站點                                                                                                     |
+| **Rates**       | `GET /rates?date&base&quote`                           | 查詢參考匯率 (D1 命中快取或調用 Frankfurter)                                                                            |
+| **LINE**        | `POST /line/webhook`                                   | 驗證簽章，被動回覆圖文引導與說明；一對一聊天的機票問題回覆 Flight Radar Flex Carousel（見〈Flight Radar — LINE chat〉） |
 
 ### 5.2 每日維護 (Cron)
 
 每日排程依序執行：清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率。
 
-* **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
-* **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。
+- **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
+- **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。
   - 回 204（仍在群組）：保留並改為「已生效」，避免同步延遲的列長期占據清理名額。
   - 帳本無法回答（錯誤或逾時 5 秒）：保留，留待下次。
   - 每次最多檢查 100 筆，由舊到新；任何一筆失敗都不得中斷整個每日排程。
@@ -295,36 +305,36 @@ CREATE TABLE fx_rates (
 
 ## 6. 前端規格與畫面校準 (Frontend & Screen Specs)
 
-* **導覽結構**：
+- **導覽結構**：
   - 手機端：底部五標籤（首頁、旅遊、＋記一筆、統計、設定）。點擊「旅遊」不切換路由，跳出「旅遊功能即將推出，敬請期待！」輕量通知；若畫面已存在或動態新增其他儲存結果提示（如支出儲存提示），「旅遊」通知依據現有提示的實際結算幾何高度（防禦進場 transform 瞬態干擾）動態向上堆疊（頂部保留 8px 間距，完全不遮蔽現有提示），且雙方獨立計時、互不干擾。
   - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態，包含「旅遊」通知按鈕）。
-* **UI 原語**：Tailwind CSS v4 + Radix UI (Dialog、Sheet、Select、Popover)。
-* **首頁呈現**：目前淨收付以使用者的偏好幣別顯示為單一數字；其他幣別依當日最新參考匯率換算後加總（僅供參考，見 ADR 0002）。取不到匯率時退回依幣別並列。群組列與結算畫面一律維持各群組的結算幣別，不換算。「待結算的群組」標題右側提供「我的群組 ›」文字連結，直接前往 `/groups`。
-* **新增開銷表單**：
+- **UI 原語**：Tailwind CSS v4 + Radix UI (Dialog、Sheet、Select、Popover)。
+- **首頁呈現**：目前淨收付以使用者的偏好幣別顯示為單一數字；其他幣別依當日最新參考匯率換算後加總（僅供參考，見 ADR 0002）。取不到匯率時退回依幣別並列。群組列與結算畫面一律維持各群組的結算幣別，不換算。「待結算的群組」標題右側提供「我的群組 ›」文字連結，直接前往 `/groups`。
+- **新增開銷表單**：
   - 標籤頁：僅保留「花費」與「轉帳」兩大頁籤（排除「收入」）。
   - 金額輸入框內建安全算式解析器（支援 `+`、`-`、`*`、`/`，防禦 `eval`）。
   - 幣別選單提供 `TWD`、`USD`、`JPY`、`THB`。
-* **靜態登陸頁**：未登入訪客訪問根路徑 `/` 時載入簡潔形象頁，登入後自動轉跳進入 App。
+- **靜態登陸頁**：未登入訪客訪問根路徑 `/` 時載入簡潔形象頁，登入後自動轉跳進入 App。
 
 ### 6.1 寫入後的畫面反應 (Write Latency & Optimistic Updates)
 
 原則：使用者按下送出後，畫面不等「重新抓取」；金額相關的畫面只在伺服器確認後更新，例外是記錄或撤銷結算：只按該筆金額精確移動付款人與收款人的餘額（見 W-4 與 ADR 0004）。每一條都有編號，程式碼審查以此為準。
 
-* **W-1 不等重抓**：刪除支出、撤銷結算、刪除群組、建立群組、加入群組成功後，立刻放行（跳轉或解除按鈕），重新抓取在背景進行。成員的連續修改各自退回失敗的那一筆，並等同一群組最後一筆修改完成後才重新抓取，避免較早回覆蓋掉仍在等待的修改。
-* **W-2 新增支出**：表單結構為「日期與行程」置頂於「金額」之上；金額輸入框下方提供 `+1000, +500, +100, +50, +10, +5, +1` 快捷增額橫向按鈕列；在支援的 LINE 對話框環境下，「發送當前對話框」勾選膠囊位於「分帳方式」標題列右側。按下儲存立刻跳到群組頁，以儲存中的列顯示（見 W-6）。分享卡與 LINE 對話框傳送在背景進行，結果出現後以提示呈現；傳送失敗要讓使用者看到。進入新增頁時先預取邀請連結（盡力而為，失敗不影響）；同時間只發一個「確保邀請」請求。
-* **W-3 背景分享結果的暫存**：背景結果以支出 id 暫存在記憶體，不放進路由狀態或查詢快取（兩者會被存到歷史或本機）。頁面離開或失敗時都要清掉；重新整理後不再顯示提示。登出（主動或重新整理權杖被拒）時，一併清除等待中的分享與「剛儲存」提示；若分享仍在等待邀請連結，登出後不得開始傳送至 LINE 對話框，已發出的傳送無法撤回，但遲到結果不得再顯示提示。
-* **W-4 撤銷結算（先改再問）**：只在該筆結算為「已確認」時，按下即把付款人餘額減、收款人餘額加該筆金額，並把該列標成已撤銷（按鈕消失，防止重複撤銷）。伺服器回覆後以其回傳的結算取代；失敗則只退回這一筆撤銷（反向套回目前的餘額，並把該列改回已確認）並顯示錯誤，不還原舊快照，期間完成的其他付款會保留；若伺服器的最新結果已在退回前取代了畫面上的數字，就以伺服器的為準、不再退回；記錄付款失敗的退回方式相同。失敗後仍向伺服器重新取得餘額與列表，以免畫面與伺服器不一致。
-* **W-5 刪除支出（先改再問）**：按下「刪除這筆」立刻回到群組頁，該筆在列表中隱藏，直到伺服器回覆；期間重新抓取列表也不會讓它重現。餘額、統計與列表上方的累計金額不預先調整，等伺服器確認後重新抓取。失敗時該筆重新顯示，群組頁顯示「刪除失敗，這筆開銷已放回：原因」，可關閉；失敗訊息只顯示在發生的那個群組，登出時清除，且不得存入持久化的查詢快取。確認鈕連按只送出一次刪除。
-* **W-6 儲存中的列（新增與編輯支出）**：按下儲存立刻回到群組頁（編輯則回到詳情頁），群組帳目最上方出現一列「儲存中…」（名稱、金額）。餘額與總額不預先調整，等伺服器確認。成功後該列被真正的列取代；編輯中的原列在期間被該列取代。失敗時該列留在原處，顯示原因，提供「重試」與「放棄」；編輯的「儲存中」或失敗列同時顯示在回到的詳情頁上方；每次編輯各自一列，不互相覆蓋；重試沿用同一個 `Idempotency-Key`，不會重複記帳。「儲存中」列不得存入持久化的查詢快取，登出（含主動登出）時清除（背景分享與提示亦依 W-3 清除），且登出前送出、登出後才回覆的寫入結果一律忽略（不寫入快取、不顯示提示）；登出時仍在等待回覆的任何寫入都會被作廢，其回覆不會寫入快取；登出（含重新整理被拒而自動登出）後不會用新帳號的權杖重送舊帳號的請求；離開群組頁後，該群組遲到的分享結果不會顯示在別的群組上。編輯沒有防重複鍵：若伺服器已套用但回覆遺失，重試會遇到版本過期（EDIT_CONFLICT），此時重新讀取該筆，內容與我們的修改完全相同就視為成功，不同（例如別人另外改過）則顯示衝突，需放棄後重新編輯；已知限制：背景分享結果與「剛儲存」提示自建立起 60 秒內無人取用就丟棄，但已被群組頁取用的分享結果，完成時一律顯示（每筆支出各自一個提示，一次只顯示一個，前一個消失後才輪到下一個，不互相遮住）；伺服器已存好但回覆未到時重新抓取列表，可能暫時同時看到「儲存中」列與真正的列。
-* **W-6a 建立與加入群組**：按下送出後，畫面立刻顯示全螢幕的「建立群組中…」／「加入群組中…」（模態對話框：焦點留在其中，背後的頁面、導覽與認領對話框對鍵盤和輔助技術隱藏，Esc 與點外面都不能關閉），不顯示預先猜測的結果；伺服器回覆後才進入群組。失敗時回到原表單（認領時回到認領對話框內）並顯示原因，輸入不丟失。等待期間返回鍵與頁面連結不會離開（伺服器回覆後才導向）。等待超過 20 秒，畫面加上「還在處理，結果還不確定」與「先離開」按鈕，按下回到群組列表（建立與加入相同）；離開後若請求才成功，群組只會在背景加進列表快取，不自動導向、不跳提示；不設傳輸逾時，因為放棄請求不會取消伺服器已做的事，會造成重複建立。失敗後鍵盤焦點回到等待前的按鈕（認領時為「確認認領」）。建立群組成功後進入成員與邀請頁，成員名單直接用伺服器剛回覆的建立者填入，不再等第二次請求；該頁在剛建立時多一個「回到首頁」連結（一般進入不顯示）。
-* **W-7 登入金鑰下載失敗**：Google 與 LINE 的金鑰下載失敗不得被快取；下一次登入可立刻重試。找不到金鑰編號時才重新下載，且同一供應商 60 秒內至多一次。
-* **W-9 設定頁的人物卡與登入方式**：
+- **W-1 不等重抓**：刪除支出、撤銷結算、刪除群組、建立群組、加入群組成功後，立刻放行（跳轉或解除按鈕），重新抓取在背景進行。成員的連續修改各自退回失敗的那一筆，並等同一群組最後一筆修改完成後才重新抓取，避免較早回覆蓋掉仍在等待的修改。
+- **W-2 新增支出**：表單結構為「日期與行程」置頂於「金額」之上；金額輸入框下方提供 `+1000, +500, +100, +50, +10, +5, +1` 快捷增額橫向按鈕列；在支援的 LINE 對話框環境下，「發送當前對話框」勾選膠囊位於「分帳方式」標題列右側。按下儲存立刻跳到群組頁，以儲存中的列顯示（見 W-6）。分享卡與 LINE 對話框傳送在背景進行，結果出現後以提示呈現；傳送失敗要讓使用者看到。進入新增頁時先預取邀請連結（盡力而為，失敗不影響）；同時間只發一個「確保邀請」請求。
+- **W-3 背景分享結果的暫存**：背景結果以支出 id 暫存在記憶體，不放進路由狀態或查詢快取（兩者會被存到歷史或本機）。頁面離開或失敗時都要清掉；重新整理後不再顯示提示。登出（主動或重新整理權杖被拒）時，一併清除等待中的分享與「剛儲存」提示；若分享仍在等待邀請連結，登出後不得開始傳送至 LINE 對話框，已發出的傳送無法撤回，但遲到結果不得再顯示提示。
+- **W-4 撤銷結算（先改再問）**：只在該筆結算為「已確認」時，按下即把付款人餘額減、收款人餘額加該筆金額，並把該列標成已撤銷（按鈕消失，防止重複撤銷）。伺服器回覆後以其回傳的結算取代；失敗則只退回這一筆撤銷（反向套回目前的餘額，並把該列改回已確認）並顯示錯誤，不還原舊快照，期間完成的其他付款會保留；若伺服器的最新結果已在退回前取代了畫面上的數字，就以伺服器的為準、不再退回；記錄付款失敗的退回方式相同。失敗後仍向伺服器重新取得餘額與列表，以免畫面與伺服器不一致。
+- **W-5 刪除支出（先改再問）**：按下「刪除這筆」立刻回到群組頁，該筆在列表中隱藏，直到伺服器回覆；期間重新抓取列表也不會讓它重現。餘額、統計與列表上方的累計金額不預先調整，等伺服器確認後重新抓取。失敗時該筆重新顯示，群組頁顯示「刪除失敗，這筆開銷已放回：原因」，可關閉；失敗訊息只顯示在發生的那個群組，登出時清除，且不得存入持久化的查詢快取。確認鈕連按只送出一次刪除。
+- **W-6 儲存中的列（新增與編輯支出）**：按下儲存立刻回到群組頁（編輯則回到詳情頁），群組帳目最上方出現一列「儲存中…」（名稱、金額）。餘額與總額不預先調整，等伺服器確認。成功後該列被真正的列取代；編輯中的原列在期間被該列取代。失敗時該列留在原處，顯示原因，提供「重試」與「放棄」；編輯的「儲存中」或失敗列同時顯示在回到的詳情頁上方；每次編輯各自一列，不互相覆蓋；重試沿用同一個 `Idempotency-Key`，不會重複記帳。「儲存中」列不得存入持久化的查詢快取，登出（含主動登出）時清除（背景分享與提示亦依 W-3 清除），且登出前送出、登出後才回覆的寫入結果一律忽略（不寫入快取、不顯示提示）；登出時仍在等待回覆的任何寫入都會被作廢，其回覆不會寫入快取；登出（含重新整理被拒而自動登出）後不會用新帳號的權杖重送舊帳號的請求；離開群組頁後，該群組遲到的分享結果不會顯示在別的群組上。編輯沒有防重複鍵：若伺服器已套用但回覆遺失，重試會遇到版本過期（EDIT_CONFLICT），此時重新讀取該筆，內容與我們的修改完全相同就視為成功，不同（例如別人另外改過）則顯示衝突，需放棄後重新編輯；已知限制：背景分享結果與「剛儲存」提示自建立起 60 秒內無人取用就丟棄，但已被群組頁取用的分享結果，完成時一律顯示（每筆支出各自一個提示，一次只顯示一個，前一個消失後才輪到下一個，不互相遮住）；伺服器已存好但回覆未到時重新抓取列表，可能暫時同時看到「儲存中」列與真正的列。
+- **W-6a 建立與加入群組**：按下送出後，畫面立刻顯示全螢幕的「建立群組中…」／「加入群組中…」（模態對話框：焦點留在其中，背後的頁面、導覽與認領對話框對鍵盤和輔助技術隱藏，Esc 與點外面都不能關閉），不顯示預先猜測的結果；伺服器回覆後才進入群組。失敗時回到原表單（認領時回到認領對話框內）並顯示原因，輸入不丟失。等待期間返回鍵與頁面連結不會離開（伺服器回覆後才導向）。等待超過 20 秒，畫面加上「還在處理，結果還不確定」與「先離開」按鈕，按下回到群組列表（建立與加入相同）；離開後若請求才成功，群組只會在背景加進列表快取，不自動導向、不跳提示；不設傳輸逾時，因為放棄請求不會取消伺服器已做的事，會造成重複建立。失敗後鍵盤焦點回到等待前的按鈕（認領時為「確認認領」）。建立群組成功後進入成員與邀請頁，成員名單直接用伺服器剛回覆的建立者填入，不再等第二次請求；該頁在剛建立時多一個「回到首頁」連結（一般進入不顯示）。
+- **W-7 登入金鑰下載失敗**：Google 與 LINE 的金鑰下載失敗不得被快取；下一次登入可立刻重試。找不到金鑰編號時才重新下載，且同一供應商 60 秒內至多一次。
+- **W-9 設定頁的人物卡與登入方式**：
   - 名稱與頭像固定跟著 User 最早綁定的 Identity（Profile source），與群組裡看到的一致。只有 Profile source 登入時才更新 `users.display_name`／`picture_url`；用另一個方式登入只更新該方式自己的信箱。`GET /me` 的 `signedInWith` 是「這個 session 登入時用的方式」：登入時寫進 `sessions.provider` 與 access token 的 `prv`，refresh 換發新 token 時沿用，所以別的瀏覽器或裝置用另一種方式登入，不會改變這個 session 看到的值；LINE 與 Google 可以各在不同瀏覽器同時登入。遷移（0012）之前建立的 session 沒有這個值，`signedInWith` 退回 `users.last_provider`，再沒有就用最早的 Identity，下次重新登入才有自己的值。`users.last_provider` 不再寫入。Profile source 被解除綁定時，名稱與頭像維持原樣，改由剩下最早的 Identity 接手，並在它下次登入時更新。已被舊版覆蓋的帳號，等 Profile source 下次登入才換回。
   - 設定頁人物卡：名稱與頭像同上；旁邊的標籤跟著這個 session 的登入方式（綠色「LINE」或有彩色 G 的「Google」）；這個 session 是 Google 登入時，信箱以小字顯示在名稱下方，LINE 登入不顯示。Profile source 是 Google 且沒有頭像時，頭像位置顯示 Gmail 信封標誌。
   - 「登入與安全」永遠列出 LINE 與 Google 兩列，LINE 為綠點、Google 為小的 G 標誌，這一區不顯示信箱。已連結：顯示淡綠膠囊「✓ 已連結」，剛完成連結的那一刻打勾彈出一次（頁面打開時就已連結的不動）；兩者都連結時才有小的「解除連結」。未連結的 Google：右邊顯示「連接」按鈕（W-8）。未連結的 LINE：顯示「即將推出」，不提供按鈕。
   - 信箱：只有 Google 的 ID token 帶 `email` 且 `email_verified` 為真時才存入 `identities.email`；LINE 一律不存。每次登入若取得信箱就更新，沒取得時保留原值。刪除帳號時隨登入方式一併刪除。不給群組其他成員看，也不用來寄信。
   - 資料遷移（0011）：刪除所有既有的 Google 綁定，這些人下次用 Google 登入時重新綁定；只靠 Google 登入的人會得到新帳號，原帳號的群組紀錄不會合併。
-* **W-8 在 LINE 內連結 Google（連結碼）**：Google 不接受 LINE 內建瀏覽器登入，所以設定頁依環境分兩種。
+- **W-8 在 LINE 內連結 Google（連結碼）**：Google 不接受 LINE 內建瀏覽器登入，所以設定頁依環境分兩種。
   - 在 LINE 內、尚未連結 Google：「登入與安全」的 Google 那列右邊顯示「連接」按鈕，不顯示 Google 按鈕，也沒有額外的提示文字（按鈕本身就會前往外部瀏覽器）。按下後向伺服器要一個連結碼，用手機的外部瀏覽器開啟 `/link?code=…`。「開啟外部瀏覽器」在 LIFF（LINE app 內）用 `liff.openWindow({ url, external: true })`，因為 LINE 在 LIFF 裡不認 `openExternalBrowser` 網址參數；在沒有 LIFF 的 LINE 內建瀏覽器才改用該參數。在 LIFF 內若 LIFF 無法啟動或開啟失敗，顯示「小芽出了點狀況，請稍後再試。」，不會退回那個沒用的參數。設定頁、登入頁提示框、`/link` 頁三處都適用。
   - 不在 LINE 內、尚未連結 Google：直接顯示 Google 按鈕，成功後走 `POST /auth/link/google`。
   - 已連結 Google，或沒設定 Google 用戶端 ID：不顯示任何連結入口。
@@ -359,19 +369,19 @@ CREATE TABLE fx_rates (
 
 ## 8. 交付階段與實作順序 (Delivery Order & Milestones)
 
-* **Phase 1: 共享核心與資料層 (Shared Core & DB)**
+- **Phase 1: 共享核心與資料層 (Shared Core & DB)**
   - 建立 pnpm monorepo 與 TypeScript 嚴格環境。
   - 實作 `packages/shared`：Zod Schema、確定性零頭分配演算法、Web Worker 還款搜尋引擎與完整屬性測試。
   - 設定 Drizzle ORM 與 D1 SQLite 表結構 Migration。
-* **Phase 2: 後端 API 與身分認證 (Worker Backend & Auth)**
+- **Phase 2: 後端 API 與身分認證 (Worker Backend & Auth)**
   - 實作 Hono 核心框架、Error Handling 與 Idempotency 中介軟體。
   - 實作 Google SSO 與 LINE LIFF ES256 Token 驗證及 Session 輪轉機制。
   - 完成 Groups, Expenses (`D1.batch`), Balances, Settlements, Stops API 端點與整合測試。
-* **Phase 3: 前端介面與全端串接 (React SPA Frontend)**
+- **Phase 3: 前端介面與全端串接 (React SPA Frontend)**
   - 搭建 Vite + React 19 + Tailwind v4 + Radix UI 響應式外殼。
   - 實作 TanStack Query 與 Hono Typed Client 數據快取層。
   - 依校準後之 31 個畫面實作記帳表單（內建算式解析器）、多幣別匯率反推、行程時間軸與結算畫面。
-* **Phase 4: 整合驗收與雲端發布 (Integration & Deploy)**
+- **Phase 4: 整合驗收與雲端發布 (Integration & Deploy)**
   - 配置 GitHub Actions 自動化部署管線 (Staging -> Production)。
   - 設定 Cloudflare WAF 限流規則與 `split.rickchen.si` 路由。
   - 執行 Playwright E2E 測試與手動發布檢核表 (Release Checklist)。
@@ -419,7 +429,7 @@ CREATE TABLE fx_rates (
 ### Flight Radar — mobile redesign
 
 - `/travel` is mobile-first in the sprout palette with light glass surfaces and a layered shadow; figures use tabular numerals in the existing face (no new font). Top to bottom before any search: the one-sentence prompt bar, the Entity Pills, the verified highlights. After a search (while it runs and once it has results) the results come first: the date tiles and comparison line, the advice line, the price list, then the Adaptive Next-Move Chips (a region labelled "Ideas to try"), then the verified highlights; the Price Watch drawer stays last. When a search finishes the page scrolls so the date tiles are at the top of the screen (smooth scroll, a plain jump under reduced motion).
-- The route hero card (a region labelled "Search summary") sits under the prompt bar: the airport codes large (40 px) with the city names under them (English names in English; an airport the catalog does not know shows only its code), a plane line between them carrying the great-circle distance and rough flight time (`655 公里・約 1 小時 19 分`, English `655 km · ≈ 1 h 19 min`; the time is 30 minutes plus the distance at 800 km/h; shown only when both airports are in the catalog, never `NaN`), the dates and travellers as `12/4（五）– 12/7（一）・1 位成人` (English `Dec 4 – Dec 7 · 1 adult`), an outlined `修改` (English "Edit") button with a pencil icon that opens or closes the editing panel (at least 44 px), and a full-width green `重新探索航班` (English "Explore flights again") button (at least 48 px) that runs the shown search in one tap without a prompt parse. While the panel is open the card shows only `修改`, since the panel's own Search button is in the bottom bar. Nothing overflows at 360 px.
+- The route hero card (a region labelled "Search summary") sits under the prompt bar: the airport codes large (40 px) with the city names under them (English names in English; an airport the catalog does not know shows only its code), a plane line between them carrying the great-circle distance and rough flight time (`655 公里・約 1 小時 19 分`, English `655 km · ≈ 1 h 19 min`; the time is 30 minutes plus the distance at 800 km/h; shown only when both airports are in the catalog, never `NaN`), the dates and travellers as `12/4（五）– 12/7（一）・1 位成人` (English `Dec 4 – Dec 7 · 1 adult`), an outlined `修改` (English "Edit") button with a pencil icon that opens or closes the editing panel (at least 44 px), and a full-width green `重新探索航班` (English "Search again") button (at least 48 px) that runs the shown search in one tap without a prompt parse. While the panel is open the card shows only `修改`, since the panel's own Search button is in the bottom bar. Nothing overflows at 360 px.
 - The Entity Pills are the other conditions of the current search: budget, theme and time/direct pills when set (none when there are none). Tapping any pill opens or closes the ticket-shaped editing panel, which is closed by default and closes by itself when any search starts (prompt, panel Search, pill removal, chip or highlight tap). Budget, theme and rule pills also have a remove button; removing them reruns the search without an LLM parse.
 - The panel holds the airport pickers, the swap button, departure and return calendars, budget, theme and the red-eye and direct-only rules. The calendars disable past dates and a past departure date is rejected on search with a message. Searching submits the displayed canonical intent directly, with no prompt-parse request.
 - The last submitted search is kept in this browser (search conditions only) and restored into the pills and fields, labelled "last search", when `/travel` opens without a LINE portal link. Opening `/travel` never starts a search by itself; the label disappears when a new search starts.

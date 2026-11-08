@@ -120,7 +120,7 @@ export function DateTiles({
               onClick={() => {
                 onSelect(day.date);
               }}
-              className={`press-pill flex h-[104px] min-w-0 shrink-0 grow-0 basis-[calc((100%-2rem)/5)] flex-col items-center justify-center gap-0.5 rounded-[18px] px-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-sprout-700 ${
+              className={`press-pill flex h-[104px] min-w-[calc((100%-2rem)/5)] flex-1 basis-0 flex-col items-center justify-center gap-0.5 rounded-[18px] px-0.5 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-sprout-700 ${
                 isSelected
                   ? `border-[3px] border-sprout-700 ${day.lowest ? "bg-[#fdf0d5] text-[#6b3f00]" : "bg-sprout-100 text-sprout-900"}`
                   : day.lowest
@@ -131,7 +131,10 @@ export function DateTiles({
               <span aria-hidden="true" className="text-[13px] font-medium">
                 {shortDate(day.date)}
               </span>
-              <span aria-hidden="true" className="text-[17px] font-black tabular-nums">
+              <span
+                aria-hidden="true"
+                className="text-[clamp(14px,4.4vw,17px)] font-black tabular-nums"
+              >
                 {plainAmount(day.price, currency)}
               </span>
               <span aria-hidden="true" className="grid min-h-4 text-xs leading-4 font-black">

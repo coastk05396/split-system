@@ -5,7 +5,14 @@ mode: HITL
 status: closed
 assignee: rick
 parent: ../map.md
-blocked_by: ["02-export-design-screens.md", "10-decide-invite-and-membership.md", "12-decide-settlement-flow.md", "13-decide-trip-module-scope.md", "14-decide-line-bot-v1-scope.md"]
+blocked_by:
+  [
+    "02-export-design-screens.md",
+    "10-decide-invite-and-membership.md",
+    "12-decide-settlement-flow.md",
+    "13-decide-trip-module-scope.md",
+    "14-decide-line-bot-v1-scope.md",
+  ]
 ---
 
 ## Question
