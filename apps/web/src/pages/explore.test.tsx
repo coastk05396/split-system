@@ -91,4 +91,80 @@ describe("探索 page", () => {
     });
     expect(new URLSearchParams(router.state.location.search).get("destination")).toBe("NRT");
   });
+
+  describe("date tiles and call to action", () => {
+    const fare = (price: number, departureDate: string, returnDate: string) => ({
+      price,
+      airline: "Example Air",
+      departureDate,
+      returnDate,
+      outboundDeparture: "08:00",
+      outboundArrival: "12:00",
+      inboundDeparture: "18:00",
+      inboundArrival: "20:00",
+      stops: 0,
+      durationMinutes: 180,
+      priceLevel: "low" as const,
+    });
+    const fares = [
+      fare(9800, "2027-01-07", "2027-01-10"),
+      fare(9500, "2027-01-08", "2027-01-11"),
+      fare(9900, "2027-01-08", "2027-01-11"),
+      fare(11000, "2027-01-09", "2027-01-12"),
+    ];
+
+    it("prices the dates, and the call to action follows the selected tile into 航班", async () => {
+      const { api, router } = renderApp({ path: "/travel", cookieUser: user });
+      api.flightHighlights.push(card("NRT", 9500, 0));
+      api.flightFares.splice(0, api.flightFares.length, ...fares);
+      const dates = await screen.findByRole("region", { name: "挑個好日子起飛" });
+      const tiles = within(dates).getAllByRole("button");
+      expect(tiles).toHaveLength(3);
+      expect(
+        within(dates).getByRole("button", { name: "1/8（五） · NT$ 9,500 · 已選 · 最低" }),
+      ).toBeVisible();
+      const cta = screen.getByRole("link", { name: /2 班航班，等你挑一班/ });
+      expect(cta).toHaveTextContent("NT$ 9,500");
+      fireEvent.click(within(dates).getByRole("button", { name: /1\/9/ }));
+      const next = screen.getByRole("link", { name: /1 班航班，等你挑一班/ });
+      expect(next).toHaveTextContent("NT$ 11,000");
+      fireEvent.click(next);
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/travel/flights");
+      });
+      const query = new URLSearchParams(router.state.location.search);
+      expect(query.get("destination")).toBe("NRT");
+      expect(query.get("departureDate")).toBe("2027-01-09");
+      expect(query.get("returnDate")).toBe("2027-01-12");
+      await waitFor(() => {
+        expect(
+          api.requests.filter((r) => r.route === "POST /api/v1/flights/search").length,
+        ).toBeGreaterThan(1);
+      });
+    });
+
+    it("amber marks only the 最低 tile", async () => {
+      const { api } = renderApp({ path: "/travel", cookieUser: user });
+      api.flightHighlights.push(card("NRT", 9500, 0));
+      api.flightFares.splice(0, api.flightFares.length, ...fares);
+      const dates = await screen.findByRole("region", { name: "挑個好日子起飛" });
+      const amber = within(dates)
+        .getAllByRole("button")
+        .filter((b) => b.dataset["lowest"] === "true");
+      expect(amber).toHaveLength(1);
+      expect(amber[0]).toHaveAccessibleName(/最低/);
+    });
+
+    it("says so when the dates cannot be priced, and retries a failed search", async () => {
+      const { api } = renderApp({ path: "/travel", cookieUser: user });
+      api.flightHighlights.push(card("NRT", 9500, 0));
+      api.flightFares.length = 0;
+      api.failNext("POST /api/v1/flights/search");
+      const alert = await screen.findByRole("alert");
+      expect(alert).toBeVisible();
+      fireEvent.click(within(alert).getByRole("button", { name: "再試一次" }));
+      expect(await screen.findByText("這條路線暫時沒有可比較的日期。")).toBeVisible();
+      expect(screen.queryByRole("link", { name: /等你挑一班/ })).toBeNull();
+    });
+  });
 });

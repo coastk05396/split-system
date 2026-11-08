@@ -49,7 +49,7 @@ The state of the app while the URL is under `/travel`: the bottom nav and deskto
 _Avoid_: Travel tab, trip mode (Trip is the disabled Group feature)
 
 **探索 (Explore page)**:
-The landing at `/travel` with no search parameters: a destination hero showing today's lowest direct fare, and a 小芽 prompt card that hands a sentence to 航班's prompt search. Amber marks only its 最低 pill.
+The landing at `/travel` with no search parameters: a destination hero showing today's lowest direct fare, Date Tiles for that route's nearby dates, a call to action that opens 航班 with the selected date already searched, and a 小芽 prompt card that hands a sentence to 航班's prompt search. Amber marks only 最低.
 _Avoid_: Home, discover
 
 **Entity Pill**:

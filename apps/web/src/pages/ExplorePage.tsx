@@ -1,11 +1,21 @@
-import { defaultFlightIntent, formatAmount, type FlightCard } from "@split/shared";
+import {
+  defaultFlightIntent,
+  formatAmount,
+  intentToQuery,
+  type FlightCard,
+  type FlightSearchIntent,
+  type FlightSearchReply,
+} from "@split/shared";
+import { useQuery } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
+import { DateTiles, cardsOnDate, dateTiles } from "../flights/DateTiles.js";
 import { friendlyRange } from "../flights/dates.js";
 import { TravelHeader } from "../flights/RouteCard.js";
 import { useHighlights } from "../flights/use-highlights.js";
+import { readWithRev } from "../groups/data.js";
 import { failureMessage, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { airportName } from "../flights/AirportPicker.js";
@@ -37,6 +47,69 @@ function HeroArt() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+/** Nearby departure dates priced by the existing search, and a link into 航班 for the picked one. */
+function DatesSection({ intent }: { intent: FlightSearchIntent }) {
+  const { session } = useAuth();
+  const [picked, setPicked] = useState<string>();
+  const search = useQuery({
+    queryKey: ["flights", "explore-dates", intent],
+    queryFn: ({ signal }) =>
+      readWithRev<FlightSearchReply>(
+        session.fetch("/api/v1/flights/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(intent),
+          signal,
+        }),
+      ),
+  });
+  const reply = search.data;
+  const tiles = dateTiles(reply, picked);
+  const cards = cardsOnDate(reply?.cards ?? [], tiles?.selected).sort((a, b) => a.price - b.price);
+  const cheapest = cards[0];
+  return (
+    <div className="mb-4" aria-busy={search.isPending}>
+      {search.isPending && (
+        <div role="status" className="mt-6 grid gap-2">
+          <span className="sr-only">{t("explore.datesLoading")}</span>
+          <span className="h-[104px] rounded-[18px] bg-sprout-100 motion-safe:animate-pulse" />
+        </div>
+      )}
+      {search.isError && (
+        <div role="alert" className="mt-6 grid justify-items-start gap-3">
+          <p className="text-sm text-red-700">{failureMessage(search.error)}</p>
+          <button
+            type="button"
+            className={`${secondaryButton} min-h-11`}
+            onClick={() => {
+              void search.refetch();
+            }}
+          >
+            {t("common.retry")}
+          </button>
+        </div>
+      )}
+      {search.isSuccess && !cheapest && (
+        <p className="mt-6 text-sm text-ink-muted">{t("explore.datesEmpty")}</p>
+      )}
+      {tiles && <DateTiles tiles={tiles} onSelect={setPicked} />}
+      {cheapest && (
+        <Link
+          to={{ pathname: "/travel/flights", search: intentToQuery(cheapest.intent) }}
+          className="press-pill mt-3 flex min-h-12 flex-wrap items-center justify-between gap-x-3 rounded-full bg-sprout-500 px-5 py-3 font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-700"
+        >
+          <span>{t("explore.cta", { count: String(cards.length) })}</span>
+          <span className="tabular-nums">
+            {t("explore.ctaFrom", {
+              amount: formatAmount(cheapest.price, cheapest.intent.currency),
+            })}
+          </span>
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -103,6 +176,7 @@ export function ExplorePage() {
           )}
         </div>
       </section>
+      {best && <DatesSection key={JSON.stringify(best.intent)} intent={best.intent} />}
       <section
         aria-label={t("explore.askTitle")}
         className="mb-6 rounded-3xl border border-sprout-200 bg-sprout-100 p-4"
