@@ -94,8 +94,7 @@ async function open(language: Language) {
 
 const rows = (language: Language) =>
   within(screen.getByRole("list", { name: text[language].fares })).getAllByRole("listitem");
-const airline = (row: HTMLElement) =>
-  within(row).getByText(/Air$/).textContent?.replace(" Air", "");
+const airline = (row: HTMLElement) => within(row).getByText(/Air$/).textContent.replace(" Air", "");
 const names = (language: Language) => rows(language).map(airline);
 
 const tap = (name: string) => {

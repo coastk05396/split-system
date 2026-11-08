@@ -27,10 +27,11 @@ const words = {
   },
 } as const;
 
-const reduced = window.matchMedia;
+const reduced = window.matchMedia.bind(window);
 afterEach(() => {
   window.matchMedia = reduced;
-  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null as never);
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- vitest mock
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
 });
 const allowMotion = () => {
   window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
@@ -56,7 +57,7 @@ describe("Flight Radar globe", () => {
     const el = await globe(words[l].okinawa);
     expect(card).toContainElement(el);
     // Below the Route Chip, in the card.
-    const chip = within(card).getAllByRole("button")[0]!;
+    const chip = within(card).getAllByRole("button")[0] as HTMLElement;
     expect(chip.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(centre(el)).toBe("26.2,127.7");
     expect(el).toHaveAttribute("height", "200");
@@ -114,6 +115,7 @@ describe("Flight Radar globe", () => {
   it("draws real land outlines and a marker", async () => {
     const calls: string[] = [];
     const fills: unknown[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- the index type is needed
     const ctx = new Proxy({} as Record<string, unknown>, {
       get: (target, key: string) =>
         key in target
@@ -127,6 +129,7 @@ describe("Flight Radar globe", () => {
         return true;
       },
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- vitest mock
     vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx as never);
     setup("en");
     await globe(words.en.okinawa);
