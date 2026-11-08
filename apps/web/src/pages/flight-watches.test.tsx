@@ -49,8 +49,10 @@ it.each(["en", "zh-TW"] as const)(
     expect(api.requests.find((r) => r.route === "POST /api/v1/flights/watches")?.body).toContain(
       '"targetFare":18000',
     );
-    fireEvent.click(screen.getByText(en ? "My Price Watches" : "我的降價雷達"));
-    const list = screen.getByRole("region", { name: en ? "My Price Watches" : "我的降價雷達" });
+    fireEvent.click(screen.getByRole("link", { name: en ? "Price Watch radar" : "降價雷達" }));
+    const list = await screen.findByRole("region", {
+      name: en ? "My Price Watches" : "我的降價雷達",
+    });
     expect(await within(list).findByText(/TPE → NRT/)).toBeVisible();
     expect(within(list).getByText(en ? "Jan 8 – Jan 11" : "1/8（五）– 1/11（一）")).toBeVisible();
     expect(within(list).queryByText(/2027-01/)).toBeNull();
@@ -130,8 +132,8 @@ describe("Price Watch inside LIFF", () => {
       targetFare: 5950,
       intent: { destination: "OKA" },
     });
-    fireEvent.click(screen.getByText("我的降價雷達"));
-    const list = screen.getByRole("region", { name: "我的降價雷達" });
+    fireEvent.click(screen.getByRole("link", { name: "降價雷達" }));
+    const list = await screen.findByRole("region", { name: "我的降價雷達" });
     expect(await within(list).findByText(/TPE → OKA/)).toBeVisible();
   });
 });

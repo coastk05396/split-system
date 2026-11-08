@@ -121,6 +121,7 @@ export const en: Record<MessageId, string> = {
   "nav.split": "Split",
   "nav.explore": "Explore",
   "nav.flights": "Flights",
+  "nav.watches": "Watches",
   "nav.new": "Add",
   "nav.newExpense": "Add expense",
   "nav.stats": "Stats",

@@ -8,7 +8,7 @@ const names = {
     bottom: "底部導覽",
     side: "側邊導覽",
     split: ["首頁", "旅遊", "新增", "統計", "設定"],
-    travel: ["分帳", "探索", "航班"],
+    travel: ["分帳", "探索", "航班", "追蹤"],
     flights: "航班",
     gear: "設定",
     heading: "下一站，沖繩！",
@@ -17,7 +17,7 @@ const names = {
     bottom: "Bottom navigation",
     side: "Side navigation",
     split: ["Home", "Trips", "Add", "Stats", "Settings"],
-    travel: ["Split", "Explore", "Flights"],
+    travel: ["Split", "Explore", "Flights", "Watches"],
     flights: "Flights",
     gear: "Settings",
     heading: "Next stop, Okinawa!",
@@ -31,7 +31,7 @@ const labels = (nav: HTMLElement) =>
 
 describe("Travel mode", () => {
   it.each(["zh-TW", "en"] as const)(
-    "swaps the bottom nav to three travel buttons under /travel/flights in %s",
+    "swaps the bottom nav to four travel buttons under /travel/flights in %s",
     async (language) => {
       const n = names[language];
       renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
@@ -69,6 +69,7 @@ describe("Travel mode", () => {
       "分帳",
       "探索",
       "航班",
+      "追蹤",
     ]);
   });
 

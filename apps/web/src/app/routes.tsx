@@ -130,6 +130,7 @@ export const routes: RouteObject[] = [
             lazy: page(() => import("../pages/ExplorePage.js"), "ExplorePage"),
           },
           { path: "flights", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
+          { path: "watches", lazy: page(() => import("../pages/WatchesPage.js"), "WatchesPage") },
         ],
       },
       { path: "trips/latest", loader: () => redirect("/travel/flights") },

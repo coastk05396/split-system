@@ -140,14 +140,8 @@ export function SettingsLink() {
   );
 }
 
-/** The headline and its bell, which opens the Price Watch radar. */
-export function TravelHeader({
-  intent,
-  onRadar,
-}: {
-  intent: FlightSearchIntent;
-  onRadar: () => void;
-}) {
+/** The headline and its bell, which links to the Price Watch list. */
+export function TravelHeader({ intent }: { intent: FlightSearchIntent }) {
   return (
     <header className="mb-5 flex items-start justify-between gap-3 px-1">
       <div className="grid min-w-0 gap-1">
@@ -155,10 +149,9 @@ export function TravelHeader({
         <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>
       </div>
       <div className="flex shrink-0 gap-1.5">
-        <button
-          type="button"
+        <Link
+          to="/travel/watches"
           aria-label={t("flight.radar")}
-          onClick={onRadar}
           className="press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
         >
           <svg
@@ -168,7 +161,7 @@ export function TravelHeader({
           >
             <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
           </svg>
-        </button>
+        </Link>
         <SettingsLink />
       </div>
     </header>

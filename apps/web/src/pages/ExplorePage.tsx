@@ -4,12 +4,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { friendlyRange } from "../flights/dates.js";
-import { FlightPriceWatches, RADAR_ID } from "../flights/FlightPriceWatches.js";
 import { TravelHeader } from "../flights/RouteCard.js";
 import { useHighlights } from "../flights/use-highlights.js";
 import { failureMessage, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
-import { prefersReducedMotion } from "../shell/motion.js";
 import { airportName } from "../flights/AirportPicker.js";
 
 /** The cheapest direct fare among today's confirmed ones, if any. */
@@ -47,22 +45,13 @@ export function ExplorePage() {
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   const highlights = useHighlights(currency);
   const navigate = useNavigate();
-  const [radarOpen, setRadarOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const best = lowestDirect(highlights.data?.highlights ?? []);
   const intent = best?.intent ?? defaultFlightIntent(Date.now(), currency);
 
   return (
     <>
-      <TravelHeader
-        intent={intent}
-        onRadar={() => {
-          setRadarOpen(true);
-          document
-            .getElementById(RADAR_ID)
-            ?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth" });
-        }}
-      />
+      <TravelHeader intent={intent} />
       <section
         aria-label={t("explore.hero")}
         className="mb-4 overflow-hidden rounded-3xl border border-sprout-200 bg-white"
@@ -149,12 +138,6 @@ export function ExplorePage() {
           </button>
         </form>
       </section>
-      <FlightPriceWatches
-        open={radarOpen}
-        onOpenChange={setRadarOpen}
-        card={null}
-        onClose={() => undefined}
-      />
     </>
   );
 }

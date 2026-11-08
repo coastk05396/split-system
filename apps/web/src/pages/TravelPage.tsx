@@ -28,7 +28,7 @@ import { getLocale, t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 
 import { useHighlights } from "../flights/use-highlights.js";
-import { FlightPriceWatches, RADAR_ID, useCreateWatch } from "../flights/FlightPriceWatches.js";
+import { FlightPriceWatches, useCreateWatch } from "../flights/FlightPriceWatches.js";
 
 /** The advice is one short sentence on screen; the rest of the grounded commentary is dropped. */
 const firstSentence = (text: string) => /^.*?(?:[。！？]|[.!?](?=\s|$))/s.exec(text)?.[0] ?? text;
@@ -42,7 +42,6 @@ export function TravelPage() {
   const [lastSearch] = useState(() => (intentFromQuery(params) ? null : readLastSearch()));
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [radarOpen, setRadarOpen] = useState(false);
   // The date picked on a tile belongs to the reply it was picked on.
   const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
   const [active, setIntent] = useState(
@@ -177,15 +176,7 @@ export function TravelPage() {
   const tiles = dateTiles(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
-      <TravelHeader
-        intent={active}
-        onRadar={() => {
-          setRadarOpen(true);
-          document
-            .getElementById(RADAR_ID)
-            ?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth" });
-        }}
-      />
+      <TravelHeader intent={active} />
       <form
         className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-sprout-700"
         onSubmit={(event) => {
@@ -327,8 +318,6 @@ export function TravelPage() {
       {searched && highlightsSection}
       {/* Last in the page flow before the bar, whose spacer must be the final element. */}
       <FlightPriceWatches
-        open={radarOpen}
-        onOpenChange={setRadarOpen}
         card={watchCard}
         onClose={() => {
           setWatchCard(null);

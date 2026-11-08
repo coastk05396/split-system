@@ -57,33 +57,15 @@ export function FlightPriceWatchButton({
     </button>
   );
 }
-export const RADAR_ID = "price-watch-radar";
-
-export function FlightPriceWatches({
-  card,
-  onClose,
-  open,
-  onOpenChange,
-}: {
-  card: FlightCard | null;
-  onClose: () => void;
-  /** The radar list is expanded (the header bell opens it). */
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+/** The signed-in User's Price Watches with cancel; the 追蹤 page body. */
+export function PriceWatchList() {
   const { session, state } = useAuth();
   const userId = state.status === "signedIn" ? state.user.id : null;
-  const { webPush } = useDeps();
   const queryClient = useQueryClient();
   const watches = useQuery({
     queryKey: ["flights", "watches", userId],
     queryFn: ({ signal }) =>
       readWithRev<FlightWatchesReply>(session.fetch("/api/v1/flights/watches", { signal })),
-  });
-  const vapid = useQuery({
-    queryKey: ["flights", "vapid"],
-    queryFn: () =>
-      readWithRev<{ publicKey: string | null }>(session.fetch("/api/v1/flights/vapid-public-key")),
   });
   const cancel = useMutation({
     mutationFn: async (id: string) => {
@@ -92,36 +74,45 @@ export function FlightPriceWatches({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flights", "watches"] }),
   });
   return (
+    <section aria-label={t("flight.myWatches")} className="grid gap-3">
+      {watches.isPending && <p role="status">{t("app.loading")}</p>}
+      {(watches.isError || cancel.isError) && (
+        <p role="alert">{failureMessage(watches.error ?? cancel.error)}</p>
+      )}
+      {watches.data?.watches.length === 0 && (
+        <p className="text-ink-muted">{t("flight.noWatches")}</p>
+      )}
+      {watches.data?.watches.map((watch) => (
+        <WatchRow
+          key={watch.id}
+          watch={watch}
+          onCancel={() => {
+            cancel.mutate(watch.id);
+          }}
+          busy={cancel.isPending}
+        />
+      ))}
+    </section>
+  );
+}
+
+/** The Price Watch drawer; the list lives on /travel/watches. */
+export function FlightPriceWatches({
+  card,
+  onClose,
+}: {
+  card: FlightCard | null;
+  onClose: () => void;
+}) {
+  const { session } = useAuth();
+  const { webPush } = useDeps();
+  const vapid = useQuery({
+    queryKey: ["flights", "vapid"],
+    queryFn: () =>
+      readWithRev<{ publicKey: string | null }>(session.fetch("/api/v1/flights/vapid-public-key")),
+  });
+  return (
     <>
-      <details
-        id={RADAR_ID}
-        open={open}
-        onToggle={(event) => {
-          onOpenChange(event.currentTarget.open);
-        }}
-        className="mt-6 scroll-mt-4 surface-card rounded-3xl border border-sprout-200 bg-white p-5"
-      >
-        <summary className="cursor-pointer font-bold">{t("flight.myWatches")}</summary>
-        <section aria-label={t("flight.myWatches")} className="mt-4 grid gap-3">
-          {watches.isPending && <p role="status">{t("app.loading")}</p>}
-          {(watches.isError || cancel.isError) && (
-            <p role="alert">{failureMessage(watches.error ?? cancel.error)}</p>
-          )}
-          {watches.data?.watches.length === 0 && (
-            <p className="text-ink-muted">{t("flight.noWatches")}</p>
-          )}
-          {watches.data?.watches.map((watch) => (
-            <WatchRow
-              key={watch.id}
-              watch={watch}
-              onCancel={() => {
-                cancel.mutate(watch.id);
-              }}
-              busy={cancel.isPending}
-            />
-          ))}
-        </section>
-      </details>
       <Dialog.Root
         open={card !== null}
         onOpenChange={(open) => {
