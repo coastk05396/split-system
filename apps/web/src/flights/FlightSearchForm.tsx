@@ -59,12 +59,15 @@ export function FlightSearchForm({
   revision,
   pending,
   onSearch,
+  onPlace,
 }: {
   intent: FlightSearchIntent;
   /** Changes whenever a search runs, so the fields redraw even for an identical intent. */
   revision: number;
   pending: boolean;
   onSearch: (intent: FlightSearchIntent) => void;
+  /** The destination the User is picking or typing, for the globe. */
+  onPlace?: (input: string) => void;
 }) {
   const currency = active.currency;
   const [problem, setProblem] = useState<"fields" | "past" | null>(null);
@@ -155,7 +158,9 @@ export function FlightSearchForm({
           popular={POPULAR_DESTINATIONS}
           onChange={(destination) => {
             set({ destination });
+            onPlace?.(destination);
           }}
+          onType={onPlace}
         />
       </div>
       <label className="grid gap-1 text-sm font-bold">

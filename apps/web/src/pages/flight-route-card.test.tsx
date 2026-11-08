@@ -97,14 +97,15 @@ describe("Flight Radar header and route card", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "names the destination in the headline and drops the globe in %s",
+    "names the destination in the headline, with no eyebrow or gradient text, in %s",
     async (language) => {
       setup(language);
       expect(
         await screen.findByRole("heading", { level: 1, name: text[language].headline }),
       ).toBeVisible();
-      expect(screen.queryByRole("img")).toBeNull();
-      expect(document.querySelector("canvas")).toBeNull();
+      // The decision to drop the globe was reversed (#125); the globe has its own tests.
+      expect(document.querySelector("[class*='bg-clip-text']")).toBeNull();
+      expect(document.querySelector("[class*='gradient']")).toBeNull();
     },
   );
 
