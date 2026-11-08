@@ -45,7 +45,7 @@ A standing alert a User sets on a route and date window so 小芽 wakes them onc
 _Avoid_: Subscription, price tracker
 
 **Travel mode**:
-The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to the travel buttons (分帳, 探索, 航班, 追蹤) and drop the expense-splitting ones. The URL is its only state, and 分帳 leaves it for 首頁.
+The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to the travel buttons (分帳, 探索, 航班, 追蹤) and drop the expense-splitting ones. The URL is its only state, and 分帳 leaves it for 首頁. While it is on, the page and nav wear the green glass palette; the normal palette returns on leaving.
 _Avoid_: Travel tab, trip mode (Trip is the disabled Group feature)
 
 **探索 (Explore page)**:

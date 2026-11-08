@@ -166,8 +166,9 @@ function Sidebar() {
 
 /** Mobile: content above a five-tab bottom bar. Desktop: a sidebar beside the content. */
 export function AppShell({ children }: { children: ReactNode }) {
+  const { travel } = useTabs();
   return (
-    <div className="min-h-dvh md:flex">
+    <div className={`min-h-dvh md:flex ${travel ? "travel-mode" : ""}`}>
       <Sidebar />
       <main className="min-w-0 flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="mx-auto w-full max-w-5xl px-5 pt-4 md:px-12 md:pt-12">{children}</div>
