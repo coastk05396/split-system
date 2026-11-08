@@ -53,11 +53,11 @@ The landing at `/travel` with no search parameters: a destination hero showing t
 _Avoid_: Home, discover
 
 **Entity Pill**:
-One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the other conditions of the current search (the route and dates live in the Route Chip), and tapping one opens the editing panel.
+One tappable filter chip in Flight Radar—such as destination vibe, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the other conditions of the current search (the route and dates live in the Route Chip), and tapping one opens the editing panel.
 _Avoid_: Tag, search parameter
 
 **Route Chip**:
-The single outlined chip on Flight Radar's search summary card that states the route and dates of the current search (plus 單程 and N 人 once those exist) and opens the editing panel when tapped. It replaces the old 修改 button; the other conditions stay Entity Pills.
+The single outlined chip on Flight Radar's search summary card that states the route and dates of the current search (plus 單程 and N 人 once those exist), shows airport codes with short dates when the card is narrow, and opens the editing panel when tapped. It replaces the old 修改 button; the other conditions stay Entity Pills.
 _Avoid_: Route pill, edit button
 
 **Date Tile**:

@@ -4,7 +4,7 @@ import { routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
 import { travelButton } from "../groups/ui.js";
 import { airportName } from "./AirportPicker.js";
-import { friendlyRange } from "./dates.js";
+import { friendlyRange, shortRange } from "./dates.js";
 
 const plane =
   "M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z";
@@ -59,23 +59,36 @@ export function RouteCard({
   onSearch: () => void;
 }) {
   const estimate = leg(intent.origin, intent.destination);
+  const fullDates = friendlyRange(intent.departureDate, intent.returnDate);
   return (
     <section
       aria-label={t("flight.summaryCard")}
-      className="mb-4 grid gap-3.5 rounded-[28px] border border-[#c4e4d3] bg-sprout-100 p-[18px]"
+      className="@container mb-4 grid gap-3.5 rounded-[28px] border border-[#c4e4d3] bg-sprout-100 p-[18px]"
     >
       <button
         type="button"
         disabled={pending}
+        aria-label={t("flight.routeChip", {
+          route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
+          dates: fullDates,
+        })}
         aria-expanded={open}
         onClick={onToggle}
-        className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 justify-self-start rounded-full border-[1.5px] border-sprout-700 bg-white px-3.5 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
+        className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 justify-self-start rounded-full border-[1.5px] border-sprout-700 bg-white px-3 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
       >
-        <span className="min-w-0 truncate">
-          {t("flight.routeChip", {
-            route: `${airportName(intent.origin)} → ${airportName(intent.destination)}`,
-            dates: friendlyRange(intent.departureDate, intent.returnDate),
-          })}
+        {/* Wide card: city names (only these may shrink) then the dates. */}
+        <span className="hidden min-w-0 items-center gap-1.5 @lg:flex">
+          <span className="min-w-0 truncate">
+            {airportName(intent.origin)} → {airportName(intent.destination)}
+          </span>
+          <span className="shrink-0">{fullDates}</span>
+        </span>
+        {/* Narrow card: airport codes and short dates, about 200 px, nothing can be clipped. */}
+        <span className="flex items-center gap-1.5 @lg:hidden">
+          <span className="shrink-0">
+            {intent.origin} → {intent.destination}
+          </span>
+          <span className="shrink-0">{shortRange(intent.departureDate, intent.returnDate)}</span>
         </span>
         <svg
           viewBox="0 0 24 24"
