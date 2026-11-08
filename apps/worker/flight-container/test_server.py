@@ -47,6 +47,38 @@ class TopAndOtherFlights(unittest.TestCase):
         payload = js(None, [raw_flight(6000, 10)])
         self.assertEqual([f["top"] for f in normalize(parse_both(payload), "TWD")], [False])
 
+    def test_cap_keeps_every_top_fare_and_the_cheapest_others(self):
+        others = [raw_flight(9000 - i * 100, 8, f"Air{i}") for i in range(24)]  # cheapest is last
+        fares = normalize(parse_both(js([raw_flight(9500, 8, "Top")], others)), "TWD")
+        self.assertEqual(len(fares), 20)
+        self.assertIn(9500, [f["price"] for f in fares if f["top"]])
+        self.assertEqual(min(f["price"] for f in fares), 6700)
+
+
+class MissingSource(unittest.TestCase):
+    def test_page_without_the_data_script_is_503(self):
+        import threading
+        from http.client import HTTPConnection
+        from http.server import ThreadingHTTPServer
+        from unittest.mock import MagicMock, patch
+        from server import Handler
+        client = MagicMock()
+        client.get.return_value = MagicMock(status_code=200, text="<html></html>")
+        body = json.dumps({"origin": "TPE", "destination": "OKA", "departureDate": "2027-01-08",
+                           "returnDate": "2027-01-11", "currency": "TWD"})
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            with patch("primp.Client", return_value=client):
+                conn = HTTPConnection("127.0.0.1", httpd.server_port)
+                conn.request("POST", "/search", body, {"Content-Length": str(len(body))})
+                response = conn.getresponse()
+                conn.close()
+                self.assertEqual((response.status, response.reason), (503, "Flight source unavailable"))
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()

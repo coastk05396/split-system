@@ -37,7 +37,10 @@ def normalize(flights: list[dict], currency: str) -> list[dict]:
             "top": flight.get("top", False),
             "priceLevel": flight.get("current_price", "unknown"),
         })
-    return fares[:20]
+    # Never cap away the cheapest fare: keep every top fare, fill the rest with the cheapest others.
+    tops = [fare for fare in fares if fare["top"]]
+    others = sorted((fare for fare in fares if not fare["top"]), key=lambda fare: fare["price"])
+    return tops + others[: max(0, 20 - len(tops))]
 
 
 def native_price_level(html: str) -> str:
@@ -101,6 +104,8 @@ def search(intent: dict) -> list[dict]:
     if response.status_code != 200:
         raise ValueError("source unavailable")
     script = LexborHTMLParser(response.text).css_first(r"script.ds\:1")
+    if script is None:
+        raise ValueError("source unavailable")
     results = parse_both(script.text())
     level = native_price_level(response.text)
     return normalize([{**flight, "current_price": level} for flight in results], intent["currency"])
