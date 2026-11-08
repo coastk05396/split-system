@@ -9,6 +9,7 @@ it("records daily route minima, hides immature statistics, and returns today's v
   const user = await signIn("google", uniqueSub("history"));
   const app = createApp({
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     flightSource: () =>
       Promise.resolve([
@@ -91,6 +92,7 @@ it("uses fourteen distinct days, ignoring another currency and observations outs
   ]);
   const app = createApp({
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     flightSource: () => Promise.resolve([{ ...oldFare, price: 8000 }]),
   });
@@ -113,6 +115,7 @@ it("daily maintenance rotates four verified routes and purges history older than
   const filters: boolean[] = [];
   const deps = {
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     rateSource: { fetchRate: () => Promise.reject(new Error("offline")) },
     flightSource: (intent: import("@split/shared").FlightSearchIntent) => {
@@ -134,10 +137,11 @@ it("daily maintenance rotates four verified routes and purges history older than
     },
   };
   await dailyMaintenance(env, clock.now, deps);
-  expect(calls).toHaveLength(4);
-  expect(new Set(calls).size).toBe(4);
+  // History rotates first; the Fare Snapshot job's requests follow (see fare-snapshots.test.ts).
+  expect(calls.slice(0, 4)).toHaveLength(4);
+  expect(new Set(calls.slice(0, 4)).size).toBe(4);
   // The 60-day baseline compares unfiltered populations only.
-  expect(filters).toEqual([false, false, false, false]);
+  expect(filters.slice(0, 4)).toEqual([false, false, false, false]);
   const recorded = await env.DB.prepare(
     "SELECT count(*) n FROM flight_fare_history WHERE price=7777",
   ).first<{ n: number }>();
@@ -158,6 +162,7 @@ it("records only unfiltered searches in the fare history", async () => {
   const user = await signIn("google", uniqueSub("filtered-history"));
   const app = createApp({
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     flightSource: () =>
       Promise.resolve([

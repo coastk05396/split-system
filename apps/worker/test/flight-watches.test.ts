@@ -66,6 +66,7 @@ it("daily checks deliver once, prune stale subscriptions, expire watches and cas
   let now = clock.now;
   const deps = {
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => now,
     rateSource: offlineRateSource,
     flightSource: () =>
@@ -238,6 +239,7 @@ it("sends a decryptable aes128gcm notification with a verifiable VAPID signature
   };
   const deps = {
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     rateSource: offlineRateSource,
     flightSource: () =>
@@ -406,6 +408,7 @@ it("expires passed departures and rejects arbitrary push destinations", async ()
   const { offlineRateSource } = await import("./auth-harness.js");
   await dailyMaintenance(env, now, {
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => now,
     rateSource: offlineRateSource,
     flightSource: () => Promise.resolve([]),
@@ -437,6 +440,7 @@ it("fires a watch for a top fare in the cheapest third even with no history and 
   const sends: string[] = [];
   const deps = {
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     rateSource: offlineRateSource,
     // Same fare on two routes; only the NGO one is a top flight (the lookup is cached per route).

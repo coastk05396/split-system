@@ -32,6 +32,7 @@ function setup() {
   };
   const deps = {
     ...productionDeps,
+    pause: () => Promise.resolve(),
     now: () => clock.now,
     rateSource: offlineRateSource,
     lineReplyClient: () => client,

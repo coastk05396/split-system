@@ -249,6 +249,25 @@ export const flightFareHistory = sqliteTable(
   ],
 );
 
+export const flightFareSnapshots = sqliteTable(
+  "flight_fare_snapshots",
+  {
+    origin: text("origin").notNull(),
+    destination: text("destination").notNull(),
+    currency: currency("currency").notNull(),
+    departureDate: text("departure_date").notNull(),
+    price: integer("price").notNull(),
+    fetchedAt: integer("fetched_at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.origin, table.destination, table.currency, table.departureDate],
+    }),
+    index("flight_fare_snapshots_date").on(table.departureDate),
+    check("flight_fare_snapshots_price_positive", sql`${table.price}>0`),
+  ],
+);
+
 export const flightPriceWatches = sqliteTable(
   "flight_price_watches",
   {

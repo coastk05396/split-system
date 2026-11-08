@@ -60,6 +60,14 @@ _Avoid_: Tag, search parameter
 One priced departure date of the current Flight Radar search, shown as a pressable tile with its cheapest fare, so the User can compare what each date costs and switch which date's fares are shown. The cheapest date (every one on a tie) is marked 最低; the date whose fares are listed is marked 已選.
 _Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
 
+**Fare Snapshot**:
+The cheapest fare found for one route and one departure day, stored with the time it was fetched. A scheduled background job fills them for the catalogue's popular routes, one date at a time and spaced out; a User's request never fetches one.
+_Avoid_: Cached search, fare history (that is the daily minimum behind Deal Signals)
+
+**Price Strip**:
+The month view of Flight Radar that shows the cheapest fare of each day, built only from Fare Snapshots and never from a live search. A route with no snapshots shows no strip. Not the same as Date Tiles, which price only the dates of the current search.
+_Avoid_: Price calendar
+
 **熱門 (Top)**:
 The small tag on a fare Google itself lists among its top flights. Flight Radar shows every fare in one list ordered by price, cheapest first; 熱門 only marks, never reorders.
 _Avoid_: Recommended, featured

@@ -19,6 +19,8 @@ export interface AppDeps {
   flightAdvisor?: FlightAdvisor;
   verifier: (env: Bindings) => IdentityVerifier;
   now: () => number;
+  /** Waits between spaced source requests; tests skip the wait. */
+  pause?: (ms: number) => Promise<void>;
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
   rateSource: RateSource;
   lineReplyClient: (env: Bindings) => LineReplyClient;
