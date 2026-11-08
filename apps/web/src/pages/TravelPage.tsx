@@ -124,7 +124,7 @@ export function TravelPage() {
     else if (handedPrompt.current) {
       // 探索 hands its 小芽 prompt over in the history state; a refresh must not repeat it.
       search.mutate({ prompt: handedPrompt.current, defaults: active });
-      navigate(".", { replace: true, state: null });
+      void navigate(".", { replace: true, state: null });
     }
     if (intent && Number.isInteger(fare) && fare > 0) setPendingWatch({ intent, fare });
   }, []);
