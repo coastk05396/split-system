@@ -82,8 +82,13 @@ export const en: Record<MessageId, string> = {
   "flight.tileSame": "This is the date you searched.",
   "flight.tileCheaper": "{amount} cheaper than {date}. Leaving another day saves money.",
   "flight.tilePricier": "{amount} pricier than {date}.",
-  "flight.listCount": "{n} flights, cheapest first.",
-  "flight.listPrices": "Prices: {caption}",
+  "flight.listTitle": "Find your flight",
+  "flight.listOrder": "Cheapest first",
+  "flight.footnote":
+    "Prices are round-trip totals for 1 adult from Google Flights. Check again before you book.",
+  "flight.meta": "{stops} · {duration}",
+  "flight.duration": "{hours} h {minutes} min",
+  "flight.durationHours": "{hours} h",
   "flight.showAll": "Show all {n} flights",
   "flight.nonstop": "Nonstop",
   "flight.oneStop": "1 stop",
@@ -97,7 +102,6 @@ export const en: Record<MessageId, string> = {
   "flight.summaryDates": "{dates} · 1 adult",
   "flight.edit": "Edit",
   "flight.top": "Top",
-  "flight.priceCaption": "Round-trip total · 1 adult",
   "app.name": "Sprout Split",
   "app.loading": "Loading…",
 

@@ -47,7 +47,13 @@ const text = {
     sticker: "Strong Buy",
     cheapest: "Cheapest",
     sort: "Sort fares",
-    caption: "Round-trip total · 1 adult",
+    footnote:
+      "Prices are round-trip totals for 1 adult from Google Flights. Check again before you book.",
+    title: "Find your flight",
+    order: "Cheapest first",
+    meta: "Nonstop · 3 h",
+    oneStop: "1 stop · 3 h 10 min",
+    bell: "Price Watch",
     subtitle: "One adult · round-trip economy, in your Preferred currency.",
     watch: "Price Watch",
   },
@@ -66,7 +72,12 @@ const text = {
     sticker: "強烈買",
     cheapest: "最低價",
     sort: "排序方式",
-    caption: "來回總價・1 位成人",
+    footnote: "價格為來回總價・1 位成人，來自 Google 航班，訂票前請再確認。",
+    title: "找到你的好航班",
+    order: "價格由低到高",
+    meta: "直飛・3 小時",
+    oneStop: "轉機 1 次・3 小時 10 分",
+    bell: "降價叫醒我",
     subtitle: "一位成人・來回經濟艙，票價以偏好幣別顯示。",
     watch: "降價叫醒我",
   },
@@ -103,7 +114,7 @@ const rows = (language: Language) =>
 
 describe("Flight Radar compact price list", () => {
   it.each(["en", "zh-TW"] as const)(
-    "lists fares cheapest first as rows of airline, times and stops with the price in %s",
+    "lists fares cheapest first as cards of airline, price, time line, stops and duration in %s",
     async (language) => {
       const { api } = setup(language, threeFares);
       await explore(api, language);
@@ -116,21 +127,61 @@ describe("Flight Radar compact price list", () => {
         "Third Air",
       ]);
       const first = list[0] as HTMLElement;
-      expect(within(first).getByText("08:00 – 12:00")).toBeVisible();
-      expect(within(first).getByText(text[language].nonstop)).toBeVisible();
+      expect(within(first).getByText("08:00")).toBeVisible();
+      expect(within(first).getByText("12:00")).toBeVisible();
+      expect(within(first).getByText(text[language].meta)).toBeVisible();
       expect(within(first).getByText("NT$ 21,000")).toHaveClass("tabular-nums");
+      // A time line with a plane between departure and arrival, never a flight number or baggage.
+      expect(first.querySelector("svg path[d^='M21 16v-2']")).not.toBeNull();
+      expect(first).toHaveClass("rounded-[20px]");
+      expect(first).not.toHaveTextContent(/baggage|行李|[A-Z]{2}\d{2,4}/);
     },
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "writes the price caption once above the list, not on each row, in %s",
+    "titles the list and writes the Google Flights footnote once after it in %s",
     async (language) => {
       const { api } = setup(language, threeFares);
       await explore(api, language);
-      await screen.findByRole("list", { name: text[language].fares });
-      expect(screen.getAllByText(text[language].caption, { exact: false })).toHaveLength(1);
+      const list = await screen.findByRole("list", { name: text[language].fares });
+      expect(screen.getByRole("heading", { name: text[language].title })).toBeVisible();
+      expect(screen.getByText(text[language].order)).toBeVisible();
+      const note = screen.getByText(text[language].footnote);
+      expect(screen.getAllByText(text[language].footnote)).toHaveLength(1);
+      expect(list.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       for (const row of rows(language))
-        expect(within(row).queryByText(text[language].caption, { exact: false })).toBeNull();
+        expect(within(row).queryByText(text[language].footnote)).toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "shows stops and duration for a connection in %s",
+    async (language) => {
+      const { api } = setup(language, [
+        { ...fare("Hop Air", 20000), stops: 1, durationMinutes: 190 },
+      ]);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(screen.getByText(text[language].oneStop)).toBeVisible();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "gives only the Strong Buy card an amber edge, not Top or plain cards in %s",
+    async (language) => {
+      const { api } = setup(language, [
+        { ...fare("Raised Air", 18000, "low"), top: true },
+        { ...fare("Top Air", 30000, "typical"), top: true },
+        fare("Plain Air", 31000, "typical"),
+      ]);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(rows(language).map((row) => row.getAttribute("data-strong"))).toEqual([
+        "true",
+        null,
+        null,
+      ]);
+      expect(rows(language)[0]).toHaveClass("data-[strong=true]:border-l-[6px]");
     },
   );
 
@@ -156,14 +207,19 @@ describe("Flight Radar compact price list", () => {
   });
 
   it.each(["en", "zh-TW"] as const)(
-    "makes each row a tall link to Google Flights in %s",
+    "makes each card a link to Google Flights with a 44 px Price Watch bell in %s",
     async (language) => {
       const { api } = setup(language, threeFares);
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
       const link = within(rows(language)[0] as HTMLElement).getByRole("link");
       expect(link).toHaveAttribute("href", expect.stringContaining("google.com/travel/flights"));
-      expect(link).toHaveClass("min-h-14");
+      expect(link.closest("li")).toHaveClass("rounded-[20px]");
+      const bell = within(rows(language)[0] as HTMLElement).getByRole("button", {
+        name: text[language].bell,
+      });
+      expect(bell).toHaveClass("size-11");
+      expect(link).not.toContainElement(bell);
     },
   );
 
