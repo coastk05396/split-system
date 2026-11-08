@@ -123,6 +123,18 @@ it("fetches only the injected routes, and none for an empty list", async () => {
   expect(new Set(fetched)).toEqual(new Set(["CTS"]));
 });
 
+it("stops after five source failures in a row instead of working through every route", async () => {
+  let calls = 0;
+  await dailyMaintenance(env, clock.now, {
+    ...deps(() => {
+      calls++;
+      return Promise.reject(new Error("source down"));
+    }),
+    snapshotDestinations: ["CTS", "NRT"],
+  });
+  expect(calls).toBe(5);
+});
+
 const seed = (destination: string, date: string, price: number, currency = "TWD") =>
   env.DB.prepare(
     "INSERT INTO flight_fare_snapshots(origin,destination,currency,departure_date,price,fetched_at) VALUES('TPE',?,?,?,?,?)",

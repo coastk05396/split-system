@@ -26,6 +26,8 @@ const sleep = (ms: number) =>
  * skipped. The source only does round trips, so a snapshot is the cheapest outbound fare priced
  * for a three-day stay. Does not touch the search cache or the Deal Signal fare history.
  */
+const MAX_CONSECUTIVE_FAILURES = 5;
+
 export async function maintainFareSnapshots(env: Bindings, deps: AppDeps): Promise<void> {
   const now = deps.now();
   const pause = deps.pause ?? sleep;
@@ -34,7 +36,8 @@ export async function maintainFareSnapshots(env: Bindings, deps: AppDeps): Promi
     .bind(isoDay(now))
     .run();
   let requested = false;
-  for (const destination of deps.snapshotDestinations ?? POPULAR_SNAPSHOT_DESTINATIONS) {
+  let failures = 0;
+  routes: for (const destination of deps.snapshotDestinations ?? POPULAR_SNAPSHOT_DESTINATIONS) {
     for (let d = 1; d <= DAYS_AHEAD; d++) {
       if (requested) await pause(SNAPSHOT_SPACING_MS);
       requested = true;
@@ -67,8 +70,10 @@ export async function maintainFareSnapshots(env: Bindings, deps: AppDeps): Promi
             now,
           )
           .run();
+        failures = 0;
       } catch {
-        /* A failing date keeps its older snapshot; the next run retries. */
+        // A failing date keeps its older snapshot; a dead source ends the run so it cannot hold the cron for hours.
+        if (++failures >= MAX_CONSECUTIVE_FAILURES) break routes;
       }
     }
   }
