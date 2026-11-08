@@ -20,7 +20,7 @@ import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { friendlyDate } from "../flights/dates.js";
 import { FareResults } from "../flights/FareResults.js";
-import { PriceStrip, priceStrip } from "../flights/PriceStrip.js";
+import { DateTiles, dateTiles } from "../flights/DateTiles.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -43,9 +43,8 @@ export function TravelPage() {
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [radarOpen, setRadarOpen] = useState(false);
-  // The date picked on the strip belongs to the reply it was picked on; the ghost finger is first-touch.
+  // The date picked on a tile belongs to the reply it was picked on.
   const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
-  const [stripTouched, setStripTouched] = useState(false);
   const [active, setIntent] = useState(
     () => lastSearch ?? defaultFlightIntent(Date.now(), currency),
   );
@@ -172,7 +171,7 @@ export function TravelPage() {
       )}
     </section>
   );
-  const strip = priceStrip(reply, picked?.reply === reply ? picked?.date : undefined);
+  const tiles = dateTiles(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
       <TravelHeader
@@ -283,22 +282,13 @@ export function TravelPage() {
       )}
       {/* After a search the results come first, right under the summary; the page scrolls here. */}
       <div ref={resultsTop} className="scroll-mt-4">
-        {!panelOpen && reply && strip && (
-          <section
-            aria-label={t("flight.priceStrip")}
-            className="surface-card mt-6 rounded-3xl border border-sprout-200 bg-white p-4"
-          >
-            <PriceStrip
-              strip={strip}
-              touched={stripTouched}
-              onTouch={() => {
-                setStripTouched(true);
-              }}
-              onSelect={(date) => {
-                setPicked({ reply, date });
-              }}
-            />
-          </section>
+        {!panelOpen && reply && tiles && (
+          <DateTiles
+            tiles={tiles}
+            onSelect={(date) => {
+              setPicked({ reply, date });
+            }}
+          />
         )}
         {reply && advise.data && (
           <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
@@ -308,7 +298,7 @@ export function TravelPage() {
         <FareResults
           pending={search.isPending}
           reply={reply}
-          date={strip?.selected}
+          date={tiles?.selected}
           onWatch={setWatchCard}
         />
       </div>

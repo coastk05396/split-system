@@ -48,8 +48,8 @@ _Avoid_: Subscription, price tracker
 One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the current search, and tapping one opens the editing panel.
 _Avoid_: Tag, search parameter
 
-**Price Strip**:
-The priced departure dates of the current Flight Radar search, side by side, so the User can compare what each date costs and switch which date's fares are shown.
+**Date Tile**:
+One priced departure date of the current Flight Radar search, shown as a pressable tile with its cheapest fare, so the User can compare what each date costs and switch which date's fares are shown. The cheapest date (every one on a tie) is marked 最低; the date whose fares are listed is marked 已選.
 _Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
 
 **熱門 (Top)**:

@@ -4,7 +4,7 @@ import { primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
-import { cardsOnDate } from "./PriceStrip.js";
+import { cardsOnDate } from "./DateTiles.js";
 
 /** Rows shown before the 顯示全部 button. */
 const FIRST_ROWS = 10;
@@ -22,7 +22,7 @@ export function FareResults({
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
-  /** Shows only the fares departing on this date (the Price Strip's selection). */
+  /** Shows only the fares departing on this date (the date tile selection). */
   date?: string | undefined;
   onWatch: (card: FlightCard) => void;
 }) {
