@@ -458,7 +458,9 @@ it("fires a watch for a top fare in the cheapest third even with no history and 
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/, "");
-  const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
+  const rawPublic = await crypto.subtle.exportKey("raw", keys.publicKey);
+  if (!(rawPublic instanceof ArrayBuffer)) throw new Error("ECDH raw key unavailable");
+  const publicKey = new Uint8Array(rawPublic);
   const request = (path: string, init: RequestInit) =>
     app.request(`https://split.test/api/v1${path}`, init, env);
   expect(
