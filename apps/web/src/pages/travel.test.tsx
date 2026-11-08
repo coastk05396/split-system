@@ -67,7 +67,7 @@ describe("Flight Radar", () => {
     expect(await screen.findByText("US$ 250.00")).toBeVisible();
     expect(screen.getByText("Strong Buy")).toBeVisible();
     expect(screen.getByText("Example Air")).toBeVisible();
-    expect(screen.getByRole("link", { name: "View Flights" }).getAttribute("href")).toContain(
+    expect(screen.getByRole("link", { name: /Example Air/ }).getAttribute("href")).toContain(
       "?tfs=",
     );
     const request = api.requests.find((r) => r.route === "POST /api/v1/flights/search");
@@ -365,7 +365,7 @@ describe("Flight Radar", () => {
     const release = api.holdResponses("POST /api/v1/flights/advise");
     await explore(api, "en");
     expect(await screen.findByText("Example Air")).toBeVisible();
-    expect(screen.getByRole("link", { name: "View Flights" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /Example Air/ })).toBeVisible();
     await waitFor(() => {
       expect(api.requests.some((r) => r.route === "POST /api/v1/flights/advise")).toBe(true);
     });
@@ -442,7 +442,7 @@ describe("Flight Radar", () => {
       cookieUser: makeUser("Rick"),
     });
 
-    expect(await screen.findByRole("link", { name: "查看航班" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: /Example Air/ })).toBeVisible();
     const requests = api.requests.filter((r) => r.route === "POST /api/v1/flights/search");
     expect(requests).toHaveLength(1);
     const body: unknown = JSON.parse(requests[0]?.body ?? "{}");

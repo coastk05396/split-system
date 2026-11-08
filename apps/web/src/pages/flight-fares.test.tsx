@@ -1,6 +1,6 @@
 import type { FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser, type FakeApi } from "../../test/fake-api.js";
 
@@ -15,7 +15,11 @@ const warmIsland: FlightSearchIntent = {
   directOnly: false,
 };
 
-const fare = (airline: string, price: number) => ({
+const fare = (
+  airline: string,
+  price: number,
+  priceLevel: "low" | "typical" | "high" | "unknown" = "low",
+) => ({
   price,
   airline,
   outboundDeparture: "08:00",
@@ -24,7 +28,7 @@ const fare = (airline: string, price: number) => ({
   inboundArrival: "20:00",
   stops: 0,
   durationMinutes: 180,
-  priceLevel: "low" as const,
+  priceLevel,
 });
 
 const text = {
@@ -32,8 +36,8 @@ const text = {
     prompt: "Where would you like to go?",
     explore: "Explore flights",
     fares: "Fares",
-    pages: "Fare pages",
-    page: (n: number, of: number) => `Fare ${String(n)} of ${String(of)}`,
+    showAll: (n: number) => `Show all ${String(n)} flights`,
+    nonstop: "Nonstop",
     results: "Search results",
     advice: "Deal commentary",
     price: "NT$ 25,000",
@@ -41,7 +45,6 @@ const text = {
     cheapest: "Cheapest",
     sort: "Sort fares",
     caption: "Round-trip total · 1 adult",
-    dates: "Jan 8 – Jan 11",
     subtitle: "One adult · round-trip economy, in your Preferred currency.",
     watch: "Price Watch",
   },
@@ -49,8 +52,8 @@ const text = {
     prompt: "想去哪裡？",
     explore: "探索航班",
     fares: "票價選項",
-    pages: "票價分頁",
-    page: (n: number, of: number) => `第 ${String(n)} / ${String(of)} 個票價`,
+    showAll: (n: number) => `顯示全部 ${String(n)} 個航班`,
+    nonstop: "直飛",
     results: "搜尋結果",
     advice: "票價短評",
     price: "NT$ 25,000",
@@ -58,7 +61,6 @@ const text = {
     cheapest: "最低價",
     sort: "排序方式",
     caption: "來回總價・1 位成人",
-    dates: "1/8（五）– 1/11（一）",
     subtitle: "一位成人・來回經濟艙，票價以偏好幣別顯示。",
     watch: "降價叫醒我",
   },
@@ -87,53 +89,71 @@ const threeFares = [
   fare("Third Air", 30000),
 ];
 
-/** The device does not ask for reduced motion (the test setup says it does). */
-const original = window.matchMedia.bind(window);
-function allowMotion() {
-  window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
-}
+const rows = (language: Language) =>
+  within(screen.getByRole("list", { name: text[language].fares })).getAllByRole("listitem");
 
-describe("Flight Radar fare carousel", () => {
-  afterEach(() => {
-    window.matchMedia = original;
-  });
-
+describe("Flight Radar compact price list", () => {
   it.each(["en", "zh-TW"] as const)(
-    "shows every fare in a carousel with page dots in %s",
+    "lists fares cheapest first as rows of airline, times and stops with the price in %s",
     async (language) => {
       const { api } = setup(language, threeFares);
       await explore(api, language);
-      const carousel = await screen.findByRole("group", { name: text[language].fares });
-      expect(carousel).toHaveAttribute("tabindex", "0");
-      const cards = within(carousel).getAllByRole("article");
-      expect(cards.map((card) => within(card).getByText(/Air$/).textContent)).toEqual([
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(screen.queryByRole("group", { name: text[language].fares })).toBeNull();
+      const list = rows(language);
+      expect(list.map((row) => within(row).getByText(/Air$/).textContent)).toEqual([
         "Second Air",
         "Example Air",
         "Third Air",
       ]);
-      const dots = within(screen.getByRole("group", { name: text[language].pages })).getAllByRole(
-        "button",
-      );
-      expect(dots.map((dot) => dot.getAttribute("aria-label"))).toEqual([
-        text[language].page(1, 3),
-        text[language].page(2, 3),
-        text[language].page(3, 3),
-      ]);
-      expect(dots[0]).toHaveAttribute("aria-current", "true");
-      fireEvent.click(dots[2] as HTMLElement);
-      expect(dots[2]).toHaveAttribute("aria-current", "true");
-      expect(dots[0]).not.toHaveAttribute("aria-current");
-      expect(vi.spyOn(Element.prototype, "scrollIntoView").mock.contexts.at(-1)).toBe(cards[2]);
+      const first = list[0] as HTMLElement;
+      expect(within(first).getByText(`08:00 – 12:00・${text[language].nonstop}`)).toBeVisible();
+      expect(within(first).getByText("NT$ 21,000")).toHaveClass("tabular-nums");
     },
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "shows no page dots for a single fare in %s",
+    "writes the price caption once above the list, not on each row, in %s",
     async (language) => {
-      const { api } = setup(language);
+      const { api } = setup(language, threeFares);
       await explore(api, language);
-      expect(await screen.findByText("Example Air")).toBeVisible();
-      expect(screen.queryByRole("group", { name: text[language].pages })).toBeNull();
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(screen.getAllByText(text[language].caption, { exact: false })).toHaveLength(1);
+      for (const row of rows(language))
+        expect(within(row).queryByText(text[language].caption, { exact: false })).toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "shows ten rows, then every fare after the show-all button in %s",
+    async (language) => {
+      const many = Array.from({ length: 12 }, (_, i) => fare(`Air ${String(i)} Air`, 20000 + i));
+      const { api } = setup(language, many);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(rows(language)).toHaveLength(10);
+      fireEvent.click(screen.getByRole("button", { name: text[language].showAll(12) }));
+      expect(rows(language)).toHaveLength(12);
+      expect(screen.queryByRole("button", { name: text[language].showAll(12) })).toBeNull();
+    },
+  );
+
+  it("offers no show-all button for ten fares or fewer", async () => {
+    const { api } = setup("en", threeFares);
+    await explore(api, "en");
+    await screen.findByRole("list", { name: text.en.fares });
+    expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "makes each row a tall link to Google Flights in %s",
+    async (language) => {
+      const { api } = setup(language, threeFares);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      const link = within(rows(language)[0] as HTMLElement).getByRole("link");
+      expect(link).toHaveAttribute("href", expect.stringContaining("google.com/travel/flights"));
+      expect(link).toHaveClass("min-h-14");
     },
   );
 
@@ -178,8 +198,8 @@ describe("Flight Radar fare carousel", () => {
     async (language) => {
       const { api } = setup(language, threeFares);
       await explore(api, language);
-      const carousel = await screen.findByRole("group", { name: text[language].fares });
-      const third = within(carousel).getAllByRole("article")[2] as HTMLElement;
+      await screen.findByRole("list", { name: text[language].fares });
+      const third = rows(language)[2] as HTMLElement;
       fireEvent.click(within(third).getByRole("button", { name: text[language].watch }));
       expect(await screen.findByRole("dialog", { name: text[language].watch })).toBeVisible();
       expect(within(screen.getByRole("dialog")).getByText(/TPE → OKA/)).toBeVisible();
@@ -191,7 +211,7 @@ describe("Flight Radar fare carousel", () => {
       api.flightFares = [];
       await explore(api, language);
       await waitFor(() => {
-        expect(screen.queryByRole("group", { name: text[language].fares })).toBeNull();
+        expect(screen.queryByRole("list", { name: text[language].fares })).toBeNull();
       });
       expect(
         await screen.findByRole("link", { name: language === "en" ? "View Flights" : "查看航班" }),
@@ -199,85 +219,41 @@ describe("Flight Radar fare carousel", () => {
     },
   );
 
-  it.each(["en", "zh-TW"] as const)(
-    "rolls prices and times only when motion is allowed, keeping the final value readable in %s",
-    async (language) => {
-      allowMotion();
-      const { api } = setup(language);
-      await explore(api, language);
-      const carousel = await screen.findByRole("group", { name: text[language].fares });
-      expect(carousel).toHaveAttribute("data-motion", "full");
-      const price = within(carousel).getByText(text[language].price);
-      expect(price).toBeVisible();
-      const rolling = price.parentElement?.querySelector("[aria-hidden='true']");
-      expect(rolling).toHaveAttribute("data-rolling", "true");
-      expect(rolling).toHaveTextContent(text[language].price);
-    },
-  );
-
-  it.each(["en", "zh-TW"] as const)(
-    "shows final states with no roll, glide or depth under reduced motion in %s",
-    async (language) => {
-      const { api } = setup(language);
-      await explore(api, language);
-      const carousel = await screen.findByRole("group", { name: text[language].fares });
-      expect(carousel).toHaveAttribute("data-motion", "reduced");
-      const price = within(carousel).getByText(text[language].price);
-      expect(price.parentElement?.querySelector("[data-rolling]")).toBeNull();
-    },
-  );
-
   const mixed = [
-    { ...fare("Plain Air", 18000) },
-    { ...fare("Top Dear Air", 30000), top: true },
-    { ...fare("Top Mid Air", 26000), top: true },
-    { ...fare("Other Air", 22000) },
+    fare("Plain Air", 18000, "typical"),
+    { ...fare("Top Dear Air", 30000, "typical"), top: true },
+    { ...fare("Top Mid Air", 26000, "typical"), top: true },
+    fare("Other Air", 22000, "typical"),
   ];
   const order = (language: Language) =>
-    within(screen.getByRole("group", { name: text[language].fares }))
-      .getAllByRole("article")
-      .map((card) => within(card).getByText(/Air$/).textContent);
+    rows(language).map((row) => within(row).getByText(/Air$/).textContent);
 
   it.each(["en", "zh-TW"] as const)(
     "lists every fare in one list by price, tagging top fares, with no toggle in %s",
     async (language) => {
       const { api } = setup(language, mixed);
       await explore(api, language);
-      await screen.findByRole("group", { name: text[language].fares });
+      await screen.findByRole("list", { name: text[language].fares });
       expect(screen.queryByRole("group", { name: text[language].sort })).toBeNull();
       expect(screen.queryByRole("button", { name: text[language].cheapest })).toBeNull();
       expect(order(language)).toEqual(["Plain Air", "Other Air", "Top Mid Air", "Top Dear Air"]);
-      const cards = within(screen.getByRole("group", { name: text[language].fares })).getAllByRole(
-        "article",
-      );
-      expect(cards.map((card) => within(card).queryByText(text[language].top) !== null)).toEqual([
-        false,
-        false,
-        true,
-        true,
-      ]);
+      expect(
+        rows(language).map((row) => within(row).queryByText(text[language].top) !== null),
+      ).toEqual([false, false, true, true]);
     },
   );
 
   it("keeps fares of equal price in the order the reply gave them", async () => {
     const { api } = setup("en", [fare("First Air", 20000), fare("Second Air", 20000)]);
     await explore(api, "en");
-    await screen.findByRole("group", { name: text.en.fares });
+    await screen.findByRole("list", { name: text.en.fares });
     expect(order("en")).toEqual(["First Air", "Second Air"]);
   });
 
-  it.each(["en", "zh-TW"] as const)(
-    "captions every card price and shows friendly dates, never ISO ones, in %s",
-    async (language) => {
-      const { api } = setup(language, threeFares);
-      await explore(api, language);
-      const carousel = await screen.findByRole("group", { name: text[language].fares });
-      const cards = within(carousel).getAllByRole("article");
-      for (const card of cards) {
-        expect(within(card).getByText(text[language].caption)).toBeVisible();
-        expect(within(card).getByText(text[language].dates)).toBeVisible();
-      }
-      expect(within(carousel).queryByText(/2027-01/)).toBeNull();
-    },
-  );
+  it.each(["en", "zh-TW"] as const)("never shows ISO dates in the list in %s", async (language) => {
+    const { api } = setup(language, threeFares);
+    await explore(api, language);
+    const list = await screen.findByRole("list", { name: text[language].fares });
+    expect(within(list).queryByText(/2027-01/)).toBeNull();
+  });
 });

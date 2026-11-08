@@ -251,12 +251,26 @@ export function TravelPage() {
           {failureMessage(search.error)}
         </p>
       )}
-      {reply && advise.data && (
+      {!panelOpen && reply && strip && (
         <section
-          aria-label={t("flight.advice")}
-          className="rise surface-card mt-6 grid gap-3 rounded-3xl border border-sprout-200 bg-white p-5"
+          aria-label={t("flight.priceStrip")}
+          className="surface-card mt-6 rounded-3xl border border-sprout-200 bg-white p-4"
         >
-          <p>{firstSentence(advise.data.commentary)}</p>
+          <PriceStrip
+            strip={strip}
+            touched={stripTouched}
+            onTouch={() => {
+              setStripTouched(true);
+            }}
+            onSelect={(date) => {
+              setPicked({ reply, date });
+            }}
+          />
+        </section>
+      )}
+      {reply && advise.data && (
+        <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
+          <p className="px-1">{firstSentence(advise.data.commentary)}</p>
           <div className="flex flex-wrap gap-2">
             {advise.data.moves.map((move) => (
               <button
@@ -287,20 +301,6 @@ export function TravelPage() {
           setWatchCard(null);
         }}
       />
-      {!panelOpen && reply && strip && (
-        <StickyBar label={t("flight.priceStrip")}>
-          <PriceStrip
-            strip={strip}
-            touched={stripTouched}
-            onTouch={() => {
-              setStripTouched(true);
-            }}
-            onSelect={(date) => {
-              setPicked({ reply, date });
-            }}
-          />
-        </StickyBar>
-      )}
       {panelOpen && (
         <StickyBar>
           <button

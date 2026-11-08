@@ -1,16 +1,18 @@
 import { formatAmount, type FlightCard, type FlightSearchReply } from "@split/shared";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
-import { friendlyRange } from "./dates.js";
 import { cardsOnDate } from "./PriceStrip.js";
-import { SplitFlap } from "./SplitFlap.js";
+
+/** Rows shown before the 顯示全部 button. */
+const FIRST_ROWS = 10;
 
 /**
- * The results of a search: a skeleton while it runs, then the fares as a one-card-at-a-time
- * carousel with page dots. The empty and degraded notices keep their direct Google Flights link.
+ * The results of a search: a skeleton while it runs, then one compact list, cheapest first, with
+ * the prices in one right-aligned column. The empty and degraded notices keep their direct Google
+ * Flights link.
  */
 export function FareResults({
   pending,
@@ -30,7 +32,7 @@ export function FareResults({
     <section
       aria-label={t("flight.results")}
       aria-busy={pending ? "true" : undefined}
-      className="mt-6 grid gap-4"
+      className="mt-4 grid gap-3"
     >
       {pending && (
         <>
@@ -51,15 +53,12 @@ export function FareResults({
         </div>
       )}
       {reply && reply.cards.length > 0 && (
-        <>
-          {/* Keyed by date so a switch starts at the first card and the numbers roll again. */}
-          <FareCarousel
-            key={date ?? ""}
-            cards={sortFares(cardsOnDate(reply.cards, date))}
-            motion={motion}
-            onWatch={onWatch}
-          />
-        </>
+        // Keyed by date so a switch folds the list back to its first rows.
+        <FareList
+          key={date ?? ""}
+          cards={sortFares(cardsOnDate(reply.cards, date))}
+          onWatch={onWatch}
+        />
       )}
     </section>
   );
@@ -70,190 +69,127 @@ export function sortFares(cards: FlightCard[]): FlightCard[] {
   return [...cards].sort((a, b) => a.price - b.price);
 }
 
-/** Three card-shaped placeholders; they pulse only when motion is allowed. */
+/** Row-shaped placeholders; they pulse only when motion is allowed. */
 function FareSkeleton({ motion }: { motion: boolean }) {
   return (
-    <div aria-hidden="true" data-motion={motion ? "full" : "reduced"} className="fare-scroller">
-      {[0, 1, 2].map((index) => (
-        <div key={index} className="fare-card">
-          <div className="fare-face fare-skeleton grid gap-3">
-            <span className="h-4 w-1/2 rounded-full" />
-            <span className="h-9 w-2/3 rounded-xl" />
-            <span className="h-4 w-full rounded-full" />
-            <span className="h-4 w-3/4 rounded-full" />
-            <span className="mt-4 h-11 w-full rounded-full" />
-          </div>
+    <div
+      aria-hidden="true"
+      data-motion={motion ? "full" : "reduced"}
+      className="fare-skeleton overflow-hidden rounded-2xl border border-sprout-200 bg-white"
+    >
+      {[0, 1, 2, 3].map((index) => (
+        <div
+          key={index}
+          className="flex min-h-14 items-center justify-between gap-3 border-t border-sprout-100 px-4 py-2 first:border-t-0"
+        >
+          <span className="grid w-1/2 gap-2">
+            <span className="h-4 w-2/3 rounded-full bg-sprout-100" />
+            <span className="h-3 w-full rounded-full bg-sprout-100" />
+          </span>
+          <span className="h-5 w-24 rounded-full bg-sprout-100" />
         </div>
       ))}
     </div>
   );
 }
 
-function FareCarousel({
+function FareList({
   cards,
-  motion,
   onWatch,
 }: {
   cards: FlightCard[];
-  motion: boolean;
   onWatch: (card: FlightCard) => void;
 }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(0);
-  const slides = () => Array.from(scroller.current?.children ?? []) as HTMLElement[];
-
-  // The card whose middle is nearest the middle of the row is the one in focus.
-  function onScroll() {
-    const row = scroller.current;
-    if (!row) return;
-    const middle = row.scrollLeft + row.clientWidth / 2;
-    let nearest = 0;
-    let gap = Infinity;
-    slides().forEach((slide, index) => {
-      const distance = Math.abs(slide.offsetLeft + slide.offsetWidth / 2 - middle);
-      if (distance < gap) {
-        gap = distance;
-        nearest = index;
-      }
-    });
-    setActive(nearest);
-  }
-
+  const [all, setAll] = useState(false);
+  const shown = all ? cards : cards.slice(0, FIRST_ROWS);
   return (
     <>
-      <div
-        ref={scroller}
-        role="group"
+      <p className="mx-1 text-sm text-ink-muted">
+        {t("flight.listCaption", { n: cards.length, caption: t("flight.priceCaption") })}
+      </p>
+      <ul
         aria-label={t("flight.fares")}
-        // A scroll container the keyboard can reach: arrow keys then scroll it.
-        tabIndex={0}
-        data-motion={motion ? "full" : "reduced"}
-        className="fare-scroller focus-visible:outline-2 focus-visible:outline-sprout-700"
-        onScroll={onScroll}
+        className="surface-card overflow-hidden rounded-2xl border border-sprout-200 bg-white"
       >
-        {cards.map((card, index) => (
-          <article
-            key={`${card.url}-${card.airline}-${card.outboundDeparture}-${card.price}`}
-            aria-label={t("flight.farePage", { n: index + 1, total: cards.length })}
-            data-active={index === active ? "true" : undefined}
-            className="fare-card"
-          >
-            <FareFace card={card} roll={motion} onWatch={onWatch} />
-          </article>
+        {shown.map((card, index) => (
+          <FareRow
+            key={`${card.url}-${card.airline}-${card.outboundDeparture}-${card.price}-${String(index)}`}
+            card={card}
+            onWatch={onWatch}
+          />
         ))}
-      </div>
-      {cards.length > 1 && (
-        <div role="group" aria-label={t("flight.farePages")} className="flex justify-center">
-          {cards.map((card, index) => (
-            <button
-              key={`${card.url}-${card.airline}-${card.outboundDeparture}-${card.price}`}
-              type="button"
-              aria-label={t("flight.farePage", { n: index + 1, total: cards.length })}
-              aria-current={index === active ? "true" : undefined}
-              className="fare-dot group focus-visible:outline-2 focus-visible:outline-sprout-700"
-              onClick={() => {
-                setActive(index);
-                slides()[index]?.scrollIntoView({
-                  behavior: motion ? "smooth" : "auto",
-                  inline: "center",
-                  block: "nearest",
-                });
-              }}
-            />
-          ))}
-        </div>
+      </ul>
+      {!all && cards.length > FIRST_ROWS && (
+        <button
+          type="button"
+          className="press-pill min-h-12 rounded-full border-[1.5px] border-sprout-900 bg-white px-5 font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+          onClick={() => {
+            setAll(true);
+          }}
+        >
+          {t("flight.showAll", { n: cards.length })}
+        </button>
       )}
     </>
   );
 }
 
-function FareFace({
-  card,
-  roll,
-  onWatch,
-}: {
-  card: FlightCard;
-  roll: boolean;
-  onWatch: (card: FlightCard) => void;
-}) {
+function FareRow({ card, onWatch }: { card: FlightCard; onWatch: (card: FlightCard) => void }) {
   return (
-    <div className="fare-face surface-card flex h-full flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="font-bold">
-          {card.intent.origin} → {card.intent.destination}
-        </h2>
-        <span className="flex items-center gap-2">
-          {card.top === true && (
-            <span className="rounded-lg bg-sprout-100 px-2 py-0.5 text-xs font-bold">
-              {t("flight.top")}
-            </span>
-          )}
-          <span className="rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold">
-            {t(`flight.${card.signal}`)}
-          </span>
-        </span>
-      </div>
-      <div aria-hidden="true" className="fare-track">
-        <span className="fare-plane">
-          <svg viewBox="0 0 24 24" className="size-4 rotate-90 fill-sprout-500">
-            <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
-          </svg>
-        </span>
-      </div>
-      <p className="text-sm text-ink-muted">
-        {friendlyRange(card.intent.departureDate, card.intent.returnDate)}
-      </p>
-      <div>
-        <p className="text-3xl font-bold">
-          <SplitFlap text={formatAmount(card.price, card.intent.currency)} roll={roll} />
-        </p>
-        <p className="text-sm text-ink-muted">{t("flight.priceCaption")}</p>
-      </div>
-      <p className="font-bold">{card.airline}</p>
-      <p className="text-sm">
-        {t("flight.outbound")}: <SplitFlap text={card.outboundDeparture} roll={roll} /> →{" "}
-        <SplitFlap text={card.outboundArrival} roll={roll} />
-      </p>
-      <p className="text-sm">
-        {card.inboundDeparture !== null && card.inboundArrival !== null ? (
-          <>
-            {t("flight.inbound")}: <SplitFlap text={card.inboundDeparture} roll={roll} /> →{" "}
-            <SplitFlap text={card.inboundArrival} roll={roll} />
-          </>
-        ) : (
-          t("flight.returnOnGoogle")
-        )}
-      </p>
-      <p className="text-sm text-ink-muted">
-        {t("flight.summary", { stops: card.stops, minutes: card.durationMinutes })}
-      </p>
-      {card.history && card.history.days >= 14 && (
-        <div className="text-sm text-ink-muted">
-          <p>
-            {t(card.history.percentBelowMean >= 0 ? "flight.historyBelow" : "flight.historyAbove", {
-              percent: Math.abs(card.history.percentBelowMean),
-              days: card.history.days,
-            })}
-          </p>
-          <p>{t("flight.percentile", { percentile: card.history.percentile })}</p>
-        </div>
-      )}
-      {card.overBudget > 0 && (
-        <p className="text-sm text-red-700">
-          {t("flight.overBudget", {
-            amount: formatAmount(card.overBudget, card.intent.currency),
-          })}
-        </p>
-      )}
+    <li className="flex items-center border-t border-sprout-100 first:border-t-0">
       <a
         href={card.url}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${primaryButton} mt-auto`}
+        className="flex min-h-14 min-w-0 flex-1 items-center justify-between gap-3 py-2 pl-4 focus-visible:outline-2 focus-visible:outline-sprout-700"
       >
-        {t("flight.view")}
+        <span className="grid min-w-0 gap-0.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-bold">{card.airline}</span>
+            {card.signal === "strong_buy" ? (
+              <span className="text-xs font-bold">{t("flight.strong_buy")}</span>
+            ) : (
+              card.top === true && (
+                <span className="rounded-lg bg-sprout-100 px-2 py-0.5 text-xs font-bold">
+                  {t("flight.top")}
+                </span>
+              )
+            )}
+          </span>
+          <span className="text-[13px] text-ink-muted">
+            {card.outboundDeparture} – {card.outboundArrival}・
+            {card.stops === 0
+              ? t("flight.nonstop")
+              : t(card.stops === 1 ? "flight.oneStop" : "flight.stops", { n: card.stops })}
+          </span>
+          {card.history && card.history.days >= 14 && (
+            <>
+              <span className="text-[13px] text-ink-muted">
+                {t(
+                  card.history.percentBelowMean >= 0
+                    ? "flight.historyBelow"
+                    : "flight.historyAbove",
+                  { percent: Math.abs(card.history.percentBelowMean), days: card.history.days },
+                )}
+              </span>
+              <span className="text-[13px] text-ink-muted">
+                {t("flight.percentile", { percentile: card.history.percentile })}
+              </span>
+            </>
+          )}
+          {card.overBudget > 0 && (
+            <span className="text-[13px] text-red-700">
+              {t("flight.overBudget", {
+                amount: formatAmount(card.overBudget, card.intent.currency),
+              })}
+            </span>
+          )}
+        </span>
+        <span className="shrink-0 text-xl font-black tabular-nums">
+          {formatAmount(card.price, card.intent.currency)}
+        </span>
       </a>
       <FlightPriceWatchButton card={card} onWatch={onWatch} />
-    </div>
+    </li>
   );
 }

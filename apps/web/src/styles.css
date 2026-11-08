@@ -1323,130 +1323,13 @@ body::before {
   }
 }
 
-/* Flight Radar fares: one card at a time in a snapping row. Padding lets the first and last card
-   centre; the card in focus is sharp and its neighbours recede where scroll-driven animation is
-   supported (a flat row elsewhere). Everything that moves is switched on by data-motion="full". */
-.fare-scroller {
-  position: relative;
-  display: flex;
-  gap: 0.75rem;
-  overflow-x: auto;
-  padding: 0.5rem 9% 1rem;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-.fare-scroller::-webkit-scrollbar {
-  display: none;
-}
-.fare-card {
-  flex: 0 0 100%;
-  scroll-snap-align: center;
-}
-@media (min-width: 640px) {
-  .fare-scroller {
-    padding-inline: calc(50% - 11rem);
-  }
-  .fare-card {
-    flex-basis: 22rem;
-  }
-}
-.fare-face {
-  border: 1px solid var(--color-sprout-200);
-  border-radius: 1.5rem;
-  background: white;
-  padding: 1.25rem;
-}
-@keyframes fare-depth {
-  0%,
-  100% {
-    scale: 0.9;
-    opacity: 0.5;
-  }
-  50% {
-    scale: 1;
-    opacity: 1;
-  }
-}
-@supports (animation-timeline: view()) {
-  .fare-scroller[data-motion="full"] .fare-face {
-    animation: fare-depth linear both;
-    animation-timeline: view(inline);
-    animation-range: cover;
-  }
-}
-
-/* The dots: a 44px tap target around a 6px dot; the current one stretches into a pill. */
-.fare-dot {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-}
-.fare-dot::before {
-  content: "";
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 999px;
-  background: var(--color-sprout-200);
-}
-.fare-dot[aria-current="true"]::before {
-  width: 1.25rem;
-  background: var(--color-sprout-600);
-}
-
-/* The plane rests at the destination; when its card comes into focus it flies the route once. */
-.fare-track {
-  position: relative;
-  overflow: hidden;
-  height: 1rem;
-  border-bottom: 1px dashed var(--color-sprout-500);
-}
-.fare-plane {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  justify-content: flex-end;
-}
-@keyframes fare-glide {
-  from {
-    transform: translateX(calc(-100% + 1rem));
-  }
-  to {
-    transform: none;
-  }
-}
-.fare-scroller[data-motion="full"] .fare-card[data-active="true"] .fare-plane {
-  animation: fare-glide 1.8s cubic-bezier(0.45, 0, 0.2, 1) both;
-}
-
-/* A digit flips down into place, left to right. */
-@keyframes flap-roll {
-  from {
-    opacity: 0.2;
-    transform: perspective(200px) rotateX(-90deg);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-[data-rolling="true"] .flap-digit {
-  display: inline-block;
-  animation: flap-roll 480ms var(--ease-out-expo) both;
-  animation-delay: calc(var(--i) * 40ms);
-}
-
-/* The loading skeleton of the cards. */
-.fare-skeleton span {
-  background: var(--color-sprout-100);
-}
+/* The loading skeleton of the fare list: pulses only where data-motion allows. */
 @keyframes fare-pulse {
   50% {
     opacity: 0.5;
   }
 }
-.fare-scroller[data-motion="full"] .fare-skeleton {
+.fare-skeleton[data-motion="full"] {
   animation: fare-pulse 1.4s ease-in-out infinite;
 }
 

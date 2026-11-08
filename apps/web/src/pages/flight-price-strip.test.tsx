@@ -86,9 +86,9 @@ async function explore(language: Language) {
 }
 
 const shownAirlines = (language: Language) =>
-  within(screen.getByRole("group", { name: text[language].fares }))
-    .getAllByRole("article")
-    .map((card) => within(card).getByText(/Air$/).textContent);
+  within(screen.getByRole("list", { name: text[language].fares }))
+    .getAllByRole("listitem")
+    .map((row) => within(row).getByText(/Air$/).textContent);
 
 /** The device does not ask for reduced motion (the test setup says it does). */
 const original = window.matchMedia.bind(window);
@@ -123,6 +123,25 @@ describe("Flight Radar Price Strip", () => {
       // The carousel shows the cards of the selected date only.
       expect(shownAirlines(language)).toEqual(["Start Air"]);
       expect(screen.queryByRole("region", { name: text[language].searchBar })).toBeNull();
+      // The strip is a card in the page flow, not a bar fixed to the screen.
+      expect(strip.className).not.toMatch(/fixed/);
+      expect(strip.closest(".fixed")).toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "puts one line of advice directly under the strip, before the list, in %s",
+    async (language) => {
+      setup(language);
+      await explore(language);
+      const strip = screen.getByRole("region", { name: text[language].bar });
+      const advice = await screen.findByRole("region", {
+        name: language === "en" ? "Deal commentary" : "票價短評",
+      });
+      expect(strip.compareDocumentPosition(advice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(advice.className).not.toMatch(/surface-card|border/);
+      const list = screen.getByRole("list", { name: text[language].fares });
+      expect(advice.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     },
   );
 
