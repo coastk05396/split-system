@@ -28,7 +28,6 @@ The owner shared screenshots of another app's add-expense form (Lightsplit) and 
 - **Send to the current LINE chat:** the checkbox "同時發送至當前 LINE 對話框" appears only when the app is opened inside LINE from a chat and `liff.sendMessages` is available; unchecked by default. When ticked it sends a short card as the user ("晚餐 NT$ 2,160・四人均分・每人 NT$ 540"). Otherwise the checkbox is hidden and, after saving, a "分享" button uses the share picker. The LIFF app needs the `chat_message.write` scope. Whether it counts against the 200-message monthly quota is unconfirmed, though probably not.
 
 **Amendments to closed tickets** (also noted on each):
-
 - **Data model:** `expense` gains `expense_time` (nullable) and `receipt_key` (nullable); `payer_member` is replaced by an `expense_payer` table (expense_id, member_id, amount_minor; PK on both ids) whose amounts sum to the Expense total; converted amounts for payers use the leftover rule; the invariant "converted_minor equals the rate applied to the amount" becomes "converted_minor is what the user confirmed, and the stored rate is derived from it when they typed it". Balance rule: each payer gains their converted share instead of one payer gaining the whole.
 - **API contract:** Expense create and edit accept a list of payers; a transfer is `POST /groups/:id/settlements`; new receipt routes `PUT`, `GET` and `DELETE /groups/:id/expenses/:eid/receipt` (read through the Worker); no new route for sending to LINE, since it runs in the LIFF app.
 - **Designs:** see the updated row for screen 4 in `docs/design-changes.md`.

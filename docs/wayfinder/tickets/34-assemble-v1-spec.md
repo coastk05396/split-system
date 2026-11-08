@@ -5,12 +5,7 @@ mode: AFK
 status: closed
 assignee: antigravity
 parent: ../map.md
-blocked_by:
-  [
-    "18-confirm-domain-and-line-names.md",
-    "21-decide-deploy-pipeline.md",
-    "33-decide-direct-line-group-link.md",
-  ]
+blocked_by: ["18-confirm-domain-and-line-names.md", "21-decide-deploy-pipeline.md", "33-decide-direct-line-group-link.md"]
 ---
 
 ## Question

@@ -5,12 +5,7 @@ mode: HITL
 status: closed
 assignee: rick
 parent: ../map.md
-blocked_by:
-  [
-    "16-decide-api-contract.md",
-    "17-reconcile-designs-with-decisions.md",
-    "23-decide-add-expense-form-features.md",
-  ]
+blocked_by: ["16-decide-api-contract.md", "17-reconcile-designs-with-decisions.md", "23-decide-add-expense-form-features.md"]
 ---
 
 ## Question
