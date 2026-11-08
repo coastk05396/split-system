@@ -96,15 +96,38 @@ describe("Travel mode green palette", () => {
     await waitFor(() => {
       expect(cancel).toBeDisabled();
     });
-    expect(cancel).toHaveClass(
-      "disabled:bg-travel-disabled",
-      "disabled:text-travel-disabled-ink",
-      "disabled:border-travel-disabled",
-    );
-    expect(cancel.className).not.toMatch(/opacity/);
+    expect(cancel).toHaveClass("secondary-button");
+    const rule = /\.travel-mode \.secondary-button:disabled\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/opacity:\s*1\b/);
+    expect(rule).toMatch(/background-color:\s*var\(--color-travel-disabled\)/);
+    expect(rule).toMatch(/color:\s*var\(--color-travel-disabled-ink\)/);
     expect(
       contrast(token("--color-travel-disabled-ink"), token("--color-travel-disabled")),
     ).toBeGreaterThanOrEqual(4.5);
+    release();
+  });
+
+  it("leaves a disabled secondary button outside /travel dimmed, with no travel colours", async () => {
+    const api = renderApp({
+      path: "/join/tok-1",
+      cookieUser: makeUser("小宇"),
+      seed: (groups) => {
+        groups.add(makeUser("ty"), {
+          name: "台南",
+          others: [{ name: "阿哲", status: "placeholder" }],
+          invite: { token: "tok-1" },
+        });
+      },
+    }).api;
+    const release = api.holdResponses("POST /api/v1/invites/tok-1/join");
+    const button = await screen.findByRole("button", { name: "我不是，以新成員加入" });
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(button).toBeDisabled();
+    });
+    expect(document.documentElement).not.toHaveClass("travel-mode");
+    expect(button).toHaveClass("disabled:opacity-50");
+    expect(button.className).not.toMatch(/travel/);
     release();
   });
 

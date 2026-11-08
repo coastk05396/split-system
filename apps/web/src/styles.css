@@ -53,6 +53,14 @@
 .travel-mode body {
   background-color: var(--travel-page);
 }
+/* Travel mode: a disabled secondary button is solid pale green (5.1:1), not dimmed; elsewhere it keeps opacity. */
+.travel-mode .secondary-button:disabled {
+  opacity: 1;
+  border-color: var(--color-travel-disabled);
+  background-color: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+  cursor: not-allowed;
+}
 .travel-mode .glass-nav {
   background-color: var(--travel-nav);
 }

@@ -395,7 +395,7 @@ export const primaryButton =
 export const travelButton =
   "press-pill flex items-center justify-center gap-2 rounded-full bg-travel-action font-bold text-white hover:bg-travel-action-hover disabled:cursor-not-allowed disabled:bg-travel-disabled disabled:text-travel-disabled-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-900";
 export const secondaryButton =
-  "press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:cursor-not-allowed disabled:border-travel-disabled disabled:bg-travel-disabled disabled:text-travel-disabled-ink";
+  "secondary-button press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:opacity-50";
 /** The red tag on every Trip entry while the Trip module is under maintenance. */
 export function MaintenanceTag() {
   return (
