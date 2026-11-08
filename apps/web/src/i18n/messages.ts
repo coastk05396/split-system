@@ -89,6 +89,7 @@ const zhTW = {
   "flight.historyAbove": "高於近期平均 {percent}%・{days} 天實際觀測",
   "flight.percentile": "票價百分位：{percentile}",
   "flight.sticker": "強烈買",
+  "flight.ideas": "接下來可以試試",
   "flight.top": "熱門",
   "flight.priceCaption": "來回總價・1 位成人",
   "flight.stripLowest": "最低",

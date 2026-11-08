@@ -26,6 +26,7 @@ import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
 import { ScreenHeader, failureMessage, primaryButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
+import { prefersReducedMotion } from "../shell/motion.js";
 
 import { FlightPriceWatches, useCreateWatch } from "../flights/FlightPriceWatches.js";
 
@@ -127,6 +128,49 @@ export function TravelPage() {
   }, []);
 
   const reply = search.data;
+  const searched = search.isPending || reply !== undefined;
+  const resultsTop = useRef<HTMLDivElement>(null);
+  // A finished search scrolls to its results; reduced motion jumps instead of gliding.
+  useEffect(() => {
+    if (reply)
+      resultsTop.current?.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "start",
+      });
+  }, [reply]);
+  const highlightsSection = (
+    <section aria-label={t("flight.highlights")} className="my-6">
+      <h2 className="mb-3 font-bold">{t("flight.highlights")}</h2>
+      {highlights.data?.highlights.length ? (
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {highlights.data.highlights.map((card) => (
+            <button
+              key={card.url}
+              type="button"
+              onClick={() => {
+                runIntent(card.intent);
+              }}
+              className="press-pill shrink-0 rounded-2xl border border-sprout-200 bg-sprout-50 px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-sprout-700"
+            >
+              <span className="block font-bold">
+                {card.intent.origin} → {card.intent.destination}
+              </span>
+              <span className="text-sm">
+                {formatAmount(card.price, card.intent.currency)} ·{" "}
+                {friendlyDate(card.intent.departureDate)}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        !highlights.isPending && (
+          <p className="text-sm text-ink-muted">
+            {t(highlights.isError ? "flight.highlightsUnavailable" : "flight.noHighlights")}
+          </p>
+        )
+      )}
+    </section>
+  );
   const strip = priceStrip(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
@@ -182,37 +226,7 @@ export function TravelPage() {
           />
         </div>
       )}
-      <section aria-label={t("flight.highlights")} className="my-6">
-        <h2 className="mb-3 font-bold">{t("flight.highlights")}</h2>
-        {highlights.data?.highlights.length ? (
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {highlights.data.highlights.map((card) => (
-              <button
-                key={card.url}
-                type="button"
-                onClick={() => {
-                  runIntent(card.intent);
-                }}
-                className="press-pill shrink-0 rounded-2xl border border-sprout-200 bg-sprout-50 px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-sprout-700"
-              >
-                <span className="block font-bold">
-                  {card.intent.origin} → {card.intent.destination}
-                </span>
-                <span className="text-sm">
-                  {formatAmount(card.price, card.intent.currency)} ·{" "}
-                  {friendlyDate(card.intent.departureDate)}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          !highlights.isPending && (
-            <p className="text-sm text-ink-muted">
-              {t(highlights.isError ? "flight.highlightsUnavailable" : "flight.noHighlights")}
-            </p>
-          )
-        )}
-      </section>
+      {!searched && highlightsSection}
       {pendingWatch && !lineWatch.isSuccess && (
         <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
           <p>
@@ -251,26 +265,39 @@ export function TravelPage() {
           {failureMessage(search.error)}
         </p>
       )}
-      {!panelOpen && reply && strip && (
-        <section
-          aria-label={t("flight.priceStrip")}
-          className="surface-card mt-6 rounded-3xl border border-sprout-200 bg-white p-4"
-        >
-          <PriceStrip
-            strip={strip}
-            touched={stripTouched}
-            onTouch={() => {
-              setStripTouched(true);
-            }}
-            onSelect={(date) => {
-              setPicked({ reply, date });
-            }}
-          />
-        </section>
-      )}
+      {/* After a search the results come first, right under the summary; the page scrolls here. */}
+      <div ref={resultsTop} className="scroll-mt-4">
+        {!panelOpen && reply && strip && (
+          <section
+            aria-label={t("flight.priceStrip")}
+            className="surface-card mt-6 rounded-3xl border border-sprout-200 bg-white p-4"
+          >
+            <PriceStrip
+              strip={strip}
+              touched={stripTouched}
+              onTouch={() => {
+                setStripTouched(true);
+              }}
+              onSelect={(date) => {
+                setPicked({ reply, date });
+              }}
+            />
+          </section>
+        )}
+        {reply && advise.data && (
+          <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
+            <p className="px-1">{firstSentence(advise.data.commentary)}</p>
+          </section>
+        )}
+        <FareResults
+          pending={search.isPending}
+          reply={reply}
+          date={strip?.selected}
+          onWatch={setWatchCard}
+        />
+      </div>
       {reply && advise.data && (
-        <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
-          <p className="px-1">{firstSentence(advise.data.commentary)}</p>
+        <section aria-label={t("flight.ideas")} className="mt-4">
           <div className="flex flex-wrap gap-2">
             {advise.data.moves.map((move) => (
               <button
@@ -288,12 +315,7 @@ export function TravelPage() {
           </div>
         </section>
       )}
-      <FareResults
-        pending={search.isPending}
-        reply={reply}
-        date={strip?.selected}
-        onWatch={setWatchCard}
-      />
+      {searched && highlightsSection}
       {/* Last in the page flow before the bar, whose spacer must be the final element. */}
       <FlightPriceWatches
         card={watchCard}

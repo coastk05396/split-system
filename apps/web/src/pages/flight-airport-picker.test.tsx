@@ -21,6 +21,7 @@ const words = {
     explore: "Explore flights",
     prompt: "Where would you like to go?",
     advice: "Deal commentary",
+    ideas: "Ideas to try",
     recent: "Recent",
     popular: "Popular",
   },
@@ -37,6 +38,7 @@ const words = {
     explore: "探索航班",
     prompt: "想去哪裡？",
     advice: "票價短評",
+    ideas: "接下來可以試試",
     recent: "最近搜尋",
     popular: "熱門",
   },
@@ -219,7 +221,7 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
       expect(screen.getByLabelText(w.departure)).toHaveValue("2027-01-08");
       expect(screen.getByLabelText(w.ret)).toHaveValue("2027-01-11");
 
-      const advice = await screen.findByRole("region", { name: w.advice });
+      const advice = await screen.findByRole("region", { name: w.ideas });
       fireEvent.click(within(advice).getAllByRole("button")[0] as HTMLElement);
       await waitFor(() => {
         expect(searches(api)).toHaveLength(2);

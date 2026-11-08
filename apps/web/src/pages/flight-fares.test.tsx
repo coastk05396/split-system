@@ -1,6 +1,6 @@
 import type { FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser, type FakeApi } from "../../test/fake-api.js";
 
@@ -41,6 +41,8 @@ const text = {
     results: "Search results",
     advice: "Deal commentary",
     price: "NT$ 25,000",
+    highlights: "Today's Strong Buy fares",
+    ideas: "Ideas to try",
     top: "Top",
     sticker: "Strong Buy",
     cheapest: "Cheapest",
@@ -58,6 +60,8 @@ const text = {
     results: "搜尋結果",
     advice: "票價短評",
     price: "NT$ 25,000",
+    highlights: "今日值得買的航班",
+    ideas: "接下來可以試試",
     top: "熱門",
     sticker: "強烈買",
     cheapest: "最低價",
@@ -70,7 +74,10 @@ const text = {
 
 type Language = keyof typeof text;
 
-function setup(language: Language, fares = [fare("Example Air", 25000)]) {
+function setup(
+  language: Language,
+  fares: (ReturnType<typeof fare> & { top?: boolean })[] = [fare("Example Air", 25000)],
+) {
   const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightFares = fares;
   return app;
@@ -286,5 +293,73 @@ describe("Flight Radar compact price list", () => {
     await explore(api, language);
     const list = await screen.findByRole("list", { name: text[language].fares });
     expect(within(list).queryByText(/2027-01/)).toBeNull();
+  });
+});
+
+describe("Flight Radar results first", () => {
+  const original = window.matchMedia.bind(window);
+  afterEach(() => {
+    window.matchMedia = original;
+  });
+  const follows = (a: Element, b: Element) =>
+    Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it.each(["en", "zh-TW"] as const)(
+    "keeps the highlights above and shows no results before a search in %s",
+    async (language) => {
+      setup(language, threeFares);
+      expect(await screen.findByLabelText(text[language].prompt)).toBeVisible();
+      expect(screen.getByRole("region", { name: text[language].highlights })).toBeVisible();
+      expect(screen.queryByRole("region", { name: text[language].results })).toBeNull();
+      expect(screen.queryByRole("region", { name: text[language].ideas })).toBeNull();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "puts the list first after a search, with the advice line, ideas and highlights below in %s",
+    async (language) => {
+      const { api } = setup(language, threeFares);
+      await explore(api, language);
+      const list = await screen.findByRole("list", { name: text[language].fares });
+      const advice = await screen.findByRole("region", { name: text[language].advice });
+      const ideas = await screen.findByRole("region", { name: text[language].ideas });
+      const highlights = screen.getByRole("region", { name: text[language].highlights });
+      const pills = screen.getByRole("region", {
+        name: language === "en" ? "Active search conditions" : "目前搜尋條件",
+      });
+      expect(follows(pills, advice)).toBe(true);
+      expect(follows(advice, list)).toBe(true);
+      expect(follows(list, ideas)).toBe(true);
+      expect(follows(ideas, highlights)).toBe(true);
+      expect(within(ideas).getAllByRole("button").length).toBeGreaterThan(0);
+      expect(within(advice).queryByRole("button")).toBeNull();
+    },
+  );
+
+  it("scrolls to the results when a search finishes, jumping under reduced motion", async () => {
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    scroll.mockClear();
+    const { api } = setup("en", threeFares);
+    await explore(api, "en");
+    await screen.findByRole("list", { name: text.en.fares });
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalledTimes(1);
+    });
+    expect(scroll).toHaveBeenLastCalledWith({ behavior: "auto", block: "start" });
+    const target = scroll.mock.contexts.at(-1) as Element;
+    expect(target.contains(screen.getByRole("region", { name: text.en.results }))).toBe(true);
+    expect(target.contains(screen.getByRole("list", { name: text.en.fares }))).toBe(true);
+  });
+
+  it("glides to the results when motion is allowed", async () => {
+    window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    scroll.mockClear();
+    const { api } = setup("en", threeFares);
+    await explore(api, "en");
+    await screen.findByRole("list", { name: text.en.fares });
+    await waitFor(() => {
+      expect(scroll).toHaveBeenLastCalledWith({ behavior: "smooth", block: "start" });
+    });
   });
 });

@@ -141,7 +141,12 @@ describe("Flight Radar", () => {
     expect(JSON.parse(request?.body ?? "{}")).toEqual(intent);
     expect(api.requests.find((r) => r.route === "GET /api/v1/flights/highlights")).toBeDefined();
     api.flightHistory = { days: 14, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
-    fireEvent.click(within(ticker).getByRole("button", { name: /TPE → NRT/ }));
+    // After a search the highlights sit below the results, so find the region again.
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Today's Strong Buy fares" })).getByRole("button", {
+        name: /TPE → NRT/,
+      }),
+    );
     expect(
       await screen.findByText("20% below the rolling average · 14 observed days"),
     ).toBeVisible();
@@ -374,7 +379,7 @@ describe("Flight Radar", () => {
     const advice = await screen.findByRole("region", { name: "Deal commentary" });
     expect(within(advice).getByText("Example Air is the cheapest option.")).toBeVisible();
     expect(
-      within(advice)
+      within(screen.getByRole("region", { name: "Ideas to try" }))
         .getAllByRole("button")
         .map((b) => b.textContent),
     ).toEqual(["Leave Thursday 2027-01-07", "Allow stops", "One week later"]);
@@ -391,8 +396,8 @@ describe("Flight Radar", () => {
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     await explore(api, "en");
-    const advice = await screen.findByRole("region", { name: "Deal commentary" });
-    fireEvent.click(within(advice).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
+    const ideas = await screen.findByRole("region", { name: "Ideas to try" });
+    fireEvent.click(within(ideas).getByRole("button", { name: "Leave Thursday 2027-01-07" }));
     const pills = screen.getByRole("region", { name: "Active search conditions" });
     expect(
       await within(pills).findByRole("button", { name: "TPE → OKA ・ Jan 7–Jan 10" }),
