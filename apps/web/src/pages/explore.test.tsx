@@ -50,6 +50,16 @@ describe("探索 page", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
+  it("ignores a cheaper direct fare that does not depart from 台北", async () => {
+    const { api } = renderApp({ path: "/travel", cookieUser: user });
+    const khh = card("NRT", 5000, 0);
+    khh.intent = { ...khh.intent, origin: "KHH" };
+    api.flightHighlights.push(khh, card("OKA", 12000, 0));
+    const hero = await screen.findByRole("region", { name: "最低直飛票價" });
+    expect(await within(hero).findByText(/TPE → OKA/)).toBeVisible();
+    expect(within(hero).queryByText(/KHH/)).toBeNull();
+  });
+
   it("says so when no direct fare is confirmed today", async () => {
     const { api } = renderApp({ path: "/travel", cookieUser: user });
     api.flightHighlights.push(card("KIX", 8000, 1));
@@ -79,6 +89,24 @@ describe("探索 page", () => {
     });
     const request = api.requests.find((r) => r.route === "POST /api/v1/flights/search");
     expect(JSON.parse(request?.body ?? "{}")).toMatchObject({ prompt: "下個月去東京" });
+  });
+
+  it("runs a handed 小芽 prompt once under StrictMode's effect replay", async () => {
+    const { api, router } = renderApp({ path: "/travel", cookieUser: user, strictMode: true });
+    fireEvent.change(await screen.findByRole("textbox", { name: "想去哪裡？" }), {
+      target: { value: "下個月去東京" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "問小芽" }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/travel/flights");
+    });
+    await waitFor(() => {
+      expect(api.requests.some((r) => r.route === "POST /api/v1/flights/search")).toBe(true);
+    });
+    const prompts = api.requests.filter(
+      (r) => r.route === "POST /api/v1/flights/search" && r.body?.includes("下個月去東京"),
+    );
+    expect(prompts).toHaveLength(1);
   });
 
   it("still sends /travel with search parameters to 航班", async () => {
@@ -153,6 +181,20 @@ describe("探索 page", () => {
         .filter((b) => b.dataset["lowest"] === "true");
       expect(amber).toHaveLength(1);
       expect(amber[0]).toHaveAccessibleName(/最低/);
+    });
+
+    it("shows the unavailable message with a retry when the search is degraded, not the empty one", async () => {
+      const { api } = renderApp({ path: "/travel", cookieUser: user });
+      api.flightHighlights.push(card("NRT", 9500, 0));
+      api.flightFares.length = 0;
+      api.flightsDegraded = true;
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("暫時無法取得即時票價");
+      expect(screen.queryByText("這條路線暫時沒有可比較的日期。")).toBeNull();
+      api.flightsDegraded = false;
+      api.flightFares.splice(0, api.flightFares.length, ...fares);
+      fireEvent.click(within(alert).getByRole("button", { name: "再試一次" }));
+      expect(await screen.findByRole("region", { name: "挑個好日子起飛" })).toBeVisible();
     });
 
     it("says so when the dates cannot be priced, and retries a failed search", async () => {

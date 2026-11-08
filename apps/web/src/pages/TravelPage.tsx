@@ -123,7 +123,9 @@ export function TravelPage() {
       runIntent(intent); // once, on arrival
     else if (handedPrompt.current) {
       // 探索 hands its 小芽 prompt over in the history state; a refresh must not repeat it.
-      search.mutate({ prompt: handedPrompt.current, defaults: active });
+      const prompt = handedPrompt.current;
+      handedPrompt.current = ""; // StrictMode replays this effect
+      search.mutate({ prompt, defaults: active });
       void navigate(".", { replace: true, state: null });
     }
     if (intent && Number.isInteger(fare) && fare > 0) setPendingWatch({ intent, fare });

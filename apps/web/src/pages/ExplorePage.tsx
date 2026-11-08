@@ -20,9 +20,11 @@ import { failureMessage, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { airportName } from "../flights/AirportPicker.js";
 
-/** The cheapest direct fare among today's confirmed ones, if any. */
+/** The cheapest direct fare from 台北 among today's confirmed ones, if any (highlights span every origin). */
 const lowestDirect = (cards: readonly FlightCard[]): FlightCard | undefined =>
-  cards.filter((c) => c.stops === 0).sort((a, b) => a.price - b.price)[0];
+  cards
+    .filter((c) => c.stops === 0 && c.intent.origin === "TPE")
+    .sort((a, b) => a.price - b.price)[0];
 
 /** A bundled illustration, so the hero never depends on a remote image. */
 function HeroArt() {
@@ -78,9 +80,11 @@ function DatesSection({ intent }: { intent: FlightSearchIntent }) {
           <span className="h-[104px] rounded-[18px] bg-sprout-100 motion-safe:animate-pulse" />
         </div>
       )}
-      {search.isError && (
+      {(search.isError || reply?.degraded) && (
         <div role="alert" className="mt-6 grid justify-items-start gap-3">
-          <p className="text-sm text-red-700">{failureMessage(search.error)}</p>
+          <p className="text-sm text-red-700">
+            {search.isError ? failureMessage(search.error) : t("flight.degraded")}
+          </p>
           <button
             type="button"
             className={`${secondaryButton} min-h-11`}
@@ -92,7 +96,7 @@ function DatesSection({ intent }: { intent: FlightSearchIntent }) {
           </button>
         </div>
       )}
-      {search.isSuccess && !cheapest && (
+      {search.isSuccess && !cheapest && !reply?.degraded && (
         <p className="mt-6 text-sm text-ink-muted">{t("explore.datesEmpty")}</p>
       )}
       {tiles && <DateTiles tiles={tiles} onSelect={setPicked} />}
