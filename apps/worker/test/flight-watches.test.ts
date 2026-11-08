@@ -418,3 +418,99 @@ it("expires passed departures and rejects arbitrary push destinations", async ()
     )?.status,
   ).toBe("expired");
 });
+
+it("fires a watch for a top fare in the cheapest third even with no history and a target it misses", async () => {
+  const { dailyMaintenance } = await import("../src/maintenance.js");
+  const { offlineRateSource } = await import("./auth-harness.js");
+  const fare = (top: boolean) => ({
+    price: 6000,
+    airline: "Test Air",
+    outboundDeparture: "08:00",
+    outboundArrival: "11:00",
+    inboundDeparture: null,
+    inboundArrival: null,
+    stops: 0,
+    durationMinutes: 180,
+    priceLevel: "typical" as const,
+    top,
+  });
+  const sends: string[] = [];
+  const deps = {
+    ...productionDeps,
+    now: () => clock.now,
+    rateSource: offlineRateSource,
+    // Same fare on two routes; only the NGO one is a top flight (the lookup is cached per route).
+    flightSource: (intent: { destination: string }) =>
+      Promise.resolve([fare(intent.destination === "NGO")]),
+    webPushSender: (subscription: { endpoint: string }) => {
+      sends.push(subscription.endpoint);
+      return Promise.resolve(201);
+    },
+  };
+  const app = createApp(deps);
+  const user = await signIn("google", uniqueSub("watch-top"));
+  const keys = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
+    "deriveBits",
+  ]);
+  if (!("publicKey" in keys)) throw new Error("ECDH key pair unavailable");
+  const encode = (bytes: Uint8Array) =>
+    btoa(String.fromCharCode(...bytes))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
+  const request = (path: string, init: RequestInit) =>
+    app.request(`https://split.test/api/v1${path}`, init, env);
+  expect(
+    (
+      await request(
+        "/flights/push-subscriptions",
+        json(
+          {
+            endpoint: "https://fcm.googleapis.com/top",
+            keys: {
+              p256dh: encode(publicKey),
+              auth: encode(crypto.getRandomValues(new Uint8Array(16))),
+            },
+          },
+          bearer(user.accessToken),
+        ),
+      )
+    ).status,
+  ).toBe(204);
+  // The target (1000) is far below the 6000 fare, so only Strong Buy can fire the watch.
+  for (const destination of ["FUK", "NGO"])
+    expect(
+      (
+        await request(
+          "/flights/watches",
+          json(
+            {
+              intent: {
+                origin: "KHH",
+                destination,
+                departureDate: "2026-12-04",
+                returnDate: "2026-12-07",
+                currency: "TWD",
+              },
+              baselineFare: 9000,
+              targetFare: 1000,
+              channel: "web_push",
+            },
+            bearer(user.accessToken),
+          ),
+        )
+      ).status,
+    ).toBe(201);
+  await dailyMaintenance(env, clock.now, deps);
+  expect(sends).toHaveLength(1);
+  const { results } = await env.DB.prepare(
+    "SELECT status, intent_json AS intent FROM flight_price_watches WHERE user_id=? ORDER BY created_at",
+  )
+    .bind(user.userId)
+    .all<{ status: string; intent: string }>();
+  expect(results.map((row) => [JSON.parse(row.intent).destination, row.status])).toEqual([
+    ["FUK", "active"],
+    ["NGO", "triggered"],
+  ]);
+});
