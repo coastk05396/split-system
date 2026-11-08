@@ -34,7 +34,7 @@ export async function maintainFareSnapshots(env: Bindings, deps: AppDeps): Promi
     .bind(isoDay(now))
     .run();
   let requested = false;
-  for (const destination of POPULAR_SNAPSHOT_DESTINATIONS) {
+  for (const destination of deps.snapshotDestinations ?? POPULAR_SNAPSHOT_DESTINATIONS) {
     for (let d = 1; d <= DAYS_AHEAD; d++) {
       if (requested) await pause(SNAPSHOT_SPACING_MS);
       requested = true;

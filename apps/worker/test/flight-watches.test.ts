@@ -67,6 +67,7 @@ it("daily checks deliver once, prune stale subscriptions, expire watches and cas
   const deps = {
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => now,
     rateSource: offlineRateSource,
     flightSource: () =>
@@ -240,6 +241,7 @@ it("sends a decryptable aes128gcm notification with a verifiable VAPID signature
   const deps = {
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => clock.now,
     rateSource: offlineRateSource,
     flightSource: () =>
@@ -409,6 +411,7 @@ it("expires passed departures and rejects arbitrary push destinations", async ()
   await dailyMaintenance(env, now, {
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => now,
     rateSource: offlineRateSource,
     flightSource: () => Promise.resolve([]),
@@ -441,6 +444,7 @@ it("fires a watch for a top fare in the cheapest third even with no history and 
   const deps = {
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => clock.now,
     rateSource: offlineRateSource,
     // Same fare on two routes; only the NGO one is a top flight (the lookup is cached per route).

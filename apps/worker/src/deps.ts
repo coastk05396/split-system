@@ -21,6 +21,8 @@ export interface AppDeps {
   now: () => number;
   /** Waits between spaced source requests; tests skip the wait. */
   pause?: (ms: number) => Promise<void>;
+  /** Routes from TPE whose Fare Snapshots the daily job refreshes; defaults to the popular list. */
+  snapshotDestinations?: readonly string[];
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
   rateSource: RateSource;
   lineReplyClient: (env: Bindings) => LineReplyClient;

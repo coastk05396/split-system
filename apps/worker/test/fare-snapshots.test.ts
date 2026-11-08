@@ -106,6 +106,23 @@ it("never fetches snapshots for a signed-in user's request", async () => {
   expect(await count()).toEqual(before);
 });
 
+it("fetches only the injected routes, and none for an empty list", async () => {
+  const fetched: string[] = [];
+  const run = (snapshotDestinations: string[]) =>
+    dailyMaintenance(env, clock.now, {
+      ...deps((intent) => {
+        fetched.push(intent.destination);
+        return Promise.resolve([]);
+      }),
+      snapshotDestinations,
+    });
+  await run([]);
+  expect(fetched).toEqual([]);
+  await run(["CTS"]);
+  expect(fetched).toHaveLength(30);
+  expect(new Set(fetched)).toEqual(new Set(["CTS"]));
+});
+
 const seed = (destination: string, date: string, price: number, currency = "TWD") =>
   env.DB.prepare(
     "INSERT INTO flight_fare_snapshots(origin,destination,currency,departure_date,price,fetched_at) VALUES('TPE',?,?,?,?,?)",

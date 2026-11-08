@@ -10,6 +10,7 @@ it("records daily route minima, hides immature statistics, and returns today's v
   const app = createApp({
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => clock.now,
     flightSource: () =>
       Promise.resolve([
@@ -93,6 +94,7 @@ it("uses fourteen distinct days, ignoring another currency and observations outs
   const app = createApp({
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => clock.now,
     flightSource: () => Promise.resolve([{ ...oldFare, price: 8000 }]),
   });
@@ -116,6 +118,7 @@ it("daily maintenance rotates four verified routes and purges history older than
   const deps = {
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => clock.now,
     rateSource: { fetchRate: () => Promise.reject(new Error("offline")) },
     flightSource: (intent: import("@split/shared").FlightSearchIntent) => {
@@ -163,6 +166,7 @@ it("records only unfiltered searches in the fare history", async () => {
   const app = createApp({
     ...productionDeps,
     pause: () => Promise.resolve(),
+    snapshotDestinations: [],
     now: () => clock.now,
     flightSource: () =>
       Promise.resolve([
