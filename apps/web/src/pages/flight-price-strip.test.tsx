@@ -45,12 +45,12 @@ const text = {
     bar: "Price Strip",
     searchBar: "Search bar",
     fares: "Fares",
-    hint: "Shorter bars are cheaper. Swipe or tap to pick a departure date.",
-    cheaper: "▼ NT$ 4,000 cheaper",
-    pricier: "▲ NT$ 5,000 pricier",
-    startValue: "Jan 8 · NT$ 25,000 · Normal",
-    firstValue: "Jan 7 · NT$ 21,000 · Cheap · Lowest",
-    lastValue: "Jan 9 · NT$ 30,000 · Pricey",
+    cheaper: "NT$ 4,000 cheaper than Jan 8",
+    pricier: "NT$ 5,000 pricier than Jan 8",
+    jump: "Jump to lowest",
+    startValue: "Jan 8 · NT$ 25,000",
+    firstValue: "Jan 7 · NT$ 21,000 · Lowest",
+    lastValue: "Jan 9 · NT$ 30,000",
   },
   "zh-TW": {
     prompt: "想去哪裡？",
@@ -59,12 +59,12 @@ const text = {
     bar: "價格條",
     searchBar: "搜尋列",
     fares: "票價選項",
-    hint: "越矮越便宜，左右滑動或點一下選出發日。",
-    cheaper: "▼ 便宜 NT$ 4,000",
-    pricier: "▲ 貴 NT$ 5,000",
-    startValue: "1/8（五） · NT$ 25,000 · 普通",
-    firstValue: "1/7（四） · NT$ 21,000 · 便宜 · 最低",
-    lastValue: "1/9（六） · NT$ 30,000 · 偏貴",
+    cheaper: "比 1/8 省 NT$ 4,000",
+    pricier: "比 1/8 貴 NT$ 5,000",
+    jump: "跳到最低",
+    startValue: "1/8（五） · NT$ 25,000",
+    firstValue: "1/7（四） · NT$ 21,000 · 最低",
+    lastValue: "1/9（六） · NT$ 30,000",
   },
 } as const;
 
@@ -189,20 +189,15 @@ describe("Flight Radar Price Strip", () => {
       expect(screen.queryByText(text[language].cheaper)).toBeNull();
       expect(screen.getByText(text[language].pricier)).toBeVisible();
 
-      // Past the last bar it stays put; the label goes away by itself after a couple of seconds.
+      // Past the last bar it stays put; the comparison line stays too.
       fireEvent.keyDown(slider, { key: "ArrowRight" });
       expect(slider).toHaveAttribute("aria-valuenow", "2");
-      await waitFor(
-        () => {
-          expect(screen.queryByText(text[language].pricier)).toBeNull();
-        },
-        { timeout: 4000 },
-      );
+      expect(screen.getByText(text[language].pricier)).toBeVisible();
 
       // Back on the start date there is nothing to compare.
       fireEvent.keyDown(slider, { key: "ArrowLeft" });
       expect(slider).toHaveAttribute("aria-valuetext", text[language].startValue);
-      expect(screen.queryByText(/NT\$ \d,000 (cheaper|pricier)|便宜 NT|貴 NT/)).toBeNull();
+      expect(screen.queryByText(/NT\$ \d,000 (cheaper|pricier)|省 NT|貴 NT/)).toBeNull();
     },
   );
 
@@ -236,22 +231,21 @@ describe("Flight Radar Price Strip", () => {
   });
 
   it.each(["en", "zh-TW"] as const)(
-    "shows the legend and the ghost finger until the first touch in %s",
+    "draws the ghost finger until the first touch and no legend or hint in %s",
     async (language) => {
       allowMotion();
       setup(language);
       const slider = await explore(language);
       const strip = screen.getByRole("region", { name: text[language].bar });
-      expect(within(strip).getByText(text[language].hint)).toBeVisible();
       expect(strip.querySelector("[data-ghost]")).not.toBeNull();
+      expect(strip.querySelector(".strip-key")).toBeNull();
       expect(slider).toHaveAttribute("data-motion", "full");
       fireEvent.keyDown(slider, { key: "ArrowLeft" });
-      expect(within(strip).queryByText(text[language].hint)).toBeNull();
       expect(strip.querySelector("[data-ghost]")).toBeNull();
     },
   );
 
-  it("has the live note region in place before the first touch, empty until a difference", async () => {
+  it("keeps the comparison line in the live region, empty on the start date, until the selection changes", async () => {
     setup("en");
     const slider = await explore("en");
     const strip = screen.getByRole("region", { name: text.en.bar });
@@ -260,22 +254,42 @@ describe("Flight Radar Price Strip", () => {
     fireEvent.keyDown(slider, { key: "ArrowLeft" });
     expect(within(strip).getByRole("status")).toBe(note);
     expect(note).toHaveTextContent(text.en.cheaper);
+    // Persistent: it is still there after the old 2.2 s note would have gone.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect(note).toHaveTextContent(text.en.cheaper);
   });
 
-  it("adds Lowest to the live note when the selected date is the lowest", async () => {
-    setup("en");
-    const slider = await explore("en");
-    fireEvent.keyDown(slider, { key: "ArrowLeft" });
-    const note = within(screen.getByRole("region", { name: text.en.bar })).getByRole("status");
-    expect(note).toHaveTextContent(`${text.en.cheaper} · Lowest`);
-  });
-
-  it("keeps the legend but draws no ghost finger under reduced motion", async () => {
+  it("draws no ghost finger under reduced motion and no legend either", async () => {
     setup("en");
     await explore("en");
     const strip = screen.getByRole("region", { name: text.en.bar });
-    expect(within(strip).getByText(text.en.hint)).toBeVisible();
     expect(strip.querySelector("[data-ghost]")).toBeNull();
+    expect(strip.querySelector(".strip-key")).toBeNull();
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "offers a 44px jump to the lowest date only when another date is selected in %s",
+    async (language) => {
+      setup(language);
+      const slider = await explore(language);
+      const strip = screen.getByRole("region", { name: text[language].bar });
+      const jump = within(strip).getByRole("button", { name: text[language].jump });
+      expect(jump.className).toMatch(/min-h-11/);
+      fireEvent.click(jump);
+      expect(slider).toHaveAttribute("aria-valuenow", "0");
+      expect(shownAirlines(language)).toEqual(["Cheapest Early Air", "Early Air"]);
+      expect(within(strip).queryByRole("button", { name: text[language].jump })).toBeNull();
+      fireEvent.keyDown(slider, { key: "End" });
+      expect(within(strip).getByRole("button", { name: text[language].jump })).toBeVisible();
+    },
+  );
+
+  it("marks bars with only two states: the lowest dark, the others light", async () => {
+    setup("en");
+    await explore("en");
+    const bars = [...document.querySelectorAll(".strip-bar")];
+    expect(bars.map((bar) => bar.getAttribute("data-lowest"))).toEqual(["true", null, null]);
+    expect(bars.some((bar) => bar.hasAttribute("data-tone"))).toBe(false);
   });
 
   it("gives the bottom bar to Search while the panel is open and back to the strip after", async () => {
@@ -332,6 +346,6 @@ describe("Flight Radar Price Strip", () => {
     const strip = screen.getByRole("region", { name: text.en.bar });
     expect(within(strip).getAllByText("Lowest")).toHaveLength(2);
     fireEvent.keyDown(slider, { key: "End" });
-    expect(slider).toHaveAttribute("aria-valuetext", "Jan 9 · NT$ 20,000 · Cheap · Lowest");
+    expect(slider).toHaveAttribute("aria-valuetext", "Jan 9 · NT$ 20,000 · Lowest");
   });
 });

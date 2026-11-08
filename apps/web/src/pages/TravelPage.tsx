@@ -43,7 +43,7 @@ export function TravelPage() {
   const [lastSearch] = useState(() => (intentFromQuery(params) ? null : readLastSearch()));
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
-  // The date picked on the strip belongs to the reply it was picked on; the legend is first-touch.
+  // The date picked on the strip belongs to the reply it was picked on; the ghost finger is first-touch.
   const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
   const [stripTouched, setStripTouched] = useState(false);
   const [active, setIntent] = useState(

@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { t } from "../i18n/messages.js";
 
 /**
- * Thumb-reach bar fixed above the mobile tab bar. The spacer is as tall as the bar (which grows
- * with the Price Strip's legend) so the last content can always scroll clear of it. The bar sits
+ * Thumb-reach bar fixed above the mobile tab bar. The spacer is as tall as the bar so the last content can always scroll clear of it. The bar sits
  * under the tab bar's layer so the Add button, which rises above the tab bar, is never cut off.
  */
 export function StickyBar({

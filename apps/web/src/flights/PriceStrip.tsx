@@ -4,17 +4,15 @@ import {
   type FlightCard,
   type FlightSearchReply,
 } from "@split/shared";
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useRef, type KeyboardEvent, type PointerEvent } from "react";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { friendlyDate, shortDate } from "./dates.js";
 
-type Tone = "cheap" | "normal" | "pricey";
 export interface StripDay {
   date: string;
   /** The date's cheapest fare. */
   price: number;
-  tone: Tone;
   /** No other shown date is cheaper (a tie marks every cheapest date). */
   lowest: boolean;
 }
@@ -44,14 +42,9 @@ export function priceStrip(
   if (cheapest.size < 2) return null;
   const prices = [...cheapest.values()];
   const low = Math.min(...prices);
-  const spread = Math.max(...prices) - low;
-  const tone = (price: number): Tone => {
-    const position = spread === 0 ? 0.5 : (price - low) / spread;
-    return position < 1 / 3 ? "cheap" : position > 2 / 3 ? "pricey" : "normal";
-  };
   const days = [...cheapest]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, price]) => ({ date, price, tone: tone(price), lowest: price === low }));
+    .map(([date, price]) => ({ date, price, lowest: price === low }));
   const start = days.find((day) => day.date === reply.intent.departureDate);
   const cheapestDay = days.reduce((best, day) => (day.price < best.price ? day : best));
   const selected = days.find((day) => day.date === picked)?.date ?? (start ?? cheapestDay).date;
@@ -62,21 +55,10 @@ export function cardsOnDate(cards: FlightCard[], date: string | undefined): Flig
   return date === undefined ? cards : cards.filter((card) => card.intent.departureDate === date);
 }
 
-const toneLabel = (tone: Tone) =>
-  t(
-    tone === "cheap"
-      ? "flight.stripCheap"
-      : tone === "pricey"
-        ? "flight.stripPricey"
-        : "flight.stripNormal",
-  );
-
-/** How long the "cheaper or dearer than where you started" note stays. */
-const NOTE_MS = 2200;
-
 /**
  * Bars for the priced dates. Tap, drag or arrow keys pick the date whose fares the carousel
- * shows. A legend and a ghost finger teach the gesture until the first touch.
+ * shows. A ghost finger teaches the gesture until the first touch. A persistent line compares the
+ * selected date with the searched one, and 跳到最低 selects the lowest date.
  */
 export function PriceStrip({
   strip,
@@ -94,22 +76,11 @@ export function PriceStrip({
   const index = days.findIndex((day) => day.date === selected);
   const current = days[index];
   const dragging = useRef(false);
-  const [noteFor, setNoteFor] = useState<string | null>(null);
-  useEffect(() => {
-    if (noteFor === null) return;
-    const timer = setTimeout(() => {
-      setNoteFor(null);
-    }, NOTE_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [noteFor]);
 
   function pick(next: number) {
     const day = days[Math.min(days.length - 1, Math.max(0, next))];
     onTouch();
     if (!day || day.date === selected) return;
-    setNoteFor(day.date);
     onSelect(day.date);
   }
   const pickAt = (event: PointerEvent<HTMLElement>) => {
@@ -132,32 +103,17 @@ export function PriceStrip({
 
   const difference = start && current ? current.price - start.price : 0;
   const note =
-    noteFor === selected && difference !== 0
+    start && difference !== 0
       ? t(difference < 0 ? "flight.stripCheaper" : "flight.stripPricier", {
+          date: shortDate(start.date),
           amount: formatAmount(Math.abs(difference), currency),
-        }) + (current?.lowest ? ` · ${t("flight.stripLowest")}` : "")
+        })
       : "";
+  const lowestIndex = days.findIndex((day) => day.lowest);
   const highest = Math.max(...days.map((day) => day.price));
 
   return (
     <div className="grid gap-1.5">
-      {/* Mounted from the first render so a screen reader announces even the first change. */}
-      <p role="status" className={touched ? "min-h-5 text-sm font-bold" : "sr-only"}>
-        {note}
-      </p>
-      {!touched && (
-        <div className="grid gap-1 text-sm text-ink-muted">
-          <p>{t("flight.stripHint")}</p>
-          <p aria-hidden="true" className="flex gap-3">
-            {(["cheap", "normal", "pricey"] as const).map((key) => (
-              <span key={key} className="flex items-center gap-1">
-                <i className="strip-key" data-tone={key} />
-                {toneLabel(key)}
-              </span>
-            ))}
-          </p>
-        </div>
-      )}
       <div
         role="slider"
         tabIndex={0}
@@ -167,7 +123,7 @@ export function PriceStrip({
         aria-valuenow={index}
         aria-valuetext={
           current
-            ? `${friendlyDate(current.date)} · ${formatAmount(current.price, currency)} · ${toneLabel(current.tone)}${current.lowest ? ` · ${t("flight.stripLowest")}` : ""}`
+            ? `${friendlyDate(current.date)} · ${formatAmount(current.price, currency)}${current.lowest ? ` · ${t("flight.stripLowest")}` : ""}`
             : undefined
         }
         data-motion={motion ? "full" : "reduced"}
@@ -196,7 +152,7 @@ export function PriceStrip({
             </span>
             <span
               className="strip-bar"
-              data-tone={day.tone}
+              data-lowest={day.lowest ? "true" : undefined}
               data-selected={day.date === selected ? "true" : undefined}
               style={{
                 height: `calc((100% - 3.75rem) * ${String(Math.max(0.2, day.price / highest))})`,
@@ -206,6 +162,23 @@ export function PriceStrip({
           </div>
         ))}
         {!touched && motion && <span data-ghost aria-hidden="true" className="strip-ghost" />}
+      </div>
+      <div className="flex min-h-11 items-center justify-between gap-2">
+        {/* Mounted from the first render so a screen reader announces even the first change. */}
+        <p role="status" className="min-w-0 text-sm font-bold">
+          {note}
+        </p>
+        {!current?.lowest && (
+          <button
+            type="button"
+            className="min-h-11 shrink-0 px-1 text-sm font-bold text-sprout-700 underline focus-visible:outline-2 focus-visible:outline-sprout-700"
+            onClick={() => {
+              pick(lowestIndex);
+            }}
+          >
+            {t("flight.stripJump")}
+          </button>
+        )}
       </div>
     </div>
   );
