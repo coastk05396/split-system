@@ -131,6 +131,15 @@ describe("Travel mode green palette", () => {
     release();
   });
 
+  it("does not interpolate button colours in Travel mode, so no in-between frame drops under 4.5:1", () => {
+    const rule = /\.travel-mode \.press-pill\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const property = /transition-property:\s*([^;]*);/.exec(rule)?.[1] ?? "";
+    expect(property).toMatch(/\btransform\b/);
+    expect(property).not.toMatch(/color|border|opacity|\ball\b/);
+    // The shared rule still animates colour everywhere else.
+    expect(/\.press-pill,[^{]*\{[^}]*transition-property:[^;]*color/.test(css)).toBe(true);
+  });
+
   it("keeps every text and background pair at 4.5:1 or better", () => {
     expect(travel["--travel-page"]).toBeDefined();
     expect(travel["--travel-nav"]).toBeDefined();

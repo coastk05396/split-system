@@ -76,6 +76,14 @@
     var(--ease-spring), var(--ease-out-expo), var(--ease-out-expo), var(--ease-out-expo),
     var(--ease-out-expo), var(--ease-out-expo);
 }
+/* Travel mode: buttons change colour instantly. A 180ms fade between the pale disabled green and the dark
+   action green passes through frames under 4.5:1; only the press transform and shadow still animate.
+   (No reduced-motion override needed: this only removes motion.) */
+.travel-mode .press-pill {
+  transition-property: transform, box-shadow;
+  transition-duration: 360ms, 220ms;
+  transition-timing-function: var(--ease-spring), var(--ease-out-expo);
+}
 .press-card:active:not(:disabled),
 .press-pill:active:not(:disabled),
 .press-icon:active:not(:disabled) {
