@@ -38,27 +38,16 @@ export function SearchSummary({
   return (
     <section
       aria-label={t("flight.summaryCard")}
-      className="surface-card mb-3 grid gap-3.5 rounded-3xl border border-sprout-200 bg-white p-4"
+      className="surface-card mb-3 grid gap-3 rounded-3xl border border-sprout-200 bg-white p-4"
     >
-      <div className="flex items-center gap-3">
-        <div className="grid min-w-0 flex-1 gap-1">
-          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <Place code={intent.origin} />
-            <svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              className={`${icon} size-[18px] self-center`}
-            >
-              <path d="M4 12h16M14 6l6 6-6 6" />
-            </svg>
-            <Place code={intent.destination} />
-          </p>
-          <p className="text-sm text-ink-muted">
-            {t("flight.summaryDates", {
-              dates: friendlyRange(intent.departureDate, intent.returnDate),
-            })}
-          </p>
-        </div>
+      <div className="flex items-start gap-3">
+        <p className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <Place code={intent.origin} />
+          <svg viewBox="0 0 24 24" aria-hidden="true" className={`${icon} size-[18px] self-center`}>
+            <path d="M4 12h16M14 6l6 6-6 6" />
+          </svg>
+          <Place code={intent.destination} />
+        </p>
         <button
           type="button"
           disabled={pending}
@@ -72,6 +61,11 @@ export function SearchSummary({
           {t("flight.edit")}
         </button>
       </div>
+      <p className="-mt-1 text-sm text-ink-muted">
+        {t("flight.summaryDates", {
+          dates: friendlyRange(intent.departureDate, intent.returnDate),
+        })}
+      </p>
       {!open && (
         <button
           type="button"

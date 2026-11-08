@@ -105,7 +105,10 @@ function FareList({
   return (
     <>
       <p className="mx-1 text-sm text-ink-muted">
-        {t("flight.listCaption", { n: cards.length, caption: t("flight.priceCaption") })}
+        {t("flight.listCount", { n: cards.length })}{" "}
+        <span className="whitespace-nowrap">
+          {t("flight.listPrices", { caption: t("flight.priceCaption") })}
+        </span>
       </p>
       <ul
         aria-label={t("flight.fares")}
@@ -161,11 +164,15 @@ function FareRow({ card, onWatch }: { card: FlightCard; onWatch: (card: FlightCa
               )
             )}
           </span>
-          <span className="text-[13px] text-ink-muted">
-            {card.outboundDeparture} – {card.outboundArrival}・
-            {card.stops === 0
-              ? t("flight.nonstop")
-              : t(card.stops === 1 ? "flight.oneStop" : "flight.stops", { n: card.stops })}
+          <span className="flex flex-wrap gap-x-1 text-[13px] text-ink-muted">
+            <span className="whitespace-nowrap">
+              {card.outboundDeparture} – {card.outboundArrival}・
+            </span>
+            <span className="whitespace-nowrap">
+              {card.stops === 0
+                ? t("flight.nonstop")
+                : t(card.stops === 1 ? "flight.oneStop" : "flight.stops", { n: card.stops })}
+            </span>
           </span>
           {card.history && card.history.days >= 14 && (
             <>
@@ -190,7 +197,7 @@ function FareRow({ card, onWatch }: { card: FlightCard; onWatch: (card: FlightCa
             </span>
           )}
         </span>
-        <span className="shrink-0 text-xl font-black tabular-nums">
+        <span className="shrink-0 text-lg font-black tabular-nums">
           {formatAmount(card.price, card.intent.currency)}
         </span>
       </a>

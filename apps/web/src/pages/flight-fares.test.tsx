@@ -116,7 +116,8 @@ describe("Flight Radar compact price list", () => {
         "Third Air",
       ]);
       const first = list[0] as HTMLElement;
-      expect(within(first).getByText(`08:00 – 12:00・${text[language].nonstop}`)).toBeVisible();
+      expect(within(first).getByText("08:00 – 12:00・")).toBeVisible();
+      expect(within(first).getByText(text[language].nonstop)).toBeVisible();
       expect(within(first).getByText("NT$ 21,000")).toHaveClass("tabular-nums");
     },
   );
