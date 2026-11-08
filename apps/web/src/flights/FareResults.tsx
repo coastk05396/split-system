@@ -24,10 +24,7 @@ export function FareResults({
   date?: string | undefined;
   onWatch: (card: FlightCard) => void;
 }) {
-  // The view belongs to the reply it was chosen on, so a new search opens on 熱門 again.
-  const [view, setView] = useState<{ reply: FlightSearchReply; mode: SortMode } | null>(null);
   if (!pending && !reply) return null;
-  const mode = view && view.reply === reply ? view.mode : "top";
   const motion = !prefersReducedMotion();
   return (
     <section
@@ -55,16 +52,10 @@ export function FareResults({
       )}
       {reply && reply.cards.length > 0 && (
         <>
-          <SortToggle
-            mode={mode}
-            onChange={(next) => {
-              setView({ reply, mode: next });
-            }}
-          />
-          {/* Keyed by date and view so a switch starts at the first card and the numbers roll again. */}
+          {/* Keyed by date so a switch starts at the first card and the numbers roll again. */}
           <FareCarousel
-            key={`${date ?? ""}-${mode}`}
-            cards={sortFares(cardsOnDate(reply.cards, date), mode)}
+            key={date ?? ""}
+            cards={sortFares(cardsOnDate(reply.cards, date))}
             motion={motion}
             onWatch={onWatch}
           />
@@ -74,36 +65,9 @@ export function FareResults({
   );
 }
 
-type SortMode = "top" | "cheapest";
-
-/** 熱門: Google's top fares first, then the rest by price. 最低價: everything by price. */
-export function sortFares(cards: FlightCard[], mode: SortMode): FlightCard[] {
-  const byPrice = (a: FlightCard, b: FlightCard) => a.price - b.price;
-  if (mode === "cheapest") return [...cards].sort(byPrice);
-  return [
-    ...cards.filter((card) => card.top === true),
-    ...cards.filter((card) => card.top !== true).sort(byPrice),
-  ];
-}
-
-function SortToggle({ mode, onChange }: { mode: SortMode; onChange: (mode: SortMode) => void }) {
-  return (
-    <div role="group" aria-label={t("flight.sort")} className="flex gap-2">
-      {(["top", "cheapest"] as const).map((key) => (
-        <button
-          key={key}
-          type="button"
-          aria-pressed={mode === key}
-          onClick={() => {
-            onChange(key);
-          }}
-          className="press-pill min-h-11 min-w-20 rounded-full border border-sprout-200 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700 aria-pressed:border-sprout-900 aria-pressed:bg-sprout-900 aria-pressed:text-white"
-        >
-          {t(key === "top" ? "flight.sortTop" : "flight.sortCheapest")}
-        </button>
-      ))}
-    </div>
-  );
+/** One list, cheapest first; Array.sort is stable, so equal prices keep the reply's order. */
+export function sortFares(cards: FlightCard[]): FlightCard[] {
+  return [...cards].sort((a, b) => a.price - b.price);
 }
 
 /** Three card-shaped placeholders; they pulse only when motion is allowed. */
@@ -218,8 +182,15 @@ function FareFace({
         <h2 className="font-bold">
           {card.intent.origin} → {card.intent.destination}
         </h2>
-        <span className="rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold">
-          {t(`flight.${card.signal}`)}
+        <span className="flex items-center gap-2">
+          {card.top === true && (
+            <span className="rounded-lg bg-sprout-100 px-2 py-0.5 text-xs font-bold">
+              {t("flight.top")}
+            </span>
+          )}
+          <span className="rounded-full bg-sprout-100 px-3 py-1 text-sm font-bold">
+            {t(`flight.${card.signal}`)}
+          </span>
         </span>
       </div>
       <div aria-hidden="true" className="fare-track">

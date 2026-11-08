@@ -239,37 +239,31 @@ describe("Flight Radar fare carousel", () => {
       .map((card) => within(card).getByText(/Air$/).textContent);
 
   it.each(["en", "zh-TW"] as const)(
-    "lists top fares first, then switches to every fare by price and back in %s",
+    "lists every fare in one list by price, tagging top fares, with no toggle in %s",
     async (language) => {
       const { api } = setup(language, mixed);
       await explore(api, language);
       await screen.findByRole("group", { name: text[language].fares });
-      const toggle = screen.getByRole("group", { name: text[language].sort });
-      const top = within(toggle).getByRole("button", { name: text[language].top });
-      const cheapest = within(toggle).getByRole("button", { name: text[language].cheapest });
-      expect(top).toHaveAttribute("aria-pressed", "true");
-      expect(order(language)).toEqual(["Top Dear Air", "Top Mid Air", "Plain Air", "Other Air"]);
-      fireEvent.click(cheapest);
-      expect(cheapest).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("group", { name: text[language].sort })).toBeNull();
+      expect(screen.queryByRole("button", { name: text[language].cheapest })).toBeNull();
       expect(order(language)).toEqual(["Plain Air", "Other Air", "Top Mid Air", "Top Dear Air"]);
-      fireEvent.click(top);
-      expect(order(language)).toEqual(["Top Dear Air", "Top Mid Air", "Plain Air", "Other Air"]);
+      const cards = within(screen.getByRole("group", { name: text[language].fares })).getAllByRole(
+        "article",
+      );
+      expect(cards.map((card) => within(card).queryByText(text[language].top) !== null)).toEqual([
+        false,
+        false,
+        true,
+        true,
+      ]);
     },
   );
 
-  it("treats fares without top as not top, opens on the top view again after a new search", async () => {
-    const { api } = setup("en", threeFares);
+  it("keeps fares of equal price in the order the reply gave them", async () => {
+    const { api } = setup("en", [fare("First Air", 20000), fare("Second Air", 20000)]);
     await explore(api, "en");
     await screen.findByRole("group", { name: text.en.fares });
-    expect(order("en")).toEqual(["Second Air", "Example Air", "Third Air"]);
-    fireEvent.click(screen.getByRole("button", { name: text.en.cheapest }));
-    await explore(api, "en");
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: text.en.top })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    });
+    expect(order("en")).toEqual(["First Air", "Second Air"]);
   });
 
   it.each(["en", "zh-TW"] as const)(
