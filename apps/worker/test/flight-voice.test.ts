@@ -75,6 +75,21 @@ it("refuses anything that is not audio, empty, or over 1 MB, without calling the
   expect(calls).toBe(0);
 });
 
+it("stops reading a chunked upload that passes 1 MB, without a Content-Length", async () => {
+  const chunk = new Uint8Array(400_000);
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.enqueue(chunk);
+    },
+  });
+  const response = await speak(
+    body,
+    { "Content-Type": "audio/webm" },
+    { flightSpeech: hears("x") },
+  );
+  expect(response.status).toBe(400);
+});
+
 it("needs a signed-in User", async () => {
   const app = createApp({ ...productionDeps, now: () => clock.now, flightSpeech: hears("x") });
   const response = await app.request(
@@ -131,6 +146,7 @@ it("sends Groq Whisper the recording and a language hint, and returns its text",
   expect(calls[0]?.form.get("language")).toBe("zh");
   expect(calls[0]?.form.get("response_format")).toBe("json");
   expect((calls[0]?.form.get("file") as File).size).toBe(2_000);
+  expect((calls[0]?.form.get("file") as File).name).toBe("voice.webm");
 });
 
 it("fails without a Groq key, so the web shows its retry message", async () => {

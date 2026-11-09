@@ -132,4 +132,27 @@ describe("語音搜尋: long-press the Search key", () => {
     });
     expect(api.voiceRequests).toHaveLength(2);
   });
+  it("opens the search sheet on a pointer tap where the browser cannot record", async () => {
+    renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
+    await screen.findByRole("heading", { name: "下一站，沖繩！" });
+    fireEvent.pointerDown(searchKey(), { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(searchKey(), { pointerId: 1 });
+    expect(await screen.findByRole("dialog", { name: "搜尋面板" })).toBeVisible();
+  });
+
+  it("does not open the sheet when the system cancels a short touch", async () => {
+    const { log } = await start();
+    fireEvent.pointerDown(searchKey(), { button: 0, pointerId: 1 });
+    fireEvent.pointerCancel(searchKey(), { pointerId: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(screen.queryByRole("dialog", { name: "搜尋面板" })).toBeNull();
+    expect(log.started).toBe(0);
+  });
+
+  it("ignores a second press while a recording is running", async () => {
+    const { log } = await start();
+    await hold();
+    fireEvent.pointerDown(searchKey(), { button: 0, pointerId: 2 });
+    expect(log.started).toBe(1);
+  });
 });

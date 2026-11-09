@@ -23,10 +23,8 @@ export interface FakeApi {
   /** A fare may sit on another departure date than the searched one, as the neighbour days do. */
   flightFares: (FlightFare & { departureDate?: string; returnDate?: string })[];
   flightsDegraded: boolean;
-  /** Fare Snapshots the Price Strip reads, and the query strings it asked with. */
   /** Every search request body the app sent. */
   flightSearchRequests: FlightSearchRequest[];
-  /** Fare Ticker chips (saved snapshots), and the query strings it asked with. */
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];

@@ -174,7 +174,9 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
   // The last recording, kept in memory only so that 重試 can resend it; dropped when the panel closes.
   const audio = useRef<Blob | null>(null);
 
-  const go = (handover: SearchKeyHandover) => void navigate("/travel", { state: handover });
+  // On /travel already, replace the entry so Back does not land on the same page twice.
+  const go = (handover: SearchKeyHandover) =>
+    void navigate("/travel", { state: handover, replace: pathname === "/travel" });
   const close = () => {
     audio.current = null;
     setLevel(0);
@@ -190,6 +192,7 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
           method: "POST",
           headers: { "Content-Type": blob.type || "audio/webm" },
           body: blob,
+          signal: AbortSignal.timeout(15_000),
         }),
       );
       const heard = text.trim();
@@ -245,9 +248,11 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
       if (!h) return;
       clearTimeout(h.timer);
       clearInterval(h.ticker);
-      void h.recording?.then((r) => {
-        r.cancel();
-      });
+      void h.recording
+        ?.then((r) => {
+          r.cancel();
+        })
+        .catch(() => undefined);
     },
     [],
   );
@@ -278,14 +283,17 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
     clearInterval(h.ticker);
     if (hold.current === h) hold.current = null;
     if (!h.started) {
-      go({ sheet: true });
+      // A system gesture that cancels a short touch is not a tap.
+      if (!cancel) go({ sheet: true });
       return;
     }
     if (cancel || !h.recording) {
       close();
-      void h.recording?.then((r) => {
-        r.cancel();
-      });
+      void h.recording
+        ?.then((r) => {
+          r.cancel();
+        })
+        .catch(() => undefined);
       return;
     }
     setLevel(0);
@@ -305,7 +313,8 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
   const label = t("nav.search");
   const handlers = {
     onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (event.button !== 0 || !recorder) return;
+      // A second finger or a press during recognition must not orphan the first hold.
+      if (event.button !== 0 || hold.current || phase.kind !== "idle") return;
       // Keeps the move and release events on the key while the finger slides up (absent in jsdom).
       if ("setPointerCapture" in event.currentTarget)
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -318,9 +327,11 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
         ticker: undefined,
         recording: undefined,
       };
-      h.timer = setTimeout(() => {
-        begin(h);
-      }, HOLD_MS);
+      // Without a recorder a hold is just a tap: only the release does anything.
+      if (recorder)
+        h.timer = setTimeout(() => {
+          begin(h);
+        }, HOLD_MS);
       hold.current = h;
     },
     onPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => {

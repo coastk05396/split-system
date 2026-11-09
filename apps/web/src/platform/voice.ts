@@ -27,16 +27,25 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
   return {
     async start(onLevel) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // 32 kbit/s keeps 15 s far below the worker's 1 MB ceiling.
-      const recorder = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
+      let recorder: MediaRecorder;
+      let context: AudioContext;
+      let analyser: AnalyserNode;
+      try {
+        // 32 kbit/s keeps 15 s far below the worker's 1 MB ceiling.
+        recorder = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
+        context = new AudioContext();
+        analyser = context.createAnalyser();
+        analyser.fftSize = 256;
+        context.createMediaStreamSource(stream).connect(analyser);
+      } catch (error) {
+        // Setup failed after the microphone opened: switch the indicator off before giving up.
+        for (const track of stream.getTracks()) track.stop();
+        throw error;
+      }
       const chunks: Blob[] = [];
       recorder.ondataavailable = (event) => {
         chunks.push(event.data);
       };
-      const context = new AudioContext();
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 256;
-      context.createMediaStreamSource(stream).connect(analyser);
       const samples = new Uint8Array(analyser.fftSize);
       let frame = 0;
       const measure = () => {

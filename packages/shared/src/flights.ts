@@ -68,7 +68,7 @@ export function partyOf(
   };
 }
 
-/** True for the fixed search that Fare History and Fare Snapshots describe: 1 adult, economy, round trip. */
+/** True for the fixed search that Fare History describes: 1 adult, economy, round trip. */
 export function isStandardSearch(intent: FlightSearchIntent): boolean {
   const party = partyOf(intent);
   return party.people === 1 && party.cabin === "economy" && !party.oneWay;

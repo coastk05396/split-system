@@ -15,7 +15,7 @@ import type { AppDeps } from "../deps.js";
 import { parseBody } from "../request-guards.js";
 import { ApiError } from "../errors.js";
 import { searchFlightRequest } from "./search.js";
-import { MAX_VOICE_BYTES, productionFlightSpeech } from "./voice.js";
+import { MAX_VOICE_BYTES, productionFlightSpeech, readCapped } from "./voice.js";
 
 export function flightRoutes(deps: AppDeps) {
   return (
@@ -41,11 +41,10 @@ export function flightRoutes(deps: AppDeps) {
         if (!/^audio\//i.test(c.req.header("Content-Type") ?? "") || declared > MAX_VOICE_BYTES) {
           throw new ApiError("VALIDATION_FAILED");
         }
-        const audio = await c.req.arrayBuffer();
-        if (audio.byteLength === 0 || audio.byteLength > MAX_VOICE_BYTES) {
-          throw new ApiError("VALIDATION_FAILED");
-        }
+        // Charged before the body is read, so oversized uploads cannot be repeated for free.
         await consumeRateLimit(createDb(c.env.DB), c.var.userId, "flights_voice", deps.now());
+        const audio = await readCapped(c.req.raw.body, MAX_VOICE_BYTES);
+        if (audio.byteLength === 0) throw new ApiError("VALIDATION_FAILED");
         const user = await c.env.DB.prepare("SELECT language FROM users WHERE id=?")
           .bind(c.var.userId)
           .first<{ language: string }>();
