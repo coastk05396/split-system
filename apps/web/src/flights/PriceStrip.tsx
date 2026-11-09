@@ -13,6 +13,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -81,11 +82,16 @@ const plainAmount = (price: number, currency: CurrencyCode) =>
 export function PriceStrip({
   intent,
   onPick,
+  open,
+  onToggle,
 }: {
   intent: FlightSearchIntent;
   onPick: (date: string) => void;
+  /** Whether the dock shows the strip or only its slim title bar. */
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const heading = useId();
+  const bodyId = useId();
   const searched = intent.departureDate;
   // The window holds still while the chosen day stays in it, so the bars never slide under a drag.
   const window0 = useRef("");
@@ -158,32 +164,59 @@ export function PriceStrip({
           : "normal";
 
   const title = t("flight.stripTitle");
+  // Every state lives inside the dock, so the collapsed bar is the same slim bar whatever the data does.
+  const dock = (content: ReactNode) => (
+    <StickyBar label={title}>
+      <div className="fr-dockhead">
+        <h2>{title}</h2>
+        <button
+          type="button"
+          className="fr-dockbtn"
+          aria-label={t("flight.stripToggle")}
+          aria-expanded={open}
+          aria-controls={bodyId}
+          onClick={onToggle}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 15 6-6 6 6" />
+          </svg>
+        </button>
+      </div>
+      {/* Collapsed: out of the tab order and the accessibility tree (inert and hidden), and no height. */}
+      <div
+        id={bodyId}
+        className="fr-dockbody"
+        data-open={open ? "true" : "false"}
+        inert={!open}
+        aria-hidden={!open}
+      >
+        <div className="fr-dockclip">
+          <div className="fr-dockpad">{content}</div>
+        </div>
+      </div>
+    </StickyBar>
+  );
   if (!loaded)
-    return (
-      <section aria-labelledby={heading} className="mt-5 grid gap-2 px-1">
-        <h2 id={heading} className="text-[17px] font-black">
-          {title}
-        </h2>
-        {pending ? (
-          <div
-            role="status"
-            aria-busy="true"
-            aria-label={t("flight.stripLoading")}
-            className="flex h-[72px] items-end gap-0.5"
-          >
-            {Array.from({ length: BARS }, (_, i) => (
-              <div
-                key={i}
-                aria-hidden="true"
-                className={`min-w-0 flex-1 rounded-t-sm bg-[#b3bbb6] ${prefersReducedMotion() ? "" : "strip-pulse"}`}
-                style={{ height: `${String(SKELETON_HEIGHTS[i % SKELETON_HEIGHTS.length])}%` }}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-[15px] font-bold text-ink-muted">{t("flight.stripUnavailable")}</p>
-        )}
-      </section>
+    return dock(
+      pending ? (
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label={t("flight.stripLoading")}
+          className="flex h-[72px] items-end gap-0.5"
+        >
+          {Array.from({ length: BARS }, (_, i) => (
+            <div
+              key={i}
+              aria-hidden="true"
+              className={`min-w-0 flex-1 rounded-t-sm bg-[#b3bbb6] ${prefersReducedMotion() ? "" : "strip-pulse"}`}
+              style={{ height: `${String(SKELETON_HEIGHTS[i % SKELETON_HEIGHTS.length])}%` }}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-[15px] font-bold text-ink-muted">{t("flight.stripUnavailable")}</p>
+      ),
     );
 
   const currency = intent.currency;
@@ -240,127 +273,125 @@ export function PriceStrip({
   };
   const grow = !prefersReducedMotion();
 
-  return (
-    <StickyBar label={title}>
-      <div className="grid gap-0">
-        <div className="fr-sh">
-          <span className="min-w-0">{t("flight.stripHint")}</span>
-          <button
-            type="button"
-            className="fr-jump fr-hit shrink-0"
-            onClick={() => {
-              if (lowestIndex >= 0 && lowestIndex !== index) choose(lowestIndex, "now");
-            }}
-          >
-            <span>{t("flight.stripJump")}</span>
-            <b>{formatAmount(low, currency)}</b>
-          </button>
-        </div>
-        <div
-          role="slider"
-          tabIndex={0}
-          aria-label={t("flight.stripSlider")}
-          aria-valuemin={0}
-          aria-valuemax={BARS - 1}
-          aria-valuenow={index}
-          aria-valuetext={valueText}
-          className="price-strip"
-          style={{ "--x": `${String(((index + 0.5) / BARS) * 100)}%` } as CSSProperties}
-          onKeyDown={onKeyDown}
-          onPointerDown={(event) => {
-            dragging.current = true;
-            // jsdom has no pointer capture; a real browser keeps the drag when the finger leaves.
-            try {
-              event.currentTarget.setPointerCapture(event.pointerId);
-            } catch {
-              /* no capture available: the drag still follows the bars it crosses */
-            }
-            move(event, "never");
-          }}
-          onPointerMove={(event) => {
-            if (dragging.current) move(event, "never");
-          }}
-          onPointerUp={() => {
-            if (!dragging.current) return;
-            dragging.current = false;
-            setWave(null);
-            commit();
-          }}
-          onPointerCancel={() => {
-            dragging.current = false;
-            setWave(null);
-            commit();
+  return dock(
+    <div className="grid gap-0">
+      <div className="fr-sh">
+        <span className="min-w-0">{t("flight.stripHint")}</span>
+        <button
+          type="button"
+          className="fr-jump fr-hit shrink-0"
+          onClick={() => {
+            if (lowestIndex >= 0 && lowestIndex !== index) choose(lowestIndex, "now");
           }}
         >
-          {dates.map((date, i) => {
-            const price = prices[i];
-            const kind = kindOf(price);
-            return (
-              <i
-                key={date}
-                aria-hidden="true"
-                data-kind={kind}
-                data-selected={i === index ? "true" : undefined}
-                data-return={i === returnIndex ? "true" : undefined}
-                className={`strip-bar ${grow ? "strip-grow" : ""}`}
-                style={
-                  {
-                    "--i": i,
-                    "--h":
-                      price === undefined ? EMPTY_PX : 8 + ((price - low) / (high - low || 1)) * 52,
-                    ...(wave === null
-                      ? {}
-                      : { "--w": (1 + 0.2 * Math.exp(-((i - wave) ** 2) / 3.5)).toFixed(3) }),
-                  } as CSSProperties
-                }
-              />
-            );
-          })}
-          <span
-            aria-hidden="true"
-            className="strip-range"
-            style={{
-              left: `${String((index / BARS) * 100)}%`,
-              width: `${String(((Math.max(spanEnd, index) - index + 1) / BARS) * 100)}%`,
-            }}
-          />
-          <span aria-hidden="true" data-part="tip" className="strip-tip">
-            {tipText}
-            {delta !== 0 && (
-              <em data-direction={delta < 0 ? "down" : "up"} className="strip-delta">
-                {plainAmount(Math.abs(delta), currency)}
-              </em>
-            )}
-          </span>
-        </div>
-        <div aria-hidden="true" className="fr-ax">
-          <span>{shortDate(dates[0] ?? searched)}</span>
-          <span>{shortDate(dates[BARS - 1] ?? searched)}</span>
-        </div>
-        <p className="fr-lg">
-          {(
-            [
-              ["cheap", "flight.stripLegendCheap"],
-              ["normal", "flight.stripLegendNormal"],
-              ["pricey", "flight.stripLegendPricey"],
-              ["yours", "flight.stripLegendYours"],
-            ] as const
-          ).map(([kind, key]) => (
-            <span key={kind}>
-              <i aria-hidden="true" className={`strip-swatch strip-swatch-${kind}`} />
-              {t(key)}
-            </span>
-          ))}
-        </p>
-        <p className="fr-lg" data-testid="strip-note">
-          {oldestHours >= OLD_AFTER_HOURS && (
-            <span className="font-semibold">
-              {t("flight.stripAge", { hours: String(oldestHours) })}
-            </span>
-          )}{" "}
-          {t("flight.stripNote")}
-        </p>
+          <span>{t("flight.stripJump")}</span>
+          <b>{formatAmount(low, currency)}</b>
+        </button>
       </div>
-    </StickyBar>
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label={t("flight.stripSlider")}
+        aria-valuemin={0}
+        aria-valuemax={BARS - 1}
+        aria-valuenow={index}
+        aria-valuetext={valueText}
+        className="price-strip"
+        style={{ "--x": `${String(((index + 0.5) / BARS) * 100)}%` } as CSSProperties}
+        onKeyDown={onKeyDown}
+        onPointerDown={(event) => {
+          dragging.current = true;
+          // jsdom has no pointer capture; a real browser keeps the drag when the finger leaves.
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch {
+            /* no capture available: the drag still follows the bars it crosses */
+          }
+          move(event, "never");
+        }}
+        onPointerMove={(event) => {
+          if (dragging.current) move(event, "never");
+        }}
+        onPointerUp={() => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          setWave(null);
+          commit();
+        }}
+        onPointerCancel={() => {
+          dragging.current = false;
+          setWave(null);
+          commit();
+        }}
+      >
+        {dates.map((date, i) => {
+          const price = prices[i];
+          const kind = kindOf(price);
+          return (
+            <i
+              key={date}
+              aria-hidden="true"
+              data-kind={kind}
+              data-selected={i === index ? "true" : undefined}
+              data-return={i === returnIndex ? "true" : undefined}
+              className={`strip-bar ${grow ? "strip-grow" : ""}`}
+              style={
+                {
+                  "--i": i,
+                  "--h":
+                    price === undefined ? EMPTY_PX : 8 + ((price - low) / (high - low || 1)) * 52,
+                  ...(wave === null
+                    ? {}
+                    : { "--w": (1 + 0.2 * Math.exp(-((i - wave) ** 2) / 3.5)).toFixed(3) }),
+                } as CSSProperties
+              }
+            />
+          );
+        })}
+        <span
+          aria-hidden="true"
+          className="strip-range"
+          style={{
+            left: `${String((index / BARS) * 100)}%`,
+            width: `${String(((Math.max(spanEnd, index) - index + 1) / BARS) * 100)}%`,
+          }}
+        />
+        <span aria-hidden="true" data-part="tip" className="strip-tip">
+          {tipText}
+          {delta !== 0 && (
+            <em data-direction={delta < 0 ? "down" : "up"} className="strip-delta">
+              {plainAmount(Math.abs(delta), currency)}
+            </em>
+          )}
+        </span>
+      </div>
+      <div aria-hidden="true" className="fr-ax">
+        <span>{shortDate(dates[0] ?? searched)}</span>
+        <span>{shortDate(dates[BARS - 1] ?? searched)}</span>
+      </div>
+      <p className="fr-lg">
+        {(
+          [
+            ["cheap", "flight.stripLegendCheap"],
+            ["normal", "flight.stripLegendNormal"],
+            ["pricey", "flight.stripLegendPricey"],
+            ["yours", "flight.stripLegendYours"],
+          ] as const
+        ).map(([kind, key]) => (
+          <span key={kind}>
+            <i aria-hidden="true" className={`strip-swatch strip-swatch-${kind}`} />
+            {t(key)}
+          </span>
+        ))}
+      </p>
+      <p className="fr-lg" data-testid="strip-note">
+        {oldestHours >= OLD_AFTER_HOURS && (
+          <span className="font-semibold">
+            {t("flight.stripAge", { hours: String(oldestHours) })}
+          </span>
+        )}{" "}
+        {t("flight.stripNote")}
+      </p>
+    </div>,
   );
 }

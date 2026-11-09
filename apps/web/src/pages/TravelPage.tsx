@@ -77,6 +77,8 @@ export function TravelPage() {
   });
   // Only the newest search may apply its reply: an older one that answers late is dropped.
   const latestSearch = useRef(0);
+  // The Price Strip dock starts collapsed; a search that returns fares raises it, a manual toggle holds until then.
+  const [stripOpen, setStripOpen] = useState(false);
   const search = useMutation({
     mutationFn: (intent: FlightSearchRequest) =>
       readWithRev<FlightSearchReply>(
@@ -97,6 +99,7 @@ export function TravelPage() {
       if (started.id !== latestSearch.current) return;
       setActive(reply.intent);
       writeLastSearch(reply.intent);
+      if (reply.cards.length) setStripOpen(true);
       if (reply.cards.length)
         advise.mutate({ language: getLocale(), intent: reply.intent, cards: reply.cards });
     },
@@ -297,6 +300,10 @@ export function TravelPage() {
         {!panelOpen && (
           <PriceStrip
             intent={active}
+            open={stripOpen}
+            onToggle={() => {
+              setStripOpen((o) => !o);
+            }}
             onPick={(date) => {
               // A day picked on the strip is a live search that keeps the stay and drops any theme.
               const { theme: _theme, ...rest } = active;

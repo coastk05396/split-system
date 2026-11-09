@@ -125,6 +125,7 @@ export const en: Record<MessageId, string> = {
   "flight.tileCheaper": "{amount} cheaper than {date}. Leaving another day saves money.",
   "flight.tilePricier": "{amount} pricier than {date}.",
   "flight.stripTitle": "Cheapest fare by day",
+  "flight.stripToggle": "Price strip",
   "flight.stripHint": "Shorter is cheaper. Drag or use arrow keys to pick a day.",
   "flight.stripJump": "Jump to lowest",
   "flight.stripSlider": "Departure day",

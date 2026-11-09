@@ -126,6 +126,7 @@ const zhTW = {
   "flight.tileCheaper": "比 {date} 省 {amount}，換個日子更划算。",
   "flight.tilePricier": "比 {date} 貴 {amount}。",
   "flight.stripTitle": "每日最低價",
+  "flight.stripToggle": "價格長條",
   "flight.stripHint": "越矮越便宜，左右滑選出發日",
   "flight.stripJump": "跳到最低",
   "flight.stripSlider": "出發日期",

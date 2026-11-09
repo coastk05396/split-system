@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { defaultFlightIntent } from "@split/shared";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const DAY = 86_400_000;
@@ -22,6 +24,7 @@ const HOUR = 3_600_000;
 const text = {
   en: {
     title: "Cheapest fare by day",
+    toggle: "Price strip",
     slider: "Departure day",
     unavailable: "Prices are unavailable right now",
     loading: "Loading prices",
@@ -32,6 +35,7 @@ const text = {
   },
   "zh-TW": {
     title: "每日最低價",
+    toggle: "價格長條",
     slider: "出發日期",
     unavailable: "目前無法取得價格",
     loading: "價格載入中",
@@ -47,7 +51,17 @@ function setup(language: Language) {
   return renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
 }
 const dock = (language: Language) => screen.findByRole("region", { name: text[language].title });
-const slider = (language: Language) => screen.findByRole("slider", { name: text[language].slider });
+const toggle = async (language: Language) =>
+  within(await dock(language)).findByRole("button", { name: text[language].toggle });
+/** Opens the dock the way a User does, unless it is already open. */
+async function expand(language: Language) {
+  const button = await toggle(language);
+  if (button.getAttribute("aria-expanded") === "false") fireEvent.click(button);
+}
+const slider = async (language: Language) => {
+  await expand(language);
+  return screen.findByRole("slider", { name: text[language].slider });
+};
 const bars = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>("[data-kind]")];
 const tip = (el: HTMLElement) => el.querySelector<HTMLElement>("[data-part='tip']");
 /** One snapshot per day: prices[n] is the fare n days after the first bar; null leaves it unsaved. */
@@ -243,6 +257,7 @@ describe("Flight Radar Price Strip dock", () => {
     const prices = Array.from({ length: 30 }, (_, n) => 8000 + n * 50);
     prices[7] = 4321;
     save(app, prices);
+    await expand("en");
     const jump = await screen.findByRole("button", { name: /Jump to lowest/ });
     await waitFor(() => {
       expect(jump).toHaveTextContent("NT$ 4,321");
@@ -305,6 +320,7 @@ describe("Flight Radar Price Strip dock", () => {
       const app = setup(language);
       save(app, [9000]);
       const release = app.api.holdResponses("GET /api/v1/flights/price-strip");
+      await expand(language);
       const skeleton = await screen.findByRole("status", { name: text[language].loading });
       expect(skeleton.children).toHaveLength(30);
       expect(skeleton.querySelector(".strip-pulse")).toBeNull();
@@ -320,6 +336,7 @@ describe("Flight Radar Price Strip dock", () => {
     window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
     const app = setup("en");
     const release = app.api.holdResponses("GET /api/v1/flights/price-strip");
+    await expand("en");
     const skeleton = await screen.findByRole("status", { name: text.en.loading });
     expect(skeleton.querySelector(".strip-pulse")).not.toBeNull();
     release();
@@ -544,5 +561,131 @@ describe("Flight Radar Price Strip dock", () => {
       expect(bg).toMatch(/^#/);
       expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "starts collapsed as a slim bar with a titled toggle, out of the tab order and the accessibility tree in %s",
+    async (language) => {
+      const app = setup(language);
+      save(
+        app,
+        Array.from({ length: 30 }, (_, n) => 6000 + n),
+      );
+      const region = await dock(language);
+      expect(within(region).getByRole("heading", { name: text[language].title })).toBeVisible();
+      const button = await toggle(language);
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(button.tagName).toBe("BUTTON");
+      expect(button).toHaveAttribute("type", "button");
+      const body = document.getElementById(button.getAttribute("aria-controls") ?? "");
+      expect(body).not.toBeNull();
+      expect(body).toHaveAttribute("inert");
+      expect(body).toHaveAttribute("aria-hidden", "true");
+      expect(screen.queryByRole("slider")).toBeNull();
+      expect(
+        within(region).queryByRole("button", { name: new RegExp(text[language].jump) }),
+      ).toBeNull();
+      // The price reads still happen (the strip is ready when it opens) but nothing is asked live.
+      expect(app.api.calls).not.toContain("POST /api/v1/flights/search");
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "opens and closes with the toggle at any time, by keyboard too, in %s",
+    async (language) => {
+      const app = setup(language);
+      save(
+        app,
+        Array.from({ length: 30 }, (_, n) => 6000 + n),
+      );
+      const user = userEvent.setup();
+      const button = await toggle(language);
+      await user.tab(); // the first stop on the page may be elsewhere: walk to the toggle
+      for (let i = 0; i < 40 && document.activeElement !== button; i++) await user.tab();
+      expect(button).toHaveFocus();
+      await user.keyboard("{Enter}");
+      expect(button).toHaveAttribute("aria-expanded", "true");
+      expect(await screen.findByRole("slider", { name: text[language].slider })).toBeVisible();
+      await user.keyboard(" ");
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByRole("slider")).toBeNull();
+      fireEvent.click(button);
+      expect(await screen.findByRole("slider", { name: text[language].slider })).toBeVisible();
+    },
+  );
+
+  it("rises when a search returns fares, and keeps a manual choice until the next search", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 6000 + n),
+    );
+    // The panel swaps the dock out while it is open, so the toggle is found again each time.
+    expect(await toggle("en")).toHaveAttribute("aria-expanded", "false");
+    await openSearchPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+    await screen.findByText("Example Air");
+    await waitFor(async () => {
+      expect(await toggle("en")).toHaveAttribute("aria-expanded", "true");
+    });
+    // A manual collapse stays through renders, ...
+    fireEvent.click(await toggle("en"));
+    expect(await toggle("en")).toHaveAttribute("aria-expanded", "false");
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(await toggle("en")).toHaveAttribute("aria-expanded", "false");
+    // ... until the next search that returns fares.
+    await openSearchPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+    await waitFor(() => {
+      expect(app.api.flightSearchRequests).toHaveLength(2);
+    });
+    await waitFor(async () => {
+      expect(await toggle("en")).toHaveAttribute("aria-expanded", "true");
+    });
+  });
+
+  it.each(["empty", "failed"] as const)(
+    "leaves the dock as it was after an %s search",
+    async (kind) => {
+      const app = setup("en");
+      save(
+        app,
+        Array.from({ length: 30 }, (_, n) => 6000 + n),
+      );
+      await toggle("en");
+      if (kind === "empty") app.api.flightFares = [];
+      else app.api.failNext("POST /api/v1/flights/search");
+      await openSearchPanel();
+      fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+      await waitFor(() => {
+        expect(app.api.flightSearchRequests.length + (kind === "failed" ? 1 : 0)).toBeGreaterThan(
+          0,
+        );
+      });
+      await act(() => new Promise((r) => setTimeout(r, 100)));
+      expect(await toggle("en")).toHaveAttribute("aria-expanded", "false");
+      fireEvent.click(await toggle("en"));
+      await openSearchPanel();
+      fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+      await act(() => new Promise((r) => setTimeout(r, 100)));
+      expect(await toggle("en")).toHaveAttribute("aria-expanded", "true");
+    },
+  );
+
+  it("keeps the toggle a 44 px target and moves only height and transform, never under reduced motion", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const rule = (name: string) => new RegExp(`${name}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+    const button = rule("\\.fr-dockbtn");
+    expect(button).toMatch(/width:\s*44px/);
+    expect(button).toMatch(/height:\s*44px/);
+    const body = rule("\\.fr-dockbody");
+    expect(body).not.toMatch(/transition/); // motion lives only in the no-preference query below
+    const motion =
+      /@media \(prefers-reduced-motion: no-preference\)\s*\{\s*\.fr-dockbody[\s\S]*?\n\}/.exec(
+        css,
+      )?.[0] ?? "";
+    expect(motion).toMatch(/transition:[^;]*grid-template-rows/);
+    expect(motion).not.toMatch(/opacity|width|top|margin|padding/);
+    expect(motion).toMatch(/\.fr-dockbtn svg\s*\{[^}]*transition:\s*transform/);
   });
 });
