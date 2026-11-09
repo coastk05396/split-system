@@ -94,14 +94,14 @@ const shift = (date: string, days: number) =>
 const SIGNAL_RANK = { strong_buy: 0, buy: 1, hold: 2 } as const;
 /**
  * Wording for a card's Deal Signal that is true for every case that maps to it (the signal's own names are never
- * shown). Strong Buy also covers a top cheapest-third fare Google rates high, and Hold an unknown price level or a
+ * shown; the LINE badge is Traditional Chinese only). Strong Buy also covers a top cheapest-third fare Google rates high, and Hold an unknown price level or a
  * cheap fare over budget, so those two claim nothing about price.
  */
 export const SIGNAL_NOTE = {
-  strong_buy: ["優先考慮", "Worth considering first"],
-  buy: ["價格合理", "Fair price"],
-  hold: ["價格僅供參考", "Price for reference"],
-} as const satisfies Record<string, Pair>;
+  strong_buy: "優先考慮",
+  buy: "價格合理",
+  hold: "價格僅供參考",
+} as const;
 
 /** Every offered chip is computed from the actual results, so none can be inapplicable. */
 export function eligibleMoves(

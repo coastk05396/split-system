@@ -94,7 +94,7 @@ export function flightBubble(card: FlightCard): FlexBubble {
   const place = FLIGHT_DESTINATIONS.find((d) => d.airport === intent.destination)?.zhTW;
   const [first, second] = insights(card);
   return bubble({
-    badge: SIGNAL_NOTE[card.signal][0],
+    badge: SIGNAL_NOTE[card.signal],
     badgeColor: SIGNAL_COLOR[card.signal],
     tag: `${card.stops === 0 ? "直飛" : `轉機 ${card.stops} 次`} · ${duration(card.durationMinutes)}`,
     body: [
