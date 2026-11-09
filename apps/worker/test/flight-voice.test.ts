@@ -155,7 +155,7 @@ it("fails without a Groq key, so the web shows its retry message", async () => {
   await expect(
     speech.transcribe(
       { audio: audio().buffer, contentType: "audio/webm", language: "en" },
-      { ...env, GROQ_API_KEY: undefined },
+      { ...env, GROQ_API_KEY: "" },
     ),
   ).rejects.toThrow();
 });
