@@ -60,11 +60,9 @@ export function FareTicker({
           onClick={() => {
             onPick(destination);
           }}
-          className={`mr-2 inline-flex min-h-11 items-center gap-[7px] rounded-full border border-transparent px-[11px] text-xs font-semibold tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-sprout-700 ${current ? "bg-travel-action text-white" : `hover:border-sprout-200 hover:bg-white/70 ${percentBelow === undefined ? "text-ink-muted" : "text-sprout-600"}`}`}
+          className={`fr-tk fr-hit${percentBelow === undefined ? "" : " lo"}`}
         >
-          <b className={`tracking-[0.04em] ${current ? "text-white" : "text-sprout-900"}`}>
-            {destination}
-          </b>
+          <b>{destination}</b>
           {amount}
           {percentBelow !== undefined && (
             <span aria-hidden="true">{`−${String(percentBelow)}%`}</span>
@@ -75,12 +73,12 @@ export function FareTicker({
   return (
     <section
       aria-label={t("flight.ticker")}
-      className={`ticker -mx-1 mb-1 whitespace-nowrap ${still ? "overflow-x-auto" : "overflow-hidden"}`}
+      className={`fr-tick ${still ? "overflow-x-auto" : ""}`}
     >
       {still ? (
         <div className="inline-block">{copy(false)}</div>
       ) : (
-        <div className="ticker-track inline-block">
+        <div className="fr-track">
           <div className="inline-block">{copy(false)}</div>
           <div aria-hidden="true" className="inline-block">
             {copy(true)}

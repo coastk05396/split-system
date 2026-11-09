@@ -1,7 +1,9 @@
 import type { CurrencyCode } from "@split/shared";
 import { useId, useState } from "react";
 import { getLocale, t } from "../i18n/messages.js";
-import { addDays, friendlyDate } from "./dates.js";
+import { addDays, friendlyDate, friendlyRange } from "./dates.js";
+
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
 import { usePriceStrip } from "./PriceStrip.js";
 
 const WEEKDAYS = {
@@ -67,17 +69,12 @@ function Month({
   const names = WEEKDAYS[getLocale() === "en" ? "en" : "zh-TW"];
   return (
     <>
-      <div
-        className="grid grid-cols-7 text-center text-xs font-semibold text-ink-muted"
-        aria-hidden="true"
-      >
+      <div className="fr-cal-g">
         {names.map((name) => (
-          <span key={name} className="py-1">
+          <span key={name} className="w" aria-hidden="true">
             {name}
           </span>
         ))}
-      </div>
-      <div className="grid grid-cols-7">
         {Array.from({ length: lead }, (_, i) => (
           <span key={`lead-${String(i)}`} />
         ))}
@@ -95,18 +92,11 @@ function Month({
               aria-pressed={edge}
               aria-label={friendlyDate(date) + (isCheap ? `, ${t("flight.calCheapDay")}` : "")}
               data-in-range={inRange ? "true" : undefined}
+              data-cheap={isCheap ? "true" : undefined}
               onClick={() => {
                 onPick(date);
               }}
-              className={`press-pill relative grid min-h-11 place-items-center text-sm font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 ${
-                past
-                  ? "cursor-not-allowed text-travel-disabled-ink line-through"
-                  : edge
-                    ? "rounded-xl bg-travel-action font-bold text-white hover:bg-travel-action-hover"
-                    : inRange
-                      ? "bg-sprout-100 text-sprout-900"
-                      : "rounded-xl text-sprout-900 hover:bg-sprout-100"
-              } ${isCheap ? `after:absolute after:bottom-1 after:size-1.5 after:rounded-full after:content-[''] ${edge ? "after:bg-white" : "after:bg-sprout-700"}` : ""}`}
+              className="fr-d"
             >
               {i + 1}
             </button>
@@ -114,8 +104,8 @@ function Month({
         })}
       </div>
       {cheap.size > 0 && (
-        <p className="mt-2 flex items-center gap-1.5 px-2 text-xs text-ink-muted">
-          <i aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-sprout-700" />
+        <p className="fr-cal-n">
+          <i aria-hidden="true" />
           {t("flight.calNote")}
         </p>
       )}
@@ -166,32 +156,29 @@ export function DatesCalendar({
     }
   }
   return (
-    <div className="grid gap-2 sm:col-span-2">
+    <div>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={id}
         onClick={toggle}
-        className="press-pill flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-sprout-200 bg-white px-4 text-left text-sm font-bold text-sprout-900 hover:bg-sprout-100 focus-visible:outline-2 focus-visible:outline-sprout-700"
+        className="fr-date fr-hit"
       >
-        {open ? t("flight.calClose") : t("flight.calOpen")}
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-5 shrink-0 fill-none stroke-sprout-900 stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
-        >
-          <path d={open ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"} />
-        </svg>
+        <span aria-hidden="true">
+          <span className="fr-lb">{t("flight.dates")}</span>
+          <b>
+            {ISO.test(departure)
+              ? oneWay || !ISO.test(returnDate)
+                ? friendlyDate(departure)
+                : friendlyRange(departure, returnDate)
+              : ""}
+          </b>
+        </span>
+        <em>{open ? t("flight.calClose") : t("flight.calOpen")}</em>
       </button>
       {open && (
-        <div
-          id={id}
-          role="group"
-          aria-label={t("flight.calendar")}
-          // Bleeds into the form padding so seven 44 px days fit a 360 px phone.
-          className="cal-pop -mx-4 grid gap-1 rounded-2xl bg-sprout-50 py-2 text-sprout-900"
-        >
-          <div className="flex items-center justify-between px-2 font-bold">
+        <div id={id} role="group" aria-label={t("flight.calendar")} className="fr-cal-in cal-pop">
+          <div className="fr-cal-h">
             <button
               type="button"
               aria-label={t("flight.calPrev")}
@@ -199,9 +186,15 @@ export function DatesCalendar({
               onClick={() => {
                 setMonth((m) => shiftMonth(m, -1));
               }}
-              className="press-pill grid size-11 place-items-center rounded-full border border-sprout-200 bg-white text-lg focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
+              className="fr-hit"
             >
-              <span aria-hidden="true">‹</span>
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+              >
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
             </button>
             <span aria-live="polite">{monthLabel(month)}</span>
             <button
@@ -210,9 +203,15 @@ export function DatesCalendar({
               onClick={() => {
                 setMonth((m) => shiftMonth(m, 1));
               }}
-              className="press-pill grid size-11 place-items-center rounded-full border border-sprout-200 bg-white text-lg focus-visible:outline-2 focus-visible:outline-sprout-700"
+              className="fr-hit"
             >
-              <span aria-hidden="true">›</span>
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+              >
+                <path d="M9 6l6 6-6 6" />
+              </svg>
             </button>
           </div>
           <Month
@@ -224,7 +223,7 @@ export function DatesCalendar({
             onPick={pick}
           />
           {choosingReturn && (
-            <p role="status" className="px-2 text-xs font-bold text-ink-muted">
+            <p role="status" className="fr-cal-n font-bold">
               {t("flight.calReturn")}
             </p>
           )}

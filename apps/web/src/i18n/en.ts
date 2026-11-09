@@ -80,6 +80,7 @@ export const en: Record<MessageId, string> = {
   "flight.infantNote": "Price excludes infants",
   "flight.infantLimit": "One infant per adult at most",
   "flight.partyDone": "Done",
+  "flight.dates": "Dates",
   "flight.calOpen": "Pick dates on a calendar",
   "flight.calClose": "Close calendar",
   "flight.calendar": "Calendar",

@@ -1,6 +1,5 @@
 import { FLIGHT_DESTINATIONS, FLIGHT_ORIGINS } from "@split/shared";
-import { useId, useState, type KeyboardEvent } from "react";
-import { input } from "../groups/ui.js";
+import { Fragment, useId, useState, type KeyboardEvent } from "react";
 import { getLocale, t } from "../i18n/messages.js";
 
 interface Airport {
@@ -144,11 +143,10 @@ export function AirportPicker({
   }
 
   return (
-    <div className={`relative min-w-0 ${className}`}>
-      <label className="grid gap-1 text-sm font-bold">
-        {text}
+    <div className={`fr-row fr-ap ${className}`}>
+      <label className="block">
+        <span className="fr-lb">{text}</span>
         <input
-          className={input}
           name={name}
           role="combobox"
           aria-expanded={open}
@@ -190,48 +188,43 @@ export function AirportPicker({
           id={`${id}-list`}
           role="listbox"
           aria-label={t("flight.airportSuggestions")}
-          className="absolute inset-x-0 top-full z-20 mt-2 max-h-72 overflow-auto rounded-2xl border border-sprout-200 bg-white p-2 shadow-lg"
+          className="fr-ap-list"
         >
           {options.length === 0 && (
-            <li role="presentation" className="p-3 text-sm font-normal text-ink-muted">
+            <li role="presentation" className="none">
               {t("flight.airportNone")}
             </li>
           )}
           {groups.map((group) => (
-            <li key={group.heading ?? "matches"} role="presentation">
+            <Fragment key={group.heading ?? "matches"}>
               {group.heading && (
-                <p className="px-3 pt-2 pb-1 text-xs font-bold tracking-wide text-ink-muted">
+                <li role="presentation" className="hd">
                   {t(group.heading)}
-                </p>
+                </li>
               )}
-              <ul role="presentation">
-                {group.codes.map((code) => {
-                  const index = options.indexOf(code);
-                  const airport = find(code);
-                  return (
-                    <li
-                      key={code}
-                      id={`${id}-${index}`}
-                      role="option"
-                      aria-selected={index === active}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                      }}
-                      onClick={() => {
-                        pick(code);
-                      }}
-                      className={`grid min-h-11 cursor-pointer grid-cols-[3rem_1fr] items-center gap-2 rounded-xl px-3 py-2 text-sm font-normal ${index === active ? "bg-sprout-100" : "hover:bg-sprout-50"}`}
-                    >
-                      <b className="text-sprout-700">{code}</b>
-                      <span>
-                        {airport.zhTW}
-                        <small className="block text-ink-muted">{airport.en}</small>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
+              {group.codes.map((code) => {
+                const index = options.indexOf(code);
+                const airport = find(code);
+                return (
+                  <li
+                    key={code}
+                    id={`${id}-${index}`}
+                    role="option"
+                    aria-selected={index === active}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    onClick={() => {
+                      pick(code);
+                    }}
+                  >
+                    <b>{code}</b>
+                    <span>{airport.zhTW}</span>
+                    <small>{airport.en}</small>
+                  </li>
+                );
+              })}
+            </Fragment>
           ))}
         </ul>
       )}

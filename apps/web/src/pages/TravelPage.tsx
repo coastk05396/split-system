@@ -221,7 +221,7 @@ export function TravelPage() {
     </section>
   );
   return (
-    <>
+    <div className="fr-page">
       <FareTicker
         intent={active}
         onPick={(destination) => {
@@ -229,62 +229,63 @@ export function TravelPage() {
           setActive({ ...rest, destination });
         }}
       />
-      <TravelHeader intent={active} globe={{ code: globe }} />
-      <form
-        className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-sprout-700"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const prompt = new FormData(event.currentTarget).get("prompt");
-          if (typeof prompt === "string" && prompt.trim())
-            search.mutate({ prompt: prompt.trim(), defaults: active });
-        }}
-      >
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">{t("flight.prompt")}</span>
-          <input
-            className="min-h-11 w-full bg-transparent py-2 outline-none placeholder:text-ink-muted"
-            name="prompt"
-            placeholder={t("flight.prompt")}
-            required
-            maxLength={1000}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={search.isPending}
-          className={`${travelButton} min-h-11 px-4 py-2`}
+      <div className="fr-in">
+        <TravelHeader intent={active} globe={{ code: globe }} />
+        <form
+          className="fr-ask"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const prompt = new FormData(event.currentTarget).get("prompt");
+            if (typeof prompt === "string" && prompt.trim())
+              search.mutate({ prompt: prompt.trim(), defaults: active });
+          }}
         >
-          {t("flight.explore")}
-        </button>
-      </form>
-      <RouteCard
-        intent={active}
-        pending={search.isPending}
-        open={panelOpen}
-        onToggle={() => {
-          setPanelOpen((open) => !open);
-        }}
-        onSearch={() => {
-          runIntent(active);
-        }}
-        sort={sort}
-        onSort={(key) => {
-          // A second tap on the active button reverses it; a new button starts ascending.
-          setSort((s) => ({ key, descending: s.key === key && !s.descending }));
-        }}
-      />
-      <EntityPills
-        intent={active}
-        pending={search.isPending}
-        open={panelOpen}
-        onToggle={() => {
-          setPanelOpen((open) => !open);
-        }}
-        onChange={runIntent}
-      />
-      {showLastSearch && <p className="mt-2 text-sm text-ink-muted">{t("flight.lastSearch")}</p>}
-      {panelOpen && (
-        <div className="mt-3">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4.5 4.5" />
+          </svg>
+          <label className="fr-hit">
+            <span className="sr-only">{t("flight.prompt")}</span>
+            <input name="prompt" placeholder={t("flight.prompt")} required maxLength={1000} />
+          </label>
+          <button
+            type="submit"
+            disabled={search.isPending}
+            aria-label={t("flight.explore")}
+            className="fr-askgo fr-hit"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14m-5-5 5 5-5 5" />
+            </svg>
+          </button>
+        </form>
+        <RouteCard
+          intent={active}
+          pending={search.isPending}
+          open={panelOpen}
+          onToggle={() => {
+            setPanelOpen((open) => !open);
+          }}
+          onSearch={() => {
+            runIntent(active);
+          }}
+          sort={sort}
+          onSort={(key) => {
+            // A second tap on the active button reverses it; a new button starts ascending.
+            setSort((s) => ({ key, descending: s.key === key && !s.descending }));
+          }}
+        />
+        <EntityPills
+          intent={active}
+          pending={search.isPending}
+          open={panelOpen}
+          onToggle={() => {
+            setPanelOpen((open) => !open);
+          }}
+          onChange={runIntent}
+        />
+        {showLastSearch && <p className="text-ink-muted">{t("flight.lastSearch")}</p>}
+        {panelOpen && (
           <FlightSearchForm
             intent={active}
             revision={revision}
@@ -294,126 +295,126 @@ export function TravelPage() {
               setGlobe((g) => findPlace(input) ?? g);
             }}
           />
-        </div>
-      )}
-      {!panelOpen && (
-        <PriceStrip
-          intent={active}
-          onPick={(date) => {
-            // A day picked on the strip is a live search that keeps the stay and drops any theme.
-            const { theme: _theme, ...rest } = active;
-            const nights = active.returnDate
-              ? Math.round(
-                  (Date.parse(active.returnDate) - Date.parse(active.departureDate)) / 86_400_000,
-                )
-              : 0;
-            runIntent({
-              ...rest,
-              departureDate: date,
-              ...(active.returnDate ? { returnDate: addDays(date, nights) } : {}),
-            });
-          }}
-        />
-      )}
-      {!searched && highlightsSection}
-      {pendingWatch && !lineWatch.isSuccess && (
-        <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
-          <p>
-            {t("flight.lineWatchAsk", {
-              route: `${pendingWatch.intent.origin} → ${pendingWatch.intent.destination}`,
-              amount: formatAmount(
-                Math.max(1, Math.floor(pendingWatch.fare * 0.85)),
-                pendingWatch.intent.currency,
-              ),
-            })}
-          </p>
-          <button
-            type="button"
-            disabled={lineWatch.isPending}
-            className={`${travelButton} px-6 py-4`}
-            onClick={() => {
-              lineWatch.mutate(pendingWatch);
+        )}
+        {!panelOpen && (
+          <PriceStrip
+            intent={active}
+            onPick={(date) => {
+              // A day picked on the strip is a live search that keeps the stay and drops any theme.
+              const { theme: _theme, ...rest } = active;
+              const nights = active.returnDate
+                ? Math.round(
+                    (Date.parse(active.returnDate) - Date.parse(active.departureDate)) / 86_400_000,
+                  )
+                : 0;
+              runIntent({
+                ...rest,
+                departureDate: date,
+                ...(active.returnDate ? { returnDate: addDays(date, nights) } : {}),
+              });
             }}
-          >
-            {t("flight.lineWatchConfirm")}
-          </button>
-        </section>
-      )}
-      {lineWatch.isSuccess && (
-        <p role="status" className="mt-5 font-bold">
-          {t("flight.lineWatchSet")}
-        </p>
-      )}
-      {lineWatch.isError && (
-        <p role="alert" className="mt-5">
-          {failureMessage(lineWatch.error)}
-        </p>
-      )}
-      {search.isError && (
-        <p role="alert" className="mt-5 text-sm text-red-700">
-          {failureMessage(search.error)}
-        </p>
-      )}
-      {/* After a search the results come first, right under the summary; the page scrolls here. */}
-      <div ref={resultsTop} className="scroll-mt-4">
-        {reply && advise.data && (
-          <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
-            <p className="px-1">{firstSentence(advise.data.commentary)}</p>
+          />
+        )}
+        {!searched && highlightsSection}
+        {pendingWatch && !lineWatch.isSuccess && (
+          <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
+            <p>
+              {t("flight.lineWatchAsk", {
+                route: `${pendingWatch.intent.origin} → ${pendingWatch.intent.destination}`,
+                amount: formatAmount(
+                  Math.max(1, Math.floor(pendingWatch.fare * 0.85)),
+                  pendingWatch.intent.currency,
+                ),
+              })}
+            </p>
+            <button
+              type="button"
+              disabled={lineWatch.isPending}
+              className={`${travelButton} px-6 py-4`}
+              onClick={() => {
+                lineWatch.mutate(pendingWatch);
+              }}
+            >
+              {t("flight.lineWatchConfirm")}
+            </button>
           </section>
         )}
-        <FareResults
-          pending={search.isPending}
-          reply={reply}
-          sort={sort}
-          onWatch={setWatchCard}
-          saved={savedWatch}
+        {lineWatch.isSuccess && (
+          <p role="status" className="mt-5 font-bold">
+            {t("flight.lineWatchSet")}
+          </p>
+        )}
+        {lineWatch.isError && (
+          <p role="alert" className="mt-5">
+            {failureMessage(lineWatch.error)}
+          </p>
+        )}
+        {search.isError && (
+          <p role="alert" className="mt-5 text-sm text-red-700">
+            {failureMessage(search.error)}
+          </p>
+        )}
+        {/* After a search the results come first, right under the summary; the page scrolls here. */}
+        <div ref={resultsTop} className="grid scroll-mt-4 gap-3.5">
+          {reply && advise.data && (
+            <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
+              <p className="px-1">{firstSentence(advise.data.commentary)}</p>
+            </section>
+          )}
+          <FareResults
+            pending={search.isPending}
+            reply={reply}
+            sort={sort}
+            onWatch={setWatchCard}
+            saved={savedWatch}
+          />
+        </div>
+        {reply && advise.data && (
+          <section aria-label={t("flight.ideas")} className="mt-4">
+            <div className="flex flex-wrap gap-2">
+              {advise.data.moves.map((move) => (
+                <button
+                  key={move.id}
+                  type="button"
+                  disabled={search.isPending}
+                  className="press-pill min-h-11 rounded-full border border-sprout-200 bg-sprout-50 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
+                  onClick={() => {
+                    runIntent(applyIntentPatch(reply.intent, move.patch));
+                  }}
+                >
+                  {move.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+        {searched && highlightsSection}
+        {/* Last in the page flow before the bar, whose spacer must be the final element. */}
+        <FlightPriceWatches
+          card={watchCard}
+          onClose={() => {
+            setWatchCard(null);
+          }}
+          onSaved={(card) => {
+            // A running count, so saving the same fare twice is always a new identity.
+            setSavedWatch((previous) => ({ card, at: (previous?.at ?? 0) + 1 }));
+          }}
         />
+        {panelOpen && (
+          <StickyBar>
+            <button
+              type="submit"
+              form={FLIGHT_SEARCH_FORM_ID}
+              disabled={search.isPending}
+              className="fr-cta shine"
+            >
+              {t("flight.search")}
+            </button>
+          </StickyBar>
+        )}
+        {/* The very last element: the sticky bars' spacer renders in here. */}
+        <div id={STICKY_BAR_SLOT} />
       </div>
-      {reply && advise.data && (
-        <section aria-label={t("flight.ideas")} className="mt-4">
-          <div className="flex flex-wrap gap-2">
-            {advise.data.moves.map((move) => (
-              <button
-                key={move.id}
-                type="button"
-                disabled={search.isPending}
-                className="press-pill min-h-11 rounded-full border border-sprout-200 bg-sprout-50 px-4 py-2 text-sm font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
-                onClick={() => {
-                  runIntent(applyIntentPatch(reply.intent, move.patch));
-                }}
-              >
-                {move.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      {searched && highlightsSection}
-      {/* Last in the page flow before the bar, whose spacer must be the final element. */}
-      <FlightPriceWatches
-        card={watchCard}
-        onClose={() => {
-          setWatchCard(null);
-        }}
-        onSaved={(card) => {
-          // A running count, so saving the same fare twice is always a new identity.
-          setSavedWatch((previous) => ({ card, at: (previous?.at ?? 0) + 1 }));
-        }}
-      />
-      {panelOpen && (
-        <StickyBar>
-          <button
-            type="submit"
-            form={FLIGHT_SEARCH_FORM_ID}
-            disabled={search.isPending}
-            className={`${travelButton} shine w-full px-6 py-4`}
-          >
-            {t("flight.search")}
-          </button>
-        </StickyBar>
-      )}
-      {/* The very last element: the sticky bars' spacer renders in here. */}
-      <div id={STICKY_BAR_SLOT} />
-    </>
+    </div>
   );
 }

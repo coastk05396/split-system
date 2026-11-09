@@ -175,7 +175,8 @@ describe("Flight Radar header and route card", () => {
       await explore(language);
       const card = screen.getByRole("region", { name: text[language].card });
       const chip = within(card).getByRole("button", { name: text[language].chip });
-      expect(chip).toHaveClass("min-h-11", "max-w-full", "whitespace-nowrap");
+      // The mock's 40 px chip on one line (nowrap in CSS) with a 44 px hit area.
+      expect(chip).toHaveClass("fr-chip", "fr-hit");
       expect(chip.className).not.toMatch(/opacity|break-/);
       // One-way and passenger count are not part of the search yet, so they are never shown.
       expect(chip).not.toHaveTextContent(/單程|One-way|人|passenger/);
@@ -228,8 +229,9 @@ describe("Flight Radar header and route card", () => {
     async (language) => {
       setup(language);
       const card = await screen.findByRole("region", { name: text[language].card });
+      // The mock's search button: 16 px padding around a 16 px label is 52 px tall.
       expect(within(card).getByRole("button", { name: text[language].search })).toHaveClass(
-        "min-h-12",
+        "fr-cta",
       );
       expect(
         within(card).getByRole("button", { name: text[language].search }).querySelector("svg"),

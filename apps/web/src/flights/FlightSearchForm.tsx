@@ -127,36 +127,35 @@ export function FlightSearchForm({
       aria-label={t("flight.editCondition")}
       noValidate
       onSubmit={submit}
-      className="ticket-panel grid gap-4 rounded-3xl border border-sprout-200 p-5 sm:grid-cols-2"
+      className="fr-card"
       aria-busy={pending}
     >
-      {/* Phone width stacks the two fields (their names do not fit side by side), swap on the right. */}
-      <div className="grid grid-cols-[1fr_2.75rem] items-end gap-x-2 gap-y-3 sm:col-span-2 sm:grid-cols-[1fr_auto_1fr]">
+      <TripToggle
+        oneWay={draft.party.oneWay}
+        onChange={(oneWay) => {
+          setDraft((d) => ({ ...d, party: { ...d.party, oneWay } }));
+        }}
+      />
+      <PartyPanel
+        value={draft.party}
+        onChange={(patch) => {
+          setDraft((d) => ({ ...d, party: { ...d.party, ...patch } }));
+        }}
+      />
+      <div className="fr-route">
         <AirportPicker
           name="origin"
           text={t("flight.origin")}
           value={draft.origin}
-          className="col-start-1 row-start-1"
           popular={POPULAR_ORIGINS}
           onChange={(origin) => {
             set({ origin });
           }}
         />
-        <button
-          type="button"
-          aria-label={t("flight.swap")}
-          onClick={() => {
-            set({ origin: draft.destination, destination: draft.origin });
-          }}
-          className="press-pill col-start-2 row-span-2 row-start-1 grid size-11 place-items-center self-center rounded-full sm:row-span-1 sm:mb-0.5 sm:self-end border border-sprout-200 bg-sprout-50 font-bold focus-visible:outline-2 focus-visible:outline-sprout-700"
-        >
-          <span aria-hidden="true">⇄</span>
-        </button>
         <AirportPicker
           name="destination"
           text={t("flight.destination")}
           value={draft.destination}
-          className="col-start-1 row-start-2 sm:col-start-3 sm:row-start-1"
           popular={POPULAR_DESTINATIONS}
           popularHeading="flight.airportPopularDest"
           onChange={(destination) => {
@@ -165,43 +164,20 @@ export function FlightSearchForm({
           }}
           onType={onPlace}
         />
-      </div>
-      <TripToggle
-        oneWay={draft.party.oneWay}
-        onChange={(oneWay) => {
-          setDraft((d) => ({ ...d, party: { ...d.party, oneWay } }));
-        }}
-      />
-      <label className="grid gap-1 text-sm font-bold">
-        {t("flight.departure")}
-        <input
-          className={input}
-          name="departureDate"
-          min={today}
-          value={draft.departureDate}
-          onChange={(e) => {
-            set({ departureDate: e.target.value });
+        <button
+          type="button"
+          aria-label={t("flight.swap")}
+          onClick={() => {
+            set({ origin: draft.destination, destination: draft.origin });
           }}
-          type="date"
-          required
-        />
-      </label>
-      {!draft.party.oneWay && (
-        <label className="grid gap-1 text-sm font-bold">
-          {t("flight.return")}
-          <input
-            className={input}
-            name="returnDate"
-            min={draft.departureDate > today ? draft.departureDate : today}
-            value={draft.returnDate}
-            onChange={(e) => {
-              set({ returnDate: e.target.value });
-            }}
-            type="date"
-            required
-          />
-        </label>
-      )}
+          className="fr-swap fr-hit"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" />
+          </svg>
+        </button>
+      </div>
+      <div className="fr-perf" aria-hidden="true" />
       <DatesCalendar
         route={{ origin: draft.origin, destination: draft.destination, currency }}
         today={today}
@@ -210,70 +186,96 @@ export function FlightSearchForm({
         oneWay={draft.party.oneWay}
         onChange={set}
       />
-      <PartyPanel
-        value={draft.party}
-        onChange={(patch) => {
-          setDraft((d) => ({ ...d, party: { ...d.party, ...patch } }));
-        }}
-      />
-      <label className="grid gap-1 text-sm font-bold">
-        {t("flight.budget")} · {currency}
-        <input
-          className={input}
-          name="budget"
-          value={draft.budget}
-          onChange={(e) => {
-            set({ budget: e.target.value });
-          }}
-          type="number"
-          min="1"
-          step={10 ** -CURRENCIES[currency].decimals}
-        />
-      </label>
-      <label className="grid gap-1 text-sm font-bold">
-        {t("flight.theme")}
-        <select
-          name="theme"
-          value={draft.theme}
-          onChange={(e) => {
-            set({ theme: e.target.value });
-          }}
-          className={input}
-        >
-          <option value="">{t("flight.theme.none")}</option>
-          {FLIGHT_THEMES.map((theme) => (
-            <option key={theme} value={theme}>
-              {t(`flight.theme.${theme}`)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="flex flex-col justify-center gap-2 text-sm">
-        <label className="flex min-h-11 items-center gap-2">
+      <div className="fr-extra">
+        <label className="grid gap-1 text-sm font-bold">
+          {t("flight.departure")}
           <input
-            type="checkbox"
-            name="excludeRedEye"
-            checked={draft.excludeRedEye}
+            className={input}
+            name="departureDate"
+            min={today}
+            value={draft.departureDate}
             onChange={(e) => {
-              set({ excludeRedEye: e.target.checked });
+              set({ departureDate: e.target.value });
             }}
+            type="date"
+            required
           />
-          {t("flight.excludes")}
         </label>
-        <label className="flex min-h-11 items-center gap-2">
+        {!draft.party.oneWay && (
+          <label className="grid gap-1 text-sm font-bold">
+            {t("flight.return")}
+            <input
+              className={input}
+              name="returnDate"
+              min={draft.departureDate > today ? draft.departureDate : today}
+              value={draft.returnDate}
+              onChange={(e) => {
+                set({ returnDate: e.target.value });
+              }}
+              type="date"
+              required
+            />
+          </label>
+        )}
+        <label className="grid gap-1 text-sm font-bold">
+          {t("flight.budget")} · {currency}
           <input
-            type="checkbox"
-            name="directOnly"
-            checked={draft.directOnly}
+            className={input}
+            name="budget"
+            value={draft.budget}
             onChange={(e) => {
-              set({ directOnly: e.target.checked });
+              set({ budget: e.target.value });
             }}
+            type="number"
+            min="1"
+            step={10 ** -CURRENCIES[currency].decimals}
           />
-          {t("flight.direct")}
         </label>
+        <label className="grid gap-1 text-sm font-bold">
+          {t("flight.theme")}
+          <select
+            name="theme"
+            value={draft.theme}
+            onChange={(e) => {
+              set({ theme: e.target.value });
+            }}
+            className={input}
+          >
+            <option value="">{t("flight.theme.none")}</option>
+            {FLIGHT_THEMES.map((theme) => (
+              <option key={theme} value={theme}>
+                {t(`flight.theme.${theme}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-col justify-center gap-2 text-sm">
+          <label className="flex min-h-11 items-center gap-2">
+            <input
+              type="checkbox"
+              name="excludeRedEye"
+              checked={draft.excludeRedEye}
+              onChange={(e) => {
+                set({ excludeRedEye: e.target.checked });
+              }}
+            />
+            {t("flight.excludes")}
+          </label>
+          <label className="flex min-h-11 items-center gap-2">
+            <input
+              type="checkbox"
+              name="directOnly"
+              checked={draft.directOnly}
+              onChange={(e) => {
+                set({ directOnly: e.target.checked });
+              }}
+            />
+            {t("flight.direct")}
+          </label>
+        </div>
       </div>
       {problem && (
-        <p role="alert" className="text-sm text-red-700 sm:col-span-2">
+        <p role="alert" className="mt-2 text-sm text-red-700">
           {problem === "past" ? t("flight.pastDate") : errorMessage("VALIDATION_FAILED")}
         </p>
       )}

@@ -221,14 +221,13 @@ describe("Passengers, cabin and trip type panel", () => {
     openParty();
     const panel = sheet();
     for (const button of [summary(), ...within(panel).getAllByRole("button")]) {
-      expect(button.className).toMatch(/min-h-1[12]|size-11/);
+      expect(button.className).toMatch(/fr-hit/);
       expect(button.className).not.toMatch(/opacity|transition-colors|transition-all/);
     }
     for (const label of panel.querySelectorAll("label span")) {
-      expect(label).toHaveClass("min-h-11");
       expect(label.className).not.toMatch(/opacity|transition/);
     }
-    expect(summary()).toHaveClass("min-w-0", "w-full");
+    expect(summary()).toHaveClass("fr-sumr");
     expect(summary().querySelector(".break-words")).not.toBeNull();
     expect(panel.className).not.toMatch(/overflow-x|w-\[/);
   });

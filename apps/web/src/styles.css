@@ -41,13 +41,17 @@
   }
 }
 
-/* Travel mode (any /travel path; the class sits on <html> so body-mounted dialogs inherit it): the Flight Radar green glass palette. Re-points the shared tokens, so
+/* Travel mode (any /travel path; the class sits on <html> so body-mounted dialogs inherit it): the Flight Radar green glass palette, equal to the
+   reference mock's tokens (--bg #f6fff8, --ink #143f2a, --mut #4a6f5c, --edge #cfe6d6, greens g300..g900). Re-points the shared tokens, so
    every sprout/ink utility under it follows; leaving /travel drops the class and the normal palette returns. */
 .travel-mode {
-  --travel-page: #e9f3ec;
+  --travel-page: #f6fff8;
   --travel-nav: #f6fffa;
   --color-sprout-200: #cfe6d6;
+  --color-ink: #143f2a;
   --color-ink-muted: #4a6f5c;
+  /* The mock's layered card shadow. */
+  --fr-sh: 0 1px 2px #143f2a1f, 0 8px 16px -8px #143f2a38, 0 24px 44px -24px #143f2a5c;
   background-color: var(--travel-page);
 }
 .travel-mode body {
@@ -64,46 +68,40 @@
 .travel-mode .glass-nav {
   background-color: var(--travel-nav);
 }
-/* Travel mode type: the mock's fonts first (Google Fonts, added by the shell), then the normal stack. */
+/* Travel mode type: exactly the mock's stack (Google Fonts, added by the shell; the generic family covers a blocked fetch). */
 .travel-mode body {
-  font-family: "Schibsted Grotesk", "Noto Sans TC", var(--font-sans);
-  /* Own stacking context, so the grain's z-index:-1 lands above body's background, not under it. */
+  font-family: "Schibsted Grotesk", "Noto Sans TC", sans-serif;
+  position: relative;
+  /* Own stacking context, so the grid layer's z-index:-1 lands above body's background, not under it. */
   isolation: isolate;
 }
-/* Paper grain: fixed behind the page (below every card and all text), so it cannot touch contrast. */
+/* The mock's faint grid, fading out over the first 65% of the page, drawn under every card. */
 .travel-mode body::before {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.04;
+  background-image:
+    linear-gradient(#2e9d7112 1px, transparent 1px),
+    linear-gradient(90deg, #2e9d7112 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask: linear-gradient(#000, #0000 65%);
+}
+/* The mock's paper grain: a multiply layer over the whole screen (7%), above the cards and their text, below dialogs.
+   Both text and its background darken together, so the contrast tests measure the darkest it can be. */
+.travel-mode body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0.07;
   mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .08 0 0 0 0 .25 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-/* Ticket notches: half circles in the page colour cut into both sides of a fare card, clear of its 16px padding. */
-.fare::before,
-.fare::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 20px;
-  height: 20px;
-  margin-top: -10px;
-  border-radius: 50%;
-  background: var(--travel-page);
-  border: 1px solid var(--color-sprout-200);
-  pointer-events: none;
-}
-.fare::before {
-  left: -11px;
-  clip-path: inset(0 0 0 50%);
-}
-.fare::after {
-  right: -11px;
-  clip-path: inset(0 50% 0 0);
-}
-/* Shine sweep on the search buttons. Peak is 20% white so white text stays above 4.5:1 mid-sweep. */
+/* Shine sweep on the search buttons. Forced: the mock's peak is 53% white, which leaves white text on the button's #2a7a58 end at 2:1 mid-sweep;
+   a 5% peak keeps it above 4.5:1 even under the 7% grain. */
 .shine {
   position: relative;
   overflow: hidden;
@@ -113,7 +111,12 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.2) 50%, transparent 70%);
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.05) 50%,
+    transparent 70%
+  );
   transform: translateX(-120%);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -127,6 +130,1182 @@
   }
 }
 
+/* ===== Flight Radar page: the reference mock's component CSS (class names prefixed fr-), same values.
+   Differences that must stay are marked "forced" and listed in docs/SPEC.md. ===== */
+.fr-page {
+  font-family: "Schibsted Grotesk", "Noto Sans TC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.fr-page button:focus-visible,
+.fr-page input:focus-visible {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.fr-page ::selection,
+.fr-sheet ::selection {
+  background: #8de0b8;
+  color: #143f2a;
+}
+.fr-page input,
+.fr-sheet input {
+  caret-color: var(--color-sprout-500);
+}
+/* A 44 px touch target around a smaller visible control: the pseudo-element is part of the control for taps and clicks. */
+.fr-hit {
+  position: relative;
+}
+.fr-hit::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+/* The page: the mock's .in (18px sides; the shell's 20px is pulled in by 2px) and 14px gap between blocks. */
+.fr-in {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-inline: -2px;
+  padding-top: 18px;
+}
+
+/* ticker */
+.fr-tick {
+  position: relative;
+  z-index: 5;
+  overflow: hidden;
+  white-space: nowrap;
+  margin: -16px -20px 0;
+  padding: 40px 0 9px;
+  border-bottom: 1px solid var(--color-sprout-200);
+  background: linear-gradient(#ffffffd0, #ffffff00);
+  backdrop-filter: blur(10px);
+  mask: linear-gradient(90deg, #0000, #000 8%, #000 92%, #0000);
+}
+/* Reduced motion: the strip stands still and scrolls by hand. */
+.fr-tick.overflow-x-auto {
+  overflow-x: auto;
+}
+@media (min-width: 768px) {
+  .fr-tick {
+    margin: -48px -48px 0;
+  }
+}
+.fr-track {
+  display: inline-block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .fr-track {
+    animation: ticker 34s linear infinite;
+  }
+  .fr-tick:hover .fr-track,
+  .fr-tick:focus-within .fr-track,
+  .fr-tick:active .fr-track {
+    animation-play-state: paused;
+  }
+}
+.fr-tk {
+  position: relative;
+  display: inline-flex;
+  gap: 7px;
+  align-items: baseline;
+  margin-right: 8px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  font:
+    600 12px "Schibsted Grotesk",
+    "Noto Sans TC",
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-muted);
+  border: 1px solid transparent;
+}
+.fr-tk b {
+  color: var(--color-ink);
+  letter-spacing: 0.04em;
+}
+.fr-tk.lo {
+  color: var(--color-sprout-600);
+}
+.fr-tk.lo b {
+  color: var(--color-sprout-900);
+}
+.fr-tk:hover {
+  background: #ffffffb8;
+  border-color: var(--color-sprout-200);
+  transform: translateY(-1px);
+}
+/* forced: the mock fills the current chip with #2e9d71 (white on it is 3.4:1); here the dark action green (7.9:1). */
+.fr-tk[aria-current="true"] {
+  background: var(--color-travel-action);
+  color: #fff;
+}
+.fr-tk[aria-current="true"] b {
+  color: #fff;
+}
+
+/* header */
+.fr-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.fr-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 0;
+}
+.fr-hl {
+  min-width: 0;
+}
+.fr-leg {
+  margin: 6px 0 0;
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+.fr-leg b {
+  color: var(--color-ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fr-mini {
+  position: relative;
+  flex: none;
+  width: 118px;
+  height: 118px;
+  margin: -6px -8px -10px 0;
+}
+
+/* ask bar */
+.fr-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 5px 5px 16px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+}
+.fr-ask:focus-within {
+  border-color: var(--color-sprout-500);
+  box-shadow: 0 0 0 3px #2e9d7126;
+}
+.fr-ask > svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  stroke: var(--color-sprout-600);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.fr-ask label {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+.fr-ask input {
+  width: 100%;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  padding: 1px 2px;
+  font-size: 15px;
+  color: inherit;
+}
+.fr-ask input:focus-visible {
+  outline: none;
+}
+.fr-ask input::placeholder {
+  color: #52745f;
+  opacity: 1;
+}
+.fr-askgo {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-sprout-600);
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.fr-askgo:hover:not(:disabled) {
+  background: var(--color-sprout-500);
+}
+.fr-askgo:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-askgo:disabled svg {
+  stroke: var(--color-travel-disabled-ink);
+}
+.fr-askgo svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* chips row: route chip and the sort buttons */
+.fr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+.fr-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 6px 11px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1.5px solid var(--color-sprout-500);
+  box-shadow: var(--fr-sh);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+.fr-chip:hover {
+  border-color: #52c493;
+}
+.fr-chip[aria-expanded="true"] {
+  border-color: var(--color-sprout-500);
+  background: #e4f9e9;
+}
+.fr-chip svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: var(--color-sprout-500);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fr-chip:disabled {
+  cursor: not-allowed;
+  border-color: var(--color-travel-disabled-ink);
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-sbar {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+.fr-sb {
+  position: relative;
+  height: 40px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+.fr-sb i {
+  font-style: normal;
+  font-size: 13px;
+}
+.fr-sb[aria-pressed="true"] {
+  background: var(--color-sprout-600);
+  color: #fff;
+  border-color: var(--color-sprout-600);
+}
+.fr-sb:hover:not([aria-pressed="true"]) {
+  background: #e4f9e9;
+}
+
+/* glass card (the mock's .card) */
+.fr-card {
+  position: relative;
+  padding: 12px 16px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, #fff, #ffffffb0);
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+  backdrop-filter: blur(16px);
+}
+.fr-lb {
+  display: block;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.06em;
+}
+
+/* search panel (the mock's ticket card): trip toggle, party row, route rows with swap, perforation, dates, calendar */
+.fr-opts {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-sprout-200);
+}
+.fr-seg {
+  display: flex;
+  padding: 3px;
+  border-radius: 99px;
+  background: #e4f9e9;
+}
+.fr-seg label {
+  position: relative;
+  display: grid;
+}
+.fr-seg span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 99px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+.fr-seg input:checked + span {
+  background: var(--color-sprout-600);
+  color: #fff;
+}
+.fr-seg input:focus-visible + span {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+}
+.fr-sumr {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 8px 0 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-sprout-200);
+}
+.fr-sumr small {
+  display: block;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.06em;
+}
+.fr-sumr b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.fr-sumr svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: var(--color-sprout-600);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fr-route {
+  position: relative;
+}
+.fr-row {
+  padding: 6px 54px 6px 0;
+}
+.fr-row + .fr-row {
+  border-top: 1px solid var(--color-sprout-200);
+}
+.fr-row input {
+  width: 100%;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 2px 0;
+  color: inherit;
+}
+.fr-swap {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  margin-top: -22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-sprout-500);
+  color: #fff;
+  font-size: 18px;
+  box-shadow: 0 8px 18px -8px var(--color-sprout-500);
+  display: grid;
+  place-items: center;
+}
+.fr-swap svg {
+  width: 20px;
+  height: 20px;
+}
+.fr-ap {
+  position: relative;
+}
+.fr-ap-list {
+  position: absolute;
+  left: 0;
+  right: 6px;
+  top: calc(100% + 8px);
+  z-index: 40;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  max-height: 300px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  border-radius: 16px;
+  box-shadow: 0 20px 44px -14px #143f2a88;
+  scrollbar-width: thin;
+  scrollbar-color: #52c493 transparent;
+}
+.fr-ap-list li {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  min-height: 44px;
+}
+.fr-ap-list li:hover,
+.fr-ap-list li[aria-selected="true"] {
+  background: #e4f9e9;
+}
+.fr-ap-list li b {
+  color: var(--color-sprout-600);
+}
+.fr-ap-list li small {
+  color: var(--color-ink-muted);
+  font-size: 11px;
+}
+.fr-ap-list li.hd {
+  display: block;
+  cursor: default;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.1em;
+  padding: 8px 10px 4px;
+  min-height: 0;
+}
+.fr-ap-list li.hd:hover {
+  background: none;
+}
+.fr-ap-list li.none {
+  display: block;
+  color: var(--color-ink-muted);
+  cursor: default;
+}
+.fr-perf {
+  position: relative;
+  margin: 8px -16px 6px;
+  border-top: 1.5px dashed #2e9d7155;
+}
+.fr-perf::before,
+.fr-perf::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--travel-page);
+  border: 1px solid var(--color-sprout-200);
+}
+.fr-perf::before {
+  left: -11px;
+  clip-path: inset(0 0 0 50%);
+}
+.fr-perf::after {
+  right: -11px;
+  clip-path: inset(0 50% 0 0);
+}
+.fr-date {
+  position: relative;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.fr-date b {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fr-date em {
+  font-style: normal;
+  color: var(--color-sprout-600);
+  font-size: 12px;
+}
+.fr-cal-in {
+  padding-top: 12px;
+}
+/* forced, phones narrower than 390 px: the mock's 7 columns would be 39.7 px at 360 px; the grid bleeds into the card padding so a day is 44.3 px. */
+@media (max-width: 389px) {
+  .fr-cal-in {
+    margin-inline: -16px;
+  }
+  .fr-cal-in .fr-cal-h,
+  .fr-cal-in .fr-cal-n {
+    margin-inline: 16px;
+  }
+}
+.fr-cal-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.fr-cal-h button {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  display: grid;
+  place-items: center;
+}
+.fr-cal-h button:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  border-color: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-cal-h button svg {
+  width: 16px;
+  height: 16px;
+}
+.fr-cal-g {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.fr-cal-g .w {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  padding: 4px 0;
+}
+.fr-d {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.fr-d:hover:not(:disabled) {
+  background: #e4f9e9;
+  transform: scale(1.08);
+}
+/* forced: the mock dims a past day to 25% opacity (about 1.5:1); here #3d6350 text with a strike-through (5.1:1 on the card), the project's no-dimming rule. */
+.fr-d:disabled {
+  cursor: not-allowed;
+  color: var(--color-travel-disabled-ink);
+  text-decoration: line-through;
+}
+.fr-d[data-in-range="true"] {
+  background: #2e9d7133;
+  border-radius: 0;
+}
+/* forced: the mock fills an edge day with #2e9d71 (white 3.4:1); here the action green (7.9:1). */
+.fr-d[aria-pressed="true"] {
+  background: var(--color-travel-action);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 12px;
+}
+.fr-d[data-cheap="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-sprout-500);
+}
+.fr-d[aria-pressed="true"][data-cheap="true"]::after {
+  background: #fff;
+  box-shadow: none;
+}
+.fr-cal-n {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+.fr-cal-n i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-sprout-500);
+  margin-right: 5px;
+}
+
+/* passengers sheet: the mock's .sheet (full phone, page colour, 44px top) */
+.fr-sheet {
+  background: var(--travel-page);
+  padding: 44px 18px 24px;
+  font-family: "Schibsted Grotesk", "Noto Sans TC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.fr-sheet button:focus-visible,
+.fr-sheet input:focus-visible {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.fr-shh {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+.fr-shx {
+  position: relative;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 99px;
+  background: var(--color-sprout-600);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+.fr-paxes {
+  display: grid;
+  gap: 14px;
+  padding: 14px 0;
+}
+.fr-pr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+.fr-pr small {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-ink-muted);
+}
+.fr-pax {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fr-pax b {
+  min-width: 42px;
+  text-align: center;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.fr-pax button {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 18px;
+  line-height: 1;
+}
+/* forced: the mock dims a disabled stepper to 30% opacity; here solid pale green with #3d6350 text (5.1:1). */
+.fr-pax button:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-cabins {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 8px 0 10px;
+  margin-bottom: 4px;
+}
+.fr-cabins label {
+  position: relative;
+  display: grid;
+}
+.fr-cabins span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: #e4f9e9;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fr-cabins input:checked + span {
+  background: var(--color-sprout-600);
+  color: #fff;
+}
+.fr-cabins input:focus-visible + span {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+}
+
+/* search button (the mock's .cta) */
+.fr-cta {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  padding: 16px;
+  border-radius: 99px;
+  background: linear-gradient(100deg, #2a7a58, #1f5a40);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 14px 28px -12px #26684b;
+}
+.fr-cta:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+  box-shadow: none;
+}
+
+/* dock (the mock's .dock): the sticky bar under the content */
+.fr-dock {
+  padding: 12px max(18px, env(safe-area-inset-right)) 14px max(18px, env(safe-area-inset-left));
+  background: #f6fffaf2;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 -14px 26px -18px #143f2a40;
+}
+.fr-sh {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+.fr-sh b {
+  color: var(--color-sprout-600);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fr-jump {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 12px;
+  color: var(--color-sprout-600);
+}
+.fr-ax {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  margin-top: 10px;
+}
+.fr-lg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+}
+.fr-lg span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* results: the mock's .res, carousel and fare card */
+.fr-res {
+  position: relative;
+  display: grid;
+  gap: 14px;
+}
+.fr-car {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  margin: 0 -18px;
+  padding: 6px calc(11cqw + 18px) 14px;
+  scroll-padding: 0;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.fr-car::-webkit-scrollbar {
+  display: none;
+}
+.fr-car > .fr-fare {
+  flex: 0 0 78cqw;
+  scroll-snap-align: center;
+}
+.fr-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+.fr-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: #cfe6d6;
+}
+.fr-dots i[data-dot="on"] {
+  width: 20px;
+  background: var(--color-sprout-600);
+}
+.fr-fare {
+  position: relative;
+  display: block;
+}
+.fr-fi {
+  position: relative;
+  z-index: 1;
+  display: grid;
+}
+.fr-front {
+  grid-area: 1 / 1;
+  border-radius: 22px;
+  padding: 18px;
+  background: linear-gradient(160deg, #fff, #ffffffc0);
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+}
+.fr-fare:hover .fr-front {
+  border-color: #52c493;
+}
+.fr-fh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.fr-fh i {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 10px/1 sans-serif;
+  font-style: normal;
+  color: #fff;
+  background: var(--color-sprout-600);
+}
+.fr-sig {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--color-sprout-500);
+  color: var(--color-sprout-600);
+  font-weight: 400;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+.fr-fl {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+.fr-fl b {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.fr-path {
+  position: relative;
+  height: 1px;
+  border-top: 1px dashed #2e9d7166;
+  display: grid;
+  place-items: center;
+}
+.fr-path span {
+  position: absolute;
+  top: -11px;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  border-radius: 99px;
+}
+.fr-path svg {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  fill: var(--color-sprout-500);
+  transform: rotate(90deg);
+}
+.fr-fm {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.fr-tm {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+.fr-tm .ft {
+  width: 0.58em;
+}
+.fr-chs {
+  display: inline-flex;
+  gap: 4px;
+}
+.fr-tg2 {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: #e4f9e9;
+  color: var(--color-sprout-700);
+}
+.fr-tg2.c {
+  background: var(--color-sprout-600);
+  color: #fff;
+}
+.fr-tg2.r {
+  background: #2b3a6b;
+  color: #fff;
+}
+.fr-ff {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 8px;
+}
+.fr-ff strong {
+  font-size: 22px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.fr-ff small {
+  opacity: 0.55;
+  font-size: 11px;
+  font-weight: 400;
+}
+.fr-pn {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-sprout-900);
+  line-height: 1;
+}
+.fr-pn .fs {
+  display: inline-block;
+  margin: 0 1px;
+}
+.fr-watch {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: none;
+  white-space: nowrap;
+  padding: 9px 12px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 13px;
+}
+.fr-watch:hover {
+  border-color: var(--color-sprout-500);
+}
+.fr-watch svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+  transform-origin: 50% 10%;
+}
+.fr-stp {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  margin-top: -20px;
+  z-index: 3;
+  padding: 4px 12px;
+  border: 2.5px solid var(--color-sprout-600);
+  color: var(--color-sprout-600);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  border-radius: 8px;
+  background: #ffffffe0;
+  pointer-events: none;
+  opacity: 0;
+  transform: rotate(-8deg);
+}
+/* The airline name is the card's one link; its box stretches over the whole card, the watch button sits above it. */
+.fr-stretch {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+}
+.fr-stretch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+}
+.fr-stretch:focus-visible {
+  outline: none;
+}
+.fr-stretch:focus-visible::after {
+  outline: 2px solid var(--color-sprout-700);
+  outline-offset: 2px;
+}
+.fr-watch {
+  z-index: 2;
+}
+.fr-meta {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+.fr-nya {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 18px;
+  text-align: center;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+  color: var(--color-ink-muted);
+}
+.fr-nya i {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-sprout-600);
+}
+.fr-nya i svg {
+  width: 22px;
+  height: 22px;
+}
+.fr-nya p {
+  margin: 0;
+}
+.fr-alt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
+  border-radius: 99px;
+  border: 1px solid var(--color-sprout-600);
+  background: #fff;
+  color: var(--color-sprout-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* loading (the mock's skeleton cards under one line of text) */
+.fr-ldt {
+  margin: 0;
+  text-align: center;
+  color: var(--color-sprout-600);
+}
+.fr-sk {
+  height: 120px;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.fr-sk i {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: #e4f9e9;
+}
+.fr-sk i:nth-child(1) {
+  width: 40%;
+}
+.fr-sk i:nth-child(2) {
+  height: 26px;
+}
+.fr-sk i:nth-child(3) {
+  width: 60%;
+}
 /* Three-tier asymmetric tactile press feedback:
    press down settles briskly (80ms ease-out); release rebounds gently with a natural squishy spring. */
 .press-card,
@@ -206,14 +1385,29 @@
     0 8px 18px -14px rgb(46 157 113 / 0.5),
     0 1px 3px rgb(20 63 42 / 0.05);
 }
-/* The ticket-shaped search panel: a glass card with a perforated top edge. */
-.ticket-panel {
-  background-color: rgb(255 255 255 / 0.9);
-  border-top-style: dashed;
-  box-shadow:
-    inset 0 1.5px 0 0 rgb(255 255 255 / 0.95),
-    0 16px 32px -18px rgb(46 157 113 / 0.45),
-    0 2px 6px rgb(20 63 42 / 0.05);
+/* The mock's buttons keep the browser's default padding (Tailwind's reset zeroes it); the fixed sizes centre the content either way. */
+.fr-askgo,
+.fr-swap,
+.fr-cal-h button,
+.fr-d,
+.fr-pax button {
+  padding: 1px 6px;
+}
+/* App-only fields under the mock's ticket (native dates, budget, theme, rules). */
+.fr-extra {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-sprout-200);
+}
+.fr-swap svg,
+.fr-cal-h button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .surface-card {
   box-shadow:
@@ -257,18 +1451,7 @@
 /* Fare Ticker: the chips drift left across two identical copies (so -50% is a seamless loop) and
    stop while hovered, touched or focused. Reduced motion gets no animation (the track class is not
    even rendered then); the header globe's gentle bob follows the same rule. */
-.ticker {
-  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-}
 @media (prefers-reduced-motion: no-preference) {
-  .ticker-track {
-    animation: ticker 34s linear infinite;
-  }
-  .ticker:hover .ticker-track,
-  .ticker:focus-within .ticker-track,
-  .ticker:active .ticker-track {
-    animation-play-state: paused;
-  }
   .globe-bob {
     animation: globe-bob 5s ease-in-out infinite;
   }
@@ -1602,59 +2785,31 @@ body::before {
 .car-wrap {
   container-type: inline-size;
   min-width: 0;
+  display: grid;
+  gap: 14px;
 }
-.car {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  padding: 6px 11cqw 14px;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-}
-.car::-webkit-scrollbar {
-  display: none;
-}
-.car > * {
-  flex: 0 0 78cqw;
-  scroll-snap-align: center;
-}
-.car-skeleton {
-  overflow-x: hidden;
-}
-.dots {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-}
-.dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 99px;
-  background: var(--color-sprout-200);
-}
-.dots i[data-dot="on"] {
-  width: 20px;
-  background: var(--color-sprout-600);
-}
-/* The plane rests mid-line; with motion it waits at the start and glides across on the active fare. */
+/* The plane waits at the start of the line (the mock's rest position); with motion it glides across on the active fare. */
 .fare-plane {
   position: absolute;
-  top: 0;
-  left: calc(50% - 8px);
+  left: 0;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  fill: var(--color-sprout-500);
   rotate: 90deg;
 }
 .stamp {
   position: absolute;
-  right: 3.25rem;
-  bottom: 0.75rem;
+  right: 18px;
+  top: 50%;
+  margin-top: -20px;
   z-index: 3;
-  padding: 0.25rem 0.75rem;
-  border: 2.5px solid var(--color-sprout-700);
-  border-radius: 0.5rem;
-  background: rgb(255 255 255 / 0.88);
-  color: var(--color-sprout-700);
-  font-size: 0.9375rem;
+  padding: 4px 12px;
+  border: 2.5px solid var(--color-sprout-600);
+  border-radius: 8px;
+  background: #ffffffe0;
+  color: var(--color-sprout-600);
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.1em;
   white-space: nowrap;
@@ -1667,6 +2822,7 @@ body::before {
   width: 0.62em;
   text-align: center;
   font-style: normal;
+  font-variant-numeric: tabular-nums;
 }
 .pt {
   position: absolute;
@@ -1686,16 +2842,15 @@ body::before {
   height: 2px;
   background: var(--color-sprout-500);
   pointer-events: none;
+  z-index: 4;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .fare-plane {
-    left: 0;
-  }
-  .car > li[data-active="true"] .fare-plane {
+  .car > li[data-active="true"] .fare-plane,
+  .fr-fare[data-active="true"] .fare-plane {
     animation: fare-glide 1.8s cubic-bezier(0.45, 0, 0.2, 1) both;
   }
   @supports (animation-timeline: view()) {
-    .car > li {
+    .fr-car > .fr-fare .fr-front {
       animation: fare-depth linear both;
       animation-timeline: view(inline);
       animation-range: cover;
@@ -1720,12 +2875,12 @@ body::before {
     left: calc(100% - 16px);
   }
 }
-/* Neighbours recede by scale alone: fading a card would blend its text into the page and drop
-   small text below 4.5:1 (muted metadata falls to about 3.9:1 at 0.8 opacity). */
+/* The mock's depth: the centred card is full size, neighbours scale to 0.9. Forced: the mock also fades them to 50%
+   opacity, which would put their text under 4.5:1; the scale stays, the fade does not. */
 @keyframes fare-depth {
   0%,
   100% {
-    scale: 0.92;
+    scale: 0.9;
   }
   50% {
     scale: 1;
@@ -1778,38 +2933,6 @@ body::before {
   }
   to {
     top: 100%;
-  }
-}
-
-/* The 強烈買 sticker: light amber with dark brown text (about 8:1), tilted 4 degrees. It sticks on once when
-   the list appears; under reduced motion it is simply there. */
-.sticker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-  padding: 0.125rem 0.5625rem 0.125rem 0.375rem;
-  border-radius: 0.5rem;
-  border: 1px solid #f0c978;
-  background: #fdf0d5;
-  color: #6b3f00;
-  font-size: 0.75rem;
-  font-weight: 900;
-  box-shadow: 0 2px 0 #f2a33a;
-  transform: rotate(-4deg);
-}
-@keyframes stick-on {
-  from {
-    opacity: 0;
-    transform: scale(1.7) rotate(-14deg);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(0.94) rotate(-2deg);
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .sticker {
-    animation: stick-on 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
   }
 }
 

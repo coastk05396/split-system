@@ -112,19 +112,19 @@ describe("Flight Radar globe", () => {
     });
   });
 
-  it("draws real land outlines and a marker", async () => {
+  it("draws the mock's pale sphere with a dot lattice, a route arc and markers", async () => {
     const calls: string[] = [];
-    const fills: unknown[] = [];
+    const fillStyles: unknown[] = [];
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- the index type is needed
     const ctx = new Proxy({} as Record<string, unknown>, {
       get: (target, key: string) =>
         key in target
           ? target[key]
-          : (...args: unknown[]) => {
+          : () => {
               calls.push(key);
-              if (key === "fill") fills.push(args[0]);
             },
       set: (target, key: string, value: unknown) => {
+        if (key === "fillStyle") fillStyles.push(value);
         target[key] = value;
         return true;
       },
@@ -133,11 +133,13 @@ describe("Flight Radar globe", () => {
     vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx as never);
     setup("en");
     await globe(words.en.okinawa);
-    // Land arrives in a lazy chunk, then the whole outline is drawn in one evenodd fill.
+    // Reduced motion in tests: the globe has arrived, so the lattice, the arc and both markers are drawn.
     await waitFor(() => {
-      expect(fills).toContain("evenodd");
+      expect(fillStyles).toContain("#e4f9e9");
     });
-    expect(calls.filter((c) => c === "moveTo").length).toBeGreaterThan(100);
+    expect(fillStyles).toContain("#143f2a");
+    expect(calls.filter((c) => c === "fillRect").length).toBeGreaterThan(100);
+    expect(calls.filter((c) => c === "lineTo").length).toBeGreaterThan(10);
     expect(calls).toContain("arc");
   });
 });

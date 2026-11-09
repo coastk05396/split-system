@@ -87,8 +87,10 @@ describe("Flight Radar Fare Ticker", () => {
       fireEvent.click(await screen.findByRole("button", { name: text[language].nrt }));
       expect(await screen.findByRole("heading", { name: text[language].headline })).toBeVisible();
       expect(await screen.findByRole("img", { name: text[language].globe })).toBeVisible();
-      expect(screen.getByRole("button", { name: text[language].nrt })).toHaveClass(
-        "bg-travel-action",
+      // The current chip takes the action fill from CSS, keyed on aria-current.
+      expect(screen.getByRole("button", { name: text[language].nrt })).toHaveAttribute(
+        "aria-current",
+        "true",
       );
       expect(app.api.calls).not.toContain("POST /api/v1/flights/search");
     },
@@ -99,7 +101,7 @@ describe("Flight Radar Fare Ticker", () => {
     const still = await ticker("en");
     // The test environment asks for reduced motion: one copy, no animation, scrollable by hand.
     expect(still.querySelectorAll("button")).toHaveLength(2);
-    expect(still.querySelector(".ticker-track")).toBeNull();
+    expect(still.querySelector(".fr-track")).toBeNull();
     expect(still).toHaveClass("overflow-x-auto");
   });
 
@@ -107,7 +109,7 @@ describe("Flight Radar Fare Ticker", () => {
     allowMotion();
     setup("en");
     const moving = await ticker("en");
-    const track = moving.querySelector(".ticker-track");
+    const track = moving.querySelector(".fr-track");
     expect(track).not.toBeNull();
     // The copy that makes the loop seamless is invisible to assistive tech and the keyboard.
     expect(within(moving).getAllByRole("button")).toHaveLength(2);

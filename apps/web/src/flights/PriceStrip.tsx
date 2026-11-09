@@ -242,18 +242,18 @@ export function PriceStrip({
 
   return (
     <StickyBar label={title}>
-      <div className="grid gap-0 text-[11px] text-ink-muted">
-        <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 text-xs">{t("flight.stripHint")}</span>
+      <div className="grid gap-0">
+        <div className="fr-sh">
+          <span className="min-w-0">{t("flight.stripHint")}</span>
           <button
             type="button"
-            className="press-pill inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-sprout-200 bg-white px-3 text-xs font-medium text-sprout-600 focus-visible:outline-2 focus-visible:outline-sprout-700"
+            className="fr-jump fr-hit shrink-0"
             onClick={() => {
               if (lowestIndex >= 0 && lowestIndex !== index) choose(lowestIndex, "now");
             }}
           >
-            {t("flight.stripJump")}
-            <b className="font-semibold tabular-nums">{formatAmount(low, currency)}</b>
+            <span>{t("flight.stripJump")}</span>
+            <b>{formatAmount(low, currency)}</b>
           </button>
         </div>
         <div
@@ -333,11 +333,11 @@ export function PriceStrip({
             )}
           </span>
         </div>
-        <div aria-hidden="true" className="mt-2.5 flex justify-between">
+        <div aria-hidden="true" className="fr-ax">
           <span>{shortDate(dates[0] ?? searched)}</span>
           <span>{shortDate(dates[BARS - 1] ?? searched)}</span>
         </div>
-        <p className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1">
+        <p className="fr-lg">
           {(
             [
               ["cheap", "flight.stripLegendCheap"],
@@ -346,13 +346,13 @@ export function PriceStrip({
               ["yours", "flight.stripLegendYours"],
             ] as const
           ).map(([kind, key]) => (
-            <span key={kind} className="inline-flex items-center gap-1.5">
+            <span key={kind}>
               <i aria-hidden="true" className={`strip-swatch strip-swatch-${kind}`} />
               {t(key)}
             </span>
           ))}
         </p>
-        <p className="mt-1.5 leading-snug">
+        <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">
           {oldestHours >= OLD_AFTER_HOURS && (
             <span className="font-semibold">
               {t("flight.stripAge", { hours: String(oldestHours) })}

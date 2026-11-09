@@ -45,7 +45,7 @@ export function FlightPriceWatchButton({
     <button
       type="button"
       aria-label={t("flight.watch")}
-      className={`${ring !== null ? "bell-ring " : ""}press-pill grid size-11 shrink-0 place-items-center text-sprout-900 focus-visible:outline-2 focus-visible:outline-sprout-700`}
+      className={`${ring !== null ? "bell-ring " : ""}fr-watch fr-hit`}
       onClick={() => {
         onWatch(card);
       }}
@@ -55,10 +55,10 @@ export function FlightPriceWatchButton({
         key={ring ?? "idle"}
         viewBox="0 0 24 24"
         aria-hidden="true"
-        className="size-5 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
       >
         <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
       </svg>
+      <span aria-hidden="true">{t("flight.watch")}</span>
     </button>
   );
 }

@@ -74,17 +74,17 @@ describe("Flight Radar green controls", () => {
         name: "搜尋航班",
       }),
     );
+    const rule = (selector: string) => css.slice(css.indexOf(`${selector} {`)).split("}")[0] ?? "";
     for (const button of buttons) {
-      expect(button).toHaveClass(
-        "bg-travel-action",
-        "text-white",
-        "hover:bg-travel-action-hover",
-        "disabled:bg-travel-disabled",
-        "disabled:text-travel-disabled-ink",
-      );
+      // The mock's green gradient button (round arrow on the prompt bar, pill elsewhere), white text.
+      expect(button.className).toMatch(/\bfr-(cta|askgo)\b/);
       // Dimming with opacity would drag the label under 4.5:1.
       expect(button.className).not.toMatch(/opacity/);
     }
+    expect(rule(".fr-cta")).toContain("#fff");
+    expect(rule(".fr-cta:disabled")).toContain("var(--color-travel-disabled-ink)");
+    expect(rule(".fr-cta:disabled")).not.toMatch(/opacity/);
+    expect(rule(".fr-askgo:disabled")).toContain("var(--color-travel-disabled-ink)");
     expect(
       screen.getByRole("button", { name: /^台北桃園 → .* 1\/8（五）– 1\/11（一）$/ }).className,
     ).not.toMatch(/opacity/);

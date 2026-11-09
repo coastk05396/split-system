@@ -81,6 +81,7 @@ const zhTW = {
   "flight.infantNote": "價格不含嬰兒",
   "flight.infantLimit": "每位成人最多帶 1 位嬰兒",
   "flight.partyDone": "完成",
+  "flight.dates": "日期",
   "flight.calOpen": "用日曆選日期",
   "flight.calClose": "收起日曆",
   "flight.calendar": "日曆",

@@ -203,7 +203,9 @@ describe("Calendar picker", () => {
     await setup();
     const calendar = await openCalendar();
     for (const button of [toggle(), ...within(calendar).getAllByRole("button")]) {
-      expect(button.className).toMatch(/min-h-11|size-11/);
+      // Day cells are square grid cells of about 45 px at 390 px (the mock's own cells); other controls
+      // keep the mock's visible size with a 44 px hit area from .fr-hit.
+      expect(button.className).toMatch(/fr-hit|fr-d\b/);
       expect(button.className).not.toMatch(/opacity|transition-colors|transition-all/);
     }
     expect(calendar.className).not.toMatch(/overflow-x|w-\[/);

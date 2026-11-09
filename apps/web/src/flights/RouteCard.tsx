@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { partyOf, routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
-import { travelButton } from "../groups/ui.js";
 import { airportName } from "./AirportPicker.js";
 import { friendlyRange, shortRange } from "./dates.js";
 import type { FareSort } from "./FareResults.js";
@@ -73,7 +72,7 @@ function Leg({ origin, destination }: { origin: string; destination: string }) {
   if (!estimate || km === undefined || minutes === undefined) return null;
   const hours = Math.floor(estimate.minutes / 60);
   return (
-    <p className="flex flex-wrap gap-x-3.5 text-[13px] whitespace-nowrap text-ink-muted tabular-nums">
+    <p className="fr-leg">
       <span className="sr-only">
         {t("flight.routeLeg", {
           km: estimate.km.toLocaleString(getLocale()),
@@ -82,15 +81,12 @@ function Leg({ origin, destination }: { origin: string; destination: string }) {
         })}
       </span>
       <span aria-hidden="true">
-        {t("flight.legDistance")}{" "}
-        <b data-leg="km" className="font-semibold text-ink">
-          {km.toLocaleString(getLocale())}
-        </b>{" "}
+        {t("flight.legDistance")} <b data-leg="km">{km.toLocaleString(getLocale())}</b>{" "}
         {t("flight.legKm")}
       </span>
       <span aria-hidden="true">
         {t("flight.legTime")}{" "}
-        <b data-leg="time" className="font-semibold text-ink">
+        <b data-leg="time">
           {t("flight.legDuration", {
             hours: Math.floor(minutes / 60),
             minutes: String(minutes % 60).padStart(2, "0"),
@@ -134,11 +130,8 @@ export function RouteCard({
     .map((x) => ` · ${String(x)}`)
     .join("");
   return (
-    <section
-      aria-label={t("flight.summaryCard")}
-      className="@container mb-4 grid gap-3.5 rounded-[28px] border border-[#c4e4d3] bg-sprout-100 p-[18px]"
-    >
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <section aria-label={t("flight.summaryCard")} className="contents">
+      <div className="fr-chips @container">
         <button
           type="button"
           disabled={pending}
@@ -150,7 +143,7 @@ export function RouteCard({
           }
           aria-expanded={open}
           onClick={onToggle}
-          className="press-pill flex min-h-11 max-w-full min-w-0 items-center gap-2 rounded-full border-[1.5px] border-sprout-700 bg-white px-3 text-sm font-bold whitespace-nowrap text-sprout-900 tabular-nums focus-visible:outline-2 focus-visible:outline-sprout-700 disabled:border-travel-disabled-ink disabled:bg-travel-disabled disabled:text-travel-disabled-ink"
+          className="fr-chip fr-hit"
         >
           {/* Wide card: city names (only these may shrink) then the dates. */}
           <span className="hidden min-w-0 items-center gap-1.5 @lg:flex">
@@ -168,15 +161,11 @@ export function RouteCard({
               {shortRange(intent.departureDate, intent.returnDate) + partyNote}
             </span>
           </span>
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-4 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
-          >
-            <path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4" />
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="shrink-0">
+            <path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" />
           </svg>
         </button>
-        <div role="group" aria-label={t("flight.sort")} className="flex shrink-0 gap-1">
+        <div role="group" aria-label={t("flight.sort")} className="fr-sbar">
           {(["price", "time"] as const).map((key) => {
             const active = sort.key === key;
             const label = key === "price" ? "Price" : "Time";
@@ -190,18 +179,16 @@ export function RouteCard({
                 onClick={() => {
                   onSort(key);
                 }}
-                className={`press-pill flex min-h-11 items-center rounded-full border-[1.5px] border-sprout-700 px-1 text-xs font-bold whitespace-nowrap focus-visible:outline-2 focus-visible:outline-sprout-700 ${active ? "bg-sprout-600 text-white" : "bg-white text-sprout-900 hover:bg-sprout-100"}`}
+                className="fr-sb fr-hit"
               >
-                {t(`flight.sort${label}`)}
-                <span aria-hidden="true" className={active ? "" : "invisible"}>
-                  {sort.descending && active ? "↓" : "↑"}
-                </span>
+                <span>{t(`flight.sort${label}`)}</span>
+                <i aria-hidden="true">{sort.descending && active ? "↓" : "↑"}</i>
               </button>
             );
           })}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2">
+      <div className="fr-card flex items-center justify-between gap-2">
         <Place code={intent.origin} />
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
           <div className="flex w-full items-center justify-center gap-1.5">
@@ -219,7 +206,7 @@ export function RouteCard({
           type="button"
           disabled={pending}
           onClick={onSearch}
-          className={`${travelButton} shine min-h-12 text-[17px]`}
+          className="fr-cta shine flex items-center justify-center gap-2"
         >
           <svg
             viewBox="0 0 24 24"
@@ -264,7 +251,7 @@ export function TravelHeader({
   globe?: { code: string | undefined };
 }) {
   const buttons = (
-    <div className="flex shrink-0 gap-1.5">
+    <div className={`flex shrink-0 gap-1.5 ${globe ? "mt-2" : ""}`}>
       <Link
         to="/travel/watches"
         aria-label={t("flight.radar")}
@@ -283,10 +270,12 @@ export function TravelHeader({
   );
   const title = (
     <>
-      <h1 className={`${globe ? "text-2xl" : "text-[28px]"} leading-[1.15] font-black`}>
+      <h1 className={globe ? undefined : "text-[28px] leading-[1.15] font-black"}>
         {headline(intent)}
       </h1>
-      <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>
+      <p className={globe ? "text-ink-muted" : "text-[15px] font-medium text-ink-muted"}>
+        {t("flight.tagline")}
+      </p>
     </>
   );
   if (!globe)
@@ -297,15 +286,15 @@ export function TravelHeader({
       </header>
     );
   return (
-    <header className="mb-5 flex items-center justify-between gap-2 px-1">
-      <div className="grid min-w-0 justify-items-start gap-1.5">
+    <header className="fr-head">
+      <div className="fr-hl grid justify-items-start">
         {title}
         <Leg origin={intent.origin} destination={intent.destination} />
         {buttons}
       </div>
       {/* The bob and the negative margins are the reference mock's: the globe floats at the corner. */}
-      <div className="globe-bob -mt-1.5 -mr-2 -mb-2.5 shrink-0">
-        <Globe code={globe.code} size={118} />
+      <div className="fr-mini globe-bob">
+        <Globe code={globe.code} from={intent.origin} size={118} />
       </div>
     </header>
   );

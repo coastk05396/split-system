@@ -7,7 +7,6 @@ import {
   type FlightSearchReply,
 } from "@split/shared";
 import { useEffect, useState, type CSSProperties } from "react";
-import { travelButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
@@ -48,32 +47,42 @@ export function FareResults({
     <section
       aria-label={t("flight.results")}
       aria-busy={pending ? "true" : undefined}
-      className="mt-4 grid gap-3"
+      className="fr-res"
     >
       {pending && (
         <>
-          <p role="status" className="text-ink-muted">
+          <p role="status" className="fr-ldt">
             {t("flight.searching")}
           </p>
           <FareSkeleton motion={motion} />
         </>
       )}
       {reply && (reply.degraded || reply.cards.length === 0) && (
-        <div className="surface-card rounded-3xl border border-sprout-200 bg-white p-5">
-          <p className="mb-4 text-ink-muted">
-            {reply.cards.length === 0 && party.cabin !== "economy"
-              ? t("flight.emptyCabin", { cabin: cabinText(party.cabin) })
-              : t(reply.degraded ? "flight.degraded" : "flight.empty")}
-          </p>
-          <a
-            href={reply.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`${travelButton} px-6 py-4`}
-          >
+        <>
+          <div className="fr-nya">
+            <i aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12 21v-9"
+                  stroke="#fff"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                <path d="M12 13c0-4 2.6-6.6 7-6.6 0 4.2-2.8 6.6-7 6.6z" fill="#fff" />
+                <path d="M12 15c0-3-2-5-5.6-5 0 3.2 2.2 5 5.6 5z" fill="#d6f3e3" />
+              </svg>
+            </i>
+            <p>
+              {reply.cards.length === 0 && party.cabin !== "economy"
+                ? t("flight.emptyCabin", { cabin: cabinText(party.cabin) })
+                : t(reply.degraded ? "flight.degraded" : "flight.empty")}
+            </p>
+          </div>
+          <a href={reply.url} target="_blank" rel="noopener noreferrer" className="fr-alt fr-hit">
             {t("flight.view")}
           </a>
-        </div>
+        </>
       )}
       {reply && reply.cards.length > 0 && (
         <FareList
@@ -126,29 +135,21 @@ function fareTags(card: FlightCard, cards: FlightCard[]): FareTag[] {
   return tags;
 }
 
-/** Carousel-shaped placeholders; a scan line sweeps them only when motion is allowed. */
+/** The mock's skeleton cards; a scan line sweeps them only when motion is allowed. */
 function FareSkeleton({ motion }: { motion: boolean }) {
   return (
-    <div className="car-wrap">
-      <div
-        aria-hidden="true"
-        data-motion={motion ? "full" : "reduced"}
-        className="car car-skeleton"
-      >
+    <>
+      <div aria-hidden="true" data-motion={motion ? "full" : "reduced"} className="grid gap-3.5">
         {[0, 1, 2].map((index) => (
-          <div
-            key={index}
-            className="fare relative grid content-start gap-3 overflow-hidden rounded-[20px] border border-sprout-200 bg-white px-4 py-3.5"
-          >
-            <span className="h-4 w-1/3 rounded-full bg-sprout-100" />
-            <span className="h-7 w-full rounded-full bg-sprout-100" />
-            <span className="h-4 w-1/2 rounded-full bg-sprout-100" />
-            <span className="h-6 w-2/5 rounded-full bg-sprout-100" />
-            {motion && <span className="scan" />}
+          <div key={index} className="fr-sk">
+            <i />
+            <i />
+            <i />
           </div>
         ))}
       </div>
-    </div>
+      {motion && <span aria-hidden="true" className="scan" />}
+    </>
   );
 }
 
@@ -227,7 +228,7 @@ function FareList({
           aria-label={t("flight.fares")}
           data-view={carousel ? "carousel" : "list"}
           data-motion={motion ? "full" : "reduced"}
-          className={carousel ? "car" : "grid gap-2.5"}
+          className={carousel ? "fr-car" : "grid gap-2.5"}
           onScroll={(event) => {
             // One snap step is a card plus the 12 px gap.
             const car = event.currentTarget;
@@ -250,7 +251,7 @@ function FareList({
           ))}
         </ul>
         {carousel && shown.length > 1 && (
-          <div aria-hidden="true" className="dots">
+          <div aria-hidden="true" className="fr-dots">
             {shown.map((_, index) => (
               <i key={keys[index]} data-dot={index === active ? "on" : "off"} />
             ))}
@@ -280,12 +281,11 @@ function FareList({
   );
 }
 
-/** Tag colours, none amber (amber is only for 最低 and 強烈買): white on #26684b, #245b41 on #e4f9e9, white on #2b3a6b. */
+/** The mock's tag chips: white on #26684b, #245b41 on #e4f9e9, white on #2b3a6b (none amber). */
 const TAG_CLASS: Record<FareTag, string> = {
-  cheapest: "rounded-lg bg-sprout-600 px-2 py-0.5 text-xs font-bold text-white",
-  fastest:
-    "rounded-lg border border-sprout-700 bg-sprout-100 px-2 py-0.5 text-xs font-bold text-sprout-700",
-  redEye: "rounded-lg bg-[#2b3a6b] px-2 py-0.5 text-xs font-bold text-white",
+  cheapest: "fr-tg2 c",
+  fastest: "fr-tg2",
+  redEye: "fr-tg2 r",
 };
 
 const PLANE =
@@ -306,9 +306,20 @@ const FLAP_STEP_MS = 55;
 /**
  * Text whose digits roll like a split-flap board before settling, left to right. Screen readers
  * get the whole text once; the rolling digits are hidden from them. Under reduced motion it is
- * plain text. Remount it (key) to roll again.
+ * plain text. Remount it (key) to roll again. With `lead`, the text before the first digit (a
+ * currency sign) is shown small and still, and `className` styles the digits.
  */
-function Flap({ text, className }: { text: string; className?: string }) {
+function Flap({
+  text,
+  className,
+  lead = false,
+  outer,
+}: {
+  text: string;
+  className?: string;
+  lead?: boolean;
+  outer?: string;
+}) {
   const [tick, setTick] = useState(() => (prefersReducedMotion() ? Infinity : 0));
   const digits = Array.from(text).filter((c) => c >= "0" && c <= "9").length;
   const rolling = tick <= 6 + 2 * Math.max(0, digits - 1);
@@ -321,21 +332,35 @@ function Flap({ text, className }: { text: string; className?: string }) {
       clearTimeout(id);
     };
   }, [tick, rolling]);
+  const prefix = lead ? (/^\D*/.exec(text)?.[0] ?? "") : "";
+  const rest = text.slice(prefix.length);
   let n = -1;
   return (
-    <span data-flap="" data-rolling={rolling ? "true" : undefined} className={className}>
+    <span data-flap="" data-rolling={rolling ? "true" : undefined} className={outer}>
       <span className="sr-only">{text}</span>
       <span aria-hidden="true">
-        {Array.from(text).map((c, i) => {
-          if (c < "0" || c > "9") return c;
-          n += 1;
-          const shown = tick > 6 + 2 * n ? c : String((Number(c) + tick * 3 + n * 7) % 10);
-          return (
-            <i key={i} className="ft">
-              {shown}
-            </i>
-          );
-        })}
+        {prefix.trim() && (
+          <>
+            <small>{prefix.trim()}</small>{" "}
+          </>
+        )}
+        <span className={className}>
+          {Array.from(rest).map((c, i) => {
+            if (c < "0" || c > "9")
+              return (
+                <span key={i} className="fs">
+                  {c}
+                </span>
+              );
+            n += 1;
+            const shown = tick > 6 + 2 * n ? c : String((Number(c) + tick * 3 + n * 7) % 10);
+            return (
+              <i key={i} className="ft">
+                {shown}
+              </i>
+            );
+          })}
+        </span>
       </span>
     </span>
   );
@@ -351,11 +376,20 @@ function duration(minutes: number): string | undefined {
     : t("flight.duration", { hours, minutes: rest });
 }
 
+/** "2h 40m" for the chip on the route line. */
+function shortDuration(minutes: number): string | undefined {
+  if (!(minutes > 0)) return undefined;
+  return t("flight.legDuration", {
+    hours: Math.floor(minutes / 60),
+    minutes: String(minutes % 60).padStart(2, "0"),
+  });
+}
+
 /**
- * One fare as a card: airline with its tag and the price on top, the departure-to-arrival time
- * line, then stops and duration. A Strong Buy card has an amber edge and a cream background; it
- * is the only highlighted kind. The card is a link to Google Flights, with the Price Watch bell
- * beside it, not inside it.
+ * One fare as the mock's ticket: airline with its tag on top, the route line (codes, plane,
+ * duration chip), the times with the tags between them, then the price and the Price Watch
+ * button. The card is a link to Google Flights (the airline name stretches over the card),
+ * the Price Watch button sits above it, not inside it.
  */
 function FareCardItem({
   card,
@@ -379,97 +413,97 @@ function FareCardItem({
       ? t("flight.nonstop")
       : t(card.stops === 1 ? "flight.oneStop" : "flight.stops", { n: card.stops });
   const took = duration(card.durationMinutes);
+  const chip = shortDuration(card.durationMinutes);
   return (
     <li
       data-strong={strong ? "true" : undefined}
       data-active={active ? "true" : undefined}
-      className="fare relative rounded-[20px] border border-sprout-200 bg-white data-[strong=true]:border-[#f0c978] data-[strong=true]:border-l-[6px] data-[strong=true]:border-l-[#f2a33a] data-[strong=true]:bg-[#fff8e8]"
+      className="fr-fare"
     >
-      <a
-        href={card.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="grid gap-2.5 rounded-[inherit] px-4 py-3.5 focus-visible:outline-2 focus-visible:outline-sprout-700"
-      >
-        <span className="flex items-center justify-between gap-2.5">
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-[17px] font-bold">{card.airline}</span>
+      <div className="fr-fi">
+        <div className="fr-front">
+          <div className="fr-fh">
+            <i aria-hidden="true">{Array.from(card.airline.trim()).slice(0, 2).join("")}</i>
+            <a href={card.url} target="_blank" rel="noopener noreferrer" className="fr-stretch">
+              {card.airline}
+            </a>
             {strong ? (
-              <span className="sticker">
-                <svg viewBox="0 0 24 24" aria-hidden="true" className="size-3 fill-current">
-                  <path d="M13 2 4 14h6l-1 8 9-12h-6z" />
-                </svg>
-                {t("flight.sticker")}
-              </span>
+              <span className="sticker fr-sig">{t("flight.sticker")}</span>
             ) : (
-              card.top === true && (
-                <span className="rounded-lg border border-sprout-200 bg-sprout-100 px-2 py-0.5 text-xs font-bold text-sprout-700">
-                  {t("flight.top")}
-                </span>
-              )
+              card.top === true && <span className="fr-sig">{t("flight.top")}</span>
             )}
-            {tags.map((tag) => (
-              <span key={tag} className={TAG_CLASS[tag]}>
-                {t(`flight.tag.${tag}`)}
-              </span>
-            ))}
-          </span>
-        </span>
-        <span className="flex items-center gap-2.5 text-[15px] font-bold tabular-nums">
-          <Flap key={card.outboundDeparture} text={card.outboundDeparture} />
-          <span aria-hidden="true" className="relative flex h-4 flex-1 items-center">
-            <span className="h-0 w-full border-t-2 border-dashed border-sprout-200" />
-            <svg viewBox="0 0 24 24" className="fare-plane size-4 fill-sprout-700">
-              <path d={PLANE} />
-            </svg>
-          </span>
-          <Flap key={card.outboundArrival} text={card.outboundArrival} />
-        </span>
-        <span className="pr-11 text-[13px] font-medium text-ink-muted">
-          {took ? t("flight.meta", { stops, duration: took }) : stops}
-        </span>
-        {card.history && card.history.days >= 14 && (
-          <>
-            <span className="text-[13px] text-ink-muted">
-              {t(
-                card.history.percentBelowMean >= 0 ? "flight.historyBelow" : "flight.historyAbove",
-                { percent: Math.abs(card.history.percentBelowMean), days: card.history.days },
-              )}
+          </div>
+          <div className="fr-fl" aria-hidden="true">
+            <b>{card.intent.origin}</b>
+            <div className="fr-path">
+              <svg viewBox="0 0 24 24" className="fare-plane">
+                <path d={PLANE} />
+              </svg>
+              {chip && <span>{chip}</span>}
+            </div>
+            <b>{card.intent.destination}</b>
+          </div>
+          <div className="fr-fm">
+            <Flap key={card.outboundDeparture} text={card.outboundDeparture} outer="fr-tm" />
+            <span className="fr-chs">
+              {tags.map((tag) => (
+                <em key={tag} className={TAG_CLASS[tag]}>
+                  {t(`flight.tag.${tag}`)}
+                </em>
+              ))}
             </span>
-            <span className="text-[13px] text-ink-muted">
-              {t("flight.percentile", { percentile: card.history.percentile })}
-            </span>
-          </>
-        )}
-        {card.overBudget > 0 && (
-          <span className="text-[13px] text-red-700">
-            {t("flight.overBudget", {
-              amount: formatAmount(card.overBudget, card.intent.currency),
-            })}
-          </span>
-        )}
-        <Flap
-          key={card.price}
-          text={formatAmount(card.price, card.intent.currency)}
-          className="block min-h-11 pr-12 text-[26px] leading-[44px] font-black text-sprout-900 tabular-nums"
-        />
-      </a>
-      <span className="absolute right-1 bottom-1">
-        <FlightPriceWatchButton card={card} onWatch={onWatch} ring={motion ? saved : null} />
-        {saved !== null && (
-          <span role="status" className="sr-only">
-            {t("flight.watchAdded")}
-          </span>
-        )}
-        {saved !== null && motion && (
-          <span key={saved} aria-hidden="true">
-            <span className="stamp">{t("flight.stamp")}</span>
-            {BURST.map(([dx, dy]) => (
-              <i key={`${String(dx)},${String(dy)}`} className="pt" style={burstStyle(dx, dy)} />
-            ))}
-          </span>
-        )}
-      </span>
+            <Flap key={card.outboundArrival} text={card.outboundArrival} outer="fr-tm" />
+          </div>
+          <p className="fr-meta">{took ? t("flight.meta", { stops, duration: took }) : stops}</p>
+          {card.history && card.history.days >= 14 && (
+            <>
+              <p className="fr-meta">
+                {t(
+                  card.history.percentBelowMean >= 0
+                    ? "flight.historyBelow"
+                    : "flight.historyAbove",
+                  { percent: Math.abs(card.history.percentBelowMean), days: card.history.days },
+                )}
+              </p>
+              <p className="fr-meta">
+                {t("flight.percentile", { percentile: card.history.percentile })}
+              </p>
+            </>
+          )}
+          {card.overBudget > 0 && (
+            <p className="fr-meta text-red-700">
+              {t("flight.overBudget", {
+                amount: formatAmount(card.overBudget, card.intent.currency),
+              })}
+            </p>
+          )}
+          <div className="fr-ff">
+            <strong>
+              <Flap
+                key={card.price}
+                text={formatAmount(card.price, card.intent.currency)}
+                lead
+                outer="tabular-nums"
+                className="fr-pn"
+              />
+            </strong>
+            <FlightPriceWatchButton card={card} onWatch={onWatch} ring={motion ? saved : null} />
+          </div>
+        </div>
+      </div>
+      {saved !== null && (
+        <span role="status" className="sr-only">
+          {t("flight.watchAdded")}
+        </span>
+      )}
+      {saved !== null && motion && (
+        <span key={saved} aria-hidden="true">
+          <span className="stamp">{t("flight.stamp")}</span>
+          {BURST.map(([dx, dy]) => (
+            <i key={`${String(dx)},${String(dy)}`} className="pt" style={burstStyle(dx, dy)} />
+          ))}
+        </span>
+      )}
     </li>
   );
 }

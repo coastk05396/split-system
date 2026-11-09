@@ -47,56 +47,76 @@ describe("Flight Radar material and type", () => {
     expect(fontLink()).toBeNull();
   });
 
-  it("sets the mock's fonts under Travel mode with the existing stack as fallback", () => {
+  it("sets exactly the mock's font stack under Travel mode", () => {
     const travel = [...css.matchAll(/\.travel-mode\s+body\s*\{([^}]*)\}/g)].map((m) => m[1]).join();
     const family = /font-family:\s*([^;]+);/.exec(travel)?.[1] ?? "";
-    expect(family).toMatch(/^"Schibsted Grotesk",\s*"Noto Sans TC",\s*var\(--font-sans\)/);
-    expect(/--font-sans:\s*\n?\s*"PingFang TC"/.test(css)).toBe(true); // the fallback stays
+    expect(family).toBe('"Schibsted Grotesk", "Noto Sans TC", sans-serif');
+    expect(/--font-sans:\s*\n?\s*"PingFang TC"/.test(css)).toBe(true); // the app stack stays for the rest of the app
   });
 
-  it("draws paper grain behind the Travel page, so no text sits under it", () => {
-    const grain = /\.travel-mode\s+body::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  it("lays the mock's grid under the cards and its paper grain over the page, as the mock does", () => {
+    const grid = /\.travel-mode\s+body::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(grid).toMatch(/background-size:\s*28px 28px/);
+    expect(grid).toMatch(/z-index:\s*-1/);
+    expect(grid).toMatch(/pointer-events:\s*none/);
+    const grain = /\.travel-mode\s+body::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     expect(grain).toContain("feTurbulence");
     expect(grain).toMatch(/pointer-events:\s*none/);
-    expect(grain).toMatch(/z-index:\s*-1/);
-    // A negative z-index sinks under the page background unless body is its own stacking context.
+    expect(grain).toMatch(/mix-blend-mode:\s*multiply/);
+    expect(grain).toMatch(/opacity:\s*0\.07/);
+    // Above the content (the mock's z-index 30) but under dialogs (z-70).
+    expect(Number(/z-index:\s*(\d+)/.exec(grain)?.[1])).toBeGreaterThan(9);
+    expect(Number(/z-index:\s*(\d+)/.exec(grain)?.[1])).toBeLessThan(70);
+    // The grid's z-index:-1 lands above body's background only when body is its own stacking context.
     const body = [...css.matchAll(/\.travel-mode\s+body\s*\{([^}]*)\}/g)].map((m) => m[1]).join();
     expect(body).toMatch(/isolation:\s*isolate/);
-    expect(grain).toMatch(/position:\s*fixed/);
   });
 
-  it("keeps muted Travel text at 4.5:1 on the darkest possible grain", () => {
-    const grain = /\.travel-mode\s+body::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  it("keeps muted Travel text at 4.5:1 with the grain over both text and page at its darkest", () => {
+    const grain = /\.travel-mode\s+body::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     const opacity = Number(/opacity:\s*([\d.]+)/.exec(grain)?.[1]);
     const noise = [0.08, 0.25, 0.16]; // the feColorMatrix colour at full alpha: the darkest the grain gets
     const travel = /\.travel-mode\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     const page = /--travel-page:\s*(#[0-9a-f]{6})/i.exec(travel)?.[1] ?? "";
     const muted = /--color-ink-muted:\s*(#[0-9a-f]{6})/i.exec(travel)?.[1] ?? "";
-    const darkest = noise
-      .map((c, i) =>
-        Math.round(parseInt(page.slice(1 + i * 2, 3 + i * 2), 16) * (1 - opacity * (1 - c))),
-      )
-      .map((v) => v.toString(16).padStart(2, "0"))
-      .join("");
+    // Multiply darkens every channel by (1 - opacity * (1 - noise)), text and background alike.
+    const under = (hex: string) =>
+      noise
+        .map((c, i) =>
+          Math.round(parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) * (1 - opacity * (1 - c))),
+        )
+        .map((v) => v.toString(16).padStart(2, "0"))
+        .join("");
     expect(opacity).toBeGreaterThan(0);
-    expect(contrast(muted, `#${darkest}`)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(`#${under(muted)}`, `#${under(page)}`)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(`#${under(muted)}`, `#${under("#ffffff")}`)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("cuts ticket notches into fare cards in the page colour, leaving card and text colours alone", () => {
-    const shared = /\.fare::before,\s*\.fare::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-    const left = shared + rule(".fare::before");
-    const right = shared + rule(".fare::after");
+  it("cuts ticket notches into the form's perforation in the page colour, inside the card padding", () => {
+    const shared = /\.fr-perf::before,\s*\.fr-perf::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const left = shared + rule(".fr-perf::before");
+    const right = shared + rule(".fr-perf::after");
     for (const side of [left, right]) {
       expect(side).toMatch(/border-radius:\s*50%/);
-      expect(side).toMatch(/pointer-events:\s*none/);
       expect(side).toContain("var(--travel-page)");
       expect(side).toMatch(/clip-path:\s*inset/);
     }
     expect(left).toMatch(/left:\s*-/);
     expect(right).toMatch(/right:\s*-/);
-    // Notches stay inside the card's 16 px padding, so no text is covered.
-    const half = Number(/width:\s*(\d+)px/.exec(left)?.[1]) / 2;
-    expect(half).toBeLessThan(16);
+    // The mock's fare cards have no notches.
+    expect(css).not.toMatch(/\.fr-fare::before|\.fare::before/);
+  });
+
+  it("gives every mock-sized control a 44 px hit area, and the 360 px calendar 44 px days", () => {
+    const hit = rule(".fr-hit::before");
+    expect(hit).toMatch(/width:\s*max\(100%,\s*44px\)/);
+    expect(hit).toMatch(/height:\s*max\(100%,\s*44px\)/);
+    // Under 390 px the calendar bleeds into the card padding: (360 - 2*18 - 2*16 + 2*16 - 6*2) / 7 = 44.3 px.
+    const narrow =
+      /@media \(max-width: 389px\)\s*\{\s*\.fr-cal-in\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(narrow).toMatch(/margin-inline:\s*-16px/);
+    const days = (360 - 2 * 18 - 2 * 16 + 2 * 16 - 6 * 2) / 7;
+    expect(days).toBeGreaterThanOrEqual(44);
   });
 
   it("puts a shine on both search buttons, animated only when motion is welcome", async () => {

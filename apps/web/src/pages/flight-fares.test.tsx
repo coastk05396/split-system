@@ -135,8 +135,11 @@ describe("Flight Radar compact price list", () => {
       );
       // A time line with a plane between departure and arrival, never a flight number or baggage.
       expect(first.querySelector("svg path[d^='M21 16v-2']")).not.toBeNull();
-      expect(first).toHaveClass("rounded-[20px]");
-      expect(first).not.toHaveTextContent(/baggage|行李|[A-Z]{2}\d{2,4}/);
+      expect(first).toHaveClass("fr-fare");
+      // The route line's airport code sits right before the departure time in the text, so it is dropped first.
+      expect(first.textContent.replace(/[A-Z]{3}(?=\d{2}:)/g, "")).not.toMatch(
+        /baggage|行李|[A-Z]{2}\d{2,4}/,
+      );
     },
   );
 
@@ -183,7 +186,8 @@ describe("Flight Radar compact price list", () => {
         null,
         null,
       ]);
-      expect(rows(language)[0]).toHaveClass("data-[strong=true]:border-l-[6px]");
+      // The reference mock marks Strong Buy only by its sticker in the signal slot, not by an amber card edge.
+      expect((rows(language)[0] as HTMLElement).className).not.toMatch(/amber|border-l/);
     },
   );
 
@@ -216,11 +220,12 @@ describe("Flight Radar compact price list", () => {
       await screen.findByRole("list", { name: text[language].fares });
       const link = within(rows(language)[0] as HTMLElement).getByRole("link");
       expect(link).toHaveAttribute("href", expect.stringContaining("google.com/travel/flights"));
-      expect(link.closest("li")).toHaveClass("rounded-[20px]");
+      expect(link.closest("li")).toHaveClass("fr-fare");
       const bell = within(rows(language)[0] as HTMLElement).getByRole("button", {
         name: text[language].bell,
       });
-      expect(bell).toHaveClass("size-11");
+      // Mock-sized pill (about 38 px) with a 44 px hit area from the .fr-hit pseudo-element.
+      expect(bell).toHaveClass("fr-hit");
       expect(link).not.toContainElement(bell);
     },
   );
@@ -333,8 +338,8 @@ describe("Flight Radar compact price list", () => {
         [false, false],
       ]);
       const sticker = labels[0]?.sticker as HTMLElement;
-      // A lightning SVG, never a glyph, and a static sticker once motion is reduced.
-      expect(sticker.querySelector("svg")).not.toBeNull();
+      // The reference mock's signal pill is text only (no lightning icon), and it is static.
+      expect(sticker.querySelector("svg")).toBeNull();
       expect(sticker).toHaveClass("sticker");
       expect(sticker.textContent).toBe(text[language].sticker);
     },

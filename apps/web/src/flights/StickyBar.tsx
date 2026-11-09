@@ -42,7 +42,7 @@ export function StickyBar({
         data-sticky-bar=""
         role="region"
         aria-label={label}
-        className="glass-nav fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[9] border-t border-sprout-200/80 py-3 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] md:bottom-0 md:left-60"
+        className="fr-dock fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[9] md:bottom-0 md:left-60"
       >
         <div className="mx-auto w-full max-w-md md:max-w-5xl">{children}</div>
       </div>
