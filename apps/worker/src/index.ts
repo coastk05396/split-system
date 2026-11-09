@@ -1,3 +1,4 @@
+export { FlightContainer } from "./flights/container.js";
 export { GroupLedger } from "./ledger.js";
 import { app } from "./app.js";
 import { dailyMaintenance } from "./maintenance.js";

@@ -391,8 +391,11 @@ export function AvatarTip({
 
 export const primaryButton =
   "press-pill flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_6px_14px_-8px_#143f2a] hover:bg-sprout-500/90 disabled:opacity-50";
+/** The Flight Radar primary button: one green for rest, hover and disabled/pending, never dimmed with opacity. */
+export const travelButton =
+  "press-pill flex items-center justify-center gap-2 rounded-full bg-travel-action font-bold text-white hover:bg-travel-action-hover disabled:cursor-not-allowed disabled:bg-travel-disabled disabled:text-travel-disabled-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-900";
 export const secondaryButton =
-  "press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:opacity-50";
+  "secondary-button press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:opacity-50";
 /** The red tag on every Trip entry while the Trip module is under maintenance. */
 export function MaintenanceTag() {
   return (

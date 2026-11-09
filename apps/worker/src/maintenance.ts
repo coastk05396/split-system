@@ -1,3 +1,7 @@
+import { maintainFlightWatches } from "./flights/watch-maintenance.js";
+import { maintainFareSnapshots } from "./flights/snapshots.js";
+import { maintainFlightHistory } from "./flights/history.js";
+import type { AppDeps } from "./deps.js";
 import { and, asc, eq, lt } from "drizzle-orm";
 import { createDb } from "./db/client.js";
 import { commitAccountCleanups } from "./auth/account-cleanup.js";
@@ -15,6 +19,10 @@ const STALE_RESERVATION_MS = 24 * 60 * 60 * 1000;
 export async function purgeExpired(env: Bindings, now: number): Promise<void> {
   const db = createDb(env.DB);
   try {
+    await env.DB.prepare("DELETE FROM flight_search_cache WHERE expires_at <= ?").bind(now).run();
+    await env.DB.prepare("DELETE FROM line_sender_counters WHERE window_start < ?")
+      .bind(now - RATE_COUNTER_RETENTION_MS)
+      .run();
     await db.batch([
       db.delete(sessions).where(lt(sessions.expiresAt, now)),
       db.delete(linkCodes).where(lt(linkCodes.expiresAt, now)),
@@ -77,9 +85,16 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
 }
 
 /** Daily maintenance keeps account cleanup ahead of the reference-rate refresh. */
-export async function dailyMaintenance(env: Bindings, now: number): Promise<void> {
+export async function dailyMaintenance(
+  env: Bindings,
+  now: number,
+  deps: AppDeps = productionDeps,
+): Promise<void> {
   const db = createDb(env.DB);
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
-  await refreshRates(db, productionDeps.rateSource, now);
+  await refreshRates(db, deps.rateSource, now);
+  await maintainFlightHistory(env, { ...deps, now: () => now });
+  await maintainFlightWatches(env, { ...deps, now: () => now });
+  await maintainFareSnapshots(env, { ...deps, now: () => now });
 }

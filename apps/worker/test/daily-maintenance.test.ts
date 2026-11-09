@@ -1,3 +1,4 @@
+import { productionDeps } from "../src/deps.js";
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
@@ -67,7 +68,12 @@ it("daily maintenance purges expired sessions and commits pending account cleanu
     return Response.json({ date, rates: { [url.searchParams.get("symbols") ?? ""]: 1 } });
   });
   try {
-    await dailyMaintenance(env, clock.now);
+    await dailyMaintenance(env, clock.now, {
+      ...productionDeps,
+      pause: () => Promise.resolve(),
+      snapshotDestinations: [],
+      flightSource: () => Promise.reject(new Error("offline flight source")),
+    });
     expect(atRateFetch.length).toBeGreaterThan(0);
     expect(atRateFetch.every((state) => state.sessions === 0 && state.cleanups === 0)).toBe(true);
     const stub = env.GROUP_LEDGER.get(env.GROUP_LEDGER.idFromName(group.id));

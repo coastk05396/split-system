@@ -31,6 +31,8 @@ This one command:
 - applies pending migrations to the local D1 database and starts the Worker API on port `8787`,
 - starts the Vite frontend on port `5173`, which proxies `/api` to `8787`.
 
+`pnpm dev`, `pnpm test` and `pnpm e2e` need no Cloudflare login and no Docker. The Workers AI binding and the Flight Radar container are declared only under `env.staging` and `env.production` in `apps/worker/wrangler.jsonc`, so locally flight search returns the degraded Google Flights deep-link results and free-text prompts are refused (set `GROQ_API_KEY` in `.dev.vars` to parse prompts locally).
+
 Open your browser at:
 👉 **[http://localhost:5173](http://localhost:5173)**
 
