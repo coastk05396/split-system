@@ -17,10 +17,9 @@ import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearch
 import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
-import { friendlyDate } from "../flights/dates.js";
+import { addDays, friendlyDate } from "../flights/dates.js";
 import { DEFAULT_SORT, FareResults, type FareSort } from "../flights/FareResults.js";
 import { findPlace } from "../flights/place.js";
-import { DateTiles, dateTiles } from "../flights/DateTiles.js";
 import { PriceStrip } from "../flights/PriceStrip.js";
 import { FareTicker } from "../flights/FareTicker.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
@@ -46,8 +45,6 @@ export function TravelPage() {
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [sort, setSort] = useState<FareSort>(DEFAULT_SORT);
-  // The date picked on a tile belongs to the reply it was picked on.
-  const [picked, setPicked] = useState<{ reply: FlightSearchReply; date: string } | null>(null);
   const [active, setIntent] = useState(
     () => lastSearch ?? defaultFlightIntent(Date.now(), currency),
   );
@@ -182,7 +179,6 @@ export function TravelPage() {
       )}
     </section>
   );
-  const tiles = dateTiles(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
       <FareTicker
@@ -259,7 +255,25 @@ export function TravelPage() {
           />
         </div>
       )}
-      {!panelOpen && <PriceStrip intent={active} />}
+      {!panelOpen && (
+        <PriceStrip
+          intent={active}
+          onPick={(date) => {
+            // A day picked on the strip is a live search that keeps the stay and drops any theme.
+            const { theme: _theme, ...rest } = active;
+            const nights = active.returnDate
+              ? Math.round(
+                  (Date.parse(active.returnDate) - Date.parse(active.departureDate)) / 86_400_000,
+                )
+              : 0;
+            runIntent({
+              ...rest,
+              departureDate: date,
+              ...(active.returnDate ? { returnDate: addDays(date, nights) } : {}),
+            });
+          }}
+        />
+      )}
       {!searched && highlightsSection}
       {pendingWatch && !lineWatch.isSuccess && (
         <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
@@ -301,26 +315,12 @@ export function TravelPage() {
       )}
       {/* After a search the results come first, right under the summary; the page scrolls here. */}
       <div ref={resultsTop} className="scroll-mt-4">
-        {!panelOpen && reply && tiles && (
-          <DateTiles
-            tiles={tiles}
-            onSelect={(date) => {
-              setPicked({ reply, date });
-            }}
-          />
-        )}
         {reply && advise.data && (
           <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
             <p className="px-1">{firstSentence(advise.data.commentary)}</p>
           </section>
         )}
-        <FareResults
-          pending={search.isPending}
-          reply={reply}
-          date={tiles?.selected}
-          sort={sort}
-          onWatch={setWatchCard}
-        />
+        <FareResults pending={search.isPending} reply={reply} sort={sort} onWatch={setWatchCard} />
       </div>
       {reply && advise.data && (
         <section aria-label={t("flight.ideas")} className="mt-4">

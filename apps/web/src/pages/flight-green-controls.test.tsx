@@ -56,7 +56,7 @@ async function explore() {
   setup();
   fireEvent.change(await screen.findByLabelText("想去哪裡？"), { target: { value: "okinawa" } });
   fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
-  await screen.findByRole("region", { name: "挑個好日子起飛" });
+  await screen.findByText("Cheap Air");
 }
 
 const AMBER = /#fdf0d5|#f0c978|#f2a33a|#fff8e8|#6b3f00|#ffd23f/i;
@@ -90,12 +90,8 @@ describe("Flight Radar green controls", () => {
     ).not.toMatch(/opacity/);
   });
 
-  it("colours tiles, fare cards and tags green, with amber only on 最低 and 強烈買", async () => {
+  it("colours fare cards and tags green, with amber only on 強烈買", async () => {
     await explore();
-    const tiles = screen.getByRole("region", { name: "挑個好日子起飛" });
-    const selected = within(tiles).getByRole("button", { pressed: true });
-    expect(selected).toHaveClass("bg-travel-action", "text-white");
-    expect(selected.className).not.toMatch(AMBER);
     for (const el of document.querySelectorAll("[class]")) {
       if (!AMBER.test(el.getAttribute("class") ?? "")) continue;
       expect(

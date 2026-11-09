@@ -11,7 +11,7 @@ import {
   createFlightWatchSchema,
   type FlightPriceWatch,
 } from "@split/shared";
-import type { CurrencyCode, FlightTickerReply, Me } from "@split/shared";
+import type { CurrencyCode, FlightSearchRequest, FlightTickerReply, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
 /**
@@ -26,6 +26,8 @@ export interface FakeApi {
   /** Fare Snapshots the Price Strip reads, and the query strings it asked with. */
   flightPriceStrip: { date: string; price: number; fetchedAt: number }[];
   flightPriceStripQueries: string[];
+  /** Every search request body the app sent. */
+  flightSearchRequests: FlightSearchRequest[];
   /** Fare Ticker chips (saved snapshots), and the query strings it asked with. */
   flightTicker: FlightTickerReply["chips"];
   flightTickerQueries: string[];
@@ -139,6 +141,7 @@ export function createFakeApi(): FakeApi {
     flightsDegraded: false,
     flightPriceStrip: [],
     flightPriceStripQueries: [],
+    flightSearchRequests: [],
     flightTicker: [],
     flightTickerQueries: [],
     flightHighlights: [],
@@ -301,7 +304,11 @@ export function createFakeApi(): FakeApi {
         api.flightPriceStripQueries.push(url.search);
         return authed === undefined
           ? error("UNAUTHORIZED", 401)
-          : json({ days: api.flightPriceStrip });
+          : json({
+              days: api.flightPriceStrip.filter((day) =>
+                day.date.startsWith(url.searchParams.get("month") ?? ""),
+              ),
+            });
       case "GET /api/v1/flights/ticker":
         api.flightTickerQueries.push(url.search);
         return authed === undefined
@@ -311,6 +318,7 @@ export function createFakeApi(): FakeApi {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const parsed = flightSearchRequestSchema.safeParse(await readJson(init));
         if (!parsed.success) return error("VALIDATION_FAILED", 400);
+        api.flightSearchRequests.push(parsed.data);
         const intent =
           "prompt" in parsed.data
             ? (api.flightPromptIntent ??

@@ -235,6 +235,139 @@
   }
 }
 
+/* Price Strip dock: 30 bars, one chosen day, a tooltip that follows it. */
+.price-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(30, 1fr);
+  gap: 3px;
+  align-items: end;
+  height: 96px;
+  padding-top: 34px;
+  margin-top: 4px;
+  touch-action: pan-y;
+  cursor: ew-resize;
+  user-select: none;
+  outline: none;
+}
+.price-strip:focus-visible {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+.strip-bar {
+  height: calc(var(--h) * 1px);
+  border-radius: 3px 3px 1px 1px;
+  background: #a9d9c5;
+  transform-origin: bottom;
+  scale: 1 var(--w, 1);
+  transition:
+    height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 0.2s,
+    scale 0.16s ease-out;
+}
+.strip-bar[data-kind="cheap"] {
+  background: #52c493;
+}
+.strip-bar[data-kind="pricey"] {
+  background: #f0c987;
+}
+.strip-bar[data-kind="none"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #9bbfaa;
+  border-style: dashed;
+}
+.strip-bar[data-return="true"] {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--color-sprout-900);
+}
+.strip-bar[data-selected="true"] {
+  background: var(--color-sprout-900);
+}
+.strip-bar[data-kind="none"][data-selected="true"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--color-sprout-900);
+  border-style: solid;
+}
+.strip-range {
+  position: absolute;
+  bottom: -7px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-sprout-600);
+  transition:
+    left 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.strip-tip {
+  position: absolute;
+  top: 0;
+  left: clamp(92px, var(--x), calc(100% - 92px));
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--color-sprout-900);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.strip-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  font-style: normal;
+  font-weight: 600;
+}
+.strip-delta::before {
+  content: "";
+  border: 4px solid transparent;
+}
+.strip-delta[data-direction="down"]::before {
+  border-top-color: currentColor;
+  border-bottom: 0;
+}
+.strip-delta[data-direction="up"]::before {
+  border-bottom-color: currentColor;
+  border-top: 0;
+}
+.strip-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: #a9d9c5;
+}
+.strip-swatch-cheap {
+  background: #52c493;
+}
+.strip-swatch-pricey {
+  background: #f0c987;
+}
+.strip-swatch-yours {
+  background: var(--color-sprout-900);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .strip-grow {
+    animation: strip-grow 0.7s calc(var(--i) * 14ms) both cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .strip-bar,
+  .strip-range,
+  .strip-tip {
+    transition: none;
+  }
+}
+@keyframes strip-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
 /* Soft panel entrance when switching tabs. */
 @keyframes tab-enter {
   from {

@@ -45,7 +45,7 @@ A standing alert a User sets on a route and date window so 小芽 wakes them onc
 _Avoid_: Subscription, price tracker
 
 **Travel mode**:
-The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to the travel buttons (分帳, 探索, 航班, 追蹤) and drop the expense-splitting ones. The URL is its only state, and 分帳 leaves it for 首頁. While it is on, the page, nav, primary buttons, Date Tiles, fare cards and tags wear the green glass palette (amber only on 最低 and 強烈買); the normal palette returns on leaving.
+The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to the travel buttons (分帳, 探索, 航班, 追蹤) and drop the expense-splitting ones. The URL is its only state, and 分帳 leaves it for 首頁. While it is on, the page, nav, primary buttons, the Price Strip, fare cards and tags wear the green glass palette (amber only on 最低 and 強烈買); the normal palette returns on leaving.
 _Avoid_: Travel tab, trip mode (Trip is the disabled Group feature)
 
 **探索 (Explore page)**:
@@ -72,17 +72,13 @@ _Avoid_: Map, 小芽 globe
 The scrolling strip of chips at the top of Flight Radar: for each destination that has a Fare Snapshot from the User's origin, its code and the cheapest saved fare, with a green −N% only where Deal Signal history says it beats the usual price. Built only from Fare Snapshots and fare history, never from a live search or the flight source; tapping a chip sets the destination. Static under reduced motion.
 _Avoid_: Marquee, deals bar, price ticker
 
-**Date Tile**:
-One priced departure date of the current Flight Radar search, shown as a pressable tile with its cheapest fare, so the User can compare what each date costs and switch which date's fares are shown. The cheapest date (every one on a tie) is marked 最低; the date whose fares are listed is marked 已選.
-_Avoid_: Price calendar, fare chart (it never covers dates the search did not price)
-
 **Fare Snapshot**:
 The cheapest fare found for one route and one departure day, stored with the time it was fetched. A scheduled background job fills them every day for a fixed short list of popular routes from Taipei, one date at a time and spaced out; a User's request never fetches one.
 _Avoid_: Cached search, fare history (that is the daily minimum behind Deal Signals)
 
 **Price Strip**:
-The month view of Flight Radar that shows the cheapest fare of each day, built only from Fare Snapshots and never from a live search. A route with no snapshots shows a plain "prices unavailable" line instead of bars. Its prices are for a round trip with a 3-day stay, 1 adult, economy, so they can differ from the trip the User chose. Not the same as Date Tiles, which price only the dates of the current search.
-_Avoid_: Price calendar
+The sticky bottom dock of Flight Radar: 30 bars, one per day from ten days before the searched departure day, each the cheapest saved fare of that day, built only from Fare Snapshots and never from a live search. The User drags it or uses the arrow keys to move the chosen day (a tooltip shows the date, the price and the difference from the searched day), jumps to the lowest day, and picking a day searches that date live so the fares below follow it. Days with no saved price are dashed empty bars; a route with no snapshots shows a plain "prices unavailable" line instead of bars. Its prices are for a round trip with a 3-day stay, 1 adult, economy, so they can differ from the trip the User chose. It replaces the retired Date Tile on 航班.
+_Avoid_: Price calendar, Date Tile (retired on Flight Radar; 探索 still shows its own nearby-date tiles)
 
 **熱門 (Top)**:
 The small tag on a fare Google itself lists among its top flights. Flight Radar shows every fare in one list, cheapest first by default; the User can sort it by price or by time, in either direction. 熱門 only marks: it never changes the order, and sorting never adds or removes it.

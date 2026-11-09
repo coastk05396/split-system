@@ -31,6 +31,12 @@ export function friendlyRange(from: string, to?: string): string {
   return `${friendlyDate(from)}${getLocale() === "en" ? " " : ""}– ${friendlyDate(to)}`;
 }
 
+/** The ISO date `days` after (or, negative, before) `date`; calendar arithmetic, no time zone. */
+export function addDays(date: string, days: number): string {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 /** "1/8–1/11" in both languages: the compact range for chips that must fit about 200 px. */
 export function shortRange(from: string, to?: string): string {
   const numeric = (date: string) => `${String(parts(date).month)}/${String(parts(date).day)}`;

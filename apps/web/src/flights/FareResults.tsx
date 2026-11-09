@@ -11,7 +11,6 @@ import { travelButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
-import { cardsOnDate } from "./DateTiles.js";
 import { cabinText, whoText } from "./PartyPanel.js";
 
 /** What the fares are ordered by and which way; the default is price, cheapest first. */
@@ -28,14 +27,11 @@ const FIRST_ROWS = 10;
 export function FareResults({
   pending,
   reply,
-  date,
   sort,
   onWatch,
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
-  /** Shows only the fares departing on this date (the date tile selection). */
-  date?: string | undefined;
   sort: FareSort;
   onWatch: (card: FlightCard) => void;
 }) {
@@ -74,10 +70,10 @@ export function FareResults({
         </div>
       )}
       {reply && reply.cards.length > 0 && (
-        // Keyed by date so a switch folds the list back to its first rows.
         <FareList
-          key={date ?? ""}
-          cards={sortFares(cardsOnDate(reply.cards, date), sort)}
+          // Keyed by date so a new day folds the list back to its first rows.
+          key={reply.intent.departureDate}
+          cards={sortFares(reply.cards, sort)}
           sort={sort}
           onWatch={onWatch}
           note={footnote(reply.intent)}

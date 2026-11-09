@@ -1,29 +1,43 @@
 import { defaultFlightIntent } from "@split/shared";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
 
+const DAY = 86_400_000;
+const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+const plus = (date: string, n: number) => iso(Date.parse(`${date}T00:00:00Z`) + n * DAY);
+
 const intent = defaultFlightIntent(Date.now(), "TWD");
-const month = intent.departureDate.slice(0, 7);
-const daysInMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
-const day = (n: number) => `${month}-${String(n).padStart(2, "0")}`;
+const searched = intent.departureDate;
+const stay = Math.round((Date.parse(intent.returnDate ?? "") - Date.parse(searched)) / DAY);
+/** The first of the 30 bars: ten days before the searched day, but never in the past. */
+const first = iso(Math.max(Date.parse(iso(Date.now())), Date.parse(searched) - 10 * DAY));
+const at = (n: number) => plus(first, n);
+const indexOfSearched = Math.round((Date.parse(searched) - Date.parse(first)) / DAY);
 const HOUR = 3_600_000;
 
 const text = {
   en: {
-    title: `Cheapest fare by day, ${month.replace("-", "/")}`,
+    title: "Cheapest fare by day",
+    slider: "Departure day",
     unavailable: "Prices are unavailable right now",
     loading: "Loading prices",
     note: "Saved prices: round trip with a 3-day stay, 1 adult, economy, the day's lowest. They can differ from the trip you chose.",
     age: "Updated 40 h ago",
+    jump: "Jump to lowest",
+    legend: ["Cheap", "Normal", "Pricey", "Your day"],
   },
   "zh-TW": {
-    title: `${month.replace("-", "/")} 每日最低價`,
+    title: "每日最低價",
+    slider: "出發日期",
     unavailable: "目前無法取得價格",
     loading: "價格載入中",
     note: "已儲存的價格：停留 3 天的來回票，1 位成人、經濟艙，取當日最低。可能與你選的行程不同。",
     age: "40 小時前更新",
+    jump: "跳到最低",
+    legend: ["便宜", "普通", "偏貴", "你選的日子"],
   },
 } as const;
 type Language = keyof typeof text;
@@ -31,60 +45,248 @@ type Language = keyof typeof text;
 function setup(language: Language) {
   return renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
 }
-const strip = (language: Language) => screen.findByRole("region", { name: text[language].title });
+const dock = (language: Language) => screen.findByRole("region", { name: text[language].title });
+const slider = (language: Language) => screen.findByRole("slider", { name: text[language].slider });
+const bars = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>("[data-kind]")];
+const tip = (el: HTMLElement) => el.querySelector<HTMLElement>("[data-part='tip']");
+/** One snapshot per day: prices[n] is the fare n days after the first bar; null leaves it unsaved. */
+function save(app: ReturnType<typeof setup>, prices: (number | null)[], fetchedAt = Date.now()) {
+  app.api.flightPriceStrip = prices.flatMap((price, n) =>
+    price === null ? [] : [{ date: at(n), price, fetchedAt }],
+  );
+}
 const original = window.matchMedia.bind(window);
 afterEach(() => {
   window.matchMedia = original;
 });
+const searchedDays = (app: ReturnType<typeof setup>) =>
+  app.api.flightSearchRequests.map((r) => ("prompt" in r ? "prompt" : r.departureDate));
 
-describe("Flight Radar Price Strip", () => {
+describe("Flight Radar Price Strip dock", () => {
   it.each(["en", "zh-TW"] as const)(
-    "draws a bar per day from saved prices with the cheapest days marked, never searching, in %s",
+    "draws 30 bars from saved prices, never searching, and marks the day searched in %s",
     async (language) => {
       const app = setup(language);
-      const fetchedAt = Date.now();
-      app.api.flightPriceStrip = [
-        { date: day(3), price: 9000, fetchedAt },
-        { date: day(4), price: 5000, fetchedAt },
-        { date: day(5), price: 7000, fetchedAt },
-        { date: day(6), price: 5000, fetchedAt },
-      ];
-      const section = await strip(language);
-      const bars = await within(section).findAllByRole("listitem");
-      expect(bars).toHaveLength(daysInMonth);
-      const marked = bars.filter((bar) => bar.dataset.cheapest === "true");
-      expect(marked.map((bar) => bar.getAttribute("aria-label"))).toEqual([
-        expect.stringContaining("NT$ 5,000"),
-        expect.stringContaining("NT$ 5,000"),
-      ]);
-      expect(bars[2]).toHaveAccessibleName(expect.stringContaining("NT$ 9,000"));
-      expect(bars[2]?.dataset.cheapest).toBeUndefined();
-      expect(within(section).getByText(text[language].note)).toBeVisible();
-      // Fresh data carries no age note, and nothing here searched.
-      expect(within(section).queryByText(/小時前更新|h ago/)).toBeNull();
+      // Day 0 and 1 are the dearest, the searched day the cheapest.
+      const prices = Array.from(
+        { length: 30 },
+        (_, n) => 5000 + Math.abs(n - indexOfSearched) * 100,
+      );
+      save(app, prices);
+      const strip = await slider(language);
+      await waitFor(() => {
+        expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+      });
+      expect(bars(strip)).toHaveLength(30);
+      expect(bars(strip)[indexOfSearched]).toHaveAttribute("data-selected", "true");
+      expect(bars(strip).filter((bar) => bar.dataset.selected === "true")).toHaveLength(1);
+      // Cheapest third is cheap, dearest fifth pricey, the rest normal.
+      expect(bars(strip)[indexOfSearched]?.dataset.kind).toBe("cheap");
+      expect(bars(strip).some((bar) => bar.dataset.kind === "pricey")).toBe(true);
+      expect(bars(strip).some((bar) => bar.dataset.kind === "normal")).toBe(true);
+      expect(within(await dock(language)).getByText(text[language].note)).toBeVisible();
       expect(app.api.calls).not.toContain("POST /api/v1/flights/search");
-      expect(app.api.flightPriceStripQueries).toEqual([
-        `?origin=TPE&destination=OKA&currency=TWD&month=${month}`,
-      ]);
+      // The window can span two months; each month is one stored-prices read.
+      const months = new Set([first.slice(0, 7), at(29).slice(0, 7)]);
+      expect(app.api.flightPriceStripQueries.sort()).toEqual(
+        [...months].sort().map((m) => `?origin=TPE&destination=OKA&currency=TWD&month=${m}`),
+      );
     },
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "shows grey skeleton bars that do not pulse under reduced motion, then the bars, in %s",
+    "is a slider named for the departure day with the day and fare as its value in %s",
     async (language) => {
       const app = setup(language);
-      app.api.flightPriceStrip = [{ date: day(3), price: 9000, fetchedAt: Date.now() }];
+      save(
+        app,
+        Array.from({ length: 30 }, (_, n) => (n === indexOfSearched ? 5000 : 7000)),
+      );
+      const strip = await slider(language);
+      expect(strip).toHaveAttribute("aria-valuemin", "0");
+      expect(strip).toHaveAttribute("aria-valuemax", "29");
+      expect(strip).toHaveAttribute("aria-valuenow", String(indexOfSearched));
+      await waitFor(() => {
+        expect(strip.getAttribute("aria-valuetext")).toContain("NT$ 5,000");
+      });
+      expect(strip.tabIndex).toBe(0);
+    },
+  );
+
+  it("shows a dashed empty bar for a day with no saved price, and says so", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => (n === indexOfSearched ? null : 6000 + n * 10)),
+    );
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    expect(bars(strip)[indexOfSearched]).toHaveAttribute("data-kind", "none");
+    expect(strip.getAttribute("aria-valuetext")).toContain("No price");
+  });
+
+  it("moves the chosen day with the arrow keys and searches once, live, after they settle", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 6000 + n * 100),
+    );
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    const start = indexOfSearched;
+    fireEvent.keyDown(strip, { key: "ArrowRight" });
+    fireEvent.keyDown(strip, { key: "ArrowRight" });
+    fireEvent.keyDown(strip, { key: "ArrowLeft" });
+    expect(strip).toHaveAttribute("aria-valuenow", String(start + 1));
+    expect(bars(strip)[start + 1]).toHaveAttribute("data-selected", "true");
+    // The tooltip names the day, its fare and how far it is from the searched day.
+    const tooltip = tip(strip);
+    expect(tooltip?.textContent).toContain(
+      `NT$ ${(6000 + (start + 1) * 100).toLocaleString("en-US")}`,
+    );
+    const delta = tooltip?.querySelector("[data-direction]");
+    expect(delta).toHaveAttribute("data-direction", "up");
+    expect(delta?.textContent).toBe("100");
+    expect(searchedDays(app)).toEqual([]);
+    await waitFor(() => {
+      expect(searchedDays(app)).toEqual([plus(searched, 1)]);
+    });
+    // The return keeps its stay.
+    expect(app.api.flightSearchRequests[0]).toMatchObject({
+      returnDate: plus(searched, 1 + stay),
+    });
+  });
+
+  it("does not leave the first bar with the arrow keys", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, () => 6000),
+    );
+    const strip = await slider("en");
+    for (let i = 0; i < 40; i++) fireEvent.keyDown(strip, { key: "ArrowLeft" });
+    expect(strip).toHaveAttribute("aria-valuenow", "0");
+    for (let i = 0; i < 40; i++) fireEvent.keyDown(strip, { key: "ArrowRight" });
+    expect(strip).toHaveAttribute("aria-valuenow", "29");
+  });
+
+  it("follows a drag across the bars and searches the day it was released on", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 9000 - n * 100),
+    );
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    // 30 columns of 10 px.
+    strip.getBoundingClientRect = () => ({
+      left: 0,
+      width: 300,
+      right: 300,
+      top: 0,
+      bottom: 96,
+      height: 96,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(strip, { clientX: 5, pointerId: 1 });
+    expect(strip).toHaveAttribute("aria-valuenow", "0");
+    fireEvent.pointerMove(strip, { clientX: 125, pointerId: 1 });
+    expect(strip).toHaveAttribute("aria-valuenow", "12");
+    expect(tip(strip)?.textContent).toContain("NT$ 7,800");
+    fireEvent.pointerMove(strip, { clientX: 1000, pointerId: 1 });
+    expect(strip).toHaveAttribute("aria-valuenow", "29");
+    fireEvent.pointerMove(strip, { clientX: 215, pointerId: 1 });
+    // Nothing is searched while the finger moves.
+    expect(searchedDays(app)).toEqual([]);
+    fireEvent.pointerUp(strip, { clientX: 215, pointerId: 1 });
+    await waitFor(() => {
+      expect(searchedDays(app)).toEqual([at(21)]);
+    });
+  });
+
+  it("jumps to the lowest day and searches it", async () => {
+    const app = setup("en");
+    const prices = Array.from({ length: 30 }, (_, n) => 8000 + n * 50);
+    prices[7] = 4321;
+    save(app, prices);
+    const jump = await screen.findByRole("button", { name: /Jump to lowest/ });
+    await waitFor(() => {
+      expect(jump).toHaveTextContent("NT$ 4,321");
+    });
+    fireEvent.click(jump);
+    const strip = await slider("en");
+    expect(strip).toHaveAttribute("aria-valuenow", "7");
+    await waitFor(() => {
+      expect(searchedDays(app)).toEqual([at(7)]);
+    });
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "names the four colours in a legend in %s",
+    async (language) => {
+      const app = setup(language);
+      save(
+        app,
+        Array.from({ length: 30 }, (_, n) => 6000 + n),
+      );
+      await slider(language);
+      const region = await dock(language);
+      expect(
+        within(region).getByRole("button", { name: new RegExp(text[language].jump) }),
+      ).toBeVisible();
+      for (const name of text[language].legend)
+        expect(within(region).getByText(name)).toBeVisible();
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "shows how much cheaper another day is than the searched day in %s",
+    async (language) => {
+      const app = setup(language);
+      save(
+        app,
+        Array.from({ length: 30 }, (_, n) => (n === indexOfSearched ? 7000 : 6000)),
+      );
+      const strip = await slider(language);
+      await waitFor(() => {
+        expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+      });
+      fireEvent.keyDown(strip, { key: indexOfSearched > 0 ? "ArrowLeft" : "ArrowRight" });
+      const other = indexOfSearched > 0 ? indexOfSearched - 1 : 1;
+      expect(strip).toHaveAttribute("aria-valuenow", String(other));
+      expect(tip(strip)?.querySelector("[data-direction]")).toHaveAttribute(
+        "data-direction",
+        "down",
+      );
+      expect(tip(strip)?.querySelector("[data-direction]")?.textContent).toBe("1,000");
+      expect(strip.getAttribute("aria-valuetext")).toContain(
+        language === "en" ? "NT$ 1,000 cheaper than" : "省 NT$ 1,000",
+      );
+    },
+  );
+
+  it.each(["en", "zh-TW"] as const)(
+    "shows grey skeleton bars that do not pulse under reduced motion, then the dock, in %s",
+    async (language) => {
+      const app = setup(language);
+      save(app, [9000]);
       const release = app.api.holdResponses("GET /api/v1/flights/price-strip");
       const skeleton = await screen.findByRole("status", { name: text[language].loading });
-      expect(skeleton.children).toHaveLength(daysInMonth);
+      expect(skeleton.children).toHaveLength(30);
       expect(skeleton.querySelector(".strip-pulse")).toBeNull();
       release();
       await waitFor(() => {
         expect(screen.queryByRole("status", { name: text[language].loading })).toBeNull();
       });
-      expect(await within(await strip(language)).findAllByRole("listitem")).toHaveLength(
-        daysInMonth,
-      );
+      expect(await slider(language)).toBeVisible();
     },
   );
 
@@ -97,24 +299,82 @@ describe("Flight Radar Price Strip", () => {
     release();
   });
 
+  it("grows the bars in only when motion is allowed", async () => {
+    const reduced = setup("en");
+    save(
+      reduced,
+      Array.from({ length: 30 }, (_, n) => 6000 + n),
+    );
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    expect(strip.querySelector(".strip-grow")).toBeNull();
+    // A drag waves the bars only when motion is allowed: none under reduced motion.
+    strip.getBoundingClientRect = () => ({
+      left: 0,
+      width: 300,
+      right: 300,
+      top: 0,
+      bottom: 96,
+      height: 96,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(strip, { clientX: 55, pointerId: 1 });
+    expect(bars(strip).every((bar) => bar.style.getPropertyValue("--w") === "")).toBe(true);
+    fireEvent.pointerUp(strip, { pointerId: 1 });
+  });
+
+  it("grows and waves the bars when motion is allowed", async () => {
+    window.matchMedia = (query) => ({ matches: false, media: query }) as MediaQueryList;
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 6000 + n),
+    );
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    expect(strip.querySelector(".strip-grow")).not.toBeNull();
+    strip.getBoundingClientRect = () => ({
+      left: 0,
+      width: 300,
+      right: 300,
+      top: 0,
+      bottom: 96,
+      height: 96,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(strip, { clientX: 55, pointerId: 1 });
+    expect(bars(strip)[5]?.style.getPropertyValue("--w")).not.toBe("");
+    fireEvent.pointerUp(strip, { pointerId: 1 });
+    await act(async () => {});
+    expect(bars(strip).every((bar) => bar.style.getPropertyValue("--w") === "")).toBe(true);
+  });
+
   it.each(["en", "zh-TW"] as const)("says how old old prices are in %s", async (language) => {
     const app = setup(language);
     app.api.flightPriceStrip = [
-      { date: day(3), price: 9000, fetchedAt: Date.now() - 30 * HOUR },
-      { date: day(4), price: 8000, fetchedAt: Date.now() - 40 * HOUR },
+      { date: at(3), price: 9000, fetchedAt: Date.now() - 30 * HOUR },
+      { date: at(4), price: 8000, fetchedAt: Date.now() - 40 * HOUR },
     ];
-    const section = await strip(language);
-    // The oldest price decides how stale the strip is.
-    expect(await within(section).findByText(text[language].age)).toBeVisible();
+    await slider(language);
+    const region = await dock(language);
+    expect(within(region).getByText(text[language].age)).toBeVisible();
   });
 
   it.each(["en", "zh-TW"] as const)(
     "shows a plain unavailable line, no bars and no spinner, when there are no prices in %s",
     async (language) => {
       setup(language);
-      const section = await strip(language);
+      const section = await screen.findByRole("region", { name: text[language].title });
       expect(await within(section).findByText(text[language].unavailable)).toBeVisible();
-      expect(within(section).queryAllByRole("listitem")).toHaveLength(0);
+      expect(screen.queryByRole("slider")).toBeNull();
       expect(screen.queryByRole("status", { name: text[language].loading })).toBeNull();
     },
   );
@@ -124,9 +384,19 @@ describe("Flight Radar Price Strip", () => {
     async (language) => {
       const app = setup(language);
       app.api.failNext("GET /api/v1/flights/price-strip");
-      const section = await strip(language);
+      app.api.failNext("GET /api/v1/flights/price-strip");
+      const section = await screen.findByRole("region", { name: text[language].title });
       expect(await within(section).findByText(text[language].unavailable)).toBeVisible();
       expect(screen.queryByRole("status", { name: text[language].loading })).toBeNull();
     },
   );
+
+  it("keeps every new text pair at 4.5:1", () => {
+    const pairs: [string, string][] = [
+      ["#ffffff", "#143f2a"], // tooltip
+      ["#4a6f5c", "#f6fffa"], // hint, axis, legend on the dock
+      ["#26684b", "#ffffff"], // jump button
+    ];
+    for (const [fg, bg] of pairs) expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
 });
