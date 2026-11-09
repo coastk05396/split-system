@@ -118,7 +118,7 @@ it("falls back to Workers AI on a Groq 429, then to deterministic copy when outp
   output = { focus: "cheapest", moves: [], commentary: "Only NT$1 today, 90% off!" };
   const leaked = await ask();
   expect(leaked.commentary).not.toMatch(/90%|NT\$1\b/);
-  expect(leaked.commentary).toMatch(/^Test Air at .* is a great price/);
+  expect(leaked.commentary).toMatch(/^Test Air at .* is worth considering first/);
   hang = true;
   expect((await ask()).moves.length).toBeGreaterThanOrEqual(3);
 }, 10_000);
@@ -132,7 +132,7 @@ it("words commentary and chips in Traditional Chinese and ignores choices the re
   });
   const reply = await response.json<FlightAdviceReply>();
   expect(reply.commentary).toContain("Test Air");
-  expect(reply.commentary).toContain("超值好價");
+  expect(reply.commentary).toContain("值得優先考慮");
   expect(reply.commentary).not.toContain("budget");
   expect(reply.moves.map((move) => move.id)).not.toContain("lift_budget");
   expect(reply.moves.map((move) => move.id)).not.toContain("relax_direct");
@@ -204,7 +204,7 @@ it.each(["en", "zh-TW"] as const)(
     const { commentary } = await response.json<FlightAdviceReply>();
     expect(commentary).toMatch(language === "en" ? /^Cheapest is / : /^最便宜的是 /);
     expect(commentary.split(/[。.]\s/)[0]).not.toMatch(
-      /best-value|great price|fair price|最划算|超值|合理/,
+      /best-value|great price|fair price|best-value|最划算|超值|合理/,
     );
   },
 );
@@ -213,7 +213,7 @@ it.each(["en", "zh-TW"] as const)(
   "says a rated best fare is a great or fair price, no more, in %s",
   async (language) => {
     for (const [signal, words] of [
-      ["strong_buy", language === "en" ? "great price" : "超值好價"],
+      ["strong_buy", language === "en" ? "worth considering first" : "值得優先考慮"],
       ["buy", language === "en" ? "fair price" : "價格合理"],
     ] as const) {
       const response = await advise(
@@ -229,6 +229,59 @@ it.each(["en", "zh-TW"] as const)(
       );
       const { commentary } = await response.json<FlightAdviceReply>();
       expect(commentary.split(/[。.]\s/)[0]).toContain(words);
+    }
+  },
+);
+
+const PRICE_CLAIM = /great price|best-value|best value|bargain|deal|超值|好價|划算|優惠|便宜/i;
+
+it.each(["en", "zh-TW"] as const)(
+  "claims no bargain for a Strong Buy that Google rates high or whose history is 100% above the mean, in %s",
+  async (language) => {
+    // Six fares: the cheapest third is the two lowest; the 8000 top fare is rated high by Google.
+    const base = {
+      airline: "Test Air",
+      outboundDeparture: "08:00",
+      outboundArrival: "12:00",
+      inboundDeparture: null,
+      inboundArrival: null,
+      stops: 0,
+      durationMinutes: 180,
+      priceLevel: "typical" as const,
+    };
+    const app = createApp({
+      ...productionDeps,
+      now: () => clock.now,
+      flightSource: () =>
+        Promise.resolve([
+          { ...base, price: 8000, top: true, priceLevel: "high" as const },
+          ...[8500, 9000, 9500, 10000, 10500].map((price) => ({ ...base, price })),
+        ]),
+    });
+    const user = await signIn("google", uniqueSub("advice-high"));
+    const search = await app.request(
+      "https://split.test/api/v1/flights/search",
+      json({ ...intent, destination: "HKG", directOnly: true }, bearer(user.accessToken)),
+      env,
+    );
+    const { cards } = await search.json<{ cards: FlightAdviceRequest["cards"] }>();
+    const high = cards.filter((card) => card.priceLevel === "high");
+    expect(high.length).toBeGreaterThan(0);
+    expect(high.every((card) => card.signal === "strong_buy")).toBe(true);
+    const doubled = {
+      ...(high[0] as (typeof cards)[number]),
+      priceLevel: "typical" as const,
+      history: { days: 30, meanPrice: 4000, percentBelowMean: -100, percentile: 100 },
+    };
+    for (const set of [high, [doubled]]) {
+      const response = await app.request(
+        "https://split.test/api/v1/flights/advise",
+        json({ language, intent, cards: set }, bearer(user.accessToken)),
+        env,
+      );
+      const { commentary } = await response.json<FlightAdviceReply>();
+      expect(commentary).not.toMatch(PRICE_CLAIM);
+      expect(commentary).toContain(language === "en" ? "worth considering first" : "值得優先考慮");
     }
   },
 );

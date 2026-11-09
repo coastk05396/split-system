@@ -94,10 +94,11 @@ const shift = (date: string, days: number) =>
 const SIGNAL_RANK = { strong_buy: 0, buy: 1, hold: 2 } as const;
 /**
  * Wording for a card's Deal Signal that is true for every case that maps to it (the signal's own names are never
- * shown). Hold also covers an unknown price level and a cheap fare over budget, so it claims nothing about price.
+ * shown). Strong Buy also covers a top cheapest-third fare Google rates high, and Hold an unknown price level or a
+ * cheap fare over budget, so those two claim nothing about price.
  */
 export const SIGNAL_NOTE = {
-  strong_buy: ["超值好價", "Great price"],
+  strong_buy: ["優先考慮", "Worth considering first"],
   buy: ["價格合理", "Fair price"],
   hold: ["價格僅供參考", "Price for reference"],
 } as const satisfies Record<string, Pair>;
@@ -231,8 +232,8 @@ export function renderAdvice(
       `Cheapest is ${cheapest.airline} at ${money(cheapest.price)}, departing ${time(cheapest.outboundDeparture)}.`,
     ],
     best_signal: [
-      `${best.airline} ${money(best.price)} ${best.signal === "strong_buy" ? "是超值好價" : "的價格合理"}。`,
-      `${best.airline} at ${money(best.price)} is a ${best.signal === "strong_buy" ? "great" : "fair"} price.`,
+      `${best.airline} ${money(best.price)} ${best.signal === "strong_buy" ? "值得優先考慮" : "的價格合理"}。`,
+      `${best.airline} at ${money(best.price)} ${best.signal === "strong_buy" ? "is worth considering first" : "is a fair price"}.`,
     ],
     over_budget: [
       `最低票價仍超出預算 ${money(cheapest.overBudget)}。`,
@@ -245,8 +246,8 @@ export function renderAdvice(
   } as const satisfies Record<AdviceFocus, Pair>;
   const strong = cards.filter((card) => card.signal === "strong_buy").length;
   const tally: Pair = [
-    `${cards.length} 個選項中有 ${strong} 個是超值好價。`,
-    `${strong} of ${cards.length} options are great prices.`,
+    `${cards.length} 個選項中有 ${strong} 個值得優先考慮。`,
+    `${strong} of ${cards.length} options are worth considering first.`,
   ];
 
   const available = eligibleMoves(request, now);

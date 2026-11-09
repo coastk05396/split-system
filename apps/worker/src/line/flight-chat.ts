@@ -134,7 +134,7 @@ async function watchReply(
       deps.now(),
     );
     return text(
-      `已設定降價提醒：${intent.origin} → ${intent.destination}，出現超值好價或降到 ${formatAmount(targetFare, intent.currency)} 時，用 LINE 通知你一次。`,
+      `已設定降價提醒：${intent.origin} → ${intent.destination}，出現優先考慮的票價或降到 ${formatAmount(targetFare, intent.currency)} 時，用 LINE 通知你一次。`,
     );
   } catch (error) {
     return text(

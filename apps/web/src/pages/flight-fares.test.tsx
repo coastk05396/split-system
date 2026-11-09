@@ -42,7 +42,7 @@ const text = {
     results: "Search results",
     advice: "Deal commentary",
     price: "NT$ 25,000",
-    highlights: "Today's best-value fares",
+    highlights: "Today's picks",
     ideas: "Ideas to try",
     top: "Top",
     cheapest: "Cheapest",
@@ -66,7 +66,7 @@ const text = {
     results: "搜尋結果",
     advice: "票價短評",
     price: "NT$ 25,000",
-    highlights: "今日值得買的航班",
+    highlights: "今日精選航班",
     ideas: "接下來可以試試",
     top: "熱門",
     cheapest: "最低價",
@@ -348,17 +348,17 @@ describe("Flight Radar compact price list", () => {
         fare("Plain Air", 31000, "typical"),
         fare("Dear Air", 40000, "high"),
       ]);
-      // The worker's own advice wording for a best fare of any signal (great or fair price, never the signal name).
+      // The worker's own advice wording for a best fare of any signal (priority or fair price, never the signal name).
       api.flightAdvice = {
         commentary:
           language === "en"
-            ? "Raised Air at NT$ 18,000 is a great price. 2 of 5 options are great prices."
-            : "Raised Air NT$ 18,000 是超值好價。5 個選項中有 2 個是超值好價。",
+            ? "Raised Air at NT$ 18,000 is worth considering first. 2 of 5 options are worth considering first."
+            : "Raised Air NT$ 18,000 值得優先考慮。5 個選項中有 2 個值得優先考慮。",
         moves: [],
       };
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
-      await screen.findByText(/Raised Air.*(great price|超值好價)/);
+      await screen.findByText(/Raised Air.*(worth considering first|值得優先考慮)/);
       expect(
         rows(language).map((row) => within(row).queryByText(text[language].top) !== null),
       ).toEqual([false, false, true, false, false]);

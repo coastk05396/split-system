@@ -96,3 +96,15 @@ it("raises Strong Buy for a top fare in the cheapest third of its search, and on
       .signal,
   ).toBe("hold");
 });
+
+it("still raises Strong Buy for a top cheapest-third fare when Google rates it high or history is 100% above the mean", () => {
+  const top = { price: 200, top: true, cheapestThird: 200 };
+  expect(evaluateDealSignal({ ...top, priceLevel: "high", history: [] }).signal).toBe("strong_buy");
+  const doubled = evaluateDealSignal({
+    ...top,
+    priceLevel: "typical",
+    history: Array<number>(14).fill(100),
+  });
+  expect(doubled.history?.percentBelowMean).toBe(-100);
+  expect(doubled.signal).toBe("strong_buy");
+});

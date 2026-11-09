@@ -134,7 +134,7 @@ describe("Flight Radar", () => {
     api.flightHighlights.push(card);
     api.flightHistory = { days: 13, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
     await openFilters(); // the highlights live in the passengers sheet
-    const ticker = await screen.findByRole("region", { name: "Today's best-value fares" });
+    const ticker = await screen.findByRole("region", { name: "Today's picks" });
     fireEvent.click(await within(ticker).findByRole("button", { name: /TPE → NRT/ }));
     expect(await screen.findByText("Example Air")).toBeVisible();
     expect(screen.queryByText(/rolling average/)).toBeNull();
@@ -145,7 +145,7 @@ describe("Flight Radar", () => {
     // A search closes the panel, so open the sheet again.
     await openFilters();
     fireEvent.click(
-      within(screen.getByRole("region", { name: "Today's best-value fares" })).getByRole("button", {
+      within(screen.getByRole("region", { name: "Today's picks" })).getByRole("button", {
         name: /TPE → NRT/,
       }),
     );
