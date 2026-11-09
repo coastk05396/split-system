@@ -406,7 +406,7 @@ export function TravelPage() {
             type="submit"
             form={FLIGHT_SEARCH_FORM_ID}
             disabled={search.isPending}
-            className={`${travelButton} w-full px-6 py-4`}
+            className={`${travelButton} shine w-full px-6 py-4`}
           >
             {t("flight.search")}
           </button>

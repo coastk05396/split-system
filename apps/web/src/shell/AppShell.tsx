@@ -164,6 +164,17 @@ function Sidebar() {
   );
 }
 
+const TRAVEL_FONTS =
+  "https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Schibsted+Grotesk:wght@400;600;700&display=swap";
+
+function link(rel: string, href: string, crossOrigin = false): HTMLLinkElement {
+  const element = document.createElement("link");
+  element.rel = rel;
+  element.href = href;
+  if (crossOrigin) element.crossOrigin = "anonymous";
+  return element;
+}
+
 /** Mobile: content above a five-tab bottom bar. Desktop: a sidebar beside the content. */
 export function AppShell({ children }: { children: ReactNode }) {
   const { travel } = useTabs();
@@ -172,8 +183,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!travel) return;
     const root = document.documentElement;
     root.classList.add("travel-mode");
+    // The mock's fonts load for Travel only; the system stack in the CSS covers a blocked or slow fetch.
+    const fonts = [
+      link("preconnect", "https://fonts.googleapis.com"),
+      link("preconnect", "https://fonts.gstatic.com", true),
+      link("stylesheet", TRAVEL_FONTS),
+    ];
+    document.head.append(...fonts);
     return () => {
       root.classList.remove("travel-mode");
+      for (const element of fonts) element.remove();
     };
   }, [travel]);
   return (

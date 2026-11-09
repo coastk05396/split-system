@@ -64,6 +64,66 @@
 .travel-mode .glass-nav {
   background-color: var(--travel-nav);
 }
+/* Travel mode type: the mock's fonts first (Google Fonts, added by the shell), then the normal stack. */
+.travel-mode body {
+  font-family: "Schibsted Grotesk", "Noto Sans TC", var(--font-sans);
+}
+/* Paper grain: fixed behind the page (below every card and all text), so it cannot touch contrast. */
+.travel-mode body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.07;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .08 0 0 0 0 .25 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Ticket notches: half circles in the page colour cut into both sides of a fare card, clear of its 16px padding. */
+.fare::before,
+.fare::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: var(--travel-page);
+  border: 1px solid var(--color-sprout-200);
+  pointer-events: none;
+}
+.fare::before {
+  left: -11px;
+  clip-path: inset(0 0 0 50%);
+}
+.fare::after {
+  right: -11px;
+  clip-path: inset(0 50% 0 0);
+}
+/* Shine sweep on the search buttons. Peak is 20% white so white text stays above 4.5:1 mid-sweep. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.2) 50%, transparent 70%);
+  transform: translateX(-120%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shine::after {
+    animation: shine 3.6s 1s infinite;
+  }
+}
+@keyframes shine {
+  to {
+    transform: translateX(120%);
+  }
+}
 
 /* Three-tier asymmetric tactile press feedback:
    press down settles briskly (80ms ease-out); release rebounds gently with a natural squishy spring. */

@@ -219,7 +219,7 @@ export function RouteCard({
           type="button"
           disabled={pending}
           onClick={onSearch}
-          className={`${travelButton} min-h-12 text-[17px]`}
+          className={`${travelButton} shine min-h-12 text-[17px]`}
         >
           <svg
             viewBox="0 0 24 24"
