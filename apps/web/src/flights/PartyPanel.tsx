@@ -165,6 +165,11 @@ export function TripToggle({
 }
 
 const FOCUSABLE = "button:not(:disabled), input:not(:disabled)";
+/** Tab stops in DOM order: a radio group is one stop, its checked radio. */
+const tabStops = (root: HTMLElement | null) =>
+  Array.from(root?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
+    (e) => !(e instanceof HTMLInputElement && e.type === "radio" && !e.checked),
+  );
 
 /**
  * Adults, children, infants and cabin in a full-screen dialog (focus moves in and is trapped,
@@ -182,7 +187,7 @@ function PartySheet({
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    dialog.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    tabStops(dialog.current)[0]?.focus();
   }, []);
   const full = value.adults + value.children + value.infants >= MAX_PARTY;
   function keyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -192,7 +197,7 @@ function PartySheet({
       return;
     }
     if (event.key !== "Tab") return;
-    const items = Array.from(dialog.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+    const items = tabStops(dialog.current);
     const [first, last] = [items[0], items.at(-1)];
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();

@@ -329,7 +329,7 @@ describe("Passengers sheet", () => {
     openParty();
     expect(sheet()).toContainElement(document.activeElement as HTMLElement);
     const focusable = Array.from(
-      sheet().querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)"),
+      sheet().querySelectorAll<HTMLElement>("button:not(:disabled), input:checked"),
     );
     const first = focusable[0] as HTMLElement;
     const last = focusable.at(-1) as HTMLElement;
@@ -342,6 +342,27 @@ describe("Passengers sheet", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(summary());
   });
+
+  it.each(["Economy", "Premium economy", "Business", "First"])(
+    "wraps Tab both ways over what is really tabbable with %s selected",
+    async (cabin) => {
+      await setup();
+      openParty();
+      fireEvent.click(screen.getByRole("radio", { name: cabin }));
+      // A radio group is one tab stop: only the checked radio is tabbable.
+      const stops = Array.from(
+        sheet().querySelectorAll<HTMLInputElement | HTMLButtonElement>("button, input"),
+      ).filter((e) => !e.disabled && !(e instanceof HTMLInputElement && !e.checked));
+      const first = stops[0] as HTMLElement;
+      const last = stops.at(-1) as HTMLElement;
+      expect(last).toBe(screen.getByRole("radio", { name: cabin }));
+      last.focus();
+      fireEvent.keyDown(last, { key: "Tab" });
+      expect(document.activeElement).toBe(first);
+      fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(last);
+    },
+  );
 
   it("closes with Done and keeps the choice", async () => {
     await setup();

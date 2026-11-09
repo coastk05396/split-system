@@ -176,6 +176,18 @@ describe("Calendar picker", () => {
     expect(within(calendar).getByRole("button", { name: "Previous month" })).toBeDisabled();
   });
 
+  it("is the way back from a cleared departure date: it opens on today's month", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2027-01-05T04:00:00Z") });
+    await setup();
+    fireEvent.change(screen.getByLabelText("Departure date"), { target: { value: "" } });
+    const calendar = await openCalendar();
+    expect(within(calendar).getByText("January 2027")).toBeVisible();
+    expect(day(calendar, /^Jan 20/)).toBeEnabled();
+    fireEvent.click(day(calendar, /^Jan 20/));
+    expect(screen.getByLabelText("Departure date")).toHaveValue("2027-01-20");
+    expect(screen.getByLabelText("Return date")).toHaveValue("2027-01-23");
+  });
+
   it("shows the Chinese labels", async () => {
     await setup("zh-TW");
     const calendar = await openCalendar();

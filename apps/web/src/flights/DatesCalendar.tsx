@@ -13,6 +13,10 @@ const MIN_PRICED_DAYS = 3;
 /** The return date a first tap offers, so an abandoned pick is still a valid trip. */
 const DEFAULT_STAY = 3;
 
+/** The month a calendar opens on: the departure's, or today's while that field is empty or invalid. */
+const openMonth = (departure: string, today: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(departure) ? departure.slice(0, 7) : today.slice(0, 7);
+
 const monthLabel = (month: string) => {
   const [year = 0, mo = 1] = month.split("-").map(Number);
   return getLocale() === "en"
@@ -141,13 +145,13 @@ export function DatesCalendar({
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(departure.slice(0, 7));
+  const [month, setMonth] = useState(openMonth(departure, today));
   /** True between the departure tap and the return tap. */
   const [choosingReturn, setChoosingReturn] = useState(false);
   const toggle = () => {
     setOpen((o) => !o);
     setChoosingReturn(false);
-    setMonth(departure.slice(0, 7));
+    setMonth(openMonth(departure, today));
   };
   function pick(date: string) {
     if (oneWay) {
