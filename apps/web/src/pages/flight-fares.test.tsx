@@ -2,7 +2,7 @@ import type { FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render-app.js";
-import { openFilters } from "../../test/flight-panel.js";
+import { openFilters, askPrompt } from "../../test/flight-panel.js";
 import { makeUser, type FakeApi } from "../../test/fake-api.js";
 
 const warmIsland: FlightSearchIntent = {
@@ -49,7 +49,7 @@ const text = {
     sort: "Sort fares",
     footnote:
       "Prices are round-trip totals for 1 adult from Google Flights. Check again before you book.",
-    title: "Find your flight",
+    title: "All flights (3)",
     order: "Cheapest first",
     meta: "Nonstop · 3 h",
     oneStop: "1 stop · 3 h 10 min",
@@ -72,7 +72,7 @@ const text = {
     cheapest: "最低價",
     sort: "排序方式",
     footnote: "價格為來回總價・1 位成人，來自 Google 航班，訂票前請再確認。",
-    title: "找到你的好航班",
+    title: "全部航班 3 筆",
     order: "價格由低到高",
     meta: "直飛・3 小時",
     oneStop: "轉機 1 次・3 小時 10 分",
@@ -88,18 +88,15 @@ function setup(
   language: Language,
   fares: (ReturnType<typeof fare> & { top?: boolean })[] = [fare("Example Air", 25000)],
 ) {
-  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightFares = fares;
   return app;
 }
 
 /** Runs a prompt search the way a User does; the fake API answers with the Warm island intent. */
-async function explore(api: FakeApi, language: Language) {
+async function explore(api: FakeApi, _language: Language) {
   api.flightPromptIntent = warmIsland;
-  fireEvent.change(await screen.findByLabelText(text[language].prompt), {
-    target: { value: "warm island" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: text[language].explore }));
+  await askPrompt("warm island");
 }
 
 /** The retired Deal Signal pill words, in both languages; the labels are gone, the data stays. */
@@ -132,9 +129,7 @@ describe("Flight Radar compact price list", () => {
       expect(within(first).getByText("08:00")).toBeVisible();
       expect(within(first).getByText("12:00")).toBeVisible();
       expect(within(first).getByText(text[language].meta)).toBeVisible();
-      expect(within(first).getByText("NT$ 21,000").closest("[data-flap]")).toHaveClass(
-        "tabular-nums",
-      );
+      expect(within(first).getByText("NT$ 21,000")).toHaveClass("fr-price");
       // A time line with a plane between departure and arrival, never a flight number or baggage.
       expect(first.querySelector("svg path[d^='M21 16v-2']")).not.toBeNull();
       expect(first).toHaveClass("fr-fare");
@@ -241,7 +236,7 @@ describe("Flight Radar compact price list", () => {
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
       const link = within(rows(language)[0] as HTMLElement).getByRole("link");
-      expect(link).toHaveAttribute("href", expect.stringContaining("google.com/travel/flights"));
+      expect(link).toHaveAttribute("href", expect.stringContaining("google.com/travel"));
       expect(link.closest("li")).toHaveClass("fr-fare");
       const bell = within(rows(language)[0] as HTMLElement).getByRole("button", {
         name: text[language].bell,
@@ -399,7 +394,10 @@ describe("Flight Radar results first", () => {
     "keeps the highlights in the passengers sheet and shows no results before a search in %s",
     async (language) => {
       setup(language, threeFares);
-      expect(await screen.findByLabelText(text[language].prompt)).toBeVisible();
+      expect(
+        await screen.findByRole("region", { name: /^(Search summary|搜尋摘要)$/ }),
+      ).toBeVisible();
+      expect(screen.queryByLabelText(text[language].prompt)).toBeNull();
       await openFilters();
       expect(screen.getByRole("region", { name: text[language].highlights })).toBeVisible();
       expect(screen.queryByRole("region", { name: text[language].results })).toBeNull();

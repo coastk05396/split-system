@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
-import { openSearchPanel } from "../../test/flight-panel.js";
+import { openSearchPanel, askPrompt } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const css = readFileSync("src/styles.css", "utf8"); // vitest runs with apps/web as cwd
@@ -39,16 +39,10 @@ const fare = {
 };
 
 async function setup(language: "en" | "zh-TW" = "en") {
-  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightPromptIntent = intent;
   app.api.flightFares = [fare];
-  fireEvent.change(
-    await screen.findByLabelText(language === "en" ? "Where would you like to go?" : "想去哪裡？"),
-    { target: { value: "okinawa" } },
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: language === "en" ? "Explore flights" : "探索航班" }),
-  );
+  await askPrompt("okinawa");
   await screen.findByText("Example Air");
   await openSearchPanel();
   return app;
@@ -67,7 +61,7 @@ const closeParty = () => {
 };
 const submit = async (app: Awaited<ReturnType<typeof setup>>, count: number) => {
   fireEvent.click(
-    within(screen.getByRole("region", { name: "Search bar" })).getByRole("button", {
+    within(screen.getByRole("dialog", { name: "Search sheet" })).getByRole("button", {
       name: "Search flights",
     }),
   );
@@ -81,7 +75,7 @@ describe("Passengers, cabin and trip type panel", () => {
     await setup();
     expect(summary()).toHaveTextContent("1 adult · Economy · Round trip");
     expect(summary()).toHaveAttribute("aria-haspopup", "dialog");
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /^Passengers and cabin/ })).toBeNull();
     expect(screen.queryByRole("group", { name: "Adults" })).toBeNull();
     openParty();
     expect(sheet()).toHaveAttribute("aria-modal", "true");
@@ -197,14 +191,13 @@ describe("Passengers, cabin and trip type panel", () => {
 
   it("shows the Chinese labels and chip suffixes", async () => {
     const app = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "zh-TW" },
     });
     app.api.flightPromptIntent = { ...intent, adults: 2, tripType: "one-way" };
     delete app.api.flightPromptIntent.returnDate;
     app.api.flightFares = [fare];
-    fireEvent.change(await screen.findByLabelText("想去哪裡？"), { target: { value: "okinawa" } });
-    fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+    await askPrompt("okinawa");
     await screen.findByText("Example Air");
     const card = screen.getByRole("region", { name: "搜尋摘要" });
     expect(
@@ -354,7 +347,7 @@ describe("Passengers sheet", () => {
     fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(last);
     fireEvent.keyDown(last, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /^Passengers and cabin/ })).toBeNull();
     expect(document.activeElement).toBe(summary());
   });
 
@@ -390,15 +383,14 @@ describe("Passengers sheet", () => {
     openParty();
     press("Adults", "Add an adult");
     closeParty();
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /^Passengers and cabin/ })).toBeNull();
     expect(summary()).toHaveTextContent("2 adults · Economy · Round trip");
     expect(document.activeElement).toBe(summary());
   });
 
   it("shows the Chinese labels and the infant note", async () => {
-    renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language: "zh-TW" } });
-    fireEvent.change(await screen.findByLabelText("想去哪裡？"), { target: { value: "okinawa" } });
-    fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+    renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language: "zh-TW" } });
+    await askPrompt("okinawa");
     await screen.findByText("Example Air");
     await openSearchPanel();
     fireEvent.click(screen.getByRole("button", { name: /^旅客與艙等/ }));

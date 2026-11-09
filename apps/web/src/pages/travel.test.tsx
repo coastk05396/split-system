@@ -9,7 +9,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
-import { openFilters, openSearchPanel } from "../../test/flight-panel.js";
+import { openFilters, openSearchPanel, askPrompt } from "../../test/flight-panel.js";
 
 const warmIsland: FlightSearchIntent = {
   origin: "TPE",
@@ -26,18 +26,10 @@ const warmIsland: FlightSearchIntent = {
 /** Runs a prompt search the way a User does; the fake API answers with the Warm island intent. */
 async function explore(
   api: { flightPromptIntent: FlightSearchIntent | null },
-  language: "en" | "zh-TW",
+  _language: "en" | "zh-TW",
 ) {
   api.flightPromptIntent = warmIsland;
-  fireEvent.change(
-    await screen.findByLabelText(language === "en" ? "Where would you like to go?" : "想去哪裡？"),
-    {
-      target: { value: "warm island" },
-    },
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: language === "en" ? "Explore flights" : "探索航班" }),
-  );
+  await askPrompt("warm island");
   await screen.findByText("Example Air");
 }
 
@@ -45,17 +37,17 @@ describe("Flight Radar", () => {
   it("shows Travel mode and redirects the old Rich Menu address", async () => {
     const { router } = renderApp({ path: "/trips/latest", cookieUser: makeUser("Rick") });
     expect(await screen.findByRole("heading", { name: "下一站，沖繩！" })).toBeVisible();
-    expect(router.state.location.pathname).toBe("/travel/flights");
+    expect(router.state.location.pathname).toBe("/travel");
     for (const name of ["底部導覽", "側邊導覽"]) {
       expect(
-        within(screen.getByRole("navigation", { name })).getByRole("link", { name: "航班" }),
+        within(screen.getByRole("navigation", { name })).getByRole("button", { name: "搜尋" }),
       ).toHaveAttribute("aria-current", "page");
     }
     expect(screen.queryByText("旅遊功能即將推出，敬請期待！")).toBeNull();
   });
   it("prices an English round trip in the Preferred currency and shows the Google handoff", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
     });
     expect(await screen.findByRole("heading", { name: "Next stop, Okinawa!" })).toBeVisible();
@@ -81,15 +73,15 @@ describe("Flight Radar", () => {
   });
 
   it("returns signed-out visitors to Flight Radar after sign-in", async () => {
-    const { router } = renderApp({ path: "/travel/flights" });
+    const { router } = renderApp({ path: "/travel" });
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/sign-in");
     });
-    expect(new URLSearchParams(router.state.location.search).get("next")).toBe("/travel/flights");
+    expect(new URLSearchParams(router.state.location.search).get("next")).toBe("/travel");
   });
 
   it("offers a direct Google link when live pricing is blocked", async () => {
-    const { api } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     api.flightsDegraded = true;
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     await openSearchPanel();
@@ -104,7 +96,7 @@ describe("Flight Radar", () => {
   });
   it("runs a verified highlight in one tap and shows history only after 14 observed days", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en", preferredCurrency: "USD" },
     });
     const intent = {
@@ -155,12 +147,9 @@ describe("Flight Radar", () => {
     expect(screen.getByText("Price percentile: 7")).toBeVisible();
   });
   it("mixes the last result with a Soul Prompt and edits Entity Pills without another prompt parse", async () => {
-    const { api } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    const { api } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await explore(api, "zh-TW");
-    fireEvent.change(screen.getByLabelText("想去哪裡？"), {
-      target: { value: "下個月週末四天，一萬五以內不要紅眼" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+    await askPrompt("下個月週末四天，一萬五以內不要紅眼");
     expect(
       await within(screen.getByRole("region", { name: "搜尋摘要" })).findByRole("button", {
         name: /1\/8（五）– 1\/11（一）$/,
@@ -193,23 +182,23 @@ describe("Flight Radar", () => {
       excludeRedEye: true,
     });
   });
-  it("summarises the search in pills and edits the route in a panel that opens and closes", async () => {
+  it("summarises the search in a row and edits the route in a sheet that opens and closes", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
-    // The prompt bar comes first; the panel is closed until a pill is tapped.
-    const prompt = await screen.findByLabelText("Where would you like to go?");
-    const pills = screen.getByRole("region", { name: "Search summary" });
-    expect(prompt.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
+    // The sheet is closed until the route chip is tapped; there is no prompt bar any more.
+    const pills = await screen.findByRole("region", { name: "Search summary" });
+    expect(screen.queryByLabelText("Where would you like to go?")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Search sheet" })).toBeNull();
     await explore(api, "en");
     const route = within(pills).getByRole("button", { name: /Jan 8 – Jan 11$/ });
-    expect(route).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(route);
-    expect(route).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(route);
-    expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
+    const sheet = await screen.findByRole("dialog", { name: "Search sheet" });
+    fireEvent.keyDown(sheet, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Search sheet" })).toBeNull();
+    });
     fireEvent.click(route);
     const panel = screen.getByRole("form", { name: "Edit search condition" });
     fireEvent.change(within(panel).getByLabelText("Origin airport"), { target: { value: "KHH" } });
@@ -217,7 +206,9 @@ describe("Flight Radar", () => {
     await waitFor(() => {
       expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(2);
     });
-    expect(screen.queryByRole("form", { name: "Edit search condition" })).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Search sheet" })).toBeNull();
+    });
     const requests = api.requests
       .filter((r) => r.route === "POST /api/v1/flights/search")
       .map((r) => flightSearchRequestSchema.parse(JSON.parse(r.body ?? "{}")));
@@ -231,12 +222,12 @@ describe("Flight Radar", () => {
     "restores the last search in %s without searching, until a new search runs",
     async (language, label, route, search) => {
       const user = { ...makeUser("Rick"), language };
-      const first = renderApp({ path: "/travel/flights", cookieUser: user });
+      const first = renderApp({ path: "/travel", cookieUser: user });
       await explore(first.api, language);
       expect(screen.queryByText(label)).toBeNull();
       cleanup();
 
-      const { api } = renderApp({ path: "/travel/flights", cookieUser: user });
+      const { api } = renderApp({ path: "/travel", cookieUser: user });
       const pills = await screen.findByRole("region", {
         name: /^(Search summary|搜尋摘要)$/,
       });
@@ -255,23 +246,23 @@ describe("Flight Radar", () => {
   );
 
   it.each([
-    ["en", "Search bar", "Search flights", "Destination airport"],
-    ["zh-TW", "搜尋列", "搜尋航班", "目的地機場"],
+    ["en", "Search sheet", "Search flights", "Destination airport"],
+    ["zh-TW", "搜尋面板", "搜尋航班", "目的地機場"],
   ] as const)(
-    "keeps Search in a bottom bar in %s only while the panel is open and searches the displayed intent",
+    "keeps Search in the sheet in %s only while it is open and searches the displayed intent",
     async (language, barName, searchName, destinationName) => {
       const { api } = renderApp({
-        path: "/travel/flights",
+        path: "/travel",
         cookieUser: { ...makeUser("Rick"), language },
       });
       await screen.findByRole("heading", { name: /^(Next stop, Okinawa!|下一站，沖繩！)$/ });
-      expect(screen.queryByRole("region", { name: barName })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: barName })).toBeNull();
       // The mock has no one-tap search: Search exists only once the panel opens.
       expect(screen.queryByRole("button", { name: searchName })).toBeNull();
       expect(screen.queryByRole("button", { name: /^(Search again|重新探索航班)$/ })).toBeNull();
 
       await openSearchPanel();
-      const bar = screen.getByRole("region", { name: barName });
+      const bar = screen.getByRole("dialog", { name: barName });
       const search = within(bar).getByRole("button", { name: searchName });
       expect(search).toBeEnabled();
       expect(
@@ -289,13 +280,15 @@ describe("Flight Radar", () => {
         .map((r) => JSON.parse(r.body ?? "{}") as Record<string, unknown>);
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({ destination: "NRT" });
-      expect(screen.queryByRole("region", { name: barName })).toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: barName })).toBeNull();
+      });
     },
   );
 
   it("rejects a past departure date in the calendar and in the search", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     await openSearchPanel();
@@ -332,7 +325,7 @@ describe("Flight Radar", () => {
         setItem.call(this, key, value);
       });
       const { api } = renderApp({
-        path: "/travel/flights",
+        path: "/travel",
         cookieUser: { ...makeUser("Rick"), language: "en" },
       });
       await openSearchPanel();
@@ -354,7 +347,7 @@ describe("Flight Radar", () => {
       // 2026-12-03T17:00Z is 2026-12-04 01:00 in Taiwan.
       vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-03T17:00:00Z") });
       const { api } = renderApp({
-        path: "/travel/flights",
+        path: "/travel",
         cookieUser: { ...makeUser("Rick"), language: "en" },
       });
       await openSearchPanel();
@@ -369,7 +362,7 @@ describe("Flight Radar", () => {
   });
 
   it("no longer shows the Vibe Recipe deck", async () => {
-    renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language: "en" } });
+    renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language: "en" } });
     await screen.findByRole("heading", { name: "Next stop, Okinawa!" });
     expect(screen.queryByRole("region", { name: "Vibe Recipes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Warm island" })).toBeNull();
@@ -377,7 +370,7 @@ describe("Flight Radar", () => {
 
   it("renders fares immediately, then reveals commentary and Adaptive Next-Move Chips", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     const release = api.holdResponses("POST /api/v1/flights/advise");
@@ -405,7 +398,7 @@ describe("Flight Radar", () => {
 
   it("applies a chip's intent patch to the pills and searches directly without a prompt parse", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     await explore(api, "en");
@@ -432,7 +425,7 @@ describe("Flight Radar", () => {
 
   it("keeps fares and shows no error when advice fails", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Rick"), language: "en" },
     });
     api.failNext("POST /api/v1/flights/advise", "INTERNAL", 500);

@@ -11,6 +11,7 @@ import { t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 import { FlightPriceWatchButton } from "./FlightPriceWatches.js";
 import { cabinText, whoText } from "./PartyPanel.js";
+import { SearchingCard } from "./SearchingCard.js";
 
 /** What the fares are ordered by and which way; the default is price, cheapest first. */
 export type FareSort = { key: "price" | "time"; descending: boolean };
@@ -29,16 +30,19 @@ const FIRST_ROWS = 10;
 export function FareResults({
   pending,
   reply,
+  route,
   sort,
-  carousel = true,
+  onSort,
   onWatch,
   saved = null,
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
+  /** The airports being searched, drawn on the searching card. */
+  route: { origin: string; destination: string };
   sort: FareSort;
-  /** Swipe row (the mock's look) or the plain vertical list; the toggle sits in the sort bar. */
-  carousel?: boolean;
+  /** A tap on a sort button; the buttons sit on the results header. */
+  onSort: (key: FareSort["key"]) => void;
   onWatch: (card: FlightCard) => void;
   /** The fare whose Price Watch was just saved: it plays the stamp and bell. */
   saved?: SavedWatch | null;
@@ -52,14 +56,7 @@ export function FareResults({
       aria-busy={pending ? "true" : undefined}
       className="fr-res"
     >
-      {pending && (
-        <>
-          <p role="status" className="fr-ldt">
-            {t("flight.searching")}
-          </p>
-          <FareSkeleton motion={motion} />
-        </>
-      )}
+      {pending && <SearchingCard origin={route.origin} destination={route.destination} />}
       {reply && (reply.degraded || reply.cards.length === 0) && (
         <>
           <div className="fr-nya">
@@ -93,7 +90,7 @@ export function FareResults({
           key={reply.intent.departureDate}
           cards={sortFares(reply.cards, sort)}
           sort={sort}
-          carousel={carousel}
+          onSort={onSort}
           onWatch={onWatch}
           saved={saved}
           motion={motion}
@@ -140,24 +137,6 @@ function fareTags(card: FlightCard, cards: FlightCard[]): FareTag[] {
   return tags;
 }
 
-/** The mock's skeleton cards; a scan line sweeps them only when motion is allowed. */
-function FareSkeleton({ motion }: { motion: boolean }) {
-  return (
-    <>
-      <div aria-hidden="true" data-motion={motion ? "full" : "reduced"} className="grid gap-3.5">
-        {[0, 1, 2].map((index) => (
-          <div key={index} className="fr-sk">
-            <i />
-            <i />
-            <i />
-          </div>
-        ))}
-      </div>
-      {motion && <span aria-hidden="true" className="scan" />}
-    </>
-  );
-}
-
 /** Stable row keys from the fare itself; a repeated fare gets a "#n" suffix so keys stay unique. */
 function rowKeys(cards: FlightCard[]): string[] {
   const seen = new Map<string, number>();
@@ -187,7 +166,7 @@ function footnote(intent: FlightSearchIntent): string {
 function FareList({
   cards,
   sort,
-  carousel,
+  onSort,
   onWatch,
   saved,
   motion,
@@ -198,57 +177,61 @@ function FareList({
   note: string;
   cards: FlightCard[];
   sort: FareSort;
-  carousel: boolean;
+  onSort: (key: FareSort["key"]) => void;
   onWatch: (card: FlightCard) => void;
   saved: SavedWatch | null;
   motion: boolean;
 }) {
   const [all, setAll] = useState(false);
-  const [active, setActive] = useState(0);
   const shown = all ? cards : cards.slice(0, FIRST_ROWS);
   const keys = rowKeys(shown);
   return (
     <>
-      {/* The mock has no heading row: the title and the order stay for screen readers. */}
-      <div className="sr-only">
-        <h2>{t("flight.listTitle")}</h2>
-        <span>{t(`flight.order.${sort.key}.${sort.descending ? "desc" : "asc"}`)}</span>
-      </div>
-      <div className={carousel ? "car-wrap" : undefined}>
-        <ul
-          aria-label={t("flight.fares")}
-          data-view={carousel ? "carousel" : "list"}
-          data-motion={motion ? "full" : "reduced"}
-          className={carousel ? "fr-car" : "grid gap-2.5"}
-          onScroll={(event) => {
-            // One snap step is a card plus the 12 px gap.
-            const car = event.currentTarget;
-            const step = (car.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0;
-            setActive(
-              Math.min(shown.length - 1, Math.max(0, Math.round(car.scrollLeft / (step + 12)))),
+      <div className="fr-rh">
+        <h2>{t("flight.listTitle", { n: cards.length })}</h2>
+        <span className="sr-only">
+          {t(`flight.order.${sort.key}.${sort.descending ? "desc" : "asc"}`)}
+        </span>
+        <div role="group" aria-label={t("flight.sort")} className="fr-sbar">
+          {(["price", "time"] as const).map((key) => {
+            const active = sort.key === key;
+            const label = key === "price" ? "Price" : "Time";
+            const state = active && sort.descending ? "Desc" : "Asc";
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                aria-label={t(`flight.sort${label}${state}`)}
+                onClick={() => {
+                  onSort(key);
+                }}
+                className="fr-sb fr-hit"
+              >
+                <span>{t(`flight.sort${label}`)}</span>
+                <i aria-hidden="true">{sort.descending && active ? "↓" : "↑"}</i>
+              </button>
             );
-          }}
-        >
-          {shown.map((card, index) => (
-            <FareCardItem
-              key={keys[index]}
-              card={card}
-              tags={fareTags(card, cards)}
-              onWatch={onWatch}
-              active={carousel && index === active}
-              saved={saved?.card === card ? saved.at : null}
-              motion={motion}
-            />
-          ))}
-        </ul>
-        {carousel && shown.length > 1 && (
-          <div aria-hidden="true" className="fr-dots">
-            {shown.map((_, index) => (
-              <i key={keys[index]} data-dot={index === active ? "on" : "off"} />
-            ))}
-          </div>
-        )}
+          })}
+        </div>
       </div>
+      <ul
+        aria-label={t("flight.fares")}
+        data-motion={motion ? "full" : "reduced"}
+        className="grid gap-2.5"
+      >
+        {shown.map((card, index) => (
+          <FareCardItem
+            key={keys[index]}
+            card={card}
+            index={index}
+            tags={fareTags(card, cards)}
+            onWatch={onWatch}
+            saved={saved?.card === card ? saved.at : null}
+            motion={motion}
+          />
+        ))}
+      </ul>
       {!all && cards.length > FIRST_ROWS && (
         <button
           type="button"
@@ -389,14 +372,15 @@ function FareCardItem({
   card,
   tags,
   onWatch,
-  active,
+  index,
   saved,
   motion,
 }: {
   card: FlightCard;
   tags: FareTag[];
   onWatch: (card: FlightCard) => void;
-  active: boolean;
+  /** Its place in the list: cards rise in one after another. */
+  index: number;
   /** When this fare's Price Watch was just saved, else null. */
   saved: number | null;
   motion: boolean;
@@ -411,8 +395,8 @@ function FareCardItem({
   return (
     <li
       data-strong={strong ? "true" : undefined}
-      data-active={active ? "true" : undefined}
-      className="fr-fare"
+      style={{ "--i": index } as CSSProperties}
+      className="fr-fare fr-rise"
     >
       <div className="fr-fi">
         <div className="fr-front">
@@ -473,13 +457,7 @@ function FareCardItem({
           )}
           <div className="fr-ff">
             <strong>
-              <Flap
-                key={card.price}
-                text={formatAmount(card.price, card.intent.currency)}
-                lead
-                outer="tabular-nums"
-                className="fr-pn"
-              />
+              <span className="fr-price">{formatAmount(card.price, card.intent.currency)}</span>
             </strong>
             <FlightPriceWatchButton card={card} onWatch={onWatch} ring={motion ? saved : null} />
           </div>

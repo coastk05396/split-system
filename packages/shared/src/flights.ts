@@ -196,17 +196,3 @@ export interface FlightHighlightsReply {
   highlights: FlightCard[];
   recipes?: import("./flight-discovery.js").VibeRecipe[];
 }
-
-/** Fare Snapshots of one route and month, read by the Price Strip; `fetchedAt` is epoch ms. */
-export interface FlightPriceStripReply {
-  days: { date: string; price: number; fetchedAt: number }[];
-}
-
-/**
- * The Fare Ticker: the cheapest saved Fare Snapshot per destination from one origin, cheapest
- * first. `percentBelow` (whole percent under the route's usual fare) is only there when Deal
- * Signal history exists for it.
- */
-export interface FlightTickerReply {
-  chips: { destination: string; price: number; percentBelow?: number }[];
-}

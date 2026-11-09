@@ -10,7 +10,6 @@ it("records daily route minima, hides immature statistics, and returns today's v
   const app = createApp({
     ...productionDeps,
     pause: () => Promise.resolve(),
-    snapshotDestinations: [],
     now: () => clock.now,
     flightSource: () =>
       Promise.resolve([
@@ -94,7 +93,6 @@ it("uses fourteen distinct days, ignoring another currency and observations outs
   const app = createApp({
     ...productionDeps,
     pause: () => Promise.resolve(),
-    snapshotDestinations: [],
     now: () => clock.now,
     flightSource: () => Promise.resolve([{ ...oldFare, price: 8000 }]),
   });
@@ -118,7 +116,6 @@ it("daily maintenance rotates four verified routes and purges history older than
   const deps = {
     ...productionDeps,
     pause: () => Promise.resolve(),
-    snapshotDestinations: [],
     now: () => clock.now,
     rateSource: { fetchRate: () => Promise.reject(new Error("offline")) },
     flightSource: (intent: import("@split/shared").FlightSearchIntent) => {
@@ -140,7 +137,7 @@ it("daily maintenance rotates four verified routes and purges history older than
     },
   };
   await dailyMaintenance(env, clock.now, deps);
-  // History rotates first; the Fare Snapshot job's requests follow (see fare-snapshots.test.ts).
+  // History rotates first; nothing else calls the source.
   expect(calls.slice(0, 4)).toHaveLength(4);
   expect(new Set(calls.slice(0, 4)).size).toBe(4);
   // The 60-day baseline compares unfiltered populations only.
@@ -166,7 +163,6 @@ it("records only unfiltered searches in the fare history", async () => {
   const app = createApp({
     ...productionDeps,
     pause: () => Promise.resolve(),
-    snapshotDestinations: [],
     now: () => clock.now,
     flightSource: () =>
       Promise.resolve([

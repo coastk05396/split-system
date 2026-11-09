@@ -13,10 +13,10 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
+import * as Dialog from "@radix-ui/react-dialog";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
-import { STICKY_BAR_SLOT, StickyBar } from "../flights/StickyBar.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
-import { addDays, friendlyDate } from "../flights/dates.js";
+import { friendlyDate } from "../flights/dates.js";
 import {
   DEFAULT_SORT,
   FareResults,
@@ -24,14 +24,13 @@ import {
   type SavedWatch,
 } from "../flights/FareResults.js";
 import { findPlace } from "../flights/place.js";
-import { PriceStrip } from "../flights/PriceStrip.js";
-import { FareTicker } from "../flights/FareTicker.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
 import { failureMessage, travelButton } from "../groups/ui.js";
 import { getLocale, t } from "../i18n/messages.js";
 import { prefersReducedMotion } from "../shell/motion.js";
+import type { SearchKeyHandover } from "../shell/SearchKey.js";
 
 import { useHighlights } from "../flights/use-highlights.js";
 import { FlightPriceWatches, useCreateWatch } from "../flights/FlightPriceWatches.js";
@@ -50,7 +49,8 @@ export function TravelPage() {
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [sort, setSort] = useState<FareSort>(DEFAULT_SORT);
-  const [swipe, setSwipe] = useState(true);
+  // Why the sheet opened without the microphone (the Search key could not record).
+  const [micHint, setMicHint] = useState(false);
   const [active, setIntent] = useState(
     () => lastSearch ?? defaultFlightIntent(Date.now(), currency),
   );
@@ -77,8 +77,6 @@ export function TravelPage() {
   });
   // Only the newest search may apply its reply: an older one that answers late is dropped.
   const latestSearch = useRef(0);
-  // The Price Strip dock starts collapsed; a search that returns fares raises it, a manual toggle holds until then.
-  const [stripOpen, setStripOpen] = useState(false);
   const search = useMutation({
     mutationFn: (intent: FlightSearchRequest) =>
       readWithRev<FlightSearchReply>(
@@ -92,6 +90,7 @@ export function TravelPage() {
       latestSearch.current += 1;
       advise.reset();
       setPanelOpen(false);
+      setMicHint(false);
       setShowLastSearch(false);
       return { id: latestSearch.current };
     },
@@ -99,7 +98,6 @@ export function TravelPage() {
       if (started.id !== latestSearch.current) return;
       setActive(reply.intent);
       writeLastSearch(reply.intent);
-      if (reply.cards.length) setStripOpen(true);
       if (reply.cards.length)
         advise.mutate({ language: getLocale(), intent: reply.intent, cards: reply.cards });
     },
@@ -113,8 +111,7 @@ export function TravelPage() {
   const portalIntent = useRef(intentFromQuery(params));
   // A LINE chat tap by someone not yet signed up adds `watch=line&fare=`; the User confirms it below.
   const navigate = useNavigate();
-  const stateOf = useLocation().state as { prompt?: unknown } | null;
-  const handedPrompt = useRef(typeof stateOf?.prompt === "string" ? stateOf.prompt : "");
+  const location = useLocation();
   const pendingFare = useRef(params.get("watch") === "line" ? Number(params.get("fare")) : 0);
   const [pendingWatch, setPendingWatch] = useState<{
     intent: FlightSearchIntent;
@@ -137,40 +134,37 @@ export function TravelPage() {
     const fare = pendingFare.current;
     portalIntent.current = null;
     pendingFare.current = 0;
-    if (intent)
-      runIntent(intent); // once, on arrival
-    else if (handedPrompt.current) {
-      // 探索 hands its 小芽 prompt over in the history state; a refresh must not repeat it.
-      const prompt = handedPrompt.current;
-      handedPrompt.current = ""; // StrictMode replays this effect
-      search.mutate({ prompt, defaults: active });
-      void navigate(".", { replace: true, state: null });
-    }
+    if (intent) runIntent(intent); // once, on arrival
     if (intent && Number.isInteger(fare) && fare > 0) setPendingWatch({ intent, fare });
   }, []);
+
+  // The Search key hands over what the User did (tap, or spoke) in the history state; it is used
+  // once and cleared, so a refresh never repeats it.
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    const handover = location.state as SearchKeyHandover | null;
+    if (!handover || handled.current === location.key) return;
+    handled.current = location.key; // StrictMode replays this effect
+    if (typeof handover.prompt === "string" && handover.prompt)
+      search.mutate({ prompt: handover.prompt, defaults: active });
+    else if (handover.sheet) {
+      setPanelOpen(true);
+      setMicHint(handover.micHint === true);
+    }
+    void navigate(".", { replace: true, state: null });
+  }, [location.key]);
 
   const reply = search.data;
   const resultsTop = useRef<HTMLDivElement>(null);
   const placedAt = useRef(0);
-  // Scroll the results to the top of the screen, past it by as much as it takes for the fare
-  // carousel to end above a sticky bar (the Price Strip dock can be tall), never so far that the
-  // carousel's own top leaves the screen. Reduced motion jumps instead of gliding.
+  // Scroll the results to the top of the screen. Reduced motion jumps instead of gliding.
   const placeResults = (behavior: ScrollBehavior) => {
     const results = resultsTop.current;
     if (!results) return;
-    const dock = document.querySelector("[data-sticky-bar]")?.getBoundingClientRect();
-    const carousel = results.querySelector(".car-wrap")?.getBoundingClientRect();
-    const top = results.getBoundingClientRect().top;
-    // Scroll by enough that the carousel clears the bar, but keep its top on screen. Measured from
-    // where things are now (before the bar appeared the page may not have scrolled as far as
-    // wanted); 16 px is the plain gap above the results.
-    let margin = 16;
-    if (dock && carousel)
-      margin = Math.min(16, top - Math.min(carousel.bottom - dock.top + 8, carousel.top - 8));
-    results.style.scrollMarginTop = `${String(margin)}px`;
+    results.style.scrollMarginTop = "16px";
     results.scrollIntoView({ behavior, block: "start" });
   };
-  // A finished search scrolls to its results. The advice and the dock arrive a moment later and
+  // A finished search scrolls to its results. The advice arrives a moment later and
   // move things, so for 3 s after the search the placement is repeated whenever the page resizes.
   useEffect(() => {
     if (!reply) return;
@@ -224,102 +218,57 @@ export function TravelPage() {
   );
   return (
     <div className="fr-page">
-      <FareTicker
-        intent={active}
-        onPick={(destination) => {
-          const { theme: _theme, ...rest } = active;
-          setActive({ ...rest, destination });
-        }}
-      />
       <div className="fr-in">
         <TravelHeader intent={active} globe={{ code: globe }} />
-        <form
-          className="fr-ask"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const prompt = new FormData(event.currentTarget).get("prompt");
-            if (typeof prompt === "string" && prompt.trim())
-              search.mutate({ prompt: prompt.trim(), defaults: active });
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="m16 16 4.5 4.5" />
-          </svg>
-          <label className="fr-hit">
-            <span className="sr-only">{t("flight.prompt")}</span>
-            <input name="prompt" placeholder={t("flight.prompt")} required maxLength={1000} />
-          </label>
-          <button
-            type="submit"
-            disabled={search.isPending}
-            aria-label={t("flight.explore")}
-            className="fr-askgo fr-hit"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 12h14m-5-5 5 5-5 5" />
-            </svg>
-          </button>
-        </form>
         <RouteCard
           intent={active}
           pending={search.isPending}
-          open={panelOpen}
-          onToggle={() => {
-            setPanelOpen((open) => !open);
-          }}
-          sort={sort}
-          onSort={(key) => {
-            // A second tap on the active button reverses it; a new button starts ascending.
-            setSort((s) => ({ key, descending: s.key === key && !s.descending }));
+          onOpen={() => {
+            setPanelOpen(true);
           }}
         />
         {showLastSearch && <p className="sr-only">{t("flight.lastSearch")}</p>}
-        {panelOpen && (
-          <FlightSearchForm
-            intent={active}
-            revision={revision}
-            pending={search.isPending}
-            onSearch={runIntent}
-            onPlace={(input) => {
-              setGlobe((g) => findPlace(input) ?? g);
-            }}
-            view={
-              reply && reply.cards.length > 0
-                ? {
-                    carousel: swipe,
-                    onToggle: () => {
-                      setSwipe((s) => !s);
-                    },
-                  }
-                : undefined
-            }
-            more={highlightsSection}
-          />
+        {!reply && !search.isPending && !search.isError && (
+          <p className="fr-hintcard">{t("flight.voiceHint")}</p>
         )}
-        {!panelOpen && (
-          <PriceStrip
-            intent={active}
-            open={stripOpen}
-            onToggle={() => {
-              setStripOpen((o) => !o);
-            }}
-            onPick={(date) => {
-              // A day picked on the strip is a live search that keeps the stay and drops any theme.
-              const { theme: _theme, ...rest } = active;
-              const nights = active.returnDate
-                ? Math.round(
-                    (Date.parse(active.returnDate) - Date.parse(active.departureDate)) / 86_400_000,
-                  )
-                : 0;
-              runIntent({
-                ...rest,
-                departureDate: date,
-                ...(active.returnDate ? { returnDate: addDays(date, nights) } : {}),
-              });
-            }}
-          />
-        )}
+        <Dialog.Root modal={false} open={panelOpen} onOpenChange={setPanelOpen}>
+          <Dialog.Portal>
+            <div className="fr-sheet-dim" aria-hidden="true" />
+            <Dialog.Content
+              aria-describedby={undefined}
+              className="fr-sheet"
+              onEscapeKeyDown={(event) => {
+                // Escape belongs to an open airport list or passengers sheet first.
+                if (document.querySelector('[role="listbox"], [aria-modal="true"]'))
+                  event.preventDefault();
+              }}
+            >
+              <Dialog.Title className="sr-only">{t("flight.sheet")}</Dialog.Title>
+              <div className="fr-sheet-grip" aria-hidden="true" />
+              <FlightSearchForm
+                intent={active}
+                revision={revision}
+                pending={search.isPending}
+                onSearch={runIntent}
+                onPlace={(input) => {
+                  setGlobe((g) => findPlace(input) ?? g);
+                }}
+                hint={micHint ? t("voice.micHint") : undefined}
+                more={highlightsSection}
+              />
+              <div className="fr-sheet-cta">
+                <button
+                  type="submit"
+                  form={FLIGHT_SEARCH_FORM_ID}
+                  disabled={search.isPending}
+                  className="fr-cta shine"
+                >
+                  {t("flight.search")}
+                </button>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
         {pendingWatch && !lineWatch.isSuccess && (
           <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
             <p>
@@ -359,8 +308,7 @@ export function TravelPage() {
           </p>
         )}
         {/* After a search the results come first, right under the summary; the page scrolls here. */}
-        {/* The mock keeps its closed panel's 14 px row above the results; the advice has no box. */}
-        <div ref={resultsTop} className={`grid scroll-mt-4 gap-3.5 ${panelOpen ? "" : "mt-3.5"}`}>
+        <div ref={resultsTop} className="mt-3.5 grid scroll-mt-4 gap-3.5">
           {reply && advise.data && (
             <section aria-label={t("flight.advice")} className="contents">
               <p className="sr-only">{firstSentence(advise.data.commentary)}</p>
@@ -369,8 +317,12 @@ export function TravelPage() {
           <FareResults
             pending={search.isPending}
             reply={reply}
+            route={active}
             sort={sort}
-            carousel={swipe}
+            onSort={(key) => {
+              // A second tap on the active button reverses it; a new button starts ascending.
+              setSort((s) => ({ key, descending: s.key === key && !s.descending }));
+            }}
             onWatch={setWatchCard}
             saved={savedWatch}
           />
@@ -394,7 +346,6 @@ export function TravelPage() {
             </div>
           </section>
         )}
-        {/* Last in the page flow before the bar, whose spacer must be the final element. */}
         <FlightPriceWatches
           card={watchCard}
           onClose={() => {
@@ -405,20 +356,6 @@ export function TravelPage() {
             setSavedWatch((previous) => ({ card, at: (previous?.at ?? 0) + 1 }));
           }}
         />
-        {panelOpen && (
-          <StickyBar>
-            <button
-              type="submit"
-              form={FLIGHT_SEARCH_FORM_ID}
-              disabled={search.isPending}
-              className="fr-cta shine"
-            >
-              {t("flight.search")}
-            </button>
-          </StickyBar>
-        )}
-        {/* The very last element: the sticky bars' spacer renders in here. */}
-        <div id={STICKY_BAR_SLOT} />
       </div>
     </div>
   );

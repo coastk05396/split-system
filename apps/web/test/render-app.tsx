@@ -15,6 +15,8 @@ import type { FakeGroups } from "./fake-groups.js";
 
 export interface RenderAppOptions {
   webPush?: AppDeps["webPush"];
+  /** A fake microphone for 語音搜尋; without one the Search key only taps. */
+  recorder?: AppDeps["recorder"];
   strictMode?: boolean;
   webSocket?: typeof WebSocket;
   path?: string;
@@ -66,6 +68,14 @@ export interface RenderedApp {
   lineChatMessages: LineMessage[];
 }
 
+let latestRouter: ReturnType<typeof createMemoryRouter> | undefined;
+
+/** The router of the app rendered last, for tests that do what the Search key does. */
+export function currentRouter(): ReturnType<typeof createMemoryRouter> {
+  if (!latestRouter) throw new Error("renderApp has not run");
+  return latestRouter;
+}
+
 /** Renders the whole SPA over the fake API with fake LINE and Google sign-in. */
 export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   const api = createFakeApi();
@@ -85,10 +95,12 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     cacheStorage: options.cacheStorage,
   };
   if (options.webPush !== undefined) deps.webPush = options.webPush;
+  if (options.recorder !== undefined) deps.recorder = options.recorder;
   if (options.webSocket !== undefined) deps.webSocket = options.webSocket;
   const router = createMemoryRouter(routes, {
     initialEntries: [options.pathFor?.() ?? options.path ?? "/"],
   });
+  latestRouter = router;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const app = (
     <AppProviders deps={deps} queryClient={queryClient}>

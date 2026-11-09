@@ -63,7 +63,7 @@ export function FlightSearchForm({
   pending,
   onSearch,
   onPlace,
-  view,
+  hint,
   more,
 }: {
   intent: FlightSearchIntent;
@@ -73,8 +73,8 @@ export function FlightSearchForm({
   onSearch: (intent: FlightSearchIntent) => void;
   /** The destination the User is picking or typing, for the globe. */
   onPlace?: (input: string) => void;
-  /** The swipe/list switch for the fares, offered once there are fares to show. */
-  view?: { carousel: boolean; onToggle: () => void } | undefined;
+  /** A line at the top of the sheet (why the microphone was not used). */
+  hint?: string | undefined;
   /** Extra content at the end of the passengers sheet (today's highlights). */
   more?: ReactNode;
 }) {
@@ -138,6 +138,11 @@ export function FlightSearchForm({
       className="fr-card"
       aria-busy={pending}
     >
+      {hint && (
+        <p role="status" className="mb-2 text-sm text-ink-muted">
+          {hint}
+        </p>
+      )}
       <TripToggle
         oneWay={draft.party.oneWay}
         onChange={(oneWay) => {
@@ -145,20 +150,6 @@ export function FlightSearchForm({
         }}
         trailing={
           <span className="fr-links">
-            {view && (
-              <button
-                type="button"
-                aria-label={t(view.carousel ? "flight.viewList" : "flight.viewSwipe")}
-                onClick={view.onToggle}
-                className="fr-ic fr-hit"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d={view.carousel ? "M4 6h16M4 12h16M4 18h16" : "M7 5h10v14H7zM3 8v8M21 8v8"}
-                  />
-                </svg>
-              </button>
-            )}
             <Link to="/travel/watches" aria-label={t("flight.radar")} className="fr-ic fr-hit">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
@@ -274,7 +265,6 @@ export function FlightSearchForm({
       </div>
       <div className="fr-perf" aria-hidden="true" />
       <DatesCalendar
-        route={{ origin: draft.origin, destination: draft.destination, currency }}
         today={today}
         departure={draft.departureDate}
         returnDate={draft.returnDate}

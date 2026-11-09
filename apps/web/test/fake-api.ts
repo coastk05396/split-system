@@ -11,7 +11,7 @@ import {
   createFlightWatchSchema,
   type FlightPriceWatch,
 } from "@split/shared";
-import type { CurrencyCode, FlightSearchRequest, FlightTickerReply, Me } from "@split/shared";
+import type { CurrencyCode, FlightSearchRequest, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
 /**
@@ -24,19 +24,18 @@ export interface FakeApi {
   flightFares: (FlightFare & { departureDate?: string; returnDate?: string })[];
   flightsDegraded: boolean;
   /** Fare Snapshots the Price Strip reads, and the query strings it asked with. */
-  flightPriceStrip: { date: string; price: number; fetchedAt: number }[];
-  flightPriceStripQueries: string[];
   /** Every search request body the app sent. */
   flightSearchRequests: FlightSearchRequest[];
   /** Fare Ticker chips (saved snapshots), and the query strings it asked with. */
-  flightTicker: FlightTickerReply["chips"];
-  flightTickerQueries: string[];
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];
   /** Whether LINE Push alerts can be chosen: a linked LINE Identity and room left this month. */
   linePushAvailable: boolean;
   flightPromptIntent: FlightSearchIntent | null;
+  /** What the speech-to-text answers; "fails" makes the request error. */
+  voiceText: string;
+  voiceRequests: { type: string; bytes: number }[];
   flightAdvice: FlightAdviceReply;
   /** Every request seen, as "METHOD /path". */
   calls: string[];
@@ -142,16 +141,14 @@ export function createFakeApi(): FakeApi {
 
   const api: FakeApi = {
     flightsDegraded: false,
-    flightPriceStrip: [],
-    flightPriceStripQueries: [],
     flightSearchRequests: [],
-    flightTicker: [],
-    flightTickerQueries: [],
     flightHighlights: [],
     flightHistory: null,
     flightWatches: [],
     linePushAvailable: true,
     flightPromptIntent: null,
+    voiceText: "",
+    voiceRequests: [],
     flightAdvice: {
       commentary: "Example Air is the cheapest option.",
       moves: [
@@ -316,20 +313,6 @@ export function createFakeApi(): FakeApi {
         return authed === undefined
           ? error("UNAUTHORIZED", 401)
           : json({ highlights: api.flightHighlights });
-      case "GET /api/v1/flights/price-strip":
-        api.flightPriceStripQueries.push(url.search);
-        return authed === undefined
-          ? error("UNAUTHORIZED", 401)
-          : json({
-              days: api.flightPriceStrip.filter((day) =>
-                day.date.startsWith(url.searchParams.get("month") ?? ""),
-              ),
-            });
-      case "GET /api/v1/flights/ticker":
-        api.flightTickerQueries.push(url.search);
-        return authed === undefined
-          ? error("UNAUTHORIZED", 401)
-          : json({ chips: api.flightTicker });
       case "POST /api/v1/flights/search": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const parsed = flightSearchRequestSchema.safeParse(await readJson(init));
@@ -370,6 +353,15 @@ export function createFakeApi(): FakeApi {
                         : "hold",
               })),
         });
+      }
+      case "POST /api/v1/flights/voice": {
+        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const body = init?.body;
+        api.voiceRequests.push({
+          type: new Headers(init?.headers).get("Content-Type") ?? "",
+          bytes: body instanceof Blob ? body.size : 0,
+        });
+        return api.voiceText === "fails" ? error("INTERNAL", 500) : json({ text: api.voiceText });
       }
       case "POST /api/v1/flights/advise":
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.flightAdvice);

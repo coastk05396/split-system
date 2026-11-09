@@ -71,7 +71,6 @@ it("daily maintenance purges expired sessions and commits pending account cleanu
     await dailyMaintenance(env, clock.now, {
       ...productionDeps,
       pause: () => Promise.resolve(),
-      snapshotDestinations: [],
       flightSource: () => Promise.reject(new Error("offline flight source")),
     });
     expect(atRateFetch.length).toBeGreaterThan(0);

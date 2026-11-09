@@ -2,7 +2,7 @@ import type { FlightCard, FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
-import { openFilters, openSearchPanel } from "../../test/flight-panel.js";
+import { openFilters, openSearchPanel, askPrompt } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const languages = ["en", "zh-TW"] as const;
@@ -57,7 +57,7 @@ const intent: FlightSearchIntent = {
   directOnly: false,
 };
 
-function open(language: Language, path = "/travel/flights") {
+function open(language: Language, path = "/travel") {
   const rendered = renderApp({ path, cookieUser: { ...makeUser("Rick"), language } });
   const w = words[language];
   const field = async (name: "origin" | "destination") => {
@@ -244,8 +244,7 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
     it("after a prompt, a next-move chip and a panel search", async () => {
       const { api, field, w } = open(language);
       api.flightPromptIntent = intent;
-      fireEvent.change(await screen.findByLabelText(w.prompt), { target: { value: "okinawa" } });
-      fireEvent.click(screen.getByRole("button", { name: w.explore }));
+      await askPrompt("okinawa");
       await screen.findByText("Example Air");
       expect(await field("origin")).toHaveDisplayValue(/TPE/);
       expect(screen.getByRole("combobox", { name: w.destination })).toHaveValue(

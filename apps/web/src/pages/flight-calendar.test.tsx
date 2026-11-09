@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
-import { openSearchPanel } from "../../test/flight-panel.js";
+import { openSearchPanel, askPrompt } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const css = readFileSync("src/styles.css", "utf8"); // vitest runs with apps/web as cwd
@@ -31,27 +31,11 @@ const fare = {
   durationMinutes: 180,
   priceLevel: "low" as const,
 };
-/** Jan 2 to 11 saved; the cheapest three-tenths (Jan 2 to 5) are the cheap days. */
-const saved = [9000, 9500, 12000, 12500, 13000, 13500, 14000, 15000, 16000, 17000].map(
-  (price, n) => ({
-    date: `2027-01-${String(n + 2).padStart(2, "0")}`,
-    price,
-    fetchedAt: Date.now(),
-  }),
-);
-
-async function setup(language: "en" | "zh-TW" = "en", snapshots = saved) {
-  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+async function setup(language: "en" | "zh-TW" = "en") {
+  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightPromptIntent = intent;
   app.api.flightFares = [fare];
-  app.api.flightPriceStrip = snapshots;
-  fireEvent.change(
-    await screen.findByLabelText(language === "en" ? "Where would you like to go?" : "想去哪裡？"),
-    { target: { value: "okinawa" } },
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: language === "en" ? "Explore flights" : "探索航班" }),
-  );
+  await askPrompt("okinawa");
   await screen.findByText("Example Air");
   await openSearchPanel();
   return app;
@@ -87,28 +71,6 @@ describe("Calendar picker", () => {
     expect(day(calendar, /^Jan 9/)).toHaveAttribute("aria-pressed", "false");
     expect(day(calendar, /^Jan 9/)).toHaveAttribute("data-in-range", "true");
     expect(day(calendar, /^Jan 12/)).not.toHaveAttribute("data-in-range");
-  });
-
-  it("puts a green dot only on cheap days from the saved prices, none without them", async () => {
-    await setup();
-    const calendar = await openCalendar();
-    await waitFor(() => {
-      expect(day(calendar, "Jan 2, lower price")).toBeVisible();
-    });
-    for (const d of [3, 4, 5]) expect(day(calendar, `Jan ${String(d)}, lower price`)).toBeVisible();
-    for (const d of [6, 8, 11, 20]) expect(day(calendar, `Jan ${String(d)}`)).toBeVisible();
-    expect(within(calendar).getAllByRole("button", { name: /lower price/ })).toHaveLength(4);
-    expect(within(calendar).getByText("Green dots mark cheaper days on this route")).toBeVisible();
-  });
-
-  it("draws no dots when the route has fewer than three saved days", async () => {
-    await setup("en", saved.slice(0, 2));
-    const calendar = await openCalendar();
-    await waitFor(() => {
-      expect(day(calendar, /^Jan 20/)).toBeVisible();
-    });
-    expect(within(calendar).queryAllByRole("button", { name: /lower price/ })).toHaveLength(0);
-    expect(within(calendar).queryByText(/Green dots/)).toBeNull();
   });
 
   it("picks a range: the first tap starts it, the second ends it, then searches those dates", async () => {
@@ -160,17 +122,14 @@ describe("Calendar picker", () => {
     expect(body).not.toHaveProperty("returnDate");
   });
 
-  it("moves between months, fetching each month's saved prices, and disables past days", async () => {
+  it("moves between months and disables past days", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2027-01-05T04:00:00Z") });
-    const app = await setup();
+    await setup();
     const calendar = await openCalendar();
     expect(day(calendar, /^Jan 4/)).toBeDisabled();
     expect(day(calendar, /^Jan 5/)).toBeEnabled();
     fireEvent.click(within(calendar).getByRole("button", { name: "Next month" }));
     expect(within(calendar).getByText("February 2027")).toBeVisible();
-    await waitFor(() => {
-      expect(app.api.flightPriceStripQueries.some((q) => q.includes("month=2027-02"))).toBe(true);
-    });
     fireEvent.click(within(calendar).getByRole("button", { name: "Previous month" }));
     expect(within(calendar).getByText("January 2027")).toBeVisible();
     expect(within(calendar).getByRole("button", { name: "Previous month" })).toBeDisabled();
@@ -193,13 +152,9 @@ describe("Calendar picker", () => {
     const calendar = await openCalendar();
     expect(within(calendar).getByText("2027 年 1 月")).toBeVisible();
     expect(within(calendar).getByRole("button", { name: "上個月" })).toBeVisible();
-    await waitFor(() => {
-      expect(day(calendar, "1/2（六）, 價格較低")).toBeVisible();
-    });
-    expect(within(calendar).getByText("綠點是這條航線比較便宜的日子")).toBeVisible();
   });
 
-  it("keeps 44 px targets, no dimming and no sideways scroll, with 4.5:1 text and 3:1 dots", async () => {
+  it("keeps 44 px targets, no dimming and no sideways scroll, with 4.5:1 text", async () => {
     await setup();
     const calendar = await openCalendar();
     for (const button of [toggle(), ...within(calendar).getAllByRole("button")]) {
@@ -214,11 +169,8 @@ describe("Calendar picker", () => {
       ["#ffffff", color("--color-travel-action")], // picked days
       [color("--color-sprout-900"), color("--color-sprout-100")], // days inside the range
       [color("--color-travel-disabled-ink"), color("--color-sprout-50")], // past days
-      [color("--color-ink-muted"), color("--color-sprout-50")], // weekdays and the green-dot note
+      [color("--color-ink-muted"), color("--color-sprout-50")], // weekdays
     ];
     for (const [fg, bg] of pairs) expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
-    expect(
-      contrast(color("--color-sprout-700"), color("--color-sprout-100")),
-    ).toBeGreaterThanOrEqual(3);
   });
 });

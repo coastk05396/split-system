@@ -18,7 +18,7 @@ const fontLink = () =>
 
 describe("Flight Radar material and type", () => {
   it("loads the reference fonts from Google Fonts on Travel pages only, with preconnect and swap", async () => {
-    const { router } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    const { router } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     const href = fontLink()?.href ?? "";
     expect(href).toContain("family=Schibsted+Grotesk");
@@ -31,7 +31,7 @@ describe("Flight Radar material and type", () => {
     expect(origins).toContain("https://fonts.gstatic.com/");
     fireEvent.click(
       within(screen.getByRole("navigation", { name: "底部導覽" })).getByRole("link", {
-        name: "分帳",
+        name: "首頁",
       }),
     );
     await waitFor(() => {
@@ -133,7 +133,7 @@ describe("Flight Radar material and type", () => {
   });
 
   it("puts a shine on both search buttons, animated only when motion is welcome", async () => {
-    renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     await openSearchPanel();
     expect(screen.getByRole("button", { name: "搜尋航班" })).toHaveClass("shine");

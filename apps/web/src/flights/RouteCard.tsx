@@ -5,7 +5,6 @@ import { partyOf, routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
 import { airportName } from "./AirportPicker.js";
 import { friendlyRange, shortRange } from "./dates.js";
-import type { FareSort } from "./FareResults.js";
 import { Globe } from "./Globe.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 
@@ -85,24 +84,17 @@ function Leg({ origin, destination }: { origin: string; destination: string }) {
 
 /**
  * The route hero card of the current search: large codes with city names, a plane line carrying
- * the distance and flight time, the Route Chip (route and dates, a pencil, opens the editing panel) and
- * a one-tap 重新探索航班. While the panel is open its own Search button takes over, so the card
- * shows only the chip.
+ * the distance and flight time, the Route Chip (route and dates, a pencil, opens the 搜尋面板).
  */
 export function RouteCard({
   intent,
   pending,
-  open,
-  onToggle,
-  sort,
-  onSort,
+  onOpen,
 }: {
   intent: FlightSearchIntent;
   pending: boolean;
-  open: boolean;
-  onToggle: () => void;
-  sort: FareSort;
-  onSort: (key: FareSort["key"]) => void;
+  /** Opens the 搜尋面板. */
+  onOpen: () => void;
 }) {
   const fullDates = friendlyRange(intent.departureDate, intent.returnDate);
   const party = partyOf(intent);
@@ -125,8 +117,8 @@ export function RouteCard({
               dates: fullDates,
             }) + partyNote
           }
-          aria-expanded={open}
-          onClick={onToggle}
+          aria-haspopup="dialog"
+          onClick={onOpen}
           className="fr-chip fr-hit"
         >
           {/* Wide card: city names (only these may shrink) then the dates. */}
@@ -149,28 +141,6 @@ export function RouteCard({
             <path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" />
           </svg>
         </button>
-        <div role="group" aria-label={t("flight.sort")} className="fr-sbar">
-          {(["price", "time"] as const).map((key) => {
-            const active = sort.key === key;
-            const label = key === "price" ? "Price" : "Time";
-            const state = active && sort.descending ? "Desc" : "Asc";
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={active}
-                aria-label={t(`flight.sort${label}${state}`)}
-                onClick={() => {
-                  onSort(key);
-                }}
-                className="fr-sb fr-hit"
-              >
-                <span>{t(`flight.sort${label}`)}</span>
-                <i aria-hidden="true">{sort.descending && active ? "↓" : "↑"}</i>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </section>
   );

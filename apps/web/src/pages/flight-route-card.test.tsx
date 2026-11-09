@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { flightSearchRequestSchema } from "@split/shared";
 import { makeUser } from "../../test/fake-api.js";
-import { openSearchPanel } from "../../test/flight-panel.js";
+import { openSearchPanel, askPrompt } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const intent: FlightSearchIntent = {
@@ -62,18 +62,15 @@ const text = {
 type Language = keyof typeof text;
 
 function setup(language: Language, next: FlightSearchIntent = intent) {
-  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightPromptIntent = next;
   return app;
 }
 const searches = (api: ReturnType<typeof setup>["api"]) =>
   api.requests.filter((r) => r.route === "POST /api/v1/flights/search");
 
-async function explore(language: Language) {
-  fireEvent.change(await screen.findByLabelText(text[language].prompt), {
-    target: { value: "okinawa" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: text[language].explore }));
+async function explore(_language: Language) {
+  await askPrompt("okinawa");
   await screen.findByText("Example Air");
 }
 
@@ -145,24 +142,24 @@ describe("Flight Radar header and route card", () => {
   });
 
   it.each(["en", "zh-TW"] as const)(
-    "opens and closes the editing panel with the route chip in %s",
+    "opens the search sheet from the route chip and closes it with Escape in %s",
     async (language) => {
       setup(language);
       await explore(language);
       const card = screen.getByRole("region", { name: text[language].card });
       const chip = within(card).getByRole("button", { name: text[language].chip });
-      expect(chip).toHaveAttribute("aria-expanded", "false");
+      expect(chip).toHaveAttribute("aria-haspopup", "dialog");
       expect(chip.querySelector("svg")).not.toBeNull();
       expect(within(card).queryByRole("button", { name: text[language].edit })).toBeNull();
       fireEvent.click(chip);
-      expect(chip).toHaveAttribute("aria-expanded", "true");
+      const sheet = await screen.findByRole("dialog", { name: /^(Search sheet|搜尋面板)$/ });
       expect(
-        screen.getByRole("form", { name: /^(Edit search condition|修改搜尋條件)$/ }),
+        within(sheet).getByRole("form", { name: /^(Edit search condition|修改搜尋條件)$/ }),
       ).toBeVisible();
-      fireEvent.click(chip);
-      expect(
-        screen.queryByRole("form", { name: /^(Edit search condition|修改搜尋條件)$/ }),
-      ).toBeNull();
+      fireEvent.keyDown(sheet, { key: "Escape" });
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: /^(Search sheet|搜尋面板)$/ })).toBeNull();
+      });
     },
   );
 

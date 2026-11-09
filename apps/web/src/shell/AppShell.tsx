@@ -1,10 +1,11 @@
-import { Bell, Compass, Plus } from "lucide-react";
+import { Bell, Plus } from "lucide-react";
 import { type ComponentType, type ReactNode, useEffect } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
 import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { hapticTick } from "./haptics.js";
 import { CuteHomeIcon, CuteSettingsIcon, CuteStatsIcon, type NavIconProps } from "./NavIcons.js";
+import { SearchKey } from "./SearchKey.js";
 import { SelectionPill } from "./SelectionPill.js";
 import { SproutMascot } from "./SproutMascot.js";
 
@@ -29,19 +30,10 @@ const TABS: readonly Tab[] = [
 
 const SIDEBAR_TABS = TABS.filter((tab) => tab.label !== "nav.new");
 
-/** SPEC §6 Travel mode: any path under /travel swaps the nav for the travel buttons. */
-const TRAVEL_TABS: readonly Tab[] = [
-  { to: "/", label: "nav.split", icon: CuteHomeIcon },
-  {
-    to: "/travel",
-    label: "nav.explore",
-    icon: ({ active: _a, ...props }) => <Compass {...props} />,
-  },
-  {
-    to: "/travel/flights",
-    label: "nav.flights",
-    icon: ({ active: _a, ...props }) => <CuteTripPlaneIcon {...props} />,
-  },
+/** SPEC §6 Travel mode: any path under /travel swaps the nav for 首頁, the Search key and 追蹤. */
+const TRAVEL_TABS: readonly (Tab | "search")[] = [
+  { to: "/", label: "nav.home", icon: CuteHomeIcon },
+  "search",
   {
     to: "/travel/watches",
     label: "nav.watches",
@@ -63,51 +55,57 @@ function BottomBar() {
       aria-label={t("nav.bottom")}
       className="glass-nav fixed inset-x-0 bottom-0 z-10 border-t border-sprout-200/80 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <ul className={`mx-auto grid h-17 max-w-md ${travel ? "grid-cols-4" : "grid-cols-5"}`}>
-        {bottom.map((tab) => (
-          <li key={tab.label} className="flex">
-            <NavLink
-              to={tab.to}
-              end={tab.to === "/" || tab.to.startsWith("/travel")}
-              onPointerDown={tab.to === "/new" ? () => hapticTick(15) : undefined}
-              className={({ isActive }) =>
-                `group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
-                  tab.to === "/new" ? "" : "press-pill"
-                } ${isActive ? "font-bold text-sprout-700" : "text-ink-muted"}`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && tab.to !== "/new" && (
-                    <SelectionPill
-                      layoutId="bottom-navigation-selection"
-                      className="top-1 h-9 w-14 rounded-2xl border border-sprout-200/90 bg-sprout-150/85 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8),0_3px_8px_-7px_#143f2a]"
-                    />
-                  )}
-                  {tab.to === "/new" ? (
-                    <span
-                      className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-all duration-300 ease-(--ease-spring) active:scale-[0.85] active:-rotate-3 active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] group-active:scale-[0.85] group-active:-rotate-3 group-active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] motion-reduce:transition-none motion-reduce:transform-none ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
-                    >
-                      <tab.icon aria-hidden="true" className="size-6" />
-                    </span>
-                  ) : (
-                    <tab.icon
-                      aria-hidden="true"
-                      active={isActive}
-                      strokeWidth={isActive ? 2.4 : 1.9}
-                      className={`relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
-                        isActive
-                          ? "-translate-y-0.5 scale-[1.1] nav-icon-pop motion-reduce:translate-y-0 motion-reduce:scale-100"
-                          : ""
-                      }`}
-                    />
-                  )}
-                  <span className="relative">{t(tab.label)}</span>
-                </>
-              )}
-            </NavLink>
-          </li>
-        ))}
+      <ul className={`mx-auto grid h-17 max-w-md ${travel ? "grid-cols-3" : "grid-cols-5"}`}>
+        {bottom.map((tab) =>
+          tab === "search" ? (
+            <li key="search" className="flex">
+              <SearchKey variant="bottom" />
+            </li>
+          ) : (
+            <li key={tab.label} className="flex">
+              <NavLink
+                to={tab.to}
+                end={tab.to === "/" || tab.to.startsWith("/travel")}
+                onPointerDown={tab.to === "/new" ? () => hapticTick(15) : undefined}
+                className={({ isActive }) =>
+                  `group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
+                    tab.to === "/new" ? "" : "press-pill"
+                  } ${isActive ? "font-bold text-sprout-700" : "text-ink-muted"}`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && tab.to !== "/new" && (
+                      <SelectionPill
+                        layoutId="bottom-navigation-selection"
+                        className="top-1 h-9 w-14 rounded-2xl border border-sprout-200/90 bg-sprout-150/85 shadow-[inset_0_1px_0_0_rgb(255_255_255/0.8),0_3px_8px_-7px_#143f2a]"
+                      />
+                    )}
+                    {tab.to === "/new" ? (
+                      <span
+                        className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-all duration-300 ease-(--ease-spring) active:scale-[0.85] active:-rotate-3 active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] group-active:scale-[0.85] group-active:-rotate-3 group-active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] motion-reduce:transition-none motion-reduce:transform-none ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
+                      >
+                        <tab.icon aria-hidden="true" className="size-6" />
+                      </span>
+                    ) : (
+                      <tab.icon
+                        aria-hidden="true"
+                        active={isActive}
+                        strokeWidth={isActive ? 2.4 : 1.9}
+                        className={`relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
+                          isActive
+                            ? "-translate-y-0.5 scale-[1.1] nav-icon-pop motion-reduce:translate-y-0 motion-reduce:scale-100"
+                            : ""
+                        }`}
+                      />
+                    )}
+                    <span className="relative">{t(tab.label)}</span>
+                  </>
+                )}
+              </NavLink>
+            </li>
+          ),
+        )}
       </ul>
     </nav>
   );
@@ -123,32 +121,38 @@ function Sidebar() {
       </Link>
       <nav aria-label={t("nav.side")}>
         <ul className="flex flex-col gap-1">
-          {side.map((tab) => (
-            <li key={tab.label}>
-              <NavLink
-                to={tab.to}
-                end={tab.to === "/" || tab.to.startsWith("/travel")}
-                className={({ isActive }) =>
-                  `press-pill relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
-                    isActive ? "font-bold" : "text-white/85 hover:bg-white/10"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <SelectionPill
-                        layoutId="side-navigation-selection"
-                        className="inset-0 rounded-xl bg-sprout-600"
-                      />
-                    )}
-                    <tab.icon aria-hidden="true" active={isActive} className="relative size-5" />
-                    <span className="relative">{t(tab.label)}</span>
-                  </>
-                )}
-              </NavLink>
-            </li>
-          ))}
+          {side.map((tab) =>
+            tab === "search" ? (
+              <li key="search">
+                <SearchKey variant="side" />
+              </li>
+            ) : (
+              <li key={tab.label}>
+                <NavLink
+                  to={tab.to}
+                  end={tab.to === "/" || tab.to.startsWith("/travel")}
+                  className={({ isActive }) =>
+                    `press-pill relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                      isActive ? "font-bold" : "text-white/85 hover:bg-white/10"
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <SelectionPill
+                          layoutId="side-navigation-selection"
+                          className="inset-0 rounded-xl bg-sprout-600"
+                        />
+                      )}
+                      <tab.icon aria-hidden="true" active={isActive} className="relative size-5" />
+                      <span className="relative">{t(tab.label)}</span>
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            ),
+          )}
         </ul>
       </nav>
       {!travel && (

@@ -43,13 +43,13 @@ describe("Price Watch list page", () => {
       for (const name of navs) {
         const nav = within(screen.getByRole("navigation", { name }));
         expect(nav.getAllByRole("link").map((l) => l.textContent)).toEqual(
-          en ? ["Split", "Explore", "Flights", "Watches"] : ["分帳", "探索", "航班", "追蹤"],
+          en ? ["Home", "Watches"] : ["首頁", "追蹤"],
         );
         expect(nav.getByRole("link", { name: en ? "Watches" : "追蹤" })).toHaveAttribute(
           "aria-current",
           "page",
         );
-        expect(nav.getByRole("link", { name: en ? "Flights" : "航班" })).not.toHaveAttribute(
+        expect(nav.getByRole("button", { name: en ? "Search" : "搜尋" })).not.toHaveAttribute(
           "aria-current",
         );
       }
@@ -75,7 +75,7 @@ describe("Price Watch list page", () => {
   });
 
   it("opens from the 追蹤 tab", async () => {
-    const { router } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    const { router } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     fireEvent.click(
       within(screen.getByRole("navigation", { name: "底部導覽" })).getByRole("link", {
@@ -88,7 +88,7 @@ describe("Price Watch list page", () => {
   });
 
   it("links the radar bell to the page", async () => {
-    renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await openSearchPanel();
     const bell = await screen.findByRole("link", { name: "降價雷達" });
     expect(bell).toHaveAttribute("href", "/travel/watches");

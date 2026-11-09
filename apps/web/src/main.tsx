@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
+import { createVoiceRecorder } from "./platform/voice.js";
 import { AppProviders, type AppDeps } from "./app/AppProviders.js";
 import { reloadForNewVersion } from "./app/new-version.js";
 import { routes } from "./app/routes.js";
@@ -11,8 +12,10 @@ import { createLineSignIn } from "./platform/line.js";
 import { browserPush } from "./platform/web-push.js";
 import "./styles.css";
 
+const recorder = createVoiceRecorder();
 const deps: AppDeps = {
   webPush: browserPush,
+  ...(recorder ? { recorder } : {}),
   fetch: (input, init) => fetch(input, init),
   line: createLineSignIn(import.meta.env.VITE_LIFF_ID),
   google: createGoogleSignIn(import.meta.env.VITE_GOOGLE_CLIENT_ID),

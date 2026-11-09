@@ -120,20 +120,16 @@ export const routes: RouteObject[] = [
       {
         path: "travel",
         children: [
-          // Old /travel?... links (bookmarks, LINE portal, Price Watch) keep their search on 航班.
+          { index: true, lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
+          // The old flights page lives at /travel now; LINE links and bookmarks keep their query.
           {
-            index: true,
-            loader: ({ request }) => {
-              const { search } = new URL(request.url);
-              return search ? redirect(`/travel/flights${search}`) : null;
-            },
-            lazy: page(() => import("../pages/ExplorePage.js"), "ExplorePage"),
+            path: "flights",
+            loader: ({ request }) => redirect(`/travel${new URL(request.url).search}`),
           },
-          { path: "flights", lazy: page(() => import("../pages/TravelPage.js"), "TravelPage") },
           { path: "watches", lazy: page(() => import("../pages/WatchesPage.js"), "WatchesPage") },
         ],
       },
-      { path: "trips/latest", loader: () => redirect("/travel/flights") },
+      { path: "trips/latest", loader: () => redirect("/travel") },
       { path: "groups", lazy: page(() => import("../pages/GroupsPage.js"), "GroupsPage") },
       { path: "groups/new", lazy: page(() => import("../pages/NewGroupPage.js"), "NewGroupPage") },
       { path: "groups/:id", lazy: page(() => import("../pages/GroupPage.js"), "GroupPage") },

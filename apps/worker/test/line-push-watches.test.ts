@@ -33,7 +33,6 @@ function setup() {
   const deps = {
     ...productionDeps,
     pause: () => Promise.resolve(),
-    snapshotDestinations: [],
     now: () => clock.now,
     rateSource: offlineRateSource,
     lineReplyClient: () => client,

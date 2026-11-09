@@ -1,5 +1,4 @@
 import { maintainFlightWatches } from "./flights/watch-maintenance.js";
-import { maintainFareSnapshots } from "./flights/snapshots.js";
 import { maintainFlightHistory } from "./flights/history.js";
 import type { AppDeps } from "./deps.js";
 import { and, asc, eq, lt } from "drizzle-orm";
@@ -96,5 +95,4 @@ export async function dailyMaintenance(
   await refreshRates(db, deps.rateSource, now);
   await maintainFlightHistory(env, { ...deps, now: () => now });
   await maintainFlightWatches(env, { ...deps, now: () => now });
-  await maintainFareSnapshots(env, { ...deps, now: () => now });
 }

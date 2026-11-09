@@ -9,7 +9,7 @@ it.each(["en", "zh-TW"] as const)(
   async (language) => {
     let subscriptions = 0;
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: { ...makeUser("Watcher"), language },
       webPush: {
         subscribe: () => {
@@ -78,7 +78,7 @@ async function searchNrt() {
 describe("Price Watch inside LIFF", () => {
   it("defaults to a LINE alert, without browser push, when the monthly quota permits", async () => {
     const { api } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: makeUser("Rick"),
       insideLine: { idToken: null },
     });
@@ -96,7 +96,7 @@ describe("Price Watch inside LIFF", () => {
 
   it("guides to the phone's external browser for free Web Push when LINE alerts are unavailable", async () => {
     const { api, lineExternalOpens } = renderApp({
-      path: "/travel/flights",
+      path: "/travel",
       cookieUser: makeUser("Rick"),
       insideLine: { idToken: null },
     });

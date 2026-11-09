@@ -38,7 +38,7 @@ const allowMotion = () => {
 };
 
 function setup(language: Language) {
-  renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+  renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
 }
 const globe = (name: string) => screen.findByRole("img", { name });
 const centre = (el: HTMLElement) => el.dataset.centre;

@@ -19,13 +19,13 @@ const token = (name: string) => travel[name] ?? theme[name] ?? "#ffffff";
 
 describe("Travel mode green palette", () => {
   it("scopes the palette to the travel pages and leaves the normal palette elsewhere", async () => {
-    const travelView = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    const travelView = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     const bottom = await screen.findByRole("navigation", { name: "底部導覽" });
     expect(bottom.closest(".travel-mode")).not.toBeNull();
     expect(
       screen.getByRole("navigation", { name: "側邊導覽" }).closest(".travel-mode"),
     ).not.toBeNull();
-    fireEvent.click(within(bottom).getByRole("link", { name: "分帳" }));
+    fireEvent.click(within(bottom).getByRole("link", { name: "首頁" }));
     await waitFor(() => {
       expect(travelView.router.state.location.pathname).toBe("/");
     });
@@ -34,7 +34,7 @@ describe("Travel mode green palette", () => {
   });
 
   it("puts the palette on <html> so the body-mounted Price Watch dialog inherits it, and drops it on leaving", async () => {
-    const { router } = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    const { router } = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     await openSearchPanel();
     fireEvent.change(screen.getByLabelText("目的地機場"), { target: { value: "NRT" } });
@@ -50,7 +50,7 @@ describe("Travel mode green palette", () => {
     });
     fireEvent.click(
       within(screen.getByRole("navigation", { name: "底部導覽" })).getByRole("link", {
-        name: "分帳",
+        name: "首頁",
       }),
     );
     await waitFor(() => {
@@ -60,7 +60,7 @@ describe("Travel mode green palette", () => {
   });
 
   it("removes the palette from <html> when the app unmounts", async () => {
-    renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
     expect(document.documentElement).toHaveClass("travel-mode");
     cleanup();

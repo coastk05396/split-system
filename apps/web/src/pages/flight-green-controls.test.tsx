@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { FlightSearchIntent } from "@split/shared";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
-import { openSearchPanel } from "../../test/flight-panel.js";
+import { openSearchPanel, askPrompt } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const css = readFileSync("src/styles.css", "utf8"); // vitest runs with apps/web as cwd
@@ -42,7 +42,7 @@ const fare = (airline: string, price: number, departureDate: string, top: boolea
 });
 
 function setup() {
-  const app = renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+  const app = renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
   app.api.flightPromptIntent = intent;
   app.api.flightFares = [
     fare("Cheap Air", 21000, "2027-01-07", true),
@@ -54,8 +54,7 @@ function setup() {
 
 async function explore() {
   setup();
-  fireEvent.change(await screen.findByLabelText("想去哪裡？"), { target: { value: "okinawa" } });
-  fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+  await askPrompt("okinawa");
   await screen.findByText("Cheap Air");
 }
 
@@ -64,24 +63,22 @@ const AMBER = /#fdf0d5|#f0c978|#f2a33a|#fff8e8|#6b3f00|#ffd23f/i;
 describe("Flight Radar green controls", () => {
   it("gives every primary button one green style, with hover and a solid disabled state", async () => {
     await explore();
-    const buttons = [screen.getByRole("button", { name: "探索航班" })];
     await openSearchPanel();
-    buttons.push(
-      within(screen.getByRole("region", { name: "搜尋列" })).getByRole("button", {
+    const buttons = [
+      within(screen.getByRole("dialog", { name: "搜尋面板" })).getByRole("button", {
         name: "搜尋航班",
       }),
-    );
+    ];
     const rule = (selector: string) => css.slice(css.indexOf(`${selector} {`)).split("}")[0] ?? "";
     for (const button of buttons) {
-      // The mock's green gradient button (round arrow on the prompt bar, pill elsewhere), white text.
-      expect(button.className).toMatch(/\bfr-(cta|askgo)\b/);
+      // The mock's green gradient pill button, white text.
+      expect(button.className).toMatch(/\bfr-cta\b/);
       // Dimming with opacity would drag the label under 4.5:1.
       expect(button.className).not.toMatch(/opacity/);
     }
     expect(rule(".fr-cta")).toContain("#fff");
     expect(rule(".fr-cta:disabled")).toContain("var(--color-travel-disabled-ink)");
     expect(rule(".fr-cta:disabled")).not.toMatch(/opacity/);
-    expect(rule(".fr-askgo:disabled")).toContain("var(--color-travel-disabled-ink)");
     expect(
       screen.getByRole("button", { name: /^台北桃園 → .* 1\/8（五）– 1\/11（一）$/ }).className,
     ).not.toMatch(/opacity/);

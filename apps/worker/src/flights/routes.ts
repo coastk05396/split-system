@@ -1,7 +1,5 @@
-import { fareTicker, flightHighlights } from "./history.js";
-import { z } from "zod";
+import { flightHighlights } from "./history.js";
 import {
-  airportCodeSchema,
   currencyCodeSchema,
   flightAdviceRequestSchema,
   flightSearchRequestSchema,
@@ -17,15 +15,7 @@ import type { AppDeps } from "../deps.js";
 import { parseBody } from "../request-guards.js";
 import { ApiError } from "../errors.js";
 import { searchFlightRequest } from "./search.js";
-
-const priceStripQuerySchema = z.object({
-  origin: airportCodeSchema,
-  destination: airportCodeSchema,
-  currency: currencyCodeSchema,
-  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-});
-
-const tickerQuerySchema = z.object({ origin: airportCodeSchema, currency: currencyCodeSchema });
+import { MAX_VOICE_BYTES, productionFlightSpeech } from "./voice.js";
 
 export function flightRoutes(deps: AppDeps) {
   return (
@@ -41,44 +31,37 @@ export function flightRoutes(deps: AppDeps) {
           200,
         );
       })
-      // Reads stored Fare Snapshots only; it never reaches the flight source (ADR 0007).
-      .get("/flights/price-strip", requireUser(deps.now), async (c) => {
-        const query = priceStripQuerySchema.safeParse({
-          origin: c.req.query("origin"),
-          destination: c.req.query("destination"),
-          currency: c.req.query("currency"),
-          month: c.req.query("month"),
-        });
-        if (!query.success) throw new ApiError("VALIDATION_FAILED");
-        const { origin, destination, currency, month } = query.data;
-        const rows = await c.env.DB.prepare(
-          "SELECT departure_date, price, fetched_at FROM flight_fare_snapshots WHERE origin=? AND destination=? AND currency=? AND departure_date>=? AND departure_date<? ORDER BY departure_date",
-        )
-          .bind(origin, destination, currency, `${month}-01`, `${month}-32`)
-          .all<{ departure_date: string; price: number; fetched_at: number }>();
-        return c.json(
-          {
-            days: rows.results.map((row) => ({
-              date: row.departure_date,
-              price: row.price,
-              fetchedAt: row.fetched_at,
-            })),
-          },
-          200,
-        );
-      })
-      // Fare Ticker: Fare Snapshots and fare history only; it never reaches the flight source.
-      .get("/flights/ticker", requireUser(deps.now), async (c) => {
-        const query = tickerQuerySchema.safeParse({
-          origin: c.req.query("origin"),
-          currency: c.req.query("currency"),
-        });
-        if (!query.success) throw new ApiError("VALIDATION_FAILED");
-        return c.json(await fareTicker(c.env.DB, query.data, deps.now()), 200);
-      })
       .post("/flights/search", requireUser(deps.now), async (c) => {
         const request = await parseBody(c, flightSearchRequestSchema);
         return c.json(await searchFlightRequest(c.env, deps, c.var.userId, request), 200);
+      })
+      // 語音搜尋: the recording is held in memory for this request only; it and the words are never stored or logged.
+      .post("/flights/voice", requireUser(deps.now), async (c) => {
+        const declared = Number(c.req.header("Content-Length") ?? 0);
+        if (!/^audio\//i.test(c.req.header("Content-Type") ?? "") || declared > MAX_VOICE_BYTES) {
+          throw new ApiError("VALIDATION_FAILED");
+        }
+        const audio = await c.req.arrayBuffer();
+        if (audio.byteLength === 0 || audio.byteLength > MAX_VOICE_BYTES) {
+          throw new ApiError("VALIDATION_FAILED");
+        }
+        await consumeRateLimit(createDb(c.env.DB), c.var.userId, "flights_voice", deps.now());
+        const user = await c.env.DB.prepare("SELECT language FROM users WHERE id=?")
+          .bind(c.var.userId)
+          .first<{ language: string }>();
+        try {
+          const text = await (deps.flightSpeech ?? productionFlightSpeech).transcribe(
+            {
+              audio,
+              contentType: c.req.header("Content-Type") ?? "audio/webm",
+              language: user?.language === "en" ? "en" : "zh-TW",
+            },
+            c.env,
+          );
+          return c.json({ text: text.trim() }, 200);
+        } catch {
+          throw new ApiError("SERVICE_UNAVAILABLE");
+        }
       })
       .post("/flights/advise", requireUser(deps.now), async (c) => {
         const request = await parseBody(c, flightAdviceRequestSchema);

@@ -1,5 +1,6 @@
 import type { WebPushSender } from "./flights/web-push.js";
 import type { FlightAI } from "./flights/ai.js";
+import type { FlightSpeech } from "./flights/voice.js";
 import type { FlightAdvisor } from "./flights/advice.js";
 import type { FlightSource } from "./flights/source.js";
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
@@ -17,12 +18,11 @@ export interface AppDeps {
   webPushSender?: WebPushSender;
   flightAI?: FlightAI;
   flightAdvisor?: FlightAdvisor;
+  flightSpeech?: FlightSpeech;
   verifier: (env: Bindings) => IdentityVerifier;
   now: () => number;
   /** Waits between spaced source requests; tests skip the wait. */
   pause?: (ms: number) => Promise<void>;
-  /** Routes from TPE whose Fare Snapshots the daily job refreshes; defaults to the popular list. */
-  snapshotDestinations?: readonly string[];
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
   rateSource: RateSource;
   lineReplyClient: (env: Bindings) => LineReplyClient;

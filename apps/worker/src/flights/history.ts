@@ -6,10 +6,8 @@ import {
   googleFlightsUrl,
   isStandardSearch,
   type FlightCard,
-  type CurrencyCode,
   type FlightFare,
   type FlightSearchIntent,
-  type FlightTickerReply,
 } from "@split/shared";
 import type { AppDeps } from "../deps.js";
 import type { Bindings } from "../env.js";
@@ -107,56 +105,6 @@ export async function flightHighlights(
     }),
   );
   return cards.filter((card) => card !== null).slice(0, 12);
-}
-
-/** A chip shows `-N%` only from this many whole percent under the usual fare. */
-const TICKER_MIN_PERCENT = 4;
-
-/**
- * The Fare Ticker: the cheapest saved Fare Snapshot per destination (the earliest day on a tie),
- * cheapest first. `percentBelow` comes from the Deal Signal history of that snapshot's route and
- * advance window, so it only appears once that history is mature. Reads stored rows only.
- */
-export async function fareTicker(
-  db: D1Database,
-  { origin, currency }: { origin: string; currency: CurrencyCode },
-  now: number,
-): Promise<FlightTickerReply> {
-  const rows = await db
-    .prepare(
-      "SELECT destination, departure_date, price FROM flight_fare_snapshots WHERE origin=? AND currency=? AND departure_date>=? ORDER BY price, departure_date",
-    )
-    .bind(origin, currency, isoDay(now))
-    .all<{ destination: string; departure_date: string; price: number }>();
-  const cheapest = new Map<string, (typeof rows.results)[number]>();
-  for (const row of rows.results) {
-    if (!cheapest.has(row.destination)) cheapest.set(row.destination, row);
-  }
-  const chips = await Promise.all(
-    [...cheapest.values()].map(async (row) => {
-      const intent: FlightSearchIntent = {
-        origin,
-        destination: row.destination,
-        departureDate: row.departure_date,
-        returnDate: isoDay(Date.parse(row.departure_date) + 3 * DAY),
-        currency,
-        excludeRedEye: false,
-        directOnly: false,
-      };
-      const { history } = evaluateDealSignal({
-        price: row.price,
-        priceLevel: "unknown",
-        history: await loadFareHistory(db, intent, now),
-      });
-      const percent = history ? Math.round(history.percentBelowMean) : 0;
-      return {
-        destination: row.destination,
-        price: row.price,
-        ...(percent >= TICKER_MIN_PERCENT && { percentBelow: percent }),
-      };
-    }),
-  );
-  return { chips };
 }
 
 /** Bounded daily rotation: four catalog routes, one adult economy, one exact future weekend. */

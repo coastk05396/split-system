@@ -1,17 +1,13 @@
-import type { CurrencyCode } from "@split/shared";
 import { useId, useState } from "react";
 import { getLocale, t } from "../i18n/messages.js";
 import { addDays, friendlyDate, friendlyRange } from "./dates.js";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-import { usePriceStrip } from "./PriceStrip.js";
 
 const WEEKDAYS = {
   en: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
   "zh-TW": ["日", "一", "二", "三", "四", "五", "六"],
 } as const;
-/** Fewer saved days than this say nothing about which are cheap, so no dot is drawn. */
-const MIN_PRICED_DAYS = 3;
 /** The return date a first tap offers, so an abandoned pick is still a valid trip. */
 const DEFAULT_STAY = 3;
 
@@ -32,37 +28,20 @@ const shiftMonth = (month: string, by: number) => {
   return new Date(Date.UTC(year, mo - 1 + by, 1)).toISOString().slice(0, 7);
 };
 
-/**
- * Cheap days of one month from its saved Fare Snapshots: the cheapest three-tenths, the same rule
- * as the Price Strip's "cheap" bars. Empty when too few days are saved.
- */
-function cheapDays(days: { date: string; price: number }[]): Set<string> {
-  if (days.length < MIN_PRICED_DAYS) return new Set();
-  const sorted = days.map((d) => d.price).sort((a, b) => a - b);
-  const cut = sorted[Math.floor(sorted.length * 0.3)] ?? 0;
-  return new Set(days.filter((d) => d.price <= cut).map((d) => d.date));
-}
-
 function Month({
   month,
-  route,
   today,
   departure,
   returnDate,
   onPick,
 }: {
   month: string;
-  route: { origin: string; destination: string; currency: CurrencyCode };
   today: string;
   departure: string;
   /** The picked return date, or undefined while it is being chosen or for a one-way trip. */
   returnDate: string | undefined;
   onPick: (date: string) => void;
 }) {
-  const { pending, days } = usePriceStrip(route.origin, route.destination, route.currency, [month]);
-  const cheap = pending
-    ? new Set<string>()
-    : cheapDays(days.filter((d) => d.date.startsWith(month)));
   const [year = 0, mo = 1] = month.split("-").map(Number);
   const lead = new Date(Date.UTC(year, mo - 1, 1)).getUTCDay();
   const count = new Date(Date.UTC(year, mo, 0)).getUTCDate();
@@ -82,7 +61,6 @@ function Month({
           const date = `${month}-${String(i + 1).padStart(2, "0")}`;
           const edge = date === departure || date === returnDate;
           const inRange = returnDate !== undefined && date > departure && date < returnDate;
-          const isCheap = cheap.has(date);
           const past = date < today;
           return (
             <button
@@ -90,9 +68,8 @@ function Month({
               type="button"
               disabled={past}
               aria-pressed={edge}
-              aria-label={friendlyDate(date) + (isCheap ? `, ${t("flight.calCheapDay")}` : "")}
+              aria-label={friendlyDate(date)}
               data-in-range={inRange ? "true" : undefined}
-              data-cheap={isCheap ? "true" : undefined}
               onClick={() => {
                 onPick(date);
               }}
@@ -103,30 +80,21 @@ function Month({
           );
         })}
       </div>
-      {cheap.size > 0 && (
-        <p className="fr-cal-n">
-          <i aria-hidden="true" />
-          {t("flight.calNote")}
-        </p>
-      )}
     </>
   );
 }
 
 /**
- * A toggle that opens a month calendar under the date fields: green dots mark the days whose saved
- * Fare Snapshot is cheap, a round trip takes a range (departure tap, then return tap) and a one-way
+ * A toggle that opens a month calendar under the date fields: a round trip takes a range (departure tap, then return tap) and a one-way
  * trip a single day. The native date fields stay as the typed and screen-reader route.
  */
 export function DatesCalendar({
-  route,
   today,
   departure,
   returnDate,
   oneWay,
   onChange,
 }: {
-  route: { origin: string; destination: string; currency: CurrencyCode };
   today: string;
   departure: string;
   returnDate: string;
@@ -216,7 +184,6 @@ export function DatesCalendar({
           </div>
           <Month
             month={month}
-            route={route}
             today={today}
             departure={departure}
             returnDate={oneWay || choosingReturn ? undefined : returnDate}

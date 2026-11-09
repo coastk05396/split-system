@@ -9,3 +9,5 @@ Considered and rejected: a live month search on page open (slow, a burst of requ
 Considered and rejected: rotating through all 31 catalogue destinations, three a day, which left a route's snapshots about ten days old and most searched routes without a strip.
 
 The cost is that only the listed routes ever have a strip, and a failing day keeps its older price until a later run succeeds. A snapshot is a round-trip outbound price for a three-day stay, because the source only supports round trips.
+
+Superseded by ADR 0008: the Price Strip, Fare Ticker, Fare Snapshots and the daily snapshot job were removed.

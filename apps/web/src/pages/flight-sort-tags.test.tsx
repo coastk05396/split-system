@@ -1,6 +1,7 @@
 import type { FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { askPrompt } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
 
@@ -82,13 +83,10 @@ const text = {
 type Language = keyof typeof text;
 
 async function open(language: Language) {
-  const app = renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language } });
+  const app = renderApp({ path: "/travel", cookieUser: { ...makeUser("Rick"), language } });
   app.api.flightFares = fares;
   app.api.flightPromptIntent = intent;
-  fireEvent.change(await screen.findByLabelText(text[language].prompt), {
-    target: { value: "warm island" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: text[language].explore }));
+  await askPrompt("warm island");
   await screen.findByRole("list", { name: text[language].fares });
 }
 
