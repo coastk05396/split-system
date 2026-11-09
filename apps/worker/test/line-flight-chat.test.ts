@@ -60,6 +60,7 @@ function harness(
     parseFails?: boolean;
     destination?: string;
     extra?: Partial<FlightSearchIntent>;
+    fares?: FlightFare[];
   } = {},
 ) {
   const sent: Sent[] = [];
@@ -82,7 +83,9 @@ function harness(
     lineReplyClient: () => client,
     flightSource: () => {
       if (options.sourceCalls) options.sourceCalls.count++;
-      return options.failSource ? Promise.reject(new Error("blocked")) : Promise.resolve(fares);
+      return options.failSource
+        ? Promise.reject(new Error("blocked"))
+        : Promise.resolve(options.fares ?? fares);
     },
     flightAI: {
       parsePrompt: (prompt) => {
@@ -180,7 +183,7 @@ describe("one-on-one LINE flight chat", () => {
     // 6 fares in, 3 Strong Buy (NT$ 7,000) then the cheapest Hold (NT$ 12,000).
     const badges = bubbles.slice(0, 4).map((b) => JSON.stringify(b.header));
     expect(badges.slice(0, 3).every((b) => b.includes("超值好價"))).toBe(true);
-    expect(badges[3]).toContain("價格偏高");
+    expect(badges[3]).toContain("價格僅供參考");
     expect(JSON.stringify(bubbles)).not.toMatch(
       /非常值得買|可以買|再等等|強烈買|可買|觀望|Strong Buy/,
     );
@@ -196,6 +199,34 @@ describe("one-on-one LINE flight chat", () => {
     expect(JSON.stringify(bubbles[0])).toContain(
       "https://www.google.com/travel/flights/search?tfs=",
     );
+  });
+
+  it.each([
+    [
+      "an unknown price level with no history or budget",
+      "NRT",
+      {},
+      { priceLevel: "unknown" as const },
+    ],
+    ["a cheap fare over budget", "BKK", { budget: 1000 }, { priceLevel: "low" as const }],
+  ])("makes no price-level claim on the badge for %s", async (_name, destination, extra, patch) => {
+    // Its own destination and LINE user: fares are cached per route and chats are rate limited per user.
+    const { post, sent } = harness({
+      destination,
+      extra,
+      fares: [{ ...fares[0], ...patch } as FlightFare],
+    });
+
+    await post({
+      ...text(`機票 ${destination}`),
+      source: { type: "user", userId: `U-${destination}` },
+    });
+
+    const flex = sent[0]?.messages.at(-1);
+    if (flex?.type !== "flex") throw new Error("expected a Flex message");
+    const header = JSON.stringify(flex.contents.contents[0]?.header);
+    expect(header).toContain("價格僅供參考");
+    expect(header).not.toMatch(/偏高|偏貴|超值|合理|便宜|划算|非常值得買|可以買|再等等/);
   });
 
   it("adds a 降價叫醒我 postback beside 查看航班 on every flight bubble, keeping one height", async () => {

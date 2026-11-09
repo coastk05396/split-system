@@ -92,11 +92,14 @@ const DAY = 86_400_000;
 const shift = (date: string, days: number) =>
   new Date(Date.parse(date) + days * DAY).toISOString().slice(0, 10);
 const SIGNAL_RANK = { strong_buy: 0, buy: 1, hold: 2 } as const;
-/** Plain-fact wording for a card's Deal Signal; the signal's own names (Strong Buy, Buy, Hold) are never shown. */
+/**
+ * Wording for a card's Deal Signal that is true for every case that maps to it (the signal's own names are never
+ * shown). Hold also covers an unknown price level and a cheap fare over budget, so it claims nothing about price.
+ */
 export const SIGNAL_NOTE = {
   strong_buy: ["超值好價", "Great price"],
   buy: ["價格合理", "Fair price"],
-  hold: ["價格偏高", "High price"],
+  hold: ["價格僅供參考", "Price for reference"],
 } as const satisfies Record<string, Pair>;
 
 /** Every offered chip is computed from the actual results, so none can be inapplicable. */
@@ -190,7 +193,8 @@ const cheapestOf = (cards: FlightAdviceRequest["cards"]) =>
 export function eligibleFocuses({ cards }: FlightAdviceRequest): AdviceFocus[] {
   return [
     ...(cheapestOf(cards).overBudget > 0 ? (["over_budget"] as const) : []),
-    "best_signal",
+    // Only when some fare is rated above hold: hold alone says nothing about price.
+    ...(cards.some((card) => card.signal !== "hold") ? (["best_signal"] as const) : []),
     "cheapest",
     ...(cards.some((card) => card.stops === 0) ? (["nonstop"] as const) : []),
   ];
@@ -227,8 +231,8 @@ export function renderAdvice(
       `Cheapest is ${cheapest.airline} at ${money(cheapest.price)}, departing ${time(cheapest.outboundDeparture)}.`,
     ],
     best_signal: [
-      `${best.airline} ${money(best.price)} 是最划算的選擇。`,
-      `${best.airline} at ${money(best.price)} is the best-value option.`,
+      `${best.airline} ${money(best.price)} ${best.signal === "strong_buy" ? "是超值好價" : "的價格合理"}。`,
+      `${best.airline} at ${money(best.price)} is a ${best.signal === "strong_buy" ? "great" : "fair"} price.`,
     ],
     over_budget: [
       `最低票價仍超出預算 ${money(cheapest.overBudget)}。`,

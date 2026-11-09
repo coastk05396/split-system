@@ -118,7 +118,7 @@ it("falls back to Workers AI on a Groq 429, then to deterministic copy when outp
   output = { focus: "cheapest", moves: [], commentary: "Only NT$1 today, 90% off!" };
   const leaked = await ask();
   expect(leaked.commentary).not.toMatch(/90%|NT\$1\b/);
-  expect(leaked.commentary).toMatch(/^Test Air at .* is the best-value option/);
+  expect(leaked.commentary).toMatch(/^Test Air at .* is a great price/);
   hang = true;
   expect((await ask()).moves.length).toBeGreaterThanOrEqual(3);
 }, 10_000);
@@ -189,6 +189,46 @@ it.each(["en", "zh-TW"] as const)(
         expect(commentary, `${signal} ${focus}`).not.toMatch(LABELS);
         expect(commentary.length).toBeGreaterThan(10);
       }
+    }
+  },
+);
+
+it.each(["en", "zh-TW"] as const)(
+  "makes no price claim when no fare is rated better than hold, even if best_signal is asked for, in %s",
+  async (language) => {
+    const hold = { ...fare, signal: "hold", priceLevel: "unknown", overBudget: 0 } as const;
+    const response = await advise(
+      { language, intent, cards: [hold, { ...hold, airline: "Night Air", price: 12000 }] },
+      { flightAdvisor: { select: () => Promise.resolve({ focus: "best_signal", moves: [] }) } },
+    );
+    const { commentary } = await response.json<FlightAdviceReply>();
+    expect(commentary).toMatch(language === "en" ? /^Cheapest is / : /^最便宜的是 /);
+    expect(commentary.split(/[。.]\s/)[0]).not.toMatch(
+      /best-value|great price|fair price|最划算|超值|合理/,
+    );
+  },
+);
+
+it.each(["en", "zh-TW"] as const)(
+  "says a rated best fare is a great or fair price, no more, in %s",
+  async (language) => {
+    for (const [signal, words] of [
+      ["strong_buy", language === "en" ? "great price" : "超值好價"],
+      ["buy", language === "en" ? "fair price" : "價格合理"],
+    ] as const) {
+      const response = await advise(
+        {
+          language,
+          intent,
+          cards: [
+            { ...fare, signal },
+            { ...fare, airline: "Night Air", price: 12000, signal: "hold" },
+          ],
+        },
+        { flightAdvisor: { select: () => Promise.resolve({ focus: "best_signal", moves: [] }) } },
+      );
+      const { commentary } = await response.json<FlightAdviceReply>();
+      expect(commentary.split(/[。.]\s/)[0]).toContain(words);
     }
   },
 );
