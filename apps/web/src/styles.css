@@ -1658,16 +1658,15 @@ body::before {
     left: calc(100% - 16px);
   }
 }
-/* Neighbours recede; never below 0.8 so their text keeps its contrast. */
+/* Neighbours recede by scale alone: fading a card would blend its text into the page and drop
+   small text below 4.5:1 (muted metadata falls to about 3.9:1 at 0.8 opacity). */
 @keyframes fare-depth {
   0%,
   100% {
     scale: 0.92;
-    opacity: 0.8;
   }
   50% {
     scale: 1;
-    opacity: 1;
   }
 }
 @keyframes stamp-in {

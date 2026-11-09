@@ -34,23 +34,25 @@ export function useCreateWatch() {
 export function FlightPriceWatchButton({
   card,
   onWatch,
-  ring = false,
+  ring = null,
 }: {
   card: FlightCard;
   onWatch: (card: FlightCard) => void;
-  /** Play the bell's ring (a Price Watch was just saved). */
-  ring?: boolean;
+  /** When a Price Watch was just saved, its identity: a new one restarts the bell ring. */
+  ring?: number | null;
 }) {
   return (
     <button
       type="button"
       aria-label={t("flight.watch")}
-      className={`${ring ? "bell-ring " : ""}press-pill grid size-11 shrink-0 place-items-center text-sprout-900 focus-visible:outline-2 focus-visible:outline-sprout-700`}
+      className={`${ring !== null ? "bell-ring " : ""}press-pill grid size-11 shrink-0 place-items-center text-sprout-900 focus-visible:outline-2 focus-visible:outline-sprout-700`}
       onClick={() => {
         onWatch(card);
       }}
     >
       <svg
+        // A new key remounts the icon, which restarts its CSS ring without touching the button's focus.
+        key={ring ?? "idle"}
         viewBox="0 0 24 24"
         aria-hidden="true"
         className="size-5 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"

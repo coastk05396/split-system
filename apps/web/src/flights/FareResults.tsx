@@ -311,7 +311,7 @@ function Flap({ text, className }: { text: string; className?: string }) {
   useEffect(() => {
     if (!rolling) return;
     const id = setTimeout(() => {
-      setTick(tick + 1);
+      setTick(prefersReducedMotion() ? Infinity : tick + 1);
     }, FLAP_STEP_MS);
     return () => {
       clearTimeout(id);
@@ -451,7 +451,7 @@ function FareCardItem({
         />
       </a>
       <span className="absolute right-1 bottom-1">
-        <FlightPriceWatchButton card={card} onWatch={onWatch} ring={saved !== null && motion} />
+        <FlightPriceWatchButton card={card} onWatch={onWatch} ring={motion ? saved : null} />
         {saved !== null && (
           <span role="status" className="sr-only">
             {t("flight.watchAdded")}

@@ -14,7 +14,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
-import { StickyBar } from "../flights/StickyBar.js";
+import { STICKY_BAR_SLOT, StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { addDays, friendlyDate } from "../flights/dates.js";
@@ -149,13 +149,43 @@ export function TravelPage() {
   const reply = search.data;
   const searched = search.isPending || reply !== undefined;
   const resultsTop = useRef<HTMLDivElement>(null);
-  // A finished search scrolls to its results; reduced motion jumps instead of gliding.
+  const placedAt = useRef(0);
+  // Scroll the results to the top of the screen, past it by as much as it takes for the fare
+  // carousel to end above a sticky bar (the Price Strip dock can be tall), never so far that the
+  // carousel's own top leaves the screen. Reduced motion jumps instead of gliding.
+  const placeResults = (behavior: ScrollBehavior) => {
+    const results = resultsTop.current;
+    if (!results) return;
+    const dock = document.querySelector("[data-sticky-bar]")?.getBoundingClientRect();
+    const carousel = results.querySelector(".car-wrap")?.getBoundingClientRect();
+    const top = results.getBoundingClientRect().top;
+    // Scroll by enough that the carousel clears the bar, but keep its top on screen. Measured from
+    // where things are now (before the bar appeared the page may not have scrolled as far as
+    // wanted); 16 px is the plain gap above the results.
+    let margin = 16;
+    if (dock && carousel)
+      margin = Math.min(16, top - Math.min(carousel.bottom - dock.top + 8, carousel.top - 8));
+    results.style.scrollMarginTop = `${String(margin)}px`;
+    results.scrollIntoView({ behavior, block: "start" });
+  };
+  // A finished search scrolls to its results. The advice and the dock arrive a moment later and
+  // move things, so for 3 s after the search the placement is repeated whenever the page resizes.
   useEffect(() => {
-    if (reply)
-      resultsTop.current?.scrollIntoView({
-        behavior: prefersReducedMotion() ? "auto" : "smooth",
-        block: "start",
-      });
+    if (!reply) return;
+    placedAt.current = Date.now();
+    placeResults(prefersReducedMotion() ? "auto" : "smooth");
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (Date.now() - placedAt.current < 3000) placeResults("auto");
+    });
+    observer.observe(document.body);
+    const stop = setTimeout(() => {
+      observer.disconnect();
+    }, 3000);
+    return () => {
+      clearTimeout(stop);
+      observer.disconnect();
+    };
   }, [reply]);
   const highlightsSection = (
     <section aria-label={t("flight.highlights")} className="my-6">
@@ -366,7 +396,8 @@ export function TravelPage() {
           setWatchCard(null);
         }}
         onSaved={(card) => {
-          setSavedWatch({ card, at: Date.now() });
+          // A running count, so saving the same fare twice is always a new identity.
+          setSavedWatch((previous) => ({ card, at: (previous?.at ?? 0) + 1 }));
         }}
       />
       {panelOpen && (
@@ -381,6 +412,8 @@ export function TravelPage() {
           </button>
         </StickyBar>
       )}
+      {/* The very last element: the sticky bars' spacer renders in here. */}
+      <div id={STICKY_BAR_SLOT} />
     </>
   );
 }

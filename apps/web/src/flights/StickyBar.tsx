@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../i18n/messages.js";
+
+/** The id of the element at the very end of the page that holds the sticky bar's spacer. */
+export const STICKY_BAR_SLOT = "sticky-bar-slot";
 
 /**
  * Thumb-reach bar fixed above the mobile tab bar. The spacer is as tall as the bar so the last content can always scroll clear of it. The bar sits
@@ -25,11 +29,17 @@ export function StickyBar({
       observer.disconnect();
     };
   }, []);
+  // The spacer goes where the page ends (the slot the page keeps last), not where the bar is
+  // written in the tree; there it would push the content down instead of clearing the bottom.
+  const spacerNode = <div aria-hidden="true" style={{ height }} />;
+  const slot = document.getElementById(STICKY_BAR_SLOT);
+  const spacer = slot ? createPortal(spacerNode, slot) : spacerNode;
   return (
     <>
-      <div aria-hidden="true" style={{ height }} />
+      {spacer}
       <div
         ref={bar}
+        data-sticky-bar=""
         role="region"
         aria-label={label}
         className="glass-nav fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[9] border-t border-sprout-200/80 py-3 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] md:bottom-0 md:left-60"
