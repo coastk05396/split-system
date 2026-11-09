@@ -142,4 +142,38 @@ describe("Flight Radar globe", () => {
     expect(calls.filter((c) => c === "lineTo").length).toBeGreaterThan(10);
     expect(calls).toContain("arc");
   });
+
+  it("repaints the route arc when only the origin changes", async () => {
+    let clears = 0;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- the index type is needed
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get: (target, key: string) =>
+        key in target
+          ? target[key]
+          : () => {
+              if (key === "clearRect") clears += 1;
+            },
+      set: (target, key: string, value: unknown) => {
+        target[key] = value;
+        return true;
+      },
+    });
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- vitest mock
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx as never);
+    setup("en");
+    await globe(words.en.okinawa);
+    await waitFor(() => {
+      expect(clears).toBeGreaterThan(0);
+    });
+    const before = clears;
+    await openSearchPanel();
+    fireEvent.change(screen.getByRole("combobox", { name: "Origin airport" }), {
+      target: { value: "khh" },
+    });
+    // The header follows the submitted search, not the draft.
+    fireEvent.click(screen.getByRole("button", { name: "Search flights" }));
+    await waitFor(() => {
+      expect(clears).toBeGreaterThan(before);
+    });
+  });
 });

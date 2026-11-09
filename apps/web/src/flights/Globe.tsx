@@ -217,6 +217,9 @@ export function Globe({
     };
   }, [lat, lng]);
 
+  // The arc starts at the origin: repaint when only it moves (the turn effect above does not depend on it).
+  useEffect(paint, [origin?.lat, origin?.lng]);
+
   return (
     <canvas
       ref={canvas}
