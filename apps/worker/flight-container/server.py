@@ -90,12 +90,13 @@ CABINS = ("economy", "premium-economy", "business", "first")
 
 
 def build_query(intent: dict):
-    """The Google Flights query for an intent; pure, so it is tested offline. Infants are out of scope."""
+    """The Google Flights query for an intent; pure, so it is tested offline. Infants are validated but never sent: the source prices them unreliably."""
     from fast_flights import FlightQuery, Passengers, create_query
     origin, destination = intent["origin"], intent["destination"]
-    adults, children = intent.get("adults", 1), intent.get("children", 0)
+    adults, children, infants = intent.get("adults", 1), intent.get("children", 0), intent.get("infants", 0)
     cabin, trip = intent.get("cabin", "economy"), intent.get("tripType", "round-trip")
-    if not (type(adults) is int and type(children) is int and 1 <= adults <= 9 and 0 <= children <= 9 - adults):
+    if not (type(adults) is int and type(children) is int and type(infants) is int
+            and 1 <= adults <= 9 and 0 <= children <= 9 - adults and 0 <= infants <= min(adults, 9 - adults - children)):
         raise ValueError("invalid passengers")
     if cabin not in CABINS or trip not in ("round-trip", "one-way"):
         raise ValueError("invalid request")

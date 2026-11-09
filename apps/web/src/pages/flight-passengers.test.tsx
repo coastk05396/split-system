@@ -57,9 +57,13 @@ const searches = (app: Awaited<ReturnType<typeof setup>>) =>
   app.api.requests.filter((r) => r.route === "POST /api/v1/flights/search");
 const lastBody = (app: Awaited<ReturnType<typeof setup>>) =>
   JSON.parse(searches(app).at(-1)?.body ?? "{}") as Record<string, unknown>;
-const summary = () => screen.getByRole("button", { name: /^Travellers and cabin/ });
+const summary = () => screen.getByRole("button", { name: /^Passengers and cabin/ });
+const sheet = () => screen.getByRole("dialog", { name: "Passengers and cabin" });
 const openParty = () => {
   fireEvent.click(summary());
+};
+const closeParty = () => {
+  fireEvent.click(within(sheet()).getByRole("button", { name: "Done" }));
 };
 const submit = async (app: Awaited<ReturnType<typeof setup>>, count: number) => {
   fireEvent.click(
@@ -73,16 +77,16 @@ const submit = async (app: Awaited<ReturnType<typeof setup>>, count: number) => 
 };
 
 describe("Passengers, cabin and trip type panel", () => {
-  it("shows a summary row of the current choice and one panel behind it", async () => {
+  it("shows a summary row of the current choice and a sheet behind it", async () => {
     await setup();
     expect(summary()).toHaveTextContent("1 adult · Economy · Round trip");
-    expect(summary()).toHaveAttribute("aria-expanded", "false");
+    expect(summary()).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("group", { name: "Adults" })).toBeNull();
     openParty();
-    expect(summary()).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("group", { name: "Adults" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Children (2–11)" })).toBeVisible();
-    expect(screen.getByRole("group", { name: "Cabin" })).toBeVisible();
+    expect(sheet()).toHaveAttribute("aria-modal", "true");
+    for (const name of ["Adults", "Children (2–11)", "Infants (under 2)", "Cabin"])
+      expect(within(sheet()).getByRole("group", { name })).toBeVisible();
   });
 
   it("counts adults and children with steppers, keeps one adult and nine travellers at most", async () => {
@@ -104,7 +108,7 @@ describe("Passengers, cabin and trip type panel", () => {
     expect(within(children).getByRole("button", { name: "Add a child" })).toBeEnabled();
   });
 
-  it("offers four cabins and no infants", async () => {
+  it("offers four cabins", async () => {
     await setup();
     openParty();
     const cabins = screen.getByRole("group", { name: "Cabin" });
@@ -113,7 +117,6 @@ describe("Passengers, cabin and trip type panel", () => {
         .getAllByRole("radio")
         .map((r) => (r as HTMLInputElement).value),
     ).toEqual(["economy", "premium-economy", "business", "first"]);
-    expect(screen.queryByText(/infant|嬰/i)).toBeNull();
   });
 
   it("sends the party and cabin, shows the people on the chip and names the party in the note", async () => {
@@ -130,6 +133,7 @@ describe("Passengers, cabin and trip type panel", () => {
       }),
     );
     fireEvent.click(screen.getByRole("radio", { name: "Business" }));
+    closeParty();
     await submit(app, 2);
     expect(flightSearchRequestSchema.parse(lastBody(app))).toMatchObject({
       adults: 2,
@@ -163,7 +167,6 @@ describe("Passengers, cabin and trip type panel", () => {
   it("searches one way: no return date field, none sent, and the chip says so", async () => {
     const app = await setup();
     expect(screen.getByLabelText("Return date")).toBeVisible();
-    openParty();
     fireEvent.click(screen.getByRole("radio", { name: "One way" }));
     expect(screen.queryByLabelText("Return date")).toBeNull();
     expect(summary()).toHaveTextContent("1 adult · Economy · One way");
@@ -177,7 +180,6 @@ describe("Passengers, cabin and trip type panel", () => {
     ).toBeVisible();
     // Back to a round trip: the return date field returns with a usable date.
     await openSearchPanel();
-    openParty();
     fireEvent.click(screen.getByRole("radio", { name: "Round trip" }));
     expect(screen.getByLabelText("Return date")).toHaveValue("2027-01-11");
   });
@@ -208,6 +210,7 @@ describe("Passengers, cabin and trip type panel", () => {
     app.api.flightFares = [];
     openParty();
     fireEvent.click(screen.getByRole("radio", { name: "First" }));
+    closeParty();
     await submit(app, 2);
     expect(await screen.findByText(/No verified First fares for this search/)).toBeVisible();
     expect(screen.queryByText(/temporarily unavailable/)).toBeNull();
@@ -216,19 +219,18 @@ describe("Passengers, cabin and trip type panel", () => {
   it("keeps targets at 44 px, nothing dimmed, no colour transitions and no horizontal scroll", async () => {
     await setup();
     openParty();
-    const panel = document.getElementById(summary().getAttribute("aria-controls") ?? "");
-    expect(panel).not.toBeNull();
-    for (const button of [summary(), ...within(panel as HTMLElement).getAllByRole("button")]) {
+    const panel = sheet();
+    for (const button of [summary(), ...within(panel).getAllByRole("button")]) {
       expect(button.className).toMatch(/min-h-1[12]|size-11/);
       expect(button.className).not.toMatch(/opacity|transition-colors|transition-all/);
     }
-    for (const label of (panel as HTMLElement).querySelectorAll("label span")) {
+    for (const label of panel.querySelectorAll("label span")) {
       expect(label).toHaveClass("min-h-11");
       expect(label.className).not.toMatch(/opacity|transition/);
     }
     expect(summary()).toHaveClass("min-w-0", "w-full");
     expect(summary().querySelector(".break-words")).not.toBeNull();
-    expect((panel as HTMLElement).className).not.toMatch(/overflow-x|w-\[/);
+    expect(panel.className).not.toMatch(/overflow-x|w-\[/);
   });
 
   it("keeps every panel text and background pair at 4.5:1 at rest, hover and disabled", () => {
@@ -242,6 +244,135 @@ describe("Passengers, cabin and trip type panel", () => {
       [color("--color-ink-muted"), color("--color-sprout-100")], // summary label on hover
       [color("--color-ink-muted"), color("--color-sprout-50")], // limit hint on the panel
       [color("--color-sprout-900"), color("--color-sprout-50")], // labels on the panel
+    ];
+    for (const [fg, bg] of pairs) expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("Passengers sheet", () => {
+  const stepper = (name: string) => within(sheet()).getByRole("group", { name });
+  const press = (group: string, button: string) => {
+    fireEvent.click(within(stepper(group)).getByRole("button", { name: button }));
+  };
+
+  it("never lets infants exceed adults, drops below one adult, or passes nine travellers", async () => {
+    await setup();
+    openParty();
+    const addInfant = () =>
+      within(stepper("Infants (under 2)")).getByRole("button", { name: "Add an infant" });
+    expect(addInfant()).toBeEnabled();
+    press("Infants (under 2)", "Add an infant");
+    expect(addInfant()).toBeDisabled(); // 1 infant, 1 adult
+    expect(screen.getByText("One infant per adult at most")).toBeVisible();
+    expect(
+      within(stepper("Adults")).getByRole("button", { name: "Remove an adult" }),
+    ).toBeDisabled();
+    expect(summary()).toHaveTextContent("1 adult, 1 infant · Economy · Round trip");
+    for (let i = 0; i < 4; i++) press("Adults", "Add an adult"); // 5 adults
+    press("Children (2–11)", "Add a child");
+    press("Children (2–11)", "Add a child"); // 5 + 2 + 1 = 8
+    press("Infants (under 2)", "Add an infant"); // 9
+    expect(addInfant()).toBeDisabled();
+    for (const [group, button] of [
+      ["Adults", "Add an adult"],
+      ["Children (2–11)", "Add a child"],
+    ] as const)
+      expect(within(stepper(group)).getByRole("button", { name: button })).toBeDisabled();
+    expect(screen.getByText("Up to 9 travellers")).toBeVisible();
+    // Dropping adults to the infant count is refused; removing an infant frees it again.
+    for (let i = 0; i < 3; i++) press("Adults", "Remove an adult");
+    expect(within(stepper("Adults")).getByText("2")).toBeVisible();
+    press("Infants (under 2)", "Remove an infant");
+    press("Infants (under 2)", "Remove an infant");
+    press("Adults", "Remove an adult");
+    expect(within(stepper("Adults")).getByText("1")).toBeVisible();
+  });
+
+  it("says the price excludes infants only when there are some", async () => {
+    await setup();
+    openParty();
+    expect(within(sheet()).queryByText("Price excludes infants")).toBeNull();
+    press("Infants (under 2)", "Add an infant");
+    expect(within(sheet()).getByText("Price excludes infants")).toBeVisible();
+  });
+
+  it("sends infants, keeps the shown fare, and repeats the note under the fares", async () => {
+    const app = await setup();
+    openParty();
+    press("Adults", "Add an adult");
+    press("Infants (under 2)", "Add an infant");
+    closeParty();
+    await submit(app, 2);
+    expect(flightSearchRequestSchema.parse(lastBody(app))).toMatchObject({
+      adults: 2,
+      infants: 1,
+    });
+    expect(screen.getByText(/Price excludes infants\./)).toBeVisible();
+    expect(screen.getAllByText(/21,000/).length).toBeGreaterThan(0); // not multiplied
+    expect(
+      screen.getByText(/Prices are round-trip totals for all 2 adults, Economy/),
+    ).toBeVisible();
+    // A plain search again: no infants key, no note.
+    await openSearchPanel();
+    openParty();
+    press("Infants (under 2)", "Remove an infant");
+    closeParty();
+    await submit(app, 3);
+    expect(lastBody(app)).not.toHaveProperty("infants");
+    expect(screen.queryByText(/Price excludes infants/)).toBeNull();
+  });
+
+  it("moves focus into the sheet, traps Tab, closes on Escape and returns focus to the row", async () => {
+    await setup();
+    const row = summary();
+    row.focus();
+    openParty();
+    expect(sheet()).toContainElement(document.activeElement as HTMLElement);
+    const focusable = Array.from(
+      sheet().querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)"),
+    );
+    const first = focusable[0] as HTMLElement;
+    const last = focusable.at(-1) as HTMLElement;
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(last, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(summary());
+  });
+
+  it("closes with Done and keeps the choice", async () => {
+    await setup();
+    openParty();
+    press("Adults", "Add an adult");
+    closeParty();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(summary()).toHaveTextContent("2 adults · Economy · Round trip");
+    expect(document.activeElement).toBe(summary());
+  });
+
+  it("shows the Chinese labels and the infant note", async () => {
+    renderApp({ path: "/travel/flights", cookieUser: { ...makeUser("Rick"), language: "zh-TW" } });
+    fireEvent.change(await screen.findByLabelText("想去哪裡？"), { target: { value: "okinawa" } });
+    fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
+    await screen.findByText("Example Air");
+    await openSearchPanel();
+    fireEvent.click(screen.getByRole("button", { name: /^旅客與艙等/ }));
+    const dialog = screen.getByRole("dialog", { name: "旅客與艙等" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "增加嬰兒" }));
+    expect(within(dialog).getByRole("group", { name: "嬰兒（2 歲以下）" })).toBeVisible();
+    expect(within(dialog).getByText("價格不含嬰兒")).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "完成" })).toBeVisible();
+  });
+
+  it("keeps the new text pairs at 4.5:1", () => {
+    const pairs: [string, string][] = [
+      [color("--color-sprout-900"), color("--color-sprout-50")], // sheet title and rows
+      [color("--color-ink-muted"), color("--color-sprout-50")], // hints and the infant note
+      ["#ffffff", color("--color-travel-action")], // Done, selected cabin and trip
+      [color("--color-sprout-900"), color("--color-sprout-100")], // idle trip segment
     ];
     for (const [fg, bg] of pairs) expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });

@@ -15,7 +15,8 @@ import {
 } from "./AirportPicker.js";
 import { input } from "../groups/ui.js";
 import { errorMessage, t } from "../i18n/messages.js";
-import { PartyPanel, toParty, type Party } from "./PartyPanel.js";
+import { DatesCalendar } from "./DatesCalendar.js";
+import { PartyPanel, TripToggle, toParty, type Party } from "./PartyPanel.js";
 
 interface Draft {
   origin: string;
@@ -99,6 +100,7 @@ export function FlightSearchForm({
       tripType: draft.party.oneWay ? "one-way" : undefined,
       adults: draft.party.adults === 1 ? undefined : draft.party.adults,
       children: draft.party.children === 0 ? undefined : draft.party.children,
+      infants: draft.party.infants === 0 ? undefined : draft.party.infants,
       cabin: draft.party.cabin === "economy" ? undefined : draft.party.cabin,
       currency,
       budget: budget?.value,
@@ -156,6 +158,7 @@ export function FlightSearchForm({
           value={draft.destination}
           className="col-start-1 row-start-2 sm:col-start-3 sm:row-start-1"
           popular={POPULAR_DESTINATIONS}
+          popularHeading="flight.airportPopularDest"
           onChange={(destination) => {
             set({ destination });
             onPlace?.(destination);
@@ -163,6 +166,12 @@ export function FlightSearchForm({
           onType={onPlace}
         />
       </div>
+      <TripToggle
+        oneWay={draft.party.oneWay}
+        onChange={(oneWay) => {
+          setDraft((d) => ({ ...d, party: { ...d.party, oneWay } }));
+        }}
+      />
       <label className="grid gap-1 text-sm font-bold">
         {t("flight.departure")}
         <input
@@ -193,6 +202,14 @@ export function FlightSearchForm({
           />
         </label>
       )}
+      <DatesCalendar
+        route={{ origin: draft.origin, destination: draft.destination, currency }}
+        today={today}
+        departure={draft.departureDate}
+        returnDate={draft.returnDate}
+        oneWay={draft.party.oneWay}
+        onChange={set}
+      />
       <PartyPanel
         value={draft.party}
         onChange={(patch) => {

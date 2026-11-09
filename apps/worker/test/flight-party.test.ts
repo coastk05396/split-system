@@ -70,9 +70,15 @@ it("accepts a one-way search without a return date and refuses a round trip with
   expect((await search({ returnDate: undefined })).status).toBe(400);
 });
 
-it("refuses infants-sized parties, unknown cabins and parties over nine", async () => {
+it("refuses infants beyond the adults, unknown cabins and parties over nine", async () => {
   const { search } = await harness("party-invalid");
-  for (const bad of [{ adults: 0 }, { adults: 6, children: 4 }, { cabin: "coach" }]) {
+  for (const bad of [
+    { adults: 0 },
+    { adults: 6, children: 4 },
+    { adults: 1, infants: 2 },
+    { adults: 5, children: 3, infants: 2 },
+    { cabin: "coach" },
+  ]) {
     expect((await search(bad)).status).toBe(400);
   }
 });
@@ -85,5 +91,28 @@ it("keeps party, cabin and one-way searches out of the fare history", async () =
   await search({ returnDate: undefined, tripType: "one-way" });
   expect(await stored()).toBe(0);
   await search({});
+  expect(await stored()).toBeGreaterThan(0);
+});
+
+it("hands infants to the source and the Google link, caches them apart and never multiplies the fare", async () => {
+  const { seen, search } = await harness("party-infants");
+  const response = await search({ adults: 2, infants: 1 });
+  expect(response.status).toBe(200);
+  const reply = await response.json<FlightSearchReply>();
+  expect(seen[0]).toMatchObject({ adults: 2, infants: 1 });
+  expect(reply.intent.infants).toBe(1);
+  expect(reply.cards[0]?.price).toBe(fare.price);
+  const tfs = new URL(reply.url).searchParams.get("tfs") ?? "";
+  const bytes = Array.from(atob(tfs.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  expect(bytes.slice(-11)).toEqual([72, 1, 64, 1, 64, 1, 64, 4, 152, 1, 1]);
+  await search({ adults: 2, infants: 1 });
+  expect(seen).toHaveLength(3); // the repeat is cached
+  await search({ adults: 2, infants: 2 });
+  expect(seen).toHaveLength(6); // another infant count is a different key
+});
+
+it("keeps an infant on a 1-adult search in the fare history: the source price excludes them", async () => {
+  const { search } = await harness("party-infants-history");
+  await search({ infants: 1 });
   expect(await stored()).toBeGreaterThan(0);
 });

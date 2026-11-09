@@ -59,6 +59,7 @@ function harness(
     failSource?: boolean;
     parseFails?: boolean;
     destination?: string;
+    extra?: Partial<FlightSearchIntent>;
   } = {},
 ) {
   const sent: Sent[] = [];
@@ -88,7 +89,11 @@ function harness(
         options.prompts?.push(prompt);
         return options.parseFails
           ? Promise.reject(new Error("no destination"))
-          : Promise.resolve({ ...intent, destination: options.destination ?? intent.destination });
+          : Promise.resolve({
+              ...intent,
+              ...options.extra,
+              destination: options.destination ?? intent.destination,
+            });
       },
     },
     flightAdvisor: { select: () => Promise.resolve(null) },
@@ -211,6 +216,31 @@ describe("one-on-one LINE flight chat", () => {
       expect(watch.action.data.length).toBeLessThanOrEqual(300);
     }
     expect(JSON.stringify(flex)).not.toContain("🌱");
+  });
+
+  it("carries infants on the card: link, watch postback and portal, with a note that the price excludes them", async () => {
+    const { post, sent } = harness({ extra: { adults: 2, infants: 1 } });
+
+    await post(text("機票 沖繩 2大1嬰"));
+
+    const flex = sent[0]?.messages.at(-1);
+    if (flex?.type !== "flex") throw new Error("expected a Flex message");
+    const [first, ...rest] = flex.contents.contents;
+    const json = JSON.stringify(first);
+    expect(json).toContain("NT$ 7,000"); // never multiplied for the infant
+    expect(json).toContain("不含嬰兒");
+    expect(json).toContain("infants=1");
+    const tfs = /tfs=([\w-]+)/.exec(json)?.[1] ?? "";
+    const bytes = Array.from(atob(tfs.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+      c.charCodeAt(0),
+    );
+    expect(bytes.slice(-11)).toEqual([72, 1, 64, 1, 64, 1, 64, 4, 152, 1, 1]);
+    expect(JSON.stringify(rest.at(-1))).toContain("infants=1");
+    // A search without infants keeps its plain card.
+    const plain = harness();
+    await plain.post(text("機票 沖繩"));
+    const plainFlex = plain.sent[0]?.messages.at(-1);
+    expect(JSON.stringify(plainFlex)).not.toContain("不含嬰兒");
   });
 
   it("creates a line_push Price Watch in one tap for a linked sender, listed in /travel's watches", async () => {

@@ -57,7 +57,7 @@ One tappable filter chip in Flight Radar—such as destination vibe, budget cap,
 _Avoid_: Tag, search parameter
 
 **Party**:
-The adults, children, cabin and trip type (round trip or one way) of a Flight Radar search, set in one panel opened from the 旅客與艙等 summary row. Prices from the flight source are totals for the whole Party. Infants are not part of a Party. Only the standard Party (1 adult, economy, round trip) feeds fare history and the scheduled fare refreshes (Fare Snapshots stay fixed there too).
+The adults, children, infants, cabin and trip type (round trip or one way) of a Flight Radar search; adults, children and infants are set in the passengers sheet opened from the 旅客與艙等 summary row. Prices from the flight source are totals for the adults and children of the Party; infants never exceed adults, are passed to the Google Flights link only and are not in the shown price (the source prices them unreliably), which the 價格不含嬰兒 note says. Only the standard Party (1 adult, economy, round trip, infants aside) feeds fare history and the scheduled fare refreshes (Fare Snapshots stay fixed there too).
 _Avoid_: Passengers, traveller count
 
 **Route Chip**:

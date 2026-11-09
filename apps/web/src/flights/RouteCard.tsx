@@ -128,7 +128,7 @@ export function RouteCard({
   const party = partyOf(intent);
   const partyNote = [
     party.oneWay && t("flight.chipOneWay"),
-    party.people > 1 && t("flight.chipPeople", { n: party.people }),
+    party.people + party.infants > 1 && t("flight.chipPeople", { n: party.people + party.infants }),
   ]
     .filter(Boolean)
     .map((x) => ` · ${String(x)}`)

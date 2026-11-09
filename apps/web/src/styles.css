@@ -1750,3 +1750,29 @@ body::before {
     animation: stick-on 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
   }
 }
+
+/* The passengers sheet rises in; reduced motion just shows it. */
+@media (prefers-reduced-motion: no-preference) {
+  .party-sheet {
+    animation: sheet-rise 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+/* The calendar opens with a short drop-in; reduced motion just shows it. */
+@media (prefers-reduced-motion: no-preference) {
+  .cal-pop {
+    animation: cal-pop 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@keyframes cal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}

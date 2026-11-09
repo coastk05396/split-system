@@ -37,6 +37,7 @@ describe("Passengers, cabin and one way", () => {
       expect(partyOf(result.data)).toEqual({
         adults: 1,
         children: 0,
+        infants: 0,
         people: 1,
         cabin: "economy",
         oneWay: false,
@@ -48,13 +49,24 @@ describe("Passengers, cabin and one way", () => {
     expect(parse({ tripType: "one-way" }).success).toBe(false);
     expect(parse({ returnDate: undefined }).success).toBe(false);
   });
-  it("limits the party to 9 and rejects infants and unknown cabins", () => {
+  it("limits the party to 9 and rejects unknown cabins", () => {
     expect(parse({ adults: 9 }).success).toBe(true);
     expect(parse({ adults: 5, children: 5 }).success).toBe(false);
     expect(parse({ adults: 0 }).success).toBe(false);
-    expect(parse({ infants: 1 }).success).toBe(true); // unknown keys are stripped, never forwarded
-    expect(parse({ infants: 1 }).data).not.toHaveProperty("infants");
     expect(parse({ cabin: "coach" }).success).toBe(false);
+  });
+  it("carries infants: never more than adults, nine travellers at most, priced as no one", () => {
+    expect(parse({ adults: 2, infants: 2 }).success).toBe(true);
+    expect(parse({ adults: 1, infants: 2 }).success).toBe(false);
+    expect(parse({ adults: 5, children: 3, infants: 2 }).success).toBe(false);
+    expect(parse({ adults: 5, children: 2, infants: 2 }).success).toBe(true);
+    expect(parse({ infants: -1 }).success).toBe(false);
+    const result = parse({ adults: 2, infants: 1 });
+    expect(result.success && partyOf(result.data)).toMatchObject({ infants: 1, people: 2 });
+    expect(partyOf({}).infants).toBe(0);
+    // The source price never includes infants, so they do not make a search non-standard.
+    const alone = parse({ infants: 1 });
+    expect(alone.success && isStandardSearch(alone.data)).toBe(true);
   });
   it("is not standard when the party, cabin or trip type differ", () => {
     for (const extra of [
@@ -74,8 +86,10 @@ describe("Passengers, cabin and one way", () => {
       directOnly: false,
       adults: 2,
       children: 1,
+      infants: 1,
       cabin: "business",
     });
+    expect(intentToQuery(intent)).toContain("infants=1");
     expect(intentFromQuery(new URLSearchParams(intentToQuery(intent)))).toEqual(intent);
     const plain = flightSearchIntentSchema.parse({
       ...base,
@@ -87,6 +101,10 @@ describe("Passengers, cabin and one way", () => {
   it("encodes party, cabin and trip type in the Google handoff", () => {
     expect(tail({ adults: 2, children: 1, cabin: "business" }).tail.slice(-11)).toEqual([
       72, 3, 64, 1, 64, 1, 64, 2, 152, 1, 1,
+    ]);
+    // Infants ride the link as lap infants (passenger 4), after adults and children.
+    expect(tail({ adults: 2, infants: 1 }).tail.slice(-11)).toEqual([
+      72, 1, 64, 1, 64, 1, 64, 4, 152, 1, 1,
     ]);
     const oneWay = tail({ tripType: "one-way", returnDate: undefined, cabin: "first" });
     expect(oneWay.tail.slice(-7)).toEqual([72, 4, 64, 1, 152, 1, 2]);

@@ -106,7 +106,10 @@ export function flightBubble(card: FlightCard): FlexBubble {
         { color: MUTED },
       ),
       row(formatAmount(card.price, intent.currency), { size: "xl", weight: "bold" }),
-      row(intent.returnDate === undefined ? "含稅單程" : "含稅來回", { color: MUTED }),
+      row(
+        `${intent.returnDate === undefined ? "含稅單程" : "含稅來回"}${(intent.infants ?? 0) > 0 ? "・不含嬰兒" : ""}`,
+        { color: MUTED },
+      ),
       { type: "separator" },
       row(`${sameLine("去", card.outboundDeparture, card.outboundArrival)} · ${card.airline}`),
       ...(intent.returnDate === undefined

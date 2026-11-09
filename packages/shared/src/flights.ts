@@ -13,9 +13,11 @@ export const flightSearchFields = z.object({
   returnDate: localDateSchema.optional(),
   /** Absent means round trip. */
   tripType: z.enum(["round-trip", "one-way"]).optional(),
-  /** The party, priced as a whole by the source. Absent means 1 adult, 0 children, economy. Infants are out. */
+  /** The party, priced as a whole by the source. Absent means 1 adult, 0 children, 0 infants, economy. */
   adults: z.number().int().min(1).max(9).optional(),
   children: z.number().int().min(0).max(8).optional(),
+  /** Lap infants: only the Google link carries them, the shown fare never includes them. */
+  infants: z.number().int().min(0).max(4).optional(),
   cabin: z.enum(FLIGHT_CABINS).optional(),
   currency: currencyCodeSchema.default("TWD"),
   budget: z.number().int().positive().max(99_999_999).optional(),
@@ -32,18 +34,24 @@ export const flightSearchIntentSchema = flightSearchFields
         : i.returnDate !== undefined && i.returnDate > i.departureDate,
     { path: ["returnDate"], message: "DATE_INVALID" },
   )
-  .refine((i) => (i.adults ?? 1) + (i.children ?? 0) <= 9, {
+  .refine((i) => (i.adults ?? 1) + (i.children ?? 0) + (i.infants ?? 0) <= 9, {
     path: ["children"],
+    message: "VALIDATION_FAILED",
+  })
+  .refine((i) => (i.infants ?? 0) <= (i.adults ?? 1), {
+    path: ["infants"],
     message: "VALIDATION_FAILED",
   });
 export type FlightSearchIntent = z.infer<typeof flightSearchIntentSchema>;
 
 /** The party and cabin of a search with the absent-means-default rules applied. */
 export function partyOf(
-  intent: Pick<FlightSearchIntent, "adults" | "children" | "cabin" | "tripType">,
+  intent: Pick<FlightSearchIntent, "adults" | "children" | "infants" | "cabin" | "tripType">,
 ): {
   adults: number;
   children: number;
+  infants: number;
+  /** Adults and children: the people the source prices. Infants are not in it. */
   people: number;
   cabin: FlightCabin;
   oneWay: boolean;
@@ -53,6 +61,7 @@ export function partyOf(
   return {
     adults,
     children,
+    infants: intent.infants ?? 0,
     people: adults + children,
     cabin: intent.cabin ?? "economy",
     oneWay: intent.tripType === "one-way",
@@ -82,6 +91,7 @@ export function intentToQuery(intent: FlightSearchIntent): string {
   if (intent.tripType !== undefined) params.set("tripType", intent.tripType);
   if (intent.adults !== undefined) params.set("adults", String(intent.adults));
   if (intent.children !== undefined) params.set("children", String(intent.children));
+  if (intent.infants !== undefined) params.set("infants", String(intent.infants));
   if (intent.cabin !== undefined) params.set("cabin", intent.cabin);
   if (intent.budget !== undefined) params.set("budget", String(intent.budget));
   if (intent.theme !== undefined) params.set("theme", intent.theme);
@@ -96,6 +106,7 @@ export function intentFromQuery(params: URLSearchParams): FlightSearchIntent | n
     tripType: params.get("tripType") ?? undefined,
     adults: params.has("adults") ? Number(params.get("adults")) : undefined,
     children: params.has("children") ? Number(params.get("children")) : undefined,
+    infants: params.has("infants") ? Number(params.get("infants")) : undefined,
     cabin: params.get("cabin") ?? undefined,
     currency: params.get("currency") ?? undefined,
     budget: params.has("budget") ? Number(params.get("budget")) : undefined,
@@ -157,7 +168,7 @@ export function googleFlightsUrl(
     ];
     return [26, bytes.length, ...bytes];
   };
-  // Passenger field 8 repeats (1 adult, 2 child); seat field 9 is 1 to 4; trip field 19 is 1 round trip, 2 one way.
+  // Passenger field 8 repeats (1 adult, 2 child, 4 infant on lap); seat field 9 is 1 to 4; trip field 19 is 1 round trip, 2 one way.
   const party = partyOf(intent);
   const { oneWay } = party;
   const bytes = [
@@ -169,6 +180,7 @@ export function googleFlightsUrl(
     FLIGHT_CABINS.indexOf(party.cabin) + 1,
     ...Array.from({ length: party.adults }, () => [64, 1]).flat(),
     ...Array.from({ length: party.children }, () => [64, 2]).flat(),
+    ...Array.from({ length: party.infants }, () => [64, 4]).flat(),
     152,
     1,
     oneWay ? 2 : 1,

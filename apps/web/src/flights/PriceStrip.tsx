@@ -41,7 +41,7 @@ function firstBar(departure: string): string {
 }
 
 /** Read-only: the endpoint serves stored Fare Snapshots and never starts a search (ADR 0007). */
-function usePriceStrip(
+export function usePriceStrip(
   origin: string,
   destination: string,
   currency: CurrencyCode,

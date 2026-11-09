@@ -1,6 +1,6 @@
 import type { FlightCard, FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
@@ -24,6 +24,7 @@ const words = {
     ideas: "Ideas to try",
     recent: "Recent",
     popular: "Popular",
+    popularDest: "Popular destinations",
   },
   "zh-TW": {
     origin: "出發機場",
@@ -39,8 +40,9 @@ const words = {
     prompt: "想去哪裡？",
     advice: "票價短評",
     ideas: "接下來可以試試",
-    recent: "最近搜尋",
+    recent: "最近用過",
     popular: "熱門",
+    popularDest: "熱門目的地",
   },
 } as const;
 
@@ -192,6 +194,37 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
     list = screen.getByRole("listbox");
     expect(within(list).getByText(w.recent)).toBeVisible();
     expect(within(list).getAllByRole("option")[0]).toHaveTextContent("KIX");
+  });
+
+  it("lists the six snapshot destinations as popular destinations, after the recent ones", async () => {
+    localStorage.setItem("split.flightRecentAirports.destination", JSON.stringify(["SIN"]));
+    const { field, w } = open(language);
+    const destination = await field("destination");
+    fireEvent.focus(destination);
+    const list = screen.getByRole("listbox");
+    expect(within(list).getByText(w.recent)).toBeVisible();
+    expect(within(list).getByText(w.popularDest)).toBeVisible();
+    expect(
+      within(list)
+        .getAllByRole("option")
+        .map((o) => o.textContent.slice(0, 3)),
+    ).toEqual(["SIN", "NRT", "KIX", "OKA", "ICN", "BKK", "HKG"]);
+  });
+
+  it("still opens with the catalogue when the browser blocks storage", async () => {
+    const { field, w } = open(language);
+    const destination = await field("destination");
+    const read = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      fireEvent.focus(destination);
+      const list = screen.getByRole("listbox");
+      expect(within(list).queryByText(w.recent)).toBeNull();
+      expect(within(list).getByText(w.popularDest)).toBeVisible();
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it("swaps origin and destination in one tap", async () => {

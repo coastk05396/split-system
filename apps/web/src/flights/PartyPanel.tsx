@@ -1,10 +1,12 @@
 import { partyOf, type FlightCabin, FLIGHT_CABINS, type FlightSearchIntent } from "@split/shared";
-import { useId, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../i18n/messages.js";
 
 export interface Party {
   adults: number;
   children: number;
+  infants: number;
   cabin: FlightCabin;
   oneWay: boolean;
 }
@@ -12,16 +14,27 @@ export interface Party {
 export const MAX_PARTY = 9;
 
 export const toParty = (intent: FlightSearchIntent): Party => {
-  const { adults, children, cabin, oneWay } = partyOf(intent);
-  return { adults, children, cabin, oneWay };
+  const { adults, children, infants, cabin, oneWay } = partyOf(intent);
+  return { adults, children, infants, cabin, oneWay };
 };
 
-/** "2 adults, 1 child" in the current language. */
-export function whoText(adults: number, children: number): string {
-  const adultText = adults === 1 ? t("flight.adultOne") : t("flight.adultCount", { n: adults });
-  if (children === 0) return adultText;
-  const childText = children === 1 ? t("flight.childOne") : t("flight.childCount", { n: children });
-  return `${adultText}, ${childText}`;
+/** "2 adults, 1 child, 1 infant" in the current language; absent groups are left out. */
+export function whoText(adults: number, children: number, infants = 0): string {
+  return [
+    adults === 1 ? t("flight.adultOne") : t("flight.adultCount", { n: adults }),
+    children === 0
+      ? ""
+      : children === 1
+        ? t("flight.childOne")
+        : t("flight.childCount", { n: children }),
+    infants === 0
+      ? ""
+      : infants === 1
+        ? t("flight.infantOne")
+        : t("flight.infantCount", { n: infants }),
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export const cabinText = (cabin: FlightCabin) => t(`flight.cabin.${cabin}`);
@@ -86,12 +99,15 @@ function Stepper({
 
 function Choices<T extends string>({
   label,
+  hideLabel = false,
   name,
   options,
   value,
   onChange,
 }: {
   label: string;
+  /** The legend stays for assistive tech only (the pills say it all). */
+  hideLabel?: boolean;
   name: string;
   options: { value: T; text: string }[];
   value: T;
@@ -99,7 +115,7 @@ function Choices<T extends string>({
 }) {
   return (
     <fieldset className="grid min-w-0 gap-2">
-      <legend className="mb-2 text-sm font-bold">{label}</legend>
+      <legend className={hideLabel ? "sr-only" : "mb-2 text-sm font-bold"}>{label}</legend>
       <div className="grid grid-cols-2 gap-2">
         {options.map((option) => (
           <label key={option.value} className="relative grid">
@@ -121,67 +137,96 @@ function Choices<T extends string>({
   );
 }
 
+/** Round trip or one way, outside the sheet: it decides whether the calendar picks a range. */
+export function TripToggle({
+  oneWay,
+  onChange,
+}: {
+  oneWay: boolean;
+  onChange: (oneWay: boolean) => void;
+}) {
+  return (
+    <div className="sm:col-span-2">
+      <Choices
+        label={t("flight.tripType")}
+        hideLabel
+        name="tripType"
+        value={oneWay ? "one-way" : "round-trip"}
+        options={[
+          { value: "round-trip", text: t("flight.roundTrip") },
+          { value: "one-way", text: t("flight.oneWay") },
+        ]}
+        onChange={(trip) => {
+          onChange(trip === "one-way");
+        }}
+      />
+    </div>
+  );
+}
+
+const FOCUSABLE = "button:not(:disabled), input:not(:disabled)";
+
 /**
- * One panel for adults, children, cabin and trip type, opened from a summary row that always shows
- * the current choice. Infants are not offered: the flight source prices them unreliably.
+ * Adults, children, infants and cabin in a full-screen dialog (focus moves in and is trapped,
+ * Escape or Done closes). Infants never exceed adults and everyone together is at most nine; the
+ * infant note says why the shown price leaves them out.
  */
-export function PartyPanel({
+function PartySheet({
   value,
   onChange,
+  onClose,
 }: {
   value: Party;
   onChange: (patch: Partial<Party>) => void;
+  onClose: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  const full = value.adults + value.children >= MAX_PARTY;
-  return (
-    <div className="grid gap-3 sm:col-span-2">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => {
-          setOpen((o) => !o);
-        }}
-        className="press-pill flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-sprout-200 bg-white px-4 py-2 text-left hover:bg-sprout-100 focus-visible:outline-2 focus-visible:outline-sprout-700"
-      >
-        <span className="grid min-w-0 gap-0.5">
-          <span className="text-xs font-bold text-ink-muted">{t("flight.party")}</span>
-          <span className="text-sm font-bold break-words">
-            {t("flight.partySummary", {
-              who: whoText(value.adults, value.children),
-              cabin: cabinText(value.cabin),
-              trip: tripText(value.oneWay),
-            })}
-          </span>
-        </span>
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-5 shrink-0 fill-none stroke-sprout-900 stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
-        >
-          <path d={open ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"} />
-        </svg>
-      </button>
-      {open && (
-        <div id={id} className="grid gap-4 rounded-2xl border border-sprout-200 bg-sprout-50 p-4">
-          <Choices
-            label={t("flight.tripType")}
-            name="tripType"
-            value={value.oneWay ? "one-way" : "round-trip"}
-            options={[
-              { value: "round-trip", text: t("flight.roundTrip") },
-              { value: "one-way", text: t("flight.oneWay") },
-            ]}
-            onChange={(trip) => {
-              onChange({ oneWay: trip === "one-way" });
-            }}
-          />
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialog.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+  }, []);
+  const full = value.adults + value.children + value.infants >= MAX_PARTY;
+  function keyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const items = Array.from(dialog.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+    const [first, last] = [items[0], items.at(-1)];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }
+  return createPortal(
+    <div
+      ref={dialog}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("flight.party")}
+      onKeyDown={keyDown}
+      className="party-sheet fixed inset-0 z-[70] overflow-y-auto overscroll-contain bg-sprout-50 px-[18px] pt-[max(3rem,env(safe-area-inset-top))] pb-6 text-sprout-900"
+    >
+      <div className="mx-auto grid max-w-md gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-black">{t("flight.party")}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="press-pill min-h-11 rounded-full bg-travel-action px-5 text-sm font-bold text-white hover:bg-travel-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-900"
+          >
+            {t("flight.partyDone")}
+          </button>
+        </div>
+        <div className="grid gap-4 py-2">
           <Stepper
             label={t("flight.adults")}
             value={value.adults}
-            min={1}
+            min={Math.max(1, value.infants)}
             canAdd={!full}
             more={t("flight.adultsMore")}
             less={t("flight.adultsLess")}
@@ -200,18 +245,85 @@ export function PartyPanel({
               onChange({ children });
             }}
           />
-          {full && <p className="text-xs font-medium text-ink-muted">{t("flight.partyMax")}</p>}
-          <Choices
-            label={t("flight.cabin")}
-            name="cabin"
-            value={value.cabin}
-            options={FLIGHT_CABINS.map((cabin) => ({ value: cabin, text: cabinText(cabin) }))}
-            onChange={(cabin) => {
-              onChange({ cabin });
+          <Stepper
+            label={t("flight.infants")}
+            value={value.infants}
+            min={0}
+            canAdd={!full && value.infants < value.adults}
+            more={t("flight.infantsMore")}
+            less={t("flight.infantsLess")}
+            onChange={(infants) => {
+              onChange({ infants });
             }}
           />
+          {full && <p className="text-xs font-medium text-ink-muted">{t("flight.partyMax")}</p>}
+          {!full && value.infants >= value.adults && (
+            <p className="text-xs font-medium text-ink-muted">{t("flight.infantLimit")}</p>
+          )}
+          {value.infants > 0 && (
+            <p className="text-xs font-bold text-ink-muted">{t("flight.infantNote")}</p>
+          )}
         </div>
-      )}
+        <Choices
+          label={t("flight.cabin")}
+          name="cabin"
+          value={value.cabin}
+          options={FLIGHT_CABINS.map((cabin) => ({ value: cabin, text: cabinText(cabin) }))}
+          onChange={(cabin) => {
+            onChange({ cabin });
+          }}
+        />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** A summary row of the current party and cabin; tapping it opens the sheet and Done returns here. */
+export function PartyPanel({
+  value,
+  onChange,
+}: {
+  value: Party;
+  onChange: (patch: Partial<Party>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const row = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    row.current?.focus();
+  };
+  return (
+    <div className="grid gap-3 sm:col-span-2">
+      <button
+        ref={row}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(true);
+        }}
+        className="press-pill flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-sprout-200 bg-white px-4 py-2 text-left hover:bg-sprout-100 focus-visible:outline-2 focus-visible:outline-sprout-700"
+      >
+        <span className="grid min-w-0 gap-0.5">
+          <span className="text-xs font-bold text-ink-muted">{t("flight.party")}</span>
+          <span className="text-sm font-bold break-words">
+            {t("flight.partySummary", {
+              who: whoText(value.adults, value.children, value.infants),
+              cabin: cabinText(value.cabin),
+              trip: tripText(value.oneWay),
+            })}
+          </span>
+        </span>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className="size-5 shrink-0 fill-none stroke-sprout-900 stroke-[2.2] [stroke-linecap:round] [stroke-linejoin:round]"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </button>
+      {open && <PartySheet value={value} onChange={onChange} onClose={close} />}
     </div>
   );
 }

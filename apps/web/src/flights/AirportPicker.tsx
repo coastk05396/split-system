@@ -78,6 +78,7 @@ export function AirportPicker({
   text,
   value,
   popular,
+  popularHeading = "flight.airportPopular",
   className = "",
   onChange,
   onType,
@@ -86,6 +87,8 @@ export function AirportPicker({
   text: string;
   value: string;
   popular: readonly string[];
+  /** The heading over the popular list: destinations say so. */
+  popularHeading?: "flight.airportPopular" | "flight.airportPopularDest";
   /** Grid placement inside the form. */
   className?: string;
   onChange: (code: string) => void;
@@ -106,7 +109,7 @@ export function AirportPicker({
       ? [
           { heading: "flight.airportRecent" as const, codes: recent },
           {
-            heading: "flight.airportPopular" as const,
+            heading: popularHeading,
             codes: popular.filter((c) => !recent.includes(c)),
           },
         ].filter((g) => g.codes.length > 0)

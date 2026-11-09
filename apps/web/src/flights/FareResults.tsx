@@ -165,13 +165,17 @@ function rowKeys(cards: FlightCard[]): string[] {
 
 /** The standard 1 adult economy round trip keeps its original note; anything else names the party. */
 function footnote(intent: FlightSearchIntent): string {
-  if (isStandardSearch(intent)) return t("flight.footnote");
   const party = partyOf(intent);
-  return t("flight.footnoteParty", {
-    trip: t(party.oneWay ? "flight.totalOne" : "flight.totalRound"),
-    who: whoText(party.adults, party.children),
-    cabin: cabinText(party.cabin),
-  });
+  // The source never prices infants, so the shown total leaves them out and says so.
+  const infants = party.infants > 0 ? ` ${t("flight.infantNote")}.` : "";
+  if (isStandardSearch(intent)) return t("flight.footnote") + infants;
+  return (
+    t("flight.footnoteParty", {
+      trip: t(party.oneWay ? "flight.totalOne" : "flight.totalRound"),
+      who: whoText(party.adults, party.children),
+      cabin: cabinText(party.cabin),
+    }) + infants
+  );
 }
 
 function FareList({

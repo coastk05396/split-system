@@ -91,6 +91,16 @@ class QueryConstruction(unittest.TestCase):
         self.assertEqual(sorted(got["passengers"]), [1, 1, 2])
         self.assertEqual(got["seat"], 3)
 
+    def test_infants_are_checked_but_never_sent_to_the_source(self):
+        # The source prices infants backwards (docs/research/fast-flights-limits.md): the link carries them, the query does not.
+        from server import build_query
+        with_infants = decode(build_query({**self.base, "adults": 2, "children": 1, "infants": 2}))
+        without = decode(build_query({**self.base, "adults": 2, "children": 1}))
+        self.assertEqual(with_infants, without)
+        for bad in ({"infants": 2}, {"adults": 5, "children": 3, "infants": 2}, {"infants": "1"}, {"infants": -1}):
+            with self.assertRaises(ValueError):
+                build_query({**self.base, **bad})
+
     def test_each_cabin_has_its_own_seat(self):
         from server import build_query
         seats = [decode(build_query({**self.base, "cabin": c}))["seat"] for c in ("economy", "premium-economy", "business", "first")]
