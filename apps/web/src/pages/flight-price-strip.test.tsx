@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { defaultFlightIntent } from "@split/shared";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { contrast } from "../../test/contrast.js";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
@@ -58,6 +59,7 @@ function save(app: ReturnType<typeof setup>, prices: (number | null)[], fetchedA
 const original = window.matchMedia.bind(window);
 afterEach(() => {
   window.matchMedia = original;
+  vi.useRealTimers();
 });
 const searchedDays = (app: ReturnType<typeof setup>) =>
   app.api.flightSearchRequests.map((r) => ("prompt" in r ? "prompt" : r.departureDate));
@@ -172,6 +174,27 @@ describe("Flight Radar Price Strip dock", () => {
     expect(strip).toHaveAttribute("aria-valuenow", "0");
     for (let i = 0; i < 40; i++) fireEvent.keyDown(strip, { key: "ArrowRight" });
     expect(strip).toHaveAttribute("aria-valuenow", "29");
+  });
+
+  it("jumps to the ends with Home and End and by a week with Page Up and Page Down", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, () => 6000),
+    );
+    const strip = await slider("en");
+    fireEvent.keyDown(strip, { key: "Home" });
+    expect(strip).toHaveAttribute("aria-valuenow", "0");
+    fireEvent.keyDown(strip, { key: "PageUp" });
+    expect(strip).toHaveAttribute("aria-valuenow", "7");
+    fireEvent.keyDown(strip, { key: "PageDown" });
+    fireEvent.keyDown(strip, { key: "PageDown" });
+    expect(strip).toHaveAttribute("aria-valuenow", "0");
+    fireEvent.keyDown(strip, { key: "End" });
+    expect(strip).toHaveAttribute("aria-valuenow", "29");
+    await waitFor(() => {
+      expect(searchedDays(app)).toEqual([at(29)]);
+    });
   });
 
   it("follows a drag across the bars and searches the day it was released on", async () => {
@@ -391,12 +414,130 @@ describe("Flight Radar Price Strip dock", () => {
     },
   );
 
-  it("keeps every new text pair at 4.5:1", () => {
+  it("ignores an older search that answers after a newer one", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 6000 + n * 100),
+    );
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    const releaseOlder = app.api.holdNextResponse("POST /api/v1/flights/search");
+    fireEvent.keyDown(strip, { key: "ArrowRight" });
+    await waitFor(() => {
+      expect(searchedDays(app)).toEqual([plus(searched, 1)]);
+    });
+    fireEvent.keyDown(strip, { key: "ArrowRight" });
+    await waitFor(() => {
+      expect(searchedDays(app)).toEqual([plus(searched, 1), plus(searched, 2)]);
+    });
+    await waitFor(() => {
+      expect(app.api.calls.filter((c) => c === "POST /api/v1/flights/advise")).toHaveLength(1);
+    });
+    releaseOlder();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    // The strip stays on the newer day and no advice was asked for the older reply.
+    expect(strip).toHaveAttribute("aria-valuenow", String(indexOfSearched + 2));
+    expect(app.api.calls.filter((c) => c === "POST /api/v1/flights/advise")).toHaveLength(1);
+    // The restored-last-search entry follows the newer search only.
+    const remembered = Array.from({ length: localStorage.length }, (_, i) =>
+      localStorage.getItem(localStorage.key(i) ?? ""),
+    ).find((value) => value?.startsWith('{"origin"'));
+    expect(remembered).toContain(`"departureDate":"${plus(searched, 2)}"`);
+  });
+
+  it.each([
+    // Far from the searched day: ten days before it, crossing into the next month.
+    { today: "2026-11-09", first: "Nov 24", last: "Dec 23", months: ["2026-11", "2026-12"] },
+    // Searched day under ten days away: the window starts today, never in the past.
+    { today: "2026-11-30", first: "Nov 30", last: "Dec 29", months: ["2026-11", "2026-12"] },
+  ])("starts the 30 days at $first for a clock of $today, reading two months", async (c) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(`${c.today}T08:00:00Z`));
+    const app = setup("en");
+    app.api.flightPriceStrip = Array.from({ length: 60 }, (_, n) => ({
+      date: plus(c.today, n),
+      price: 6000 + n,
+      fetchedAt: Date.now(),
+    }));
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    const region = await dock("en");
+    expect(within(region).getByText(c.first)).toBeInTheDocument();
+    expect(within(region).getByText(c.last)).toBeInTheDocument();
+    expect(app.api.flightPriceStripQueries.sort()).toEqual(
+      c.months.map((m) => `?origin=TPE&destination=OKA&currency=TWD&month=${m}`),
+    );
+  });
+
+  it("keeps the stay and drops a theme when a day is picked live", async () => {
+    const app = setup("en");
+    app.api.flightPromptIntent = { ...intent, theme: "warm_island" };
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 6000 + n),
+    );
+    fireEvent.change(await screen.findByLabelText("Where would you like to go?"), {
+      target: { value: "somewhere warm" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Explore flights" }));
+    await waitFor(() => {
+      expect(app.api.flightSearchRequests).toHaveLength(1);
+    });
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    fireEvent.keyDown(strip, { key: "ArrowRight" });
+    await waitFor(() => {
+      expect(app.api.flightSearchRequests).toHaveLength(2);
+    });
+    const picked = app.api.flightSearchRequests[1];
+    expect(picked).not.toHaveProperty("theme");
+    expect(picked).toMatchObject({
+      departureDate: plus(searched, 1),
+      returnDate: plus(searched, 1 + stay),
+    });
+  });
+
+  it("still draws the bars of the month that loaded when the other month fails", async () => {
+    const app = setup("en");
+    save(
+      app,
+      Array.from({ length: 30 }, (_, n) => 6000 + n),
+    );
+    app.api.failNext("GET /api/v1/flights/price-strip");
+    const strip = await slider("en");
+    await waitFor(() => {
+      expect(bars(strip).some((bar) => bar.dataset.kind !== "none")).toBe(true);
+    });
+    const priced = bars(strip).filter((bar) => bar.dataset.kind !== "none").length;
+    expect(priced).toBeGreaterThan(0);
+    expect(priced).toBeLessThan(30);
+    expect(screen.queryByText(text.en.unavailable)).toBeNull();
+  });
+
+  it("keeps every new text pair at 4.5:1, from the real tokens", () => {
+    const css = readFileSync("src/styles.css", "utf8"); // vitest runs with apps/web as cwd
+    const token = (name: string, from = css) =>
+      new RegExp(`${name}\\s*:\\s*(#[0-9a-f]{6})`, "i").exec(from)?.[1] ?? "";
+    const travel = /\.travel-mode\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const tip = /\.strip-tip\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     const pairs: [string, string][] = [
-      ["#ffffff", "#143f2a"], // tooltip
-      ["#4a6f5c", "#f6fffa"], // hint, axis, legend on the dock
-      ["#26684b", "#ffffff"], // jump button
+      [token("\\bcolor", tip), token("--color-sprout-900")], // tooltip
+      [token("--color-ink-muted", travel), token("--travel-nav", travel)], // hint, axis, legend
+      [token("--color-sprout-600"), "#ffffff"], // jump button on white
     ];
-    for (const [fg, bg] of pairs) expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    for (const [fg, bg] of pairs) {
+      expect(fg).toMatch(/^#/);
+      expect(bg).toMatch(/^#/);
+      expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

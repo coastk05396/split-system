@@ -54,6 +54,8 @@ export interface FakeApi {
   failNext(route: string, code?: string, status?: number): void;
   /** Holds answers at the network boundary until the returned release is called. */
   holdResponses(route: string): () => void;
+  /** Holds only the next answer to the route, so a later request overtakes it. */
+  holdNextResponse(route: string): () => void;
   /** When set, `POST /auth/link/:provider` fails with this 409 code. */
   refuseLink: string | null;
   /** Link codes the server has issued, with the User each one belongs to. */
@@ -107,6 +109,7 @@ export function createFakeApi(): FakeApi {
   const failing = new Map<string, { code: string; status: number }>();
   const dropping = new Set<string>();
   const held = new Map<string, Promise<void>>();
+  const heldOnce = new Map<string, Promise<void>>();
   const requests: FakeApi["requests"] = [];
 
   function issue(user: Me): Response {
@@ -196,6 +199,16 @@ export function createFakeApi(): FakeApi {
         release();
       };
     },
+    holdNextResponse(route) {
+      let release: () => void = () => undefined;
+      heldOnce.set(
+        route,
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      return release;
+    },
     testSignInEnabled: true,
     refuseLink: null,
     linkCodes: new Map(),
@@ -227,6 +240,9 @@ export function createFakeApi(): FakeApi {
       );
       const route = `${(init?.method ?? "GET").toUpperCase()} ${url.pathname}`;
       await held.get(route);
+      const once = heldOnce.get(route);
+      heldOnce.delete(route);
+      await once;
       // The server did the work; only its answer is lost on the way back.
       if (dropping.delete(route)) throw new TypeError("Failed to fetch");
       return response;

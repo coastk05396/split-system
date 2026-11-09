@@ -218,11 +218,25 @@ export function PriceStrip({
     choose(Math.floor(at), settle);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    if (step === 0) return;
-    event.preventDefault();
     const now = Math.max(0, dates.indexOf(latest.current.chosen));
-    choose(now + step, "later");
+    // The ARIA slider keys: arrows by a day, Page keys by a week, Home and End to the ends.
+    const target =
+      event.key === "ArrowRight"
+        ? now + 1
+        : event.key === "ArrowLeft"
+          ? now - 1
+          : event.key === "PageUp"
+            ? now + 7
+            : event.key === "PageDown"
+              ? now - 7
+              : event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? BARS - 1
+                  : null;
+    if (target === null) return;
+    event.preventDefault();
+    choose(target, "later");
   };
   const grow = !prefersReducedMotion();
 

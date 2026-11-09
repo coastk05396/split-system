@@ -69,6 +69,8 @@ export function TravelPage() {
         }),
       ),
   });
+  // Only the newest search may apply its reply: an older one that answers late is dropped.
+  const latestSearch = useRef(0);
   const search = useMutation({
     mutationFn: (intent: FlightSearchRequest) =>
       readWithRev<FlightSearchReply>(
@@ -79,11 +81,14 @@ export function TravelPage() {
         }),
       ),
     onMutate: () => {
+      latestSearch.current += 1;
       advise.reset();
       setPanelOpen(false);
       setShowLastSearch(false);
+      return { id: latestSearch.current };
     },
-    onSuccess: (reply) => {
+    onSuccess: (reply, _request, started) => {
+      if (started.id !== latestSearch.current) return;
       setActive(reply.intent);
       writeLastSearch(reply.intent);
       if (reply.cards.length)
