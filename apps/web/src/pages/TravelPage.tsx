@@ -18,7 +18,12 @@ import { StickyBar } from "../flights/StickyBar.js";
 import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { addDays, friendlyDate } from "../flights/dates.js";
-import { DEFAULT_SORT, FareResults, type FareSort } from "../flights/FareResults.js";
+import {
+  DEFAULT_SORT,
+  FareResults,
+  type FareSort,
+  type SavedWatch,
+} from "../flights/FareResults.js";
 import { findPlace } from "../flights/place.js";
 import { PriceStrip } from "../flights/PriceStrip.js";
 import { FareTicker } from "../flights/FareTicker.js";
@@ -37,6 +42,7 @@ const firstSentence = (text: string) => /^.*?(?:[。！？]|[.!?](?=\s|$))/s.exe
 
 export function TravelPage() {
   const [watchCard, setWatchCard] = useState<FlightCard | null>(null);
+  const [savedWatch, setSavedWatch] = useState<SavedWatch | null>(null);
   const { state, session } = useAuth();
   const currency = state.status === "signedIn" ? state.user.preferredCurrency : "TWD";
   // A LINE portal link carries its own search; otherwise the last search is restored, never run.
@@ -325,7 +331,13 @@ export function TravelPage() {
             <p className="px-1">{firstSentence(advise.data.commentary)}</p>
           </section>
         )}
-        <FareResults pending={search.isPending} reply={reply} sort={sort} onWatch={setWatchCard} />
+        <FareResults
+          pending={search.isPending}
+          reply={reply}
+          sort={sort}
+          onWatch={setWatchCard}
+          saved={savedWatch}
+        />
       </div>
       {reply && advise.data && (
         <section aria-label={t("flight.ideas")} className="mt-4">
@@ -352,6 +364,9 @@ export function TravelPage() {
         card={watchCard}
         onClose={() => {
           setWatchCard(null);
+        }}
+        onSaved={(card) => {
+          setSavedWatch({ card, at: Date.now() });
         }}
       />
       {panelOpen && (

@@ -24,6 +24,10 @@ export const en: Record<MessageId, string> = {
   "flight.noHighlights": "No verified Strong Buy fares today yet.",
   "flight.highlightsUnavailable": "Highlights are temporarily unavailable.",
   "flight.watch": "Price Watch",
+  "flight.viewList": "List view",
+  "flight.viewSwipe": "Swipe view",
+  "flight.watchAdded": "Price Watch added",
+  "flight.stamp": "Watching",
   "flight.myWatches": "My Price Watches",
   "flight.noWatches": "No Price Watches yet.",
   "flight.watchDescription":

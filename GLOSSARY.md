@@ -68,6 +68,10 @@ _Avoid_: Route pill, edit button
 The small (about 118 px) globe of real land outlines at the top right of Flight Radar's header, beside the distance and flight-time readouts. It turns to the catalogue airport the User picks or types as the destination (by code, or by English or Traditional Chinese city name) and drops a marker there; unknown input leaves it where it is, and countries are not recognised. Decoration and feedback only, never a control.
 _Avoid_: Map, 小芽 globe
 
+**Fare Carousel**:
+How Flight Radar lays out its fare cards: one list that scrolls sideways with snap, the centred card sharp and its neighbours receding, with a dot per fare and a button that folds it into a plain vertical list. It is the same single list for keyboard and screen readers, never a second copy. Prices and times roll like a split-flap board and the plane glides on the active fare; all of it is still under reduced motion.
+_Avoid_: Slider, swiper, fare strip
+
 **Fare Ticker**:
 The scrolling strip of chips at the top of Flight Radar: for each destination that has a Fare Snapshot from the User's origin, its code and the cheapest saved fare, with a green −N% only where Deal Signal history says it beats the usual price. Built only from Fare Snapshots and fare history, never from a live search or the flight source; tapping a chip sets the destination. Static under reduced motion.
 _Avoid_: Marquee, deals bar, price ticker

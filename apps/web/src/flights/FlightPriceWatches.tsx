@@ -34,15 +34,18 @@ export function useCreateWatch() {
 export function FlightPriceWatchButton({
   card,
   onWatch,
+  ring = false,
 }: {
   card: FlightCard;
   onWatch: (card: FlightCard) => void;
+  /** Play the bell's ring (a Price Watch was just saved). */
+  ring?: boolean;
 }) {
   return (
     <button
       type="button"
       aria-label={t("flight.watch")}
-      className="press-pill grid size-11 shrink-0 place-items-center text-sprout-900 focus-visible:outline-2 focus-visible:outline-sprout-700"
+      className={`${ring ? "bell-ring " : ""}press-pill grid size-11 shrink-0 place-items-center text-sprout-900 focus-visible:outline-2 focus-visible:outline-sprout-700`}
       onClick={() => {
         onWatch(card);
       }}
@@ -100,9 +103,12 @@ export function PriceWatchList() {
 export function FlightPriceWatches({
   card,
   onClose,
+  onSaved,
 }: {
   card: FlightCard | null;
   onClose: () => void;
+  /** A Price Watch for this fare was saved (the drawer then closes). */
+  onSaved?: (card: FlightCard) => void;
 }) {
   const { session } = useAuth();
   const { webPush } = useDeps();
@@ -129,6 +135,7 @@ export function FlightPriceWatches({
                 publicKey={vapid.data?.publicKey ?? null}
                 available={webPush !== undefined}
                 onClose={onClose}
+                onSaved={onSaved}
               />
             )}
           </Dialog.Content>
@@ -178,11 +185,13 @@ function WatchForm({
   publicKey,
   available,
   onClose,
+  onSaved,
 }: {
   card: FlightCard;
   publicKey: string | null;
   available: boolean;
   onClose: () => void;
+  onSaved: ((card: FlightCard) => void) | undefined;
 }) {
   const { session } = useAuth();
   const { webPush, line } = useDeps();
@@ -223,6 +232,7 @@ function WatchForm({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["flights", "watches"] });
+      onSaved?.(card);
       onClose();
     },
   });

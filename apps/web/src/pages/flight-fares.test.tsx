@@ -130,7 +130,9 @@ describe("Flight Radar compact price list", () => {
       expect(within(first).getByText("08:00")).toBeVisible();
       expect(within(first).getByText("12:00")).toBeVisible();
       expect(within(first).getByText(text[language].meta)).toBeVisible();
-      expect(within(first).getByText("NT$ 21,000")).toHaveClass("tabular-nums");
+      expect(within(first).getByText("NT$ 21,000").closest("[data-flap]")).toHaveClass(
+        "tabular-nums",
+      );
       // A time line with a plane between departure and arrival, never a flight number or baggage.
       expect(first.querySelector("svg path[d^='M21 16v-2']")).not.toBeNull();
       expect(first).toHaveClass("rounded-[20px]");
