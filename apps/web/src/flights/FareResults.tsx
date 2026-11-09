@@ -422,13 +422,6 @@ function FareCardItem({
               {card.airline}
             </a>
             {!strong && card.top === true && <span className="fr-sig">{t("flight.top")}</span>}
-            {strong ? (
-              <span className="sticker fr-sig">{t("flight.sticker")}</span>
-            ) : (
-              <span className={`fr-sig fr-sig-${card.signal}`}>
-                {t(card.signal === "buy" ? "flight.buy" : "flight.hold")}
-              </span>
-            )}
           </div>
           <div className="fr-fl" aria-hidden="true">
             <b>{card.intent.origin}</b>

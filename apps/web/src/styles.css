@@ -1070,18 +1070,6 @@
   box-shadow: none;
   transform: none;
 }
-.fr-sig + .fr-sig {
-  margin-left: 6px;
-}
-/* Buy and Hold are the mock's pills; Hold is darkened from #b27a14 (3.69:1) and Buy's text from #4d7f69 (4.47:1 under the grain) to reach 4.5:1. */
-.fr-sig-buy {
-  color: #467760;
-  border-color: #7fb8a0;
-}
-.fr-sig-hold {
-  color: #8f6200;
-  border-color: #b27a14;
-}
 .fr-fl {
   display: grid;
   grid-template-columns: auto 1fr auto;

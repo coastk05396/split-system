@@ -42,10 +42,9 @@ const text = {
     results: "Search results",
     advice: "Deal commentary",
     price: "NT$ 25,000",
-    highlights: "Today's Strong Buy fares",
+    highlights: "Today's best-value fares",
     ideas: "Ideas to try",
     top: "Top",
-    sticker: "Strong Buy",
     cheapest: "Cheapest",
     sort: "Sort fares",
     footnote:
@@ -70,7 +69,6 @@ const text = {
     highlights: "今日值得買的航班",
     ideas: "接下來可以試試",
     top: "熱門",
-    sticker: "強烈買",
     cheapest: "最低價",
     sort: "排序方式",
     footnote: "價格為來回總價・1 位成人，來自 Google 航班，訂票前請再確認。",
@@ -103,6 +101,9 @@ async function explore(api: FakeApi, language: Language) {
   });
   fireEvent.click(screen.getByRole("button", { name: text[language].explore }));
 }
+
+/** The retired Deal Signal pill words, in both languages; the labels are gone, the data stays. */
+const DEAL_SIGNAL_LABELS = /強烈買|可買|觀望|Strong Buy|\bBuy\b|\bHold\b/i;
 
 const threeFares = [
   fare("Example Air", 25000),
@@ -193,7 +194,7 @@ describe("Flight Radar compact price list", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "gives only the Strong Buy card an amber edge, not Top or plain cards in %s",
+    "marks only the raised card as strong, without an amber edge, not Top or plain cards in %s",
     async (language) => {
       const { api } = setup(language, [
         { ...fare("Raised Air", 18000, "low"), top: true },
@@ -207,7 +208,7 @@ describe("Flight Radar compact price list", () => {
         null,
         null,
       ]);
-      // The reference mock marks Strong Buy only by its sticker in the signal slot, not by an amber card edge.
+      // The raised card keeps its data flag but no amber card edge.
       expect((rows(language)[0] as HTMLElement).className).not.toMatch(/amber|border-l/);
     },
   );
@@ -338,41 +339,11 @@ describe("Flight Radar compact price list", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "puts a Strong Buy sticker on raised fares, a Top tag on other top fares, nothing else in %s",
+    "shows a Top tag on other top fares and no Deal Signal label on any fare in %s",
     async (language) => {
       const { api } = setup(language, [
         { ...fare("Raised Air", 18000, "low"), top: true },
         fare("History Air", 19000, "low"),
-        { ...fare("Top Air", 30000, "typical"), top: true },
-        fare("Plain Air", 31000, "typical"),
-      ]);
-      await explore(api, language);
-      await screen.findByRole("list", { name: text[language].fares });
-      const labels = rows(language).map((row) => ({
-        sticker: within(row).queryByText(text[language].sticker),
-        top: within(row).queryByText(text[language].top),
-      }));
-      expect(labels.map((l) => [l.sticker !== null, l.top !== null])).toEqual([
-        [true, false],
-        [true, false],
-        [false, true],
-        [false, false],
-      ]);
-      const sticker = labels[0]?.sticker as HTMLElement;
-      // The reference mock's signal pill is text only (no lightning icon), and it is static.
-      expect(sticker.querySelector("svg")).toBeNull();
-      expect(sticker).toHaveClass("sticker");
-      expect(sticker.textContent).toBe(text[language].sticker);
-    },
-  );
-
-  it.each([
-    ["en", "Buy", "Hold"],
-    ["zh-TW", "可買", "觀望"],
-  ] as const)(
-    "shows the real Buy and Hold signal on every other fare, beside the Top tag, in %s",
-    async (language, buy, hold) => {
-      const { api } = setup(language, [
         { ...fare("Top Air", 30000, "typical"), top: true },
         fare("Plain Air", 31000, "typical"),
         fare("Dear Air", 40000, "high"),
@@ -380,16 +351,15 @@ describe("Flight Radar compact price list", () => {
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
       expect(
-        rows(language).map((row) => [
-          within(row).queryByText(text[language].top) !== null,
-          within(row).queryByText(buy) !== null,
-          within(row).queryByText(hold) !== null,
-        ]),
-      ).toEqual([
-        [true, true, false],
-        [false, true, false],
-        [false, false, true],
-      ]);
+        rows(language).map((row) => within(row).queryByText(text[language].top) !== null),
+      ).toEqual([false, false, true, false, false]);
+      expect(
+        rows(language).some((row) => row.querySelector(".fr-sig-buy, .fr-sig-hold, .sticker")),
+      ).toBe(false);
+      expect(document.body.textContent).not.toMatch(DEAL_SIGNAL_LABELS);
+      await openFilters();
+      await screen.findByRole("region", { name: text[language].highlights });
+      expect(document.body.textContent).not.toMatch(DEAL_SIGNAL_LABELS);
     },
   );
 

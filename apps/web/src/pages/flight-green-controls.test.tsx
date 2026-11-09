@@ -87,13 +87,11 @@ describe("Flight Radar green controls", () => {
     ).not.toMatch(/opacity/);
   });
 
-  it("colours fare cards and tags green, with amber only on 強烈買", async () => {
+  it("colours fare cards and tags green, with amber only on the lowest tile and the strong card", async () => {
     await explore();
     for (const el of document.querySelectorAll("[class]")) {
       if (!AMBER.test(el.getAttribute("class") ?? "")) continue;
-      expect(
-        el.closest('[data-lowest="true"], [data-strong="true"]') ?? el.closest(".sticker"),
-      ).not.toBeNull();
+      expect(el.closest('[data-lowest="true"], [data-strong="true"]')).not.toBeNull();
     }
     for (const tag of screen.queryAllByText("熱門")) expect(tag.className).not.toMatch(AMBER);
   });
@@ -105,10 +103,10 @@ describe("Flight Radar green controls", () => {
       ["#ffffff", color("--color-travel-action-hover")],
       [color("--color-travel-disabled-ink"), color("--color-travel-disabled")],
       [color("--color-sprout-900"), color("--color-sprout-100")], // unselected tile
-      ["#6b3f00", "#fdf0d5"], // 最低 tile and 強烈買 sticker
+      ["#6b3f00", "#fdf0d5"], // 最低 tile
       [color("--color-sprout-900"), "#ffffff"], // fare card price
       [color("--color-ink-muted"), "#ffffff"], // fare card meta
-      [color("--color-sprout-900"), "#fff8e8"], // 強烈買 card
+      [color("--color-sprout-900"), "#fff8e8"], // strong card
       [color("--color-sprout-700"), color("--color-sprout-100")], // 熱門 tag
     ];
     for (const [fg, bg] of pairs) expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);

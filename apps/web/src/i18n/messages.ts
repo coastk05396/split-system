@@ -17,7 +17,6 @@ const zhTW = {
   "flight.view": "查看航班",
   "flight.degraded": "暫時無法取得即時票價，請直接到 Google 航班查看。",
   "flight.empty": "目前沒有可確認的票價，請到 Google 航班查看。",
-  "flight.strong_buy": "非常值得買",
   "flight.overBudget": "超出預算 {amount}",
   "flight.excludes": "排除紅眼航班",
   "flight.direct": "只看直飛",
@@ -168,7 +167,6 @@ const zhTW = {
   "flight.historyBelow": "低於近期平均 {percent}%・{days} 天實際觀測",
   "flight.historyAbove": "高於近期平均 {percent}%・{days} 天實際觀測",
   "flight.percentile": "票價百分位：{percentile}",
-  "flight.sticker": "強烈買",
   "flight.ideas": "接下來可以試試",
   "flight.summaryCard": "搜尋摘要",
   "flight.routeChip": "{route} {dates}",
@@ -201,8 +199,6 @@ const zhTW = {
   "flight.footnoteParty":
     "價格為{trip}總價，全部 {who}・{cabin}，來自 Google 航班，訂票前請再確認。",
   "flight.top": "熱門",
-  "flight.buy": "可買",
-  "flight.hold": "觀望",
   "app.name": "小芽分帳",
   "app.loading": "載入中…",
 
