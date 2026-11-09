@@ -59,7 +59,27 @@ describe("Flight Radar material and type", () => {
     expect(grain).toContain("feTurbulence");
     expect(grain).toMatch(/pointer-events:\s*none/);
     expect(grain).toMatch(/z-index:\s*-1/);
+    // A negative z-index sinks under the page background unless body is its own stacking context.
+    const body = [...css.matchAll(/\.travel-mode\s+body\s*\{([^}]*)\}/g)].map((m) => m[1]).join();
+    expect(body).toMatch(/isolation:\s*isolate/);
     expect(grain).toMatch(/position:\s*fixed/);
+  });
+
+  it("keeps muted Travel text at 4.5:1 on the darkest possible grain", () => {
+    const grain = /\.travel-mode\s+body::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const opacity = Number(/opacity:\s*([\d.]+)/.exec(grain)?.[1]);
+    const noise = [0.08, 0.25, 0.16]; // the feColorMatrix colour at full alpha: the darkest the grain gets
+    const travel = /\.travel-mode\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const page = /--travel-page:\s*(#[0-9a-f]{6})/i.exec(travel)?.[1] ?? "";
+    const muted = /--color-ink-muted:\s*(#[0-9a-f]{6})/i.exec(travel)?.[1] ?? "";
+    const darkest = noise
+      .map((c, i) =>
+        Math.round(parseInt(page.slice(1 + i * 2, 3 + i * 2), 16) * (1 - opacity * (1 - c))),
+      )
+      .map((v) => v.toString(16).padStart(2, "0"))
+      .join("");
+    expect(opacity).toBeGreaterThan(0);
+    expect(contrast(muted, `#${darkest}`)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("cuts ticket notches into fare cards in the page colour, leaving card and text colours alone", () => {

@@ -67,6 +67,8 @@
 /* Travel mode type: the mock's fonts first (Google Fonts, added by the shell), then the normal stack. */
 .travel-mode body {
   font-family: "Schibsted Grotesk", "Noto Sans TC", var(--font-sans);
+  /* Own stacking context, so the grain's z-index:-1 lands above body's background, not under it. */
+  isolation: isolate;
 }
 /* Paper grain: fixed behind the page (below every card and all text), so it cannot touch contrast. */
 .travel-mode body::before {
@@ -75,7 +77,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.07;
+  opacity: 0.04;
   mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .08 0 0 0 0 .25 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
