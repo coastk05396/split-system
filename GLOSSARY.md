@@ -53,7 +53,7 @@ The landing at `/travel` with no search parameters: a destination hero showing t
 _Avoid_: Home, discover
 
 **Entity Pill**:
-One tappable filter chip in Flight Radar—such as destination vibe, budget cap, or flight-time rule—parsed from a prompt or picked from buttons; together they summarise the other conditions of the current search (the route and dates live in the Route Chip), and tapping one opens the editing panel.
+One of the other conditions of a Flight Radar search—destination vibe, budget cap, or flight-time rule—parsed from a prompt or picked in the fields under the cabins in the passengers sheet. Since the pixel-parity change (#141) they are no longer drawn as chips: the reference mock has none, so they live only as those fields (the route and dates live in the Route Chip).
 _Avoid_: Tag, search parameter
 
 **Party**:
@@ -61,11 +61,11 @@ The adults, children, infants, cabin and trip type (round trip or one way) of a 
 _Avoid_: Passengers, traveller count
 
 **Route Chip**:
-The single outlined chip on Flight Radar's search summary card that states the route and dates of the current search (plus 單程 for a one-way search and N 人 when more than one person travels), shows airport codes with short dates when the card is narrow, and opens the editing panel when tapped. It replaces the old 修改 button; the other conditions stay Entity Pills.
+The single outlined chip on Flight Radar's chip row (left of the sort buttons) that states the route and dates of the current search (plus 單程 for a one-way search and N 人 when more than one person travels), shows airport codes with short dates when the card is narrow, and opens the editing panel when tapped. It replaces the old 修改 button; the other conditions are Entity Pills.
 _Avoid_: Route pill, edit button
 
 **Route Globe**:
-The small (about 118 px) globe of real land outlines at the top right of Flight Radar's header, beside the distance and flight-time readouts. It turns to the catalogue airport the User picks or types as the destination (by code, or by English or Traditional Chinese city name) and drops a marker there; unknown input leaves it where it is, and countries are not recognised. Decoration and feedback only, never a control.
+The small (about 118 px) dot-lattice globe (a pale sphere, airport dots, the route arc and a plane; no land outlines) at the top right of Flight Radar's header, beside the distance and flight-time readouts. It turns to the catalogue airport the User picks or types as the destination (by code, or by English or Traditional Chinese city name) and drops a marker there; unknown input leaves it where it is, and countries are not recognised. Decoration and feedback only, never a control.
 _Avoid_: Map, 小芽 globe
 
 **Fare Carousel**:

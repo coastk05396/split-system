@@ -201,6 +201,8 @@ const zhTW = {
   "flight.footnoteParty":
     "價格為{trip}總價，全部 {who}・{cabin}，來自 Google 航班，訂票前請再確認。",
   "flight.top": "熱門",
+  "flight.buy": "可買",
+  "flight.hold": "觀望",
   "app.name": "小芽分帳",
   "app.loading": "載入中…",
 

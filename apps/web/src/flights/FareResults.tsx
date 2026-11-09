@@ -30,12 +30,15 @@ export function FareResults({
   pending,
   reply,
   sort,
+  carousel = true,
   onWatch,
   saved = null,
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
   sort: FareSort;
+  /** Swipe row (the mock's look) or the plain vertical list; the toggle sits in the sort bar. */
+  carousel?: boolean;
   onWatch: (card: FlightCard) => void;
   /** The fare whose Price Watch was just saved: it plays the stamp and bell. */
   saved?: SavedWatch | null;
@@ -90,6 +93,7 @@ export function FareResults({
           key={reply.intent.departureDate}
           cards={sortFares(reply.cards, sort)}
           sort={sort}
+          carousel={carousel}
           onWatch={onWatch}
           saved={saved}
           motion={motion}
@@ -182,6 +186,7 @@ function footnote(intent: FlightSearchIntent): string {
 function FareList({
   cards,
   sort,
+  carousel,
   onWatch,
   saved,
   motion,
@@ -190,38 +195,21 @@ function FareList({
   note: string;
   cards: FlightCard[];
   sort: FareSort;
+  carousel: boolean;
   onWatch: (card: FlightCard) => void;
   saved: SavedWatch | null;
   motion: boolean;
 }) {
   const [all, setAll] = useState(false);
-  const [carousel, setCarousel] = useState(true);
   const [active, setActive] = useState(0);
   const shown = all ? cards : cards.slice(0, FIRST_ROWS);
   const keys = rowKeys(shown);
   return (
     <>
-      <div className="flex items-baseline justify-between gap-3 px-1">
-        <h2 className="text-[22px] font-black">{t("flight.listTitle")}</h2>
-        <span className="shrink-0 text-[13px] font-medium text-ink-muted">
-          {t(`flight.order.${sort.key}.${sort.descending ? "desc" : "asc"}`)}
-        </span>
-        <button
-          type="button"
-          aria-label={t(carousel ? "flight.viewList" : "flight.viewSwipe")}
-          className="press-pill grid size-11 shrink-0 place-items-center text-sprout-900 focus-visible:outline-2 focus-visible:outline-sprout-700"
-          onClick={() => {
-            setCarousel((c) => !c);
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-5 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
-          >
-            <path d={carousel ? "M4 6h16M4 12h16M4 18h16" : "M7 5h10v14H7zM3 8v8M21 8v8"} />
-          </svg>
-        </button>
+      {/* The mock has no heading row: the title and the order stay for screen readers. */}
+      <div className="sr-only">
+        <h2>{t("flight.listTitle")}</h2>
+        <span>{t(`flight.order.${sort.key}.${sort.descending ? "desc" : "asc"}`)}</span>
       </div>
       <div className={carousel ? "car-wrap" : undefined}>
         <ul
@@ -276,7 +264,7 @@ function FareList({
           </svg>
         </button>
       )}
-      <p className="px-1 text-[13px] leading-normal font-medium text-ink-muted">{note}</p>
+      <p className="sr-only">{note}</p>
     </>
   );
 }
@@ -427,10 +415,13 @@ function FareCardItem({
             <a href={card.url} target="_blank" rel="noopener noreferrer" className="fr-stretch">
               {card.airline}
             </a>
+            {!strong && card.top === true && <span className="fr-sig">{t("flight.top")}</span>}
             {strong ? (
               <span className="sticker fr-sig">{t("flight.sticker")}</span>
             ) : (
-              card.top === true && <span className="fr-sig">{t("flight.top")}</span>
+              <span className={`fr-sig fr-sig-${card.signal}`}>
+                {t(card.signal === "buy" ? "flight.buy" : "flight.hold")}
+              </span>
             )}
           </div>
           <div className="fr-fl" aria-hidden="true">
@@ -454,10 +445,10 @@ function FareCardItem({
             </span>
             <Flap key={card.outboundArrival} text={card.outboundArrival} outer="fr-tm" />
           </div>
-          <p className="fr-meta">{took ? t("flight.meta", { stops, duration: took }) : stops}</p>
+          <p className="sr-only">{took ? t("flight.meta", { stops, duration: took }) : stops}</p>
           {card.history && card.history.days >= 14 && (
             <>
-              <p className="fr-meta">
+              <p className="sr-only">
                 {t(
                   card.history.percentBelowMean >= 0
                     ? "flight.historyBelow"
@@ -465,13 +456,13 @@ function FareCardItem({
                   { percent: Math.abs(card.history.percentBelowMean), days: card.history.days },
                 )}
               </p>
-              <p className="fr-meta">
+              <p className="sr-only">
                 {t("flight.percentile", { percentile: card.history.percentile })}
               </p>
             </>
           )}
           {card.overBudget > 0 && (
-            <p className="fr-meta text-red-700">
+            <p className="sr-only">
               {t("flight.overBudget", {
                 amount: formatAmount(card.overBudget, card.intent.currency),
               })}

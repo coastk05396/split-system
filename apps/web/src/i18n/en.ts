@@ -202,6 +202,8 @@ export const en: Record<MessageId, string> = {
   "flight.footnoteParty":
     "Prices are {trip} totals for all {who}, {cabin}, from Google Flights. Check again before you book.",
   "flight.top": "Top",
+  "flight.buy": "Buy",
+  "flight.hold": "Hold",
   "app.name": "Sprout Split",
   "app.loading": "Loading…",
 

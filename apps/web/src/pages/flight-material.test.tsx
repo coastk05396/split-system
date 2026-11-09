@@ -92,6 +92,32 @@ describe("Flight Radar material and type", () => {
     expect(contrast(`#${under(muted)}`, `#${under("#ffffff")}`)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it("keeps the signal pill and currency-prefix colours at 4.5:1 under the darkest grain", () => {
+    const noise = [0.08, 0.25, 0.16];
+    const under = (hex: string) =>
+      `#${noise
+        .map((c, i) =>
+          Math.round(parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) * (1 - 0.07 * (1 - c)))
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")}`;
+    const ink = (rule: RegExp) => /color:\s*(#[0-9a-f]{6})/i.exec(rule.exec(css)?.[1] ?? "")?.[1];
+    for (const colour of [ink(/\.fr-sig-buy\s*\{([^}]*)\}/), ink(/\.fr-sig-hold\s*\{([^}]*)\}/)]) {
+      expect(colour).toBeDefined();
+      expect(contrast(under(colour ?? ""), under("#ffffff"))).toBeGreaterThanOrEqual(4.5);
+    }
+    // The currency prefix is an opaque muted colour, never the mock's .55 opacity (3.19:1).
+    const prefix = /\.fr-ff small\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(prefix).not.toMatch(/opacity/);
+    expect(prefix).toMatch(/color:\s*var\(--color-ink-muted\)/);
+  });
+
+  it("keeps one 90 degree turn on the fare plane", () => {
+    expect(/\.fr-path svg\s*\{([^}]*)\}/.exec(css)?.[1]).not.toMatch(/rotate/);
+    expect(/\.fare-plane\s*\{([^}]*)\}/.exec(css)?.[1]).toMatch(/rotate:\s*90deg/);
+  });
+
   it("cuts ticket notches into the form's perforation in the page colour, inside the card padding", () => {
     const shared = /\.fr-perf::before,\s*\.fr-perf::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     const left = shared + rule(".fr-perf::before");

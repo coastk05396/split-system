@@ -2,6 +2,7 @@ import type { FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render-app.js";
+import { openFilters } from "../../test/flight-panel.js";
 import { makeUser, type FakeApi } from "../../test/fake-api.js";
 
 const warmIsland: FlightSearchIntent = {
@@ -345,6 +346,33 @@ describe("Flight Radar compact price list", () => {
     },
   );
 
+  it.each([
+    ["en", "Buy", "Hold"],
+    ["zh-TW", "可買", "觀望"],
+  ] as const)(
+    "shows the real Buy and Hold signal on every other fare, beside the Top tag, in %s",
+    async (language, buy, hold) => {
+      const { api } = setup(language, [
+        { ...fare("Top Air", 30000, "typical"), top: true },
+        fare("Plain Air", 31000, "typical"),
+        fare("Dear Air", 40000, "high"),
+      ]);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(
+        rows(language).map((row) => [
+          within(row).queryByText(text[language].top) !== null,
+          within(row).queryByText(buy) !== null,
+          within(row).queryByText(hold) !== null,
+        ]),
+      ).toEqual([
+        [true, true, false],
+        [false, true, false],
+        [false, false, true],
+      ]);
+    },
+  );
+
   it("keeps fares of equal price in the order the reply gave them", async () => {
     const { api } = setup("en", [fare("First Air", 20000), fare("Second Air", 20000)]);
     await explore(api, "en");
@@ -369,10 +397,11 @@ describe("Flight Radar results first", () => {
     Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
   it.each(["en", "zh-TW"] as const)(
-    "keeps the highlights above and shows no results before a search in %s",
+    "keeps the highlights in the passengers sheet and shows no results before a search in %s",
     async (language) => {
       setup(language, threeFares);
       expect(await screen.findByLabelText(text[language].prompt)).toBeVisible();
+      await openFilters();
       expect(screen.getByRole("region", { name: text[language].highlights })).toBeVisible();
       expect(screen.queryByRole("region", { name: text[language].results })).toBeNull();
       expect(screen.queryByRole("region", { name: text[language].ideas })).toBeNull();
@@ -387,14 +416,13 @@ describe("Flight Radar results first", () => {
       const list = await screen.findByRole("list", { name: text[language].fares });
       const advice = await screen.findByRole("region", { name: text[language].advice });
       const ideas = await screen.findByRole("region", { name: text[language].ideas });
-      const highlights = screen.getByRole("region", { name: text[language].highlights });
-      const pills = screen.getByRole("region", {
-        name: language === "en" ? "Active search conditions" : "目前搜尋條件",
-      });
-      expect(follows(pills, advice)).toBe(true);
+      const summary = screen.getByRole("region", { name: /^(Search summary|搜尋摘要)$/ });
+      expect(follows(summary, advice)).toBe(true);
       expect(follows(advice, list)).toBe(true);
       expect(follows(list, ideas)).toBe(true);
-      expect(follows(ideas, highlights)).toBe(true);
+      // The highlights moved into the passengers sheet, which the panel opens.
+      await openFilters();
+      expect(screen.getByRole("region", { name: text[language].highlights })).toBeVisible();
       expect(within(ideas).getAllByRole("button").length).toBeGreaterThan(0);
       expect(within(advice).queryByRole("button")).toBeNull();
     },

@@ -2,6 +2,7 @@ import type { FlightPriceWatch } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const watch: FlightPriceWatch = {
@@ -88,8 +89,9 @@ describe("Price Watch list page", () => {
 
   it("links the radar bell to the page", async () => {
     renderApp({ path: "/travel/flights", cookieUser: makeUser("Rick") });
+    await openSearchPanel();
     const bell = await screen.findByRole("link", { name: "降價雷達" });
     expect(bell).toHaveAttribute("href", "/travel/watches");
-    expect(bell).toHaveClass("min-h-11", "min-w-11");
+    expect(bell).toHaveClass("fr-ic", "fr-hit");
   });
 });

@@ -9,25 +9,11 @@ import type { FareSort } from "./FareResults.js";
 import { Globe } from "./Globe.js";
 import { prefersReducedMotion } from "../shell/motion.js";
 
-const plane =
-  "M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z";
-
 /** The page headline: the destination's city, or the open question for a theme search. */
 export function headline(intent: FlightSearchIntent): string {
   return intent.theme
     ? t("flight.headlineAsk")
     : t("flight.headline", { place: airportName(intent.destination) });
-}
-
-/** One end of the route: the code large, the city under it (the code alone when unknown). */
-function Place({ code, end }: { code: string; end?: boolean }) {
-  const name = airportName(code);
-  return (
-    <div className={`flex min-w-0 flex-col gap-0.5 ${end ? "items-end text-right" : ""}`}>
-      <span className="text-[40px] leading-none font-black tracking-[0.01em]">{code}</span>
-      {name !== code && <span className="text-sm font-medium text-ink-muted">{name}</span>}
-    </div>
-  );
 }
 
 /** A number that rolls to its new value (ease-out, 800 ms) instead of jumping; reduced motion jumps. */
@@ -108,7 +94,6 @@ export function RouteCard({
   pending,
   open,
   onToggle,
-  onSearch,
   sort,
   onSort,
 }: {
@@ -116,7 +101,6 @@ export function RouteCard({
   pending: boolean;
   open: boolean;
   onToggle: () => void;
-  onSearch: () => void;
   sort: FareSort;
   onSort: (key: FareSort["key"]) => void;
 }) {
@@ -188,49 +172,20 @@ export function RouteCard({
           })}
         </div>
       </div>
-      <div className="fr-card flex items-center justify-between gap-2">
-        <Place code={intent.origin} />
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
-          <div className="flex w-full items-center justify-center gap-1.5">
-            <span className="h-0.5 flex-1 rounded-full bg-[#8cc3a8]" />
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 shrink-0 fill-sprout-700">
-              <path d={plane} />
-            </svg>
-            <span className="h-0.5 flex-1 rounded-full bg-[#8cc3a8]" />
-          </div>
-        </div>
-        <Place code={intent.destination} end />
-      </div>
-      {!open && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={onSearch}
-          className="fr-cta shine flex items-center justify-center gap-2"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-5 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round]"
-          >
-            <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
-            <circle cx="16" cy="7" r="2" />
-            <circle cx="8" cy="17" r="2" />
-          </svg>
-          {t("flight.exploreAgain")}
-        </button>
-      )}
     </section>
   );
 }
 
 /** The small gear that stands in for 設定, which Travel mode's nav does not carry. */
-export function SettingsLink() {
+export function SettingsLink({ className }: { className?: string } = {}) {
   return (
     <Link
       to="/settings"
       aria-label={t("nav.settings")}
-      className="press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+      className={
+        className ??
+        "press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+      }
     >
       <Settings aria-hidden="true" className="size-[22px] stroke-sprout-900" strokeWidth={2} />
     </Link>
@@ -250,8 +205,8 @@ export function TravelHeader({
   /** The catalogue airport the globe faces; omit the prop for no globe. */
   globe?: { code: string | undefined };
 }) {
-  const buttons = (
-    <div className={`flex shrink-0 gap-1.5 ${globe ? "mt-2" : ""}`}>
+  const buttons = globe ? null : (
+    <div className="flex shrink-0 gap-1.5">
       <Link
         to="/travel/watches"
         aria-label={t("flight.radar")}
@@ -273,9 +228,7 @@ export function TravelHeader({
       <h1 className={globe ? undefined : "text-[28px] leading-[1.15] font-black"}>
         {headline(intent)}
       </h1>
-      <p className={globe ? "text-ink-muted" : "text-[15px] font-medium text-ink-muted"}>
-        {t("flight.tagline")}
-      </p>
+      {!globe && <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>}
     </>
   );
   if (!globe)
@@ -290,7 +243,6 @@ export function TravelHeader({
       <div className="fr-hl grid justify-items-start">
         {title}
         <Leg origin={intent.origin} destination={intent.destination} />
-        {buttons}
       </div>
       {/* The bob and the negative margins are the reference mock's: the globe floats at the corner. */}
       <div className="fr-mini globe-bob">

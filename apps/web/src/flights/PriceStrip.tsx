@@ -352,7 +352,7 @@ export function PriceStrip({
             </span>
           ))}
         </p>
-        <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">
+        <p className="sr-only">
           {oldestHours >= OLD_AFTER_HOURS && (
             <span className="font-semibold">
               {t("flight.stripAge", { hours: String(oldestHours) })}

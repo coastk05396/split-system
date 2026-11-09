@@ -9,3 +9,11 @@ export async function openSearchPanel(): Promise<void> {
     .find((button) => button.hasAttribute("aria-expanded"));
   if (route?.getAttribute("aria-expanded") === "false") fireEvent.click(route);
 }
+
+/** Opens the passengers sheet, which also holds the budget, theme, rules and today's highlights. */
+export async function openFilters(): Promise<void> {
+  await openSearchPanel();
+  fireEvent.click(
+    await screen.findByRole("button", { name: /^(Passengers and cabin|旅客與艙等)/ }),
+  );
+}

@@ -15,7 +15,6 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { FLIGHT_SEARCH_FORM_ID, FlightSearchForm } from "../flights/FlightSearchForm.js";
 import { STICKY_BAR_SLOT, StickyBar } from "../flights/StickyBar.js";
-import { EntityPills } from "../flights/EntityPills.js";
 import { RouteCard, TravelHeader } from "../flights/RouteCard.js";
 import { addDays, friendlyDate } from "../flights/dates.js";
 import {
@@ -51,6 +50,7 @@ export function TravelPage() {
   const [showLastSearch, setShowLastSearch] = useState(lastSearch !== null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [sort, setSort] = useState<FareSort>(DEFAULT_SORT);
+  const [swipe, setSwipe] = useState(true);
   const [active, setIntent] = useState(
     () => lastSearch ?? defaultFlightIntent(Date.now(), currency),
   );
@@ -147,7 +147,6 @@ export function TravelPage() {
   }, []);
 
   const reply = search.data;
-  const searched = search.isPending || reply !== undefined;
   const resultsTop = useRef<HTMLDivElement>(null);
   const placedAt = useRef(0);
   // Scroll the results to the top of the screen, past it by as much as it takes for the fare
@@ -266,25 +265,13 @@ export function TravelPage() {
           onToggle={() => {
             setPanelOpen((open) => !open);
           }}
-          onSearch={() => {
-            runIntent(active);
-          }}
           sort={sort}
           onSort={(key) => {
             // A second tap on the active button reverses it; a new button starts ascending.
             setSort((s) => ({ key, descending: s.key === key && !s.descending }));
           }}
         />
-        <EntityPills
-          intent={active}
-          pending={search.isPending}
-          open={panelOpen}
-          onToggle={() => {
-            setPanelOpen((open) => !open);
-          }}
-          onChange={runIntent}
-        />
-        {showLastSearch && <p className="text-ink-muted">{t("flight.lastSearch")}</p>}
+        {showLastSearch && <p className="sr-only">{t("flight.lastSearch")}</p>}
         {panelOpen && (
           <FlightSearchForm
             intent={active}
@@ -294,6 +281,17 @@ export function TravelPage() {
             onPlace={(input) => {
               setGlobe((g) => findPlace(input) ?? g);
             }}
+            view={
+              reply && reply.cards.length > 0
+                ? {
+                    carousel: swipe,
+                    onToggle: () => {
+                      setSwipe((s) => !s);
+                    },
+                  }
+                : undefined
+            }
+            more={highlightsSection}
           />
         )}
         {!panelOpen && (
@@ -315,7 +313,6 @@ export function TravelPage() {
             }}
           />
         )}
-        {!searched && highlightsSection}
         {pendingWatch && !lineWatch.isSuccess && (
           <section aria-label={t("flight.lineWatchConfirm")} className="mt-5 grid gap-3">
             <p>
@@ -358,13 +355,14 @@ export function TravelPage() {
         <div ref={resultsTop} className="grid scroll-mt-4 gap-3.5">
           {reply && advise.data && (
             <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
-              <p className="px-1">{firstSentence(advise.data.commentary)}</p>
+              <p className="sr-only">{firstSentence(advise.data.commentary)}</p>
             </section>
           )}
           <FareResults
             pending={search.isPending}
             reply={reply}
             sort={sort}
+            carousel={swipe}
             onWatch={setWatchCard}
             saved={savedWatch}
           />
@@ -388,7 +386,6 @@ export function TravelPage() {
             </div>
           </section>
         )}
-        {searched && highlightsSection}
         {/* Last in the page flow before the bar, whose spacer must be the final element. */}
         <FlightPriceWatches
           card={watchCard}

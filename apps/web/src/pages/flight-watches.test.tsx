@@ -49,6 +49,7 @@ it.each(["en", "zh-TW"] as const)(
     expect(api.requests.find((r) => r.route === "POST /api/v1/flights/watches")?.body).toContain(
       '"targetFare":18000',
     );
+    await openSearchPanel(); // the bell now sits in the ticket card's trip row
     fireEvent.click(screen.getByRole("link", { name: en ? "Price Watch radar" : "降價雷達" }));
     const list = await screen.findByRole("region", {
       name: en ? "My Price Watches" : "我的降價雷達",
@@ -132,6 +133,7 @@ describe("Price Watch inside LIFF", () => {
       targetFare: 5950,
       intent: { destination: "OKA" },
     });
+    await openSearchPanel();
     fireEvent.click(screen.getByRole("link", { name: "降價雷達" }));
     const list = await screen.findByRole("region", { name: "我的降價雷達" });
     expect(await within(list).findByText(/TPE → OKA/)).toBeVisible();

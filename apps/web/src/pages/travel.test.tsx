@@ -9,7 +9,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
-import { openSearchPanel } from "../../test/flight-panel.js";
+import { openFilters, openSearchPanel } from "../../test/flight-panel.js";
 
 const warmIsland: FlightSearchIntent = {
   origin: "TPE",
@@ -133,6 +133,7 @@ describe("Flight Radar", () => {
     };
     api.flightHighlights.push(card);
     api.flightHistory = { days: 13, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
+    await openFilters(); // the highlights live in the passengers sheet
     const ticker = await screen.findByRole("region", { name: "Today's Strong Buy fares" });
     fireEvent.click(await within(ticker).findByRole("button", { name: /TPE → NRT/ }));
     expect(await screen.findByText("Example Air")).toBeVisible();
@@ -141,7 +142,8 @@ describe("Flight Radar", () => {
     expect(JSON.parse(request?.body ?? "{}")).toEqual(intent);
     expect(api.requests.find((r) => r.route === "GET /api/v1/flights/highlights")).toBeDefined();
     api.flightHistory = { days: 14, meanPrice: 31250, percentBelowMean: 20, percentile: 7 };
-    // After a search the highlights sit below the results, so find the region again.
+    // A search closes the panel, so open the sheet again.
+    await openFilters();
     fireEvent.click(
       within(screen.getByRole("region", { name: "Today's Strong Buy fares" })).getByRole("button", {
         name: /TPE → NRT/,
@@ -159,13 +161,20 @@ describe("Flight Radar", () => {
       target: { value: "下個月週末四天，一萬五以內不要紅眼" },
     });
     fireEvent.click(screen.getByRole("button", { name: "探索航班" }));
-    const pills = await screen.findByRole("region", { name: "目前搜尋條件" });
     expect(
       await within(screen.getByRole("region", { name: "搜尋摘要" })).findByRole("button", {
         name: /1\/8（五）– 1\/11（一）$/,
       }),
     ).toBeVisible();
-    fireEvent.click(within(pills).getByRole("button", { name: "移除預算上限" }));
+    // The budget pill is gone; the budget is cleared in the passengers sheet and searched from the panel.
+    await openSearchPanel();
+    fireEvent.click(screen.getByRole("button", { name: /^旅客與艙等/ }));
+    const sheet = screen.getByRole("dialog", { name: "旅客與艙等" });
+    fireEvent.change(within(sheet).getByRole("spinbutton", { name: /預算上限/ }), {
+      target: { value: "" },
+    });
+    fireEvent.click(within(sheet).getByRole("button", { name: "完成" }));
+    fireEvent.click(screen.getByRole("button", { name: "搜尋航班" }));
     await waitFor(() => {
       expect(api.requests.filter((r) => r.route === "POST /api/v1/flights/search")).toHaveLength(3);
     });
@@ -257,11 +266,9 @@ describe("Flight Radar", () => {
       });
       await screen.findByRole("heading", { name: /^(Next stop, Okinawa!|下一站，沖繩！)$/ });
       expect(screen.queryByRole("region", { name: barName })).toBeNull();
-      // Only the route card's own one-tap search exists until the panel opens.
+      // The mock has no one-tap search: Search exists only once the panel opens.
       expect(screen.queryByRole("button", { name: searchName })).toBeNull();
-      expect(screen.getAllByRole("button", { name: /^(Search again|重新探索航班)$/ })).toHaveLength(
-        1,
-      );
+      expect(screen.queryByRole("button", { name: /^(Search again|重新探索航班)$/ })).toBeNull();
 
       await openSearchPanel();
       const bar = screen.getByRole("region", { name: barName });

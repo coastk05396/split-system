@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 
 const names = {
   "zh-TW": {
@@ -54,6 +55,7 @@ describe("Travel mode", () => {
       const bottom = within(screen.getByRole("navigation", { name: n.bottom }));
       expect(bottom.getByRole("link", { name: n.travel[0] })).toHaveAttribute("href", "/");
       expect(bottom.getByRole("link", { name: n.travel[1] })).toHaveAttribute("href", "/travel");
+      await openSearchPanel(); // the gear sits in the ticket card's trip row
       expect(screen.getByRole("link", { name: n.gear })).toHaveAttribute("href", "/settings");
     },
   );

@@ -1,5 +1,5 @@
 import { partyOf, type FlightCabin, FLIGHT_CABINS, type FlightSearchIntent } from "@split/shared";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../i18n/messages.js";
 
@@ -100,6 +100,7 @@ function Choices<T extends string>({
   options,
   value,
   onChange,
+  trailing,
 }: {
   label: string;
   /** The legend stays for assistive tech only (the pills say it all). */
@@ -110,6 +111,8 @@ function Choices<T extends string>({
   options: { value: T; text: string }[];
   value: T;
   onChange: (value: T) => void;
+  /** Controls at the right end of the row (the trip row's links). */
+  trailing?: ReactNode;
 }) {
   return (
     <fieldset className={variant === "seg" ? "fr-opts" : "min-w-0"}>
@@ -131,6 +134,7 @@ function Choices<T extends string>({
           </label>
         ))}
       </div>
+      {trailing}
     </fieldset>
   );
 }
@@ -139,9 +143,11 @@ function Choices<T extends string>({
 export function TripToggle({
   oneWay,
   onChange,
+  trailing,
 }: {
   oneWay: boolean;
   onChange: (oneWay: boolean) => void;
+  trailing?: ReactNode;
 }) {
   return (
     <div>
@@ -158,12 +164,13 @@ export function TripToggle({
         onChange={(trip) => {
           onChange(trip === "one-way");
         }}
+        trailing={trailing}
       />
     </div>
   );
 }
 
-const FOCUSABLE = "button:not(:disabled), input:not(:disabled)";
+const FOCUSABLE = "button:not(:disabled), input:not(:disabled), select:not(:disabled)";
 /** Tab stops in DOM order: a radio group is one stop, its checked radio. */
 const tabStops = (root: HTMLElement | null) =>
   Array.from(root?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
@@ -179,10 +186,12 @@ function PartySheet({
   value,
   onChange,
   onClose,
+  extra,
 }: {
   value: Party;
   onChange: (patch: Partial<Party>) => void;
   onClose: () => void;
+  extra?: ReactNode;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -274,6 +283,7 @@ function PartySheet({
             onChange({ cabin });
           }}
         />
+        {extra}
       </div>
     </div>,
     document.body,
@@ -284,9 +294,12 @@ function PartySheet({
 export function PartyPanel({
   value,
   onChange,
+  extra,
 }: {
   value: Party;
   onChange: (patch: Partial<Party>) => void;
+  /** More search conditions, shown under the cabins in the sheet. */
+  extra?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const row = useRef<HTMLButtonElement>(null);
@@ -320,7 +333,7 @@ export function PartyPanel({
           <path d="M9 6l6 6-6 6" />
         </svg>
       </button>
-      {open && <PartySheet value={value} onChange={onChange} onClose={close} />}
+      {open && <PartySheet value={value} onChange={onChange} onClose={close} extra={extra} />}
     </div>
   );
 }

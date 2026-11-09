@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { flightSearchRequestSchema } from "@split/shared";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const intent: FlightSearchIntent = {
@@ -25,6 +26,7 @@ const text = {
     chip: "Taipei Taoyuan → Okinawa Jan 8 – Jan 11",
     edit: "Edit",
     search: "Search again",
+    panelSearch: "Search flights",
     prompt: "Where would you like to go?",
     headline: "Next stop, Okinawa!",
     asking: "Where to next?",
@@ -44,6 +46,7 @@ const text = {
     chip: "台北桃園 → 沖繩 1/8（五）– 1/11（一）",
     edit: "修改",
     search: "重新探索航班",
+    panelSearch: "搜尋航班",
     prompt: "想去哪裡？",
     headline: "下一站，沖繩！",
     asking: "下一站，去哪裡？",
@@ -81,19 +84,13 @@ describe("Flight Radar header and route card", () => {
       setup(language);
       await explore(language);
       const card = screen.getByRole("region", { name: text[language].card });
-      expect(within(card).getByText(text[language].origin)).toBeVisible();
-      expect(within(card).getByText(text[language].destination)).toBeVisible();
-      expect(within(card).getByText("TPE")).toBeVisible();
-      expect(within(card).getByText("OKA")).toBeVisible();
-      expect(within(card).getByText("TPE")).toHaveClass("text-[40px]");
-      // The distance and flight time moved to the header, beside the globe.
+      // The mock has no hero card: only the chip row (route chip and sort bar) is left.
+      expect(within(card).queryByText("TPE")).toBeNull();
+      expect(within(card).queryByRole("button", { name: text[language].search })).toBeNull();
+      // The distance and flight time sit in the header, beside the globe.
       expect(screen.getByText(text[language].leg)).toBeInTheDocument();
       expect(within(card).getByRole("button", { name: text[language].chip })).toBeVisible();
-      // The route-and-dates pill is gone; the other pills stay below the card.
-      expect(screen.queryByRole("button", { name: /^TPE → OKA ・/ })).toBeNull();
-      const pills = screen.getByRole("region", { name: text[language].pills });
-      expect(within(pills).getByRole("button", { name: text[language].budget })).toBeVisible();
-      expect(card.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByRole("region", { name: text[language].pills })).toBeNull();
     },
   );
 
@@ -123,8 +120,9 @@ describe("Flight Radar header and route card", () => {
     "links a 44 px bell to the Price Watch page in %s",
     async (language) => {
       setup(language);
+      await openSearchPanel();
       const bell = await screen.findByRole("link", { name: text[language].bell });
-      expect(bell).toHaveClass("min-h-11", "min-w-11");
+      expect(bell).toHaveClass("fr-ic", "fr-hit");
       expect(bell).toHaveAttribute("href", "/travel/watches");
       expect(bell.querySelector("svg")).not.toBeNull();
     },
@@ -141,7 +139,7 @@ describe("Flight Radar header and route card", () => {
     setup("en", { ...intent, origin: "ZZZ" });
     await explore("en");
     const card = screen.getByRole("region", { name: text.en.card });
-    expect(within(card).getAllByText("ZZZ")).toHaveLength(1);
+    expect(card).toHaveTextContent("ZZZ → OKA");
     expect(card).not.toHaveTextContent(/km/);
     expect(card).not.toHaveTextContent(/NaN|undefined/);
   });
@@ -209,33 +207,18 @@ describe("Flight Radar header and route card", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "searches the shown search in one tap, without a prompt parse, in %s",
+    "searches the shown search from the panel's Search button, without a prompt parse, in %s",
     async (language) => {
       const { api } = setup(language);
       await explore(language);
-      const card = screen.getByRole("region", { name: text[language].card });
-      fireEvent.click(within(card).getByRole("button", { name: text[language].search }));
+      await openSearchPanel();
+      fireEvent.click(screen.getByRole("button", { name: text[language].panelSearch }));
       await waitFor(() => {
         expect(searches(api)).toHaveLength(2);
       });
       const request = flightSearchRequestSchema.parse(JSON.parse(searches(api)[1]?.body ?? "{}"));
       expect(request).not.toHaveProperty("prompt");
       expect(request).toMatchObject({ origin: "TPE", destination: "OKA", budget: 15000 });
-    },
-  );
-
-  it.each(["en", "zh-TW"] as const)(
-    "gives the search button a 48 px target in %s",
-    async (language) => {
-      setup(language);
-      const card = await screen.findByRole("region", { name: text[language].card });
-      // The mock's search button: 16 px padding around a 16 px label is 52 px tall.
-      expect(within(card).getByRole("button", { name: text[language].search })).toHaveClass(
-        "fr-cta",
-      );
-      expect(
-        within(card).getByRole("button", { name: text[language].search }).querySelector("svg"),
-      ).not.toBeNull();
     },
   );
 });

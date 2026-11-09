@@ -64,10 +64,7 @@ const AMBER = /#fdf0d5|#f0c978|#f2a33a|#fff8e8|#6b3f00|#ffd23f/i;
 describe("Flight Radar green controls", () => {
   it("gives every primary button one green style, with hover and a solid disabled state", async () => {
     await explore();
-    const buttons = [
-      screen.getByRole("button", { name: "探索航班" }),
-      screen.getByRole("button", { name: "重新探索航班" }),
-    ];
+    const buttons = [screen.getByRole("button", { name: "探索航班" })];
     await openSearchPanel();
     buttons.push(
       within(screen.getByRole("region", { name: "搜尋列" })).getByRole("button", {

@@ -5,6 +5,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderApp } from "../../test/render-app.js";
 import { makeUser } from "../../test/fake-api.js";
+import { openSearchPanel } from "../../test/flight-panel.js";
 import { contrast } from "../../test/contrast.js";
 
 const intent: FlightSearchIntent = {
@@ -138,6 +139,7 @@ describe.each(["en", "zh-TW"] as const)("Flight Radar fare carousel in %s", (lan
 
   it("switches to a plain list and back", async () => {
     await open(language);
+    await openSearchPanel(); // the switch sits in the ticket card's trip row
     fireEvent.click(screen.getByRole("button", { name: l.list }));
     expect(list(language)).toHaveAttribute("data-view", "list");
     expect(dots()).toHaveLength(0);

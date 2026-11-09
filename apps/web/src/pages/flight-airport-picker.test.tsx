@@ -2,7 +2,7 @@ import type { FlightCard, FlightSearchIntent } from "@split/shared";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
-import { openSearchPanel } from "../../test/flight-panel.js";
+import { openFilters, openSearchPanel } from "../../test/flight-panel.js";
 import { renderApp } from "../../test/render-app.js";
 
 const languages = ["en", "zh-TW"] as const;
@@ -292,6 +292,7 @@ describe.each(languages)("Flight Radar airport picker in %s", (language) => {
         overBudget: 0,
         url: "https://example.test/f",
       } satisfies FlightCard);
+      await openFilters(); // the highlights now live in the passengers sheet
       fireEvent.click(await screen.findByRole("button", { name: /KHH → KIX/ }));
       await screen.findByText("Example Air");
       expect(await field("origin")).toHaveDisplayValue(/KHH/);

@@ -119,6 +119,17 @@ describe("Passengers, cabin and trip type panel", () => {
     ).toEqual(["economy", "premium-economy", "business", "first"]);
   });
 
+  it("gives each cabin choice a 44 px target that stops at the 4 px gap", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const pill = /\.fr-cabins span\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const hit = /\.fr-cabins span::before\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    const gap = /\.fr-cabins\s*\{[^}]*gap:\s*(\d+)px/.exec(css)?.[1];
+    const height = Number(/min-height:\s*(\d+)px/.exec(pill)?.[1]);
+    const out = Number(/inset:\s*-(\d+)px 0/.exec(hit)?.[1]);
+    expect(height + 2 * out).toBeGreaterThanOrEqual(44);
+    expect(out * 2).toBeLessThanOrEqual(Number(gap));
+  });
+
   it("sends the party and cabin, shows the people on the chip and names the party in the note", async () => {
     const app = await setup();
     openParty();
@@ -328,7 +339,9 @@ describe("Passengers sheet", () => {
     openParty();
     expect(sheet()).toContainElement(document.activeElement as HTMLElement);
     const focusable = Array.from(
-      sheet().querySelectorAll<HTMLElement>("button:not(:disabled), input:checked"),
+      sheet().querySelectorAll<HTMLElement>(
+        "button:not(:disabled), input:checked, input:not([type=radio]):not(:disabled), select",
+      ),
     );
     const first = focusable[0] as HTMLElement;
     const last = focusable.at(-1) as HTMLElement;
@@ -350,11 +363,17 @@ describe("Passengers sheet", () => {
       fireEvent.click(screen.getByRole("radio", { name: cabin }));
       // A radio group is one tab stop: only the checked radio is tabbable.
       const stops = Array.from(
-        sheet().querySelectorAll<HTMLInputElement | HTMLButtonElement>("button, input"),
-      ).filter((e) => !e.disabled && !(e instanceof HTMLInputElement && !e.checked));
+        sheet().querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>(
+          "button, input, select",
+        ),
+      ).filter(
+        (e) => !e.disabled && !(e instanceof HTMLInputElement && e.type === "radio" && !e.checked),
+      );
       const first = stops[0] as HTMLElement;
       const last = stops.at(-1) as HTMLElement;
-      expect(last).toBe(screen.getByRole("radio", { name: cabin }));
+      // The conditions under the cabins (budget, theme, rules) now end the sheet.
+      expect(last).toBe(within(sheet()).getByRole("checkbox", { name: "Direct flights only" }));
+      expect(stops).toContain(screen.getByRole("radio", { name: cabin }));
       last.focus();
       fireEvent.keyDown(last, { key: "Tab" });
       expect(document.activeElement).toBe(first);
