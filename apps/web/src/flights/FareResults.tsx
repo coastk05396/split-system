@@ -24,7 +24,7 @@ export type SavedWatch = { card: FlightCard; at: number };
 const FIRST_ROWS = 10;
 
 /**
- * The results of a search: a skeleton while it runs, then one list of fare cards, cheapest first.
+ * The results of a search: the searching card while it runs, then one list of fare cards, cheapest first.
  * The empty and degraded notices keep their direct Google Flights link.
  */
 export function FareResults({
@@ -38,8 +38,8 @@ export function FareResults({
 }: {
   pending: boolean;
   reply: FlightSearchReply | undefined;
-  /** The airports being searched, drawn on the searching card. */
-  route: { origin: string; destination: string };
+  /** The airports being searched, drawn on the searching card; none while a spoken sentence is still being read. */
+  route?: { origin: string; destination: string } | undefined;
   sort: FareSort;
   /** A tap on a sort button; the buttons sit on the results header. */
   onSort: (key: FareSort["key"]) => void;
@@ -56,7 +56,7 @@ export function FareResults({
       aria-busy={pending ? "true" : undefined}
       className="fr-res"
     >
-      {pending && <SearchingCard origin={route.origin} destination={route.destination} />}
+      {pending && <SearchingCard route={route} />}
       {reply && (reply.degraded || reply.cards.length === 0) && (
         <>
           <div className="fr-nya">

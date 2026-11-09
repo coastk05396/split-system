@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
 
-/** Today's confirmed fares; 航班 and 探索 share one cache entry. */
+/** Today's confirmed fares, one cache entry. */
 export function useHighlights(currency: CurrencyCode) {
   const { session } = useAuth();
   return useQuery({

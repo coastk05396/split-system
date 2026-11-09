@@ -611,31 +611,10 @@
   font-weight: 700;
   border-radius: 12px;
 }
-.fr-d[data-cheap="true"]::after {
-  content: "";
-  position: absolute;
-  bottom: 4px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-sprout-500);
-}
-.fr-d[aria-pressed="true"][data-cheap="true"]::after {
-  background: #fff;
-  box-shadow: none;
-}
 .fr-cal-n {
   margin: 8px 2px 0;
   font-size: 12px;
   color: var(--color-ink-muted);
-}
-.fr-cal-n i {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-sprout-500);
-  margin-right: 5px;
 }
 
 /* passengers sheet: the mock's .sheet (full phone, page colour, 44px top) */
@@ -800,29 +779,11 @@
   gap: 5px;
 }
 
-/* results: the mock's .res, carousel and fare card */
+/* results: the mock's .res and fare card */
 .fr-res {
   position: relative;
   display: grid;
   gap: 14px;
-}
-.fr-car {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  margin: 0 -18px;
-  padding: 6px calc(11cqw + 18px) 14px;
-  scroll-padding: 0;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-}
-.fr-car::-webkit-scrollbar {
-  display: none;
-}
-.fr-car > .fr-fare {
-  flex: 0 0 78cqw;
-  scroll-snap-align: center;
 }
 
 .fr-fare {
@@ -2419,15 +2380,7 @@ body::before {
   }
 }
 
-/* Fare carousel. The wrapper is a size container so the cards and side padding are in cqw: one card
-   is 78% wide and its neighbours peek 11% each side. The list scrolls inside itself, never the page. */
-.car-wrap {
-  container-type: inline-size;
-  min-width: 0;
-  display: grid;
-  gap: 14px;
-}
-/* The plane waits at the start of the line (the mock's rest position); with motion it glides across on the active fare. */
+/* The plane waits at the start of the line (the mock's rest position). */
 .fare-plane {
   position: absolute;
   left: 0;
@@ -2474,27 +2427,7 @@ body::before {
   pointer-events: none;
   opacity: 0;
 }
-.scan {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 2px;
-  background: var(--color-sprout-500);
-  pointer-events: none;
-  z-index: 4;
-}
 @media (prefers-reduced-motion: no-preference) {
-  .car > li[data-active="true"] .fare-plane,
-  .fr-fare[data-active="true"] .fare-plane {
-    animation: fare-glide 1.8s cubic-bezier(0.45, 0, 0.2, 1) both;
-  }
-  @supports (animation-timeline: view()) {
-    .fr-car > .fr-fare .fr-front {
-      animation: fare-depth linear both;
-      animation-timeline: view(inline);
-      animation-range: cover;
-    }
-  }
   .stamp {
     animation: stamp-in 1.5s both;
   }
@@ -2504,25 +2437,6 @@ body::before {
   .bell-ring svg {
     transform-origin: 50% 10%;
     animation: ring-bell 0.7s;
-  }
-  .scan {
-    animation: scan 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
-}
-@keyframes fare-glide {
-  to {
-    left: calc(100% - 16px);
-  }
-}
-/* The mock's depth: the centred card is full size, neighbours scale to 0.9. Forced: the mock also fades them to 50%
-   opacity, which would put their text under 4.5:1; the scale stays, the fade does not. */
-@keyframes fare-depth {
-  0%,
-  100% {
-    scale: 0.9;
-  }
-  50% {
-    scale: 1;
   }
 }
 @keyframes stamp-in {
@@ -2564,14 +2478,6 @@ body::before {
   }
   75% {
     transform: rotate(-8deg);
-  }
-}
-@keyframes scan {
-  from {
-    top: 0;
-  }
-  to {
-    top: 100%;
   }
 }
 

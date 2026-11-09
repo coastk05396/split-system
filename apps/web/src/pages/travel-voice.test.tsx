@@ -16,6 +16,12 @@ async function hold(clientY = 500) {
   await voicePanel();
 }
 
+/** Holds the key and keeps talking for longer than the shortest recording the app accepts. */
+async function speak(clientY = 500) {
+  await hold(clientY);
+  await new Promise((resolve) => setTimeout(resolve, 650));
+}
+
 async function start(options: { denied?: boolean } = {}) {
   const fake = createFakeRecorder(options);
   const app = renderApp({
@@ -35,7 +41,7 @@ describe("語音搜尋: long-press the Search key", () => {
   it("records while held and, on release, searches what was said", async () => {
     const { api, log } = await start();
     api.voiceText = "台北到沖繩，12 月 4 號到 7 號";
-    await hold();
+    await speak();
     expect(within(await voicePanel()).getByLabelText("聆聽中")).toBeVisible();
     expect(log.open).toBe(1);
     fireEvent.pointerUp(searchKey(), { pointerId: 1 });
@@ -85,7 +91,9 @@ describe("語音搜尋: long-press the Search key", () => {
   it("sends the recording by itself at 15 seconds", async () => {
     const { api } = await start();
     api.voiceText = "東京";
-    vi.useFakeTimers({ toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval"] });
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "Date"],
+    });
     fireEvent.pointerDown(searchKey(), { button: 0, pointerId: 1, clientY: 500 });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400);
@@ -109,7 +117,7 @@ describe("語音搜尋: long-press the Search key", () => {
   it("asks to try again, and does not search, when nothing was heard", async () => {
     const { api } = await start();
     api.voiceText = "";
-    await hold();
+    await speak();
     fireEvent.pointerUp(searchKey(), { pointerId: 1 });
     expect(await screen.findByText("沒聽清楚，再長按說一次")).toBeVisible();
     expect(screen.queryByRole("button", { name: "重試" })).toBeNull();
@@ -121,7 +129,7 @@ describe("語音搜尋: long-press the Search key", () => {
   it("offers a retry that resends the same recording when the request fails", async () => {
     const { api } = await start();
     api.voiceText = "fails";
-    await hold();
+    await speak();
     fireEvent.pointerUp(searchKey(), { pointerId: 1 });
     const retry = await screen.findByRole("button", { name: "重試" });
     expect(screen.getByText("沒聽清楚，再長按說一次")).toBeVisible();
@@ -132,6 +140,63 @@ describe("語音搜尋: long-press the Search key", () => {
     });
     expect(api.voiceRequests).toHaveLength(2);
   });
+  it("treats a tap-length recording as nothing heard, without calling the service", async () => {
+    const { api, log } = await start();
+    await hold();
+    fireEvent.pointerUp(searchKey(), { pointerId: 1 });
+    expect(await screen.findByText("沒聽清楚，再長按說一次")).toBeVisible();
+    expect(api.voiceRequests).toHaveLength(0);
+    expect(log.open).toBe(0);
+  });
+
+  it("still throws the recording away when the finger is in the cancel zone at 15 seconds", async () => {
+    const { api, log } = await start();
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "setInterval", "clearTimeout", "clearInterval", "Date"],
+    });
+    fireEvent.pointerDown(searchKey(), { button: 0, pointerId: 1, clientY: 500 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    fireEvent.pointerMove(searchKey(), { pointerId: 1, clientY: 400 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(log.cancelled).toBe(1);
+    expect(api.voiceRequests).toHaveLength(0);
+  });
+
+  it("ignores the release of a second finger and keeps recording the first", async () => {
+    const { api, log } = await start();
+    await speak();
+    fireEvent.pointerDown(searchKey(), { button: 0, pointerId: 2 });
+    fireEvent.pointerUp(searchKey(), { pointerId: 2 });
+    expect(log.stopped).toBe(0);
+    expect(api.voiceRequests).toHaveLength(0);
+    expect(await voicePanel()).toBeVisible();
+  });
+
+  it("closes the not-heard message with Escape", async () => {
+    await start();
+    await hold();
+    fireEvent.pointerUp(searchKey(), { pointerId: 1 });
+    await screen.findByText("沒聽清楚，再長按說一次");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "語音搜尋" })).toBeNull();
+  });
+
+  it("switches the microphone off when the page is left mid-recording", async () => {
+    const { log, router } = await start();
+    await hold();
+    await act(async () => {
+      await router.navigate("/travel/watches");
+    });
+    await waitFor(() => {
+      expect(log.cancelled).toBe(1);
+    });
+    expect(screen.queryByRole("dialog", { name: "語音搜尋" })).toBeNull();
+  });
+
   it("opens the search sheet on a pointer tap where the browser cannot record", async () => {
     renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });

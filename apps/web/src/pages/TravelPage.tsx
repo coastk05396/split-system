@@ -317,7 +317,7 @@ export function TravelPage() {
           <FareResults
             pending={search.isPending}
             reply={reply}
-            route={active}
+            route={search.variables && "prompt" in search.variables ? undefined : active}
             sort={sort}
             onSort={(key) => {
               // A second tap on the active button reverses it; a new button starts ascending.

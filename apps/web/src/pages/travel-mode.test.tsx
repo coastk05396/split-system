@@ -86,6 +86,16 @@ describe("Travel mode", () => {
     ]);
   });
 
+  it("redirects the old /travel/flights page to /travel with its query", async () => {
+    const { router, api } = renderApp({
+      path: "/travel/flights?origin=TPE&destination=NRT&departureDate=2027-01-08&returnDate=2027-01-11&currency=TWD&budget=15000&excludeRedEye=1&directOnly=0",
+      cookieUser: makeUser("Rick"),
+    });
+    expect(await screen.findByRole("link", { name: /Example Air/ })).toBeVisible();
+    expect(router.state.location.pathname).toBe("/travel");
+    expect(api.flightSearchRequests).toEqual([expect.objectContaining({ destination: "NRT" })]);
+  });
+
   it("runs a /travel?... link's search once and redirects the old /travel path with its query", async () => {
     const query =
       "origin=TPE&destination=NRT&departureDate=2027-01-08&returnDate=2027-01-11&currency=TWD&budget=15000&excludeRedEye=1&directOnly=0";

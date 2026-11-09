@@ -28,24 +28,28 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
     async start(onLevel) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       let recorder: MediaRecorder;
-      let context: AudioContext;
+      let context: AudioContext | undefined;
       let analyser: AnalyserNode;
+      const chunks: Blob[] = [];
       try {
         // 32 kbit/s keeps 15 s far below the worker's 1 MB ceiling.
         recorder = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
+        recorder.ondataavailable = (event) => {
+          chunks.push(event.data);
+        };
         context = new AudioContext();
+        // A context made after the permission prompt can start suspended; the bars need it running.
+        void context.resume().catch(() => undefined);
         analyser = context.createAnalyser();
         analyser.fftSize = 256;
         context.createMediaStreamSource(stream).connect(analyser);
+        recorder.start();
       } catch (error) {
         // Setup failed after the microphone opened: switch the indicator off before giving up.
         for (const track of stream.getTracks()) track.stop();
+        void context?.close().catch(() => undefined);
         throw error;
       }
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (event) => {
-        chunks.push(event.data);
-      };
       const samples = new Uint8Array(analyser.fftSize);
       let frame = 0;
       const measure = () => {
@@ -59,16 +63,21 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
       const release = () => {
         cancelAnimationFrame(frame);
         for (const track of stream.getTracks()) track.stop();
-        void context.close();
+        void context.close().catch(() => undefined);
       };
-      recorder.start();
       return {
         stop: () =>
           new Promise<Blob>((resolve) => {
-            recorder.onstop = () => {
+            const finish = () => {
               release();
               resolve(new Blob(chunks, { type: recorder.mimeType }));
             };
+            // A recorder the system already stopped (call, unplugged mic) fires no second stop event.
+            if (recorder.state === "inactive") {
+              finish();
+              return;
+            }
+            recorder.onstop = finish;
             recorder.stop();
           }),
         cancel: () => {

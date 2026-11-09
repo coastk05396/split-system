@@ -9,7 +9,11 @@ const ARC = "M16 66 Q155 -22 294 66";
  * airports with a plane flying along it, the words 搜尋航班 as a wave of brightness, and status
  * lines that take turns. Reduced motion shows the same card standing still.
  */
-export function SearchingCard({ origin, destination }: { origin: string; destination: string }) {
+export function SearchingCard({
+  route,
+}: {
+  route?: { origin: string; destination: string } | undefined;
+}) {
   const still = prefersReducedMotion();
   return (
     <div className="sc" data-motion={still ? "reduced" : "full"}>
@@ -55,14 +59,16 @@ export function SearchingCard({ origin, destination }: { origin: string; destina
           )}
         </g>
       </svg>
-      <div className="sc-ends" aria-hidden="true">
-        <span>
-          {origin} {airportName(origin)}
-        </span>
-        <span>
-          {destination} {airportName(destination)}
-        </span>
-      </div>
+      {route && (
+        <div className="sc-ends" aria-hidden="true">
+          <span>
+            {route.origin} {airportName(route.origin)}
+          </span>
+          <span>
+            {route.destination} {airportName(route.destination)}
+          </span>
+        </div>
+      )}
       <p role="status" className="sc-title">
         <span className="sr-only">{t("flight.searching")}</span>
         <span aria-hidden="true">

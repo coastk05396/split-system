@@ -144,6 +144,7 @@ it("sends Groq Whisper the recording and a language hint, and returns its text",
   expect(calls[0]?.auth).toBe("Bearer test-key");
   expect(calls[0]?.form.get("model")).toBe("whisper-large-v3-turbo");
   expect(calls[0]?.form.get("language")).toBe("zh");
+  expect(calls[0]?.form.get("prompt")).toBe("以下是繁體中文的句子。");
   expect(calls[0]?.form.get("response_format")).toBe("json");
   expect((calls[0]?.form.get("file") as File).size).toBe(2_000);
   expect((calls[0]?.form.get("file") as File).name).toBe("voice.webm");

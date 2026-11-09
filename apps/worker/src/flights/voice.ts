@@ -37,6 +37,8 @@ export function createFlightSpeech(fetchImpl: typeof fetch = fetch): FlightSpeec
       form.set("file", new File([audio], `voice.${extension(contentType)}`, { type: contentType }));
       form.set("model", "whisper-large-v3-turbo");
       form.set("language", language === "en" ? "en" : "zh");
+      // Whisper answers "zh" in Simplified characters unless the prompt is written in Traditional.
+      if (language !== "en") form.set("prompt", "以下是繁體中文的句子。");
       form.set("response_format", "json");
       form.set("temperature", "0");
       const response = await fetchImpl("https://api.groq.com/openai/v1/audio/transcriptions", {
