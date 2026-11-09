@@ -1,5 +1,5 @@
 import { FLIGHT_DESTINATIONS, formatAmount, intentToQuery, type FlightCard } from "@split/shared";
-import { SIGNAL_LABEL, time } from "../flights/advice.js";
+import { SIGNAL_NOTE, time } from "../flights/advice.js";
 import type { FlexBubble, FlexComponent } from "./reply-client.js";
 
 type FlexButtonAction = Extract<FlexComponent, { type: "button" }>["action"];
@@ -94,7 +94,7 @@ export function flightBubble(card: FlightCard): FlexBubble {
   const place = FLIGHT_DESTINATIONS.find((d) => d.airport === intent.destination)?.zhTW;
   const [first, second] = insights(card);
   return bubble({
-    badge: SIGNAL_LABEL[card.signal][0],
+    badge: SIGNAL_NOTE[card.signal][0],
     badgeColor: SIGNAL_COLOR[card.signal],
     tag: `${card.stops === 0 ? "直飛" : `轉機 ${card.stops} 次`} · ${duration(card.durationMinutes)}`,
     body: [

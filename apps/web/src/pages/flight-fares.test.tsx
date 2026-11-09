@@ -103,7 +103,7 @@ async function explore(api: FakeApi, language: Language) {
 }
 
 /** The retired Deal Signal pill words, in both languages; the labels are gone, the data stays. */
-const DEAL_SIGNAL_LABELS = /強烈買|可買|觀望|Strong Buy|\bBuy\b|\bHold\b/i;
+const DEAL_SIGNAL_LABELS = /強烈買|可買|觀望|非常值得買|可以買|再等等|Strong Buy|\bBuy\b|\bHold\b/i;
 
 const threeFares = [
   fare("Example Air", 25000),
@@ -348,8 +348,17 @@ describe("Flight Radar compact price list", () => {
         fare("Plain Air", 31000, "typical"),
         fare("Dear Air", 40000, "high"),
       ]);
+      // The worker's own advice wording for a best fare of any signal (best-value, never the signal name).
+      api.flightAdvice = {
+        commentary:
+          language === "en"
+            ? "Raised Air at NT$ 18,000 is the best-value option. 2 of 5 options are great prices."
+            : "Raised Air NT$ 18,000 是最划算的選擇。5 個選項中有 2 個是超值好價。",
+        moves: [],
+      };
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
+      await screen.findByText(/Raised Air.*(best-value|最划算)/);
       expect(
         rows(language).map((row) => within(row).queryByText(text[language].top) !== null),
       ).toEqual([false, false, true, false, false]);

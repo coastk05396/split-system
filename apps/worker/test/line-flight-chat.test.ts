@@ -179,8 +179,11 @@ describe("one-on-one LINE flight chat", () => {
     expect(bubbles.map((b) => b.size)).toEqual(Array<string>(5).fill("kilo"));
     // 6 fares in, 3 Strong Buy (NT$ 7,000) then the cheapest Hold (NT$ 12,000).
     const badges = bubbles.slice(0, 4).map((b) => JSON.stringify(b.header));
-    expect(badges.slice(0, 3).every((b) => b.includes("非常值得買"))).toBe(true);
-    expect(badges[3]).toContain("再等等");
+    expect(badges.slice(0, 3).every((b) => b.includes("超值好價"))).toBe(true);
+    expect(badges[3]).toContain("價格偏高");
+    expect(JSON.stringify(bubbles)).not.toMatch(
+      /非常值得買|可以買|再等等|強烈買|可買|觀望|Strong Buy/,
+    );
     expect(JSON.stringify(bubbles[0])).toContain("NT$ 7,000");
     // Every bubble has the same rows, so the cards share one height.
     const rows = (b: (typeof bubbles)[number]) =>

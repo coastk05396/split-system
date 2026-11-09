@@ -118,7 +118,7 @@ it("falls back to Workers AI on a Groq 429, then to deterministic copy when outp
   output = { focus: "cheapest", moves: [], commentary: "Only NT$1 today, 90% off!" };
   const leaked = await ask();
   expect(leaked.commentary).not.toMatch(/90%|NT\$1\b/);
-  expect(leaked.commentary).toMatch(/^Test Air at .* has the strongest signal/);
+  expect(leaked.commentary).toMatch(/^Test Air at .* is the best-value option/);
   hang = true;
   expect((await ask()).moves.length).toBeGreaterThanOrEqual(3);
 }, 10_000);
@@ -132,7 +132,7 @@ it("words commentary and chips in Traditional Chinese and ignores choices the re
   });
   const reply = await response.json<FlightAdviceReply>();
   expect(reply.commentary).toContain("Test Air");
-  expect(reply.commentary).toContain("非常值得買");
+  expect(reply.commentary).toContain("超值好價");
   expect(reply.commentary).not.toContain("budget");
   expect(reply.moves.map((move) => move.id)).not.toContain("lift_budget");
   expect(reply.moves.map((move) => move.id)).not.toContain("relax_direct");
@@ -165,3 +165,30 @@ it("still offers at least three chips when few conditions apply", async () => {
   const reply = await response.json<FlightAdviceReply>();
   expect(reply.moves.map((move) => move.id)).toEqual(["later_week", "longer_stay", "shorter_stay"]);
 });
+
+/** The retired Deal Signal label words, in both languages (the signal itself stays data). */
+const LABELS = /強烈買|可買|觀望|非常值得買|可以買|再等等|Strong Buy|\bBuy\b|\bHold\b/i;
+
+it.each(["en", "zh-TW"] as const)(
+  "never names the Deal Signal in commentary, for any best signal or focus, in %s",
+  async (language) => {
+    for (const signal of ["strong_buy", "buy", "hold"] as const) {
+      for (const focus of ["best_signal", "cheapest", "over_budget", "nonstop"] as const) {
+        const response = await advise(
+          {
+            language,
+            intent,
+            cards: [
+              { ...fare, signal, overBudget: 500 },
+              { ...fare, airline: "Night Air", price: 12000, signal: "hold", overBudget: 3500 },
+            ],
+          },
+          { flightAdvisor: { select: () => Promise.resolve({ focus, moves: [] }) } },
+        );
+        const { commentary } = await response.json<FlightAdviceReply>();
+        expect(commentary, `${signal} ${focus}`).not.toMatch(LABELS);
+        expect(commentary.length).toBeGreaterThan(10);
+      }
+    }
+  },
+);

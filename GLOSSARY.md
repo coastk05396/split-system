@@ -37,7 +37,7 @@ A standalone flight deal discovery experience, opened from the Travel tab or ask
 _Avoid_: Trip (that is a Group with Stops), travel module
 
 **Deal Signal**:
-The buy-timing rating on a flight option—Strong Buy, Buy, or Hold—judged from how the live fare compares against historical norms and the User's budget. Strong Buy has one meaning everywhere (Flight Radar rows, LINE, Price Watch): the fare is a bargain by Google's own price level or by history, or it is a 熱門 fare in the cheapest third of its search. It is never shown as a label in the web app (the 強烈買 / 可買 / 觀望 pills were removed); it only drives the highlights strip, Price Watch triggers and the card's `data-strong` flag.
+The buy-timing rating on a flight option—Strong Buy, Buy, or Hold—judged from how the live fare compares against historical norms and the User's budget. Strong Buy has one meaning everywhere (Flight Radar rows, LINE, Price Watch): the fare is a bargain by Google's own price level or by history, or it is a 熱門 fare in the cheapest third of its search. It is never shown as a label in the web app (the 強烈買 / 可買 / 觀望 pills were removed); its names are also kept out of the advice commentary and the LINE badge (which say "best-value" / "great price" instead); it only drives the highlights strip, Price Watch triggers and the card's `data-strong` flag.
 _Avoid_: Price score, recommendation tier
 
 **Price Watch**:
