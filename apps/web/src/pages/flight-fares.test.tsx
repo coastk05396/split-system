@@ -168,7 +168,27 @@ describe("Flight Radar compact price list", () => {
       ]);
       await explore(api, language);
       await screen.findByRole("list", { name: text[language].fares });
-      expect(screen.getByText(text[language].oneStop)).toBeVisible();
+      // The stop count sits on the visible route line, not only in screen-reader text.
+      const stops = screen.getByTestId("fare-stops");
+      expect(stops).toHaveTextContent(language === "en" ? "1 stop · 3h 10m" : "轉機 1 次 · 3h 10m");
+      expect(stops.closest(".sr-only")).toBeNull();
+    },
+  );
+
+  it("shows no stop text on a nonstop fare", async () => {
+    const { api } = setup("en", [fare("Direct Air", 20000)]);
+    await explore(api, "en");
+    await screen.findByRole("list", { name: text.en.fares });
+    expect(screen.queryByTestId("fare-stops")?.textContent ?? "").not.toMatch(/stop/i);
+  });
+
+  it.each(["en", "zh-TW"] as const)(
+    "keeps a plain search's price note for screen readers only in %s",
+    async (language) => {
+      const { api } = setup(language, [fare("Plain Air", 20000)]);
+      await explore(api, language);
+      await screen.findByRole("list", { name: text[language].fares });
+      expect(screen.getByTestId("fare-note")).toHaveClass("sr-only");
     },
   );
 

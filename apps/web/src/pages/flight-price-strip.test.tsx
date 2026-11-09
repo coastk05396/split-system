@@ -86,7 +86,10 @@ describe("Flight Radar Price Strip dock", () => {
       expect(bars(strip)[indexOfSearched]?.dataset.kind).toBe("cheap");
       expect(bars(strip).some((bar) => bar.dataset.kind === "pricey")).toBe(true);
       expect(bars(strip).some((bar) => bar.dataset.kind === "normal")).toBe(true);
-      expect(within(await dock(language)).getByText(text[language].note)).toBeVisible();
+      // jest-dom cannot see sr-only clipping, so the note must not carry that class at all.
+      const note = within(await dock(language)).getByText(text[language].note);
+      expect(note).toBeVisible();
+      expect(note).not.toHaveClass("sr-only");
       expect(app.api.calls).not.toContain("POST /api/v1/flights/search");
       // The window can span two months; each month is one stored-prices read.
       const months = new Set([first.slice(0, 7), at(29).slice(0, 7)]);
@@ -388,7 +391,9 @@ describe("Flight Radar Price Strip dock", () => {
     ];
     await slider(language);
     const region = await dock(language);
-    expect(within(region).getByText(text[language].age)).toBeVisible();
+    const age = within(region).getByText(text[language].age);
+    expect(age).toBeVisible();
+    expect(age.closest(".sr-only")).toBeNull();
   });
 
   it.each(["en", "zh-TW"] as const)(

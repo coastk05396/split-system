@@ -136,10 +136,10 @@ export function RouteCard({
             </span>
             <span className="shrink-0">{fullDates + partyNote}</span>
           </span>
-          {/* Narrow card: airport codes and short dates, about 200 to 236 px; the dates cannot be clipped. */}
-          <span className="flex items-center gap-1.5 @lg:hidden">
-            <span className="shrink-0">
-              {intent.origin} → {intent.destination}
+          {/* Narrow card: city names (only these may shrink) and short dates, so the dates cannot be clipped. */}
+          <span className="flex min-w-0 items-center gap-1.5 @lg:hidden">
+            <span className="min-w-0 truncate">
+              {airportName(intent.origin)} → {airportName(intent.destination)}
             </span>
             <span className="shrink-0">
               {shortRange(intent.departureDate, intent.returnDate) + partyNote}

@@ -98,6 +98,7 @@ export function FareResults({
           saved={saved}
           motion={motion}
           note={footnote(reply.intent)}
+          disclose={!isStandardSearch(reply.intent) || partyOf(reply.intent).infants > 0}
         />
       )}
     </section>
@@ -191,7 +192,9 @@ function FareList({
   saved,
   motion,
   note,
+  disclose,
 }: {
+  disclose: boolean;
   note: string;
   cards: FlightCard[];
   sort: FareSort;
@@ -264,7 +267,10 @@ function FareList({
           </svg>
         </button>
       )}
-      <p className="sr-only">{note}</p>
+      {/* The price basis shows when the party is not the plain 1 adult trip, or has an infant. */}
+      <p className={disclose ? "fr-lg" : "sr-only"} data-testid="fare-note">
+        {note}
+      </p>
     </>
   );
 }
@@ -430,7 +436,11 @@ function FareCardItem({
               <svg viewBox="0 0 24 24" className="fare-plane">
                 <path d={PLANE} />
               </svg>
-              {chip && <span>{chip}</span>}
+              {(chip || card.stops > 0) && (
+                <span data-testid="fare-stops">
+                  {card.stops > 0 && chip ? `${stops} · ${chip}` : card.stops > 0 ? stops : chip}
+                </span>
+              )}
             </div>
             <b>{card.intent.destination}</b>
           </div>

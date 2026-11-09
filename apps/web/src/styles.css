@@ -1109,6 +1109,7 @@
   background: #fff;
   border: 1px solid var(--color-sprout-200);
   border-radius: 99px;
+  white-space: nowrap;
 }
 .fr-path svg {
   position: absolute;
@@ -1427,7 +1428,8 @@
 }
 .fr-links {
   display: flex;
-  gap: 6px;
+  /* 34 px circles with 10 px between: the 44 px touch targets (fr-hit) meet and never overlap. */
+  gap: 10px;
 }
 .fr-ic {
   position: relative;

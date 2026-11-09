@@ -139,7 +139,7 @@ describe("Flight Radar header and route card", () => {
     setup("en", { ...intent, origin: "ZZZ" });
     await explore("en");
     const card = screen.getByRole("region", { name: text.en.card });
-    expect(card).toHaveTextContent("ZZZ → OKA");
+    expect(card).toHaveTextContent(/ZZZ → \S/);
     expect(card).not.toHaveTextContent(/km/);
     expect(card).not.toHaveTextContent(/NaN|undefined/);
   });
@@ -182,15 +182,15 @@ describe("Flight Radar header and route card", () => {
   );
 
   it.each(["en", "zh-TW"] as const)(
-    "never truncates the dates and offers a compact code form for narrow cards in %s",
+    "never truncates the dates and offers a short-date form with city names for narrow cards in %s",
     async (language) => {
       setup(language);
       await explore(language);
       const card = screen.getByRole("region", { name: text[language].card });
       const chip = within(card).getByRole("button", { name: text[language].chip });
-      // jsdom has no layout, so check what is rendered: codes and short dates are always present
-      // for the narrow form, and no date text sits inside an element that can be clipped.
-      expect(within(chip).getByText("TPE → OKA")).toBeInTheDocument();
+      // jsdom has no layout, so check what is rendered: short dates are always present for the
+      // narrow form (the mock shows city names there, not codes), and no date text can be clipped.
+      expect(within(chip).queryByText("TPE → OKA")).toBeNull();
       const compactDates = within(chip).getByText("1/8–1/11");
       const fullDates = within(chip).getByText(text[language].dates);
       for (const dates of [compactDates, fullDates]) {
@@ -198,11 +198,9 @@ describe("Flight Radar header and route card", () => {
         expect(dates).toHaveClass("shrink-0");
       }
       // Only the long city-name route may shrink.
-      expect(
-        within(chip)
-          .getByText(/Taipei Taoyuan|台北桃園/)
-          .closest(".truncate"),
-      ).not.toBeNull();
+      for (const names of within(chip).getAllByText(/Taipei Taoyuan|台北桃園/)) {
+        expect(names.closest(".truncate")).not.toBeNull();
+      }
     },
   );
 

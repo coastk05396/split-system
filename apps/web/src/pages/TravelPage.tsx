@@ -352,9 +352,10 @@ export function TravelPage() {
           </p>
         )}
         {/* After a search the results come first, right under the summary; the page scrolls here. */}
-        <div ref={resultsTop} className="grid scroll-mt-4 gap-3.5">
+        {/* The mock keeps its closed panel's 14 px row above the results; the advice has no box. */}
+        <div ref={resultsTop} className={`grid scroll-mt-4 gap-3.5 ${panelOpen ? "" : "mt-3.5"}`}>
           {reply && advise.data && (
-            <section aria-label={t("flight.advice")} className="mt-3 grid gap-3">
+            <section aria-label={t("flight.advice")} className="contents">
               <p className="sr-only">{firstSentence(advise.data.commentary)}</p>
             </section>
           )}

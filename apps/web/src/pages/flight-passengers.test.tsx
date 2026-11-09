@@ -317,7 +317,10 @@ describe("Passengers sheet", () => {
       adults: 2,
       infants: 1,
     });
-    expect(screen.getByText(/Price excludes infants\./)).toBeVisible();
+    // Visible on screen, not screen-reader-only (jest-dom cannot see that clipping).
+    const exclusion = screen.getByText(/Price excludes infants\./);
+    expect(exclusion).toBeVisible();
+    expect(exclusion.closest(".sr-only")).toBeNull();
     expect(screen.getAllByText(/21,000/).length).toBeGreaterThan(0); // not multiplied
     expect(
       screen.getByText(/Prices are round-trip totals for all 2 adults, Economy/),
