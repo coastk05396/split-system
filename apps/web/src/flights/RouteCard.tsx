@@ -37,7 +37,12 @@ function useRoll(target: number | undefined): number | undefined {
   const current = useRef(target);
   useEffect(() => {
     if (target === undefined || prefersReducedMotion()) return;
-    const start = current.current ?? target;
+    if (current.current === undefined) {
+      current.current = target;
+      setShown(target);
+      return;
+    }
+    const start = current.current;
     if (start === target) return;
     const t0 = performance.now();
     let frame = 0;
