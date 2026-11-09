@@ -1,4 +1,5 @@
 import { Settings } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { partyOf, routeEstimate, type FlightSearchIntent } from "@split/shared";
 import { getLocale, t } from "../i18n/messages.js";
@@ -7,6 +8,7 @@ import { airportName } from "./AirportPicker.js";
 import { friendlyRange, shortRange } from "./dates.js";
 import type { FareSort } from "./FareResults.js";
 import { Globe } from "./Globe.js";
+import { prefersReducedMotion } from "../shell/motion.js";
 
 const plane =
   "M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z";
@@ -29,16 +31,69 @@ function Place({ code, end }: { code: string; end?: boolean }) {
   );
 }
 
-/** Distance and rough flight time, shown only when both airports have known coordinates. */
-function leg(origin: string, destination: string): string | undefined {
+/** A number that rolls to its new value (ease-out, 800 ms) instead of jumping; reduced motion jumps. */
+function useRoll(target: number | undefined): number | undefined {
+  const [shown, setShown] = useState(target);
+  const current = useRef(target);
+  useEffect(() => {
+    if (target === undefined || prefersReducedMotion()) return;
+    const start = current.current ?? target;
+    if (start === target) return;
+    const t0 = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / 800);
+      current.current =
+        k >= 1 ? target : Math.round(start + (target - start) * (1 - 2 ** (-10 * k)));
+      setShown(current.current);
+      if (k < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [target]);
+  return prefersReducedMotion() ? target : shown;
+}
+
+/**
+ * Distance and rough flight time beside the globe, rolling to each new route; shown only when both
+ * airports have known coordinates. The rolling figures are hidden from assistive tech, which gets
+ * the settled text once.
+ */
+function Leg({ origin, destination }: { origin: string; destination: string }) {
   const estimate = routeEstimate(origin, destination);
-  if (!estimate) return undefined;
+  const km = useRoll(estimate?.km);
+  const minutes = useRoll(estimate?.minutes);
+  if (!estimate || km === undefined || minutes === undefined) return null;
   const hours = Math.floor(estimate.minutes / 60);
-  return t("flight.routeLeg", {
-    km: estimate.km.toLocaleString(getLocale()),
-    hours,
-    minutes: estimate.minutes - hours * 60,
-  });
+  return (
+    <p className="flex flex-wrap gap-x-3.5 text-[13px] whitespace-nowrap text-ink-muted tabular-nums">
+      <span className="sr-only">
+        {t("flight.routeLeg", {
+          km: estimate.km.toLocaleString(getLocale()),
+          hours,
+          minutes: estimate.minutes - hours * 60,
+        })}
+      </span>
+      <span aria-hidden="true">
+        {t("flight.legDistance")}{" "}
+        <b data-leg="km" className="font-semibold text-ink">
+          {km.toLocaleString(getLocale())}
+        </b>{" "}
+        {t("flight.legKm")}
+      </span>
+      <span aria-hidden="true">
+        {t("flight.legTime")}{" "}
+        <b data-leg="time" className="font-semibold text-ink">
+          {t("flight.legDuration", {
+            hours: Math.floor(minutes / 60),
+            minutes: String(minutes % 60).padStart(2, "0"),
+          })}
+        </b>
+      </span>
+    </p>
+  );
 }
 
 /**
@@ -55,7 +110,6 @@ export function RouteCard({
   onSearch,
   sort,
   onSort,
-  globe,
 }: {
   intent: FlightSearchIntent;
   pending: boolean;
@@ -64,10 +118,7 @@ export function RouteCard({
   onSearch: () => void;
   sort: FareSort;
   onSort: (key: FareSort["key"]) => void;
-  /** The catalogue airport the globe faces. */
-  globe: string | undefined;
 }) {
-  const estimate = leg(intent.origin, intent.destination);
   const fullDates = friendlyRange(intent.departureDate, intent.returnDate);
   const party = partyOf(intent);
   const partyNote = [
@@ -155,37 +206,28 @@ export function RouteCard({
             </svg>
             <span className="h-0.5 flex-1 rounded-full bg-[#8cc3a8]" />
           </div>
-          {estimate && (
-            <span className="text-center text-xs font-bold text-sprout-700 tabular-nums">
-              {estimate}
-            </span>
-          )}
         </div>
         <Place code={intent.destination} end />
       </div>
-      {/* The globe shares the button's row, so it costs about 50 px of height, not 114. */}
-      <div className="flex items-center gap-3">
-        <Globe code={globe} />
-        {!open && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onSearch}
-            className={`${travelButton} min-h-12 flex-1 text-[17px]`}
+      {!open && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onSearch}
+          className={`${travelButton} min-h-12 text-[17px]`}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="size-5 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round]"
           >
-            <svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              className="size-5 shrink-0 fill-none stroke-current stroke-[2.2] [stroke-linecap:round]"
-            >
-              <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
-              <circle cx="16" cy="7" r="2" />
-              <circle cx="8" cy="17" r="2" />
-            </svg>
-            {t("flight.exploreAgain")}
-          </button>
-        )}
-      </div>
+            <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+            <circle cx="16" cy="7" r="2" />
+            <circle cx="8" cy="17" r="2" />
+          </svg>
+          {t("flight.exploreAgain")}
+        </button>
+      )}
     </section>
   );
 }
@@ -203,29 +245,62 @@ export function SettingsLink() {
   );
 }
 
-/** The headline and its bell, which links to the Price Watch list. */
-export function TravelHeader({ intent }: { intent: FlightSearchIntent }) {
-  return (
-    <header className="mb-5 flex items-start justify-between gap-3 px-1">
-      <div className="grid min-w-0 gap-1">
-        <h1 className="text-[28px] leading-[1.15] font-black">{headline(intent)}</h1>
-        <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>
-      </div>
-      <div className="flex shrink-0 gap-1.5">
-        <Link
-          to="/travel/watches"
-          aria-label={t("flight.radar")}
-          className="press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+/**
+ * The headline and its bell, which links to the Price Watch list. With `globe` (Flight Radar) the
+ * Route Globe sits at the top right, about 118 px, with the rolling distance and flight time under
+ * the tagline and the buttons under those; without it (Explore) the buttons sit at the right.
+ */
+export function TravelHeader({
+  intent,
+  globe,
+}: {
+  intent: FlightSearchIntent;
+  /** The catalogue airport the globe faces; omit the prop for no globe. */
+  globe?: { code: string | undefined };
+}) {
+  const buttons = (
+    <div className="flex shrink-0 gap-1.5">
+      <Link
+        to="/travel/watches"
+        aria-label={t("flight.radar")}
+        className="press-pill flex size-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-sprout-200 bg-white focus-visible:outline-2 focus-visible:outline-sprout-700"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className="size-[22px] fill-none stroke-sprout-900 stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
         >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-[22px] fill-none stroke-sprout-900 stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
-          >
-            <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
-          </svg>
-        </Link>
-        <SettingsLink />
+          <path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 0 0 4 0" />
+        </svg>
+      </Link>
+      <SettingsLink />
+    </div>
+  );
+  const title = (
+    <>
+      <h1 className={`${globe ? "text-2xl" : "text-[28px]"} leading-[1.15] font-black`}>
+        {headline(intent)}
+      </h1>
+      <p className="text-[15px] font-medium text-ink-muted">{t("flight.tagline")}</p>
+    </>
+  );
+  if (!globe)
+    return (
+      <header className="mb-5 flex items-start justify-between gap-3 px-1">
+        <div className="grid min-w-0 gap-1">{title}</div>
+        {buttons}
+      </header>
+    );
+  return (
+    <header className="mb-5 flex items-center justify-between gap-2 px-1">
+      <div className="grid min-w-0 justify-items-start gap-1.5">
+        {title}
+        <Leg origin={intent.origin} destination={intent.destination} />
+        {buttons}
+      </div>
+      {/* The bob and the negative margins are the reference mock's: the globe floats at the corner. */}
+      <div className="globe-bob -mt-1.5 -mr-2 -mb-2.5 shrink-0">
+        <Globe code={globe.code} size={118} />
       </div>
     </header>
   );

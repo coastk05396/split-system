@@ -65,8 +65,12 @@ The single outlined chip on Flight Radar's search summary card that states the r
 _Avoid_: Route pill, edit button
 
 **Route Globe**:
-The small (100 px) globe of real land outlines in Flight Radar's search summary card. It turns to the catalogue airport the User picks or types as the destination (by code, or by English or Traditional Chinese city name) and drops a marker there; unknown input leaves it where it is, and countries are not recognised. Decoration and feedback only, never a control.
+The small (about 118 px) globe of real land outlines at the top right of Flight Radar's header, beside the distance and flight-time readouts. It turns to the catalogue airport the User picks or types as the destination (by code, or by English or Traditional Chinese city name) and drops a marker there; unknown input leaves it where it is, and countries are not recognised. Decoration and feedback only, never a control.
 _Avoid_: Map, 小芽 globe
+
+**Fare Ticker**:
+The scrolling strip of chips at the top of Flight Radar: for each destination that has a Fare Snapshot from the User's origin, its code and the cheapest saved fare, with a green −N% only where Deal Signal history says it beats the usual price. Built only from Fare Snapshots and fare history, never from a live search or the flight source; tapping a chip sets the destination. Static under reduced motion.
+_Avoid_: Marquee, deals bar, price ticker
 
 **Date Tile**:
 One priced departure date of the current Flight Radar search, shown as a pressable tile with its cheapest fare, so the User can compare what each date costs and switch which date's fares are shown. The cheapest date (every one on a tie) is marked 最低; the date whose fares are listed is marked 已選.

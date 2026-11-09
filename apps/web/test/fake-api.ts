@@ -11,7 +11,7 @@ import {
   createFlightWatchSchema,
   type FlightPriceWatch,
 } from "@split/shared";
-import type { CurrencyCode, Me } from "@split/shared";
+import type { CurrencyCode, FlightTickerReply, Me } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
 /**
@@ -26,6 +26,9 @@ export interface FakeApi {
   /** Fare Snapshots the Price Strip reads, and the query strings it asked with. */
   flightPriceStrip: { date: string; price: number; fetchedAt: number }[];
   flightPriceStripQueries: string[];
+  /** Fare Ticker chips (saved snapshots), and the query strings it asked with. */
+  flightTicker: FlightTickerReply["chips"];
+  flightTickerQueries: string[];
   flightHighlights: FlightCard[];
   flightHistory: FareHistoryStats | null;
   flightWatches: FlightPriceWatch[];
@@ -136,6 +139,8 @@ export function createFakeApi(): FakeApi {
     flightsDegraded: false,
     flightPriceStrip: [],
     flightPriceStripQueries: [],
+    flightTicker: [],
+    flightTickerQueries: [],
     flightHighlights: [],
     flightHistory: null,
     flightWatches: [],
@@ -297,6 +302,11 @@ export function createFakeApi(): FakeApi {
         return authed === undefined
           ? error("UNAUTHORIZED", 401)
           : json({ days: api.flightPriceStrip });
+      case "GET /api/v1/flights/ticker":
+        api.flightTickerQueries.push(url.search);
+        return authed === undefined
+          ? error("UNAUTHORIZED", 401)
+          : json({ chips: api.flightTicker });
       case "POST /api/v1/flights/search": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);
         const parsed = flightSearchRequestSchema.safeParse(await readJson(init));

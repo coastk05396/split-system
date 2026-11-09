@@ -22,6 +22,7 @@ import { DEFAULT_SORT, FareResults, type FareSort } from "../flights/FareResults
 import { findPlace } from "../flights/place.js";
 import { DateTiles, dateTiles } from "../flights/DateTiles.js";
 import { PriceStrip } from "../flights/PriceStrip.js";
+import { FareTicker } from "../flights/FareTicker.js";
 import { readLastSearch, writeLastSearch } from "../flights/last-search.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { readWithRev } from "../groups/data.js";
@@ -184,7 +185,14 @@ export function TravelPage() {
   const tiles = dateTiles(reply, picked?.reply === reply ? picked?.date : undefined);
   return (
     <>
-      <TravelHeader intent={active} />
+      <FareTicker
+        intent={active}
+        onPick={(destination) => {
+          const { theme: _theme, ...rest } = active;
+          setActive({ ...rest, destination });
+        }}
+      />
+      <TravelHeader intent={active} globe={{ code: globe }} />
       <form
         className="glass-chip mb-4 flex items-center gap-2 rounded-full border border-sprout-200 p-1.5 pl-4 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-sprout-700"
         onSubmit={(event) => {
@@ -227,7 +235,6 @@ export function TravelPage() {
           // A second tap on the active button reverses it; a new button starts ascending.
           setSort((s) => ({ key, descending: s.key === key && !s.descending }));
         }}
-        globe={globe}
       />
       <EntityPills
         intent={active}

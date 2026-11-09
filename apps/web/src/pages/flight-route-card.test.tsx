@@ -86,7 +86,8 @@ describe("Flight Radar header and route card", () => {
       expect(within(card).getByText("TPE")).toBeVisible();
       expect(within(card).getByText("OKA")).toBeVisible();
       expect(within(card).getByText("TPE")).toHaveClass("text-[40px]");
-      expect(within(card).getByText(text[language].leg)).toBeVisible();
+      // The distance and flight time moved to the header, beside the globe.
+      expect(screen.getByText(text[language].leg)).toBeInTheDocument();
       expect(within(card).getByRole("button", { name: text[language].chip })).toBeVisible();
       // The route-and-dates pill is gone; the other pills stay below the card.
       expect(screen.queryByRole("button", { name: /^TPE → OKA ・/ })).toBeNull();

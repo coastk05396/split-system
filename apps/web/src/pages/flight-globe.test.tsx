@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { openSearchPanel } from "../../test/flight-panel.js";
@@ -51,17 +51,17 @@ async function typeDestination(language: Language, value: string) {
 }
 
 describe("Flight Radar globe", () => {
-  it.each(languages)("sits in the route card, turned to the searched place, in %s", async (l) => {
+  it.each(languages)("sits in the header, turned to the searched place, in %s", async (l) => {
     setup(l);
     const card = await screen.findByRole("region", { name: words[l].card });
     const el = await globe(words[l].okinawa);
-    expect(card).toContainElement(el);
-    // Below the Route Chip, in the card.
-    const chip = within(card).getAllByRole("button")[0] as HTMLElement;
-    expect(chip.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // In the header above the route card, not in it.
+    expect(card).not.toContainElement(el);
+    expect(el.closest("header")).not.toBeNull();
+    expect(el.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(centre(el)).toBe("26.2,127.7");
     expect(el).toHaveAttribute("height", "200");
-    expect(el.style.height).toBe("100px");
+    expect(el.style.height).toBe("118px");
   });
 
   it.each(languages)("turns to a catalogue code, then a city name, in %s", async (l) => {

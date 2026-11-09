@@ -1,4 +1,4 @@
-import { flightHighlights } from "./history.js";
+import { fareTicker, flightHighlights } from "./history.js";
 import { z } from "zod";
 import {
   airportCodeSchema,
@@ -24,6 +24,8 @@ const priceStripQuerySchema = z.object({
   currency: currencyCodeSchema,
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
 });
+
+const tickerQuerySchema = z.object({ origin: airportCodeSchema, currency: currencyCodeSchema });
 
 export function flightRoutes(deps: AppDeps) {
   return (
@@ -64,6 +66,15 @@ export function flightRoutes(deps: AppDeps) {
           },
           200,
         );
+      })
+      // Fare Ticker: Fare Snapshots and fare history only; it never reaches the flight source.
+      .get("/flights/ticker", requireUser(deps.now), async (c) => {
+        const query = tickerQuerySchema.safeParse({
+          origin: c.req.query("origin"),
+          currency: c.req.query("currency"),
+        });
+        if (!query.success) throw new ApiError("VALIDATION_FAILED");
+        return c.json(await fareTicker(c.env.DB, query.data, deps.now()), 200);
       })
       .post("/flights/search", requireUser(deps.now), async (c) => {
         const request = await parseBody(c, flightSearchRequestSchema);

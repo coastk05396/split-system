@@ -91,9 +91,10 @@ function draw(ctx: CanvasRenderingContext2D, view: View): void {
 /**
  * A small globe of real land outlines that turns to a catalogue airport and drops a marker there.
  * Decoration and feedback only: not focusable, no tap target. Reduced motion jumps instead of
- * turning. `code` unknown to the catalogue leaves it where it is.
+ * turning. `code` unknown to the catalogue leaves it where it is. `size` is the CSS size; the
+ * canvas keeps 200 px of its own, so a larger size is scaled, not redrawn.
  */
-export function Globe({ code }: { code: string | undefined }) {
+export function Globe({ code, size = SIZE }: { code: string | undefined; size?: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const view = useRef<View>({ centre: HOME, marker: 0, target: undefined, land: undefined });
   const target = code ? airportCoordinates(code) : undefined;
@@ -168,7 +169,7 @@ export function Globe({ code }: { code: string | undefined }) {
       }
       width={SIZE * 2}
       height={SIZE * 2}
-      style={{ width: SIZE, height: SIZE }}
+      style={{ width: size, height: size }}
       className="shrink-0"
     />
   );
