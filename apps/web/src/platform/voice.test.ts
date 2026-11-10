@@ -80,6 +80,23 @@ describe("createVoiceRecorder", () => {
     await expect(recording?.stop()).rejects.toThrow();
   });
 
+  it("rejects a stop that is waiting when the recorder breaks, instead of handing back partial audio", async () => {
+    const { log, recorders } = stubBrowser();
+    const recording = await createVoiceRecorder()?.start(() => undefined);
+    const recorder = recorders[0];
+    if (!recorder) throw new Error("no recorder");
+    // The browser reports the error before it delivers the stop event.
+    recorder.stop = () => {
+      recorder.state = "inactive";
+      recorder.ondataavailable?.({ data: new Blob(["partial"]) });
+    };
+    const stopping = recording?.stop();
+    recorder.onerror?.();
+    recorder.onstop?.();
+    await expect(stopping).rejects.toThrow();
+    expect(log.tracksStopped).toBeGreaterThanOrEqual(1);
+  });
+
   it("hands back what was recorded on stop and releases the microphone once", async () => {
     const { log } = stubBrowser();
     const recording = await createVoiceRecorder()?.start(() => undefined);

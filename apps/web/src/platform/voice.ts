@@ -64,10 +64,13 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
       };
       frame = requestAnimationFrame(measure);
       let failed = false;
+      // Set while a stop is waiting for the recorder's last data; an error then rejects it.
+      let rejectStop: ((error: Error) => void) | undefined;
       recorder.onerror = () => {
         if (failed) return;
         failed = true;
         release();
+        rejectStop?.(new Error("recorder failed"));
         onFail?.();
       };
       const release = () => {
@@ -82,7 +85,13 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
               reject(new Error("recorder failed"));
               return;
             }
+            rejectStop = reject;
             const finish = () => {
+              // The stop event can follow an error; what was recorded is then incomplete.
+              if (failed) {
+                reject(new Error("recorder failed"));
+                return;
+              }
               release();
               resolve(new Blob(chunks, { type: recorder.mimeType }));
             };
