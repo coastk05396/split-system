@@ -74,12 +74,16 @@ describe("consumeRateLimit", () => {
 
   it("matches the limits of decision 27", () => {
     expect(RATE_LIMITS).toEqual({
+      flights_voice: { limit: 6, windowMs: 60_000 },
       expense_write: { limit: 30, windowMs: 60_000 },
       invite_join: { limit: 10, windowMs: 60_000 },
       group_create: { limit: 5, windowMs: 3_600_000 },
       membership_lookup: { limit: 30, windowMs: 60_000 },
       settlement_lookup_fallback: { limit: 30, windowMs: 60_000 },
       rates_lookup: { limit: 30, windowMs: 60_000 },
+      flights_minute: { limit: 10, windowMs: 60_000 },
+      flights_hour: { limit: 40, windowMs: 3_600_000 },
+      flights_advise: { limit: 20, windowMs: 60_000 },
     });
   });
 });

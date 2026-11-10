@@ -8,12 +8,14 @@ export const WELCOME_TEXT = [
   "嗨，歡迎加入小芽分帳 🌱",
   "聚餐快分、旅行慢慢記，一群人的開銷交給小芽。",
   "點下方「小芽快捷選單」就能建立群組、記一筆或查看結算。",
+  "想找便宜機票？直接問我，例如「下個月週末去沖繩」，小芽幫你比價。",
 ].join("\n");
 
 export const HELP_TEXT = [
   "小芽使用幫助 🌱",
   "・快速分帳：建立群組，邀朋友一起記帳",
-  "・我的旅程：打開最近的旅行",
+  "・我的旅程：打開機票雷達，找特價機票",
+  "・問機票：直接傳「下個月週末去沖繩」，小芽回傳航班卡片",
   "・記一筆：新增一筆開銷",
   "・查看結算：看看誰該付給誰",
   "・邀請夥伴：分享邀請連結",
@@ -26,6 +28,8 @@ export const MENU_POINTER_TEXT = "點下方選單就能記帳 🌱";
 const eventSchema = z.looseObject({
   type: z.string(),
   replyToken: z.string().optional(),
+  source: z.looseObject({ type: z.string(), userId: z.string().optional() }).optional(),
+  message: z.looseObject({ type: z.string(), text: z.string().optional() }).optional(),
   postback: z.looseObject({ data: z.string() }).optional(),
 });
 
@@ -35,17 +39,19 @@ export const webhookBodySchema = z.looseObject({ events: z.array(eventSchema) })
 export type WebhookEvent = z.infer<typeof eventSchema>;
 
 /**
- * The replies for one event: follow, message and the help postback only. Every other
- * event (unfollow, join, other postbacks) gets nothing.
+ * The replies for one event: follow, and one-on-one message and the help postback only.
+ * Every other event (group or room chat, unfollow, join, other postbacks) gets nothing.
  */
 export function repliesFor(event: WebhookEvent): LineMessage[] {
   switch (event.type) {
     case "follow":
       return [{ type: "text", text: WELCOME_TEXT }];
     case "message":
-      return [{ type: "text", text: MENU_POINTER_TEXT }];
+      return event.source?.type === "user" ? [{ type: "text", text: MENU_POINTER_TEXT }] : [];
     case "postback":
-      return event.postback?.data === HELP_POSTBACK_DATA ? [{ type: "text", text: HELP_TEXT }] : [];
+      return event.source?.type === "user" && event.postback?.data === HELP_POSTBACK_DATA
+        ? [{ type: "text", text: HELP_TEXT }]
+        : [];
     default:
       return [];
   }

@@ -3,17 +3,19 @@
 > **專案名稱**：小芽分帳 (Short: 小芽)  
 > **正式網域**：`split.rickchen.si`  
 > **狀態**：Build-Ready Specification (Wayfinder Completed)  
-> **基礎設施原則**：100% Cloudflare Free Tier / Zero-Server / Local-First Development  
+> **基礎設施原則**：100% Cloudflare Free Tier / Zero-Server / Local-First Development
 
 ---
 
 ## 1. 產品概述與邊界 (Product Overview & Scope)
 
 ### 1.1 產品定位
+
 「小芽分帳」是一款專為好友、室友與團體旅遊打造的輕量化分帳與記帳工具。兼具「日常聚會累加分帳 (Running Tab)」與「旅遊行程分帳 (Trip)」，深度整合 LINE LIFF (手機端原生體驗) 與 Web App (桌面端全功能)，並以小豆芽吉祥物作為親切的系統通知角色。
 
 ### 1.2 系統邊界
-* **In-Scope (v1 發布範圍)**：
+
+- **In-Scope (v1 發布範圍)**：
   - 介面語言：繁體中文 (`zh-TW`，預設) 與英文 (`en`)；語言存在帳號上，於設定頁切換，首次依裝置語言決定。
   - 幣別支援：新台幣 (`TWD`，整數元)、美元 (`USD`，美分)、日元 (`JPY`，整數元) 與泰銖 (`THB`，satang，兩位小數)。
   - 雙軌登入：桌面端 Google SSO、手機端 LINE LIFF 靜默自動登入；支援已登入狀態下的手動身分綁定。
@@ -26,7 +28,7 @@
   - 行程模組：目的地、日期、每日時間軸站點 (自動按時間排序)、地圖文字連結搜尋。
   - 虛擬成員 (Placeholders)：未註冊好友代記，後續可認領與合併。
   - 單一響應式 SPA：桌面寬螢幕雙欄側邊欄，手機端底部五分頁導覽。
-* **Out-of-Scope (v1 排除項目)**：
+- **Out-of-Scope (v1 排除項目)**：
   - 英文以外的其他語言（日文、泰文等）；LINE Bot 回覆與圖文選單、隱私權政策與服務條款僅提供繁體中文。
   - LINE Bot 自然語言文字記帳（Bot 僅提供 Rich Menu 圖文選單與被動回覆）。
   - 金流支付或銀行轉帳（系統僅記錄與計算債務，不碰實體金流）。
@@ -54,36 +56,43 @@
 ```
 
 ### 2.1 倉庫結構 (pnpm Workspace Monorepo)
-* `apps/worker`：Cloudflare Worker (Hono REST API、認證、Drizzle ORM)。
-* `apps/web`：React 19 + Vite + Tailwind CSS v4 + Radix UI (單頁應用)。
-* `packages/shared`：前後端共享之 Zod Schemas、TypeScript 型別、純函數金流運算引擎與測試。
+
+- `apps/worker`：Cloudflare Worker (Hono REST API、認證、Drizzle ORM)。
+- `apps/web`：React 19 + Vite + Tailwind CSS v4 + Radix UI (單頁應用)。
+- `packages/shared`：前後端共享之 Zod Schemas、TypeScript 型別、純函數金流運算引擎與測試。
 
 ---
 
 ## 3. 金額模型與運算引擎 (Money & Settlement Engine)
 
 ### 3.1 最小貨幣整數儲存 (Minor Unit Integer)
-* `TWD`：`decimals = 0`，以整數「元」儲存 (例如 NT$ 2,160 存 `2160`)。
-* `USD`：`decimals = 2`，以整數「分」儲存 (例如 US$ 12.34 存 `1234`)。
-* `JPY`：`decimals = 0`，以整數「元」儲存 (例如 JP¥ 1,500 存 `1500`)，符號 `JP¥`。
-* `THB`：`decimals = 2`，以整數 satang 儲存 (例如 ฿ 1,234.50 存 `123450`)，符號 `฿`。
-* 金額限制：每筆支出 1 至 99,999,999 單位。禁止負數支出。
+
+- `TWD`：`decimals = 0`，以整數「元」儲存 (例如 NT$ 2,160 存 `2160`)。
+- `USD`：`decimals = 2`，以整數「分」儲存 (例如 US$ 12.34 存 `1234`)。
+- `JPY`：`decimals = 0`，以整數「元」儲存 (例如 JP¥ 1,500 存 `1500`)，符號 `JP¥`。
+- `THB`：`decimals = 2`，以整數 satang 儲存 (例如 ฿ 1,234.50 存 `123450`)，符號 `฿`。
+- 金額限制：每筆支出 1 至 99,999,999 單位。禁止負數支出。
 
 ### 3.2 確定性零頭分配規則 (Leftover Distribution)
+
 三個人均分 100 元 (`100 = 33 * 3 + 1`)：
+
 1. 每人先分 `floor(100 / 3) = 33`。
 2. 餘數 `1` 元分配順序：**付款人（若有參與分攤）優先得 1 元**，其餘按成員加入固定順序分配，每人最多分 1 元。
 3. 最終結果為 `34, 33, 33`。完全確定，無浮點誤差與隨機性。
-* **份數分攤 (Shares split)**：每人先得 `floor(total * weight / sum)`。若產生餘數，僅分配給產生小數零頭 (`hasRemainder`) 之成員，且付款人優先得 1 元；若某成員份額已為整除之整數，則不額外加 1，以確保所有人分得金額與數學期望值差距小於 1 單位。
+
+- **份數分攤 (Shares split)**：每人先得 `floor(total * weight / sum)`。若產生餘數，僅分配給產生小數零頭 (`hasRemainder`) 之成員，且付款人優先得 1 元；若某成員份額已為整除之整數，則不額外加 1，以確保所有人分得金額與數學期望值差距小於 1 單位。
 
 ### 3.3 匯率儲存與精度
-* 匯率以放大 `1,000,000` 倍之整數存儲於 D1（例如 31.5234 存為 `31523400`）。
-* 前端展示至小數點後 4 位。
-* 使用者輸入換算後金額時，系統自動反推匯率並設為自訂匯率標記。
+
+- 匯率以放大 `1,000,000` 倍之整數存儲於 D1（例如 31.5234 存為 `31523400`）。
+- 前端展示至小數點後 4 位。
+- 使用者輸入換算後金額時，系統自動反推匯率並設為自訂匯率標記。
 
 ### 3.4 還款計畫與債務簡化
-* **後端 Worker**：僅計算各成員的淨餘額 `Net Balance = 總支付 - 總分攤`（驗證總和恆等於 0）。
-* **前端 Web Worker**：
+
+- **後端 Worker**：僅計算各成員的淨餘額 `Net Balance = 總支付 - 總分攤`（驗證總和恆等於 0）。
+- **前端 Web Worker**：
   - 非零餘額人數 ≤ 20：執行精確圖論搜尋（Exact fewest-payments），介面標註「最少筆數」。
   - 非零餘額人數 > 20：執行貪婪演算法（Greedy），介面標註「至多 N-1 筆」。
 
@@ -246,46 +255,47 @@ CREATE TABLE fx_rates (
 ## 5. API 合約 (Typed Hono REST API)
 
 ### 5.1 認證與端點列表 (`/api/v1`)
-* **認證機制**：Header `Authorization: Bearer <access_jwt>` (效期 1 小時)。
-* **防重送與並行**：
+
+- **認證機制**：Header `Authorization: Bearer <access_jwt>` (效期 1 小時)。
+- **防重送與並行**：
   - POST 支出與結算帶 `Idempotency-Key`。
   - PATCH 帶 `If-Match: <updated_at>` 樂觀鎖校驗。
 
-| 模組 | HTTP 方法與路徑 | 說明 |
-| :--- | :--- | :--- |
-| **Auth** | `POST /auth/google` | Google ID Token 交換 Session |
-| | `POST /auth/line` | LINE LIFF ID Token 交換 Session |
-| | `POST /auth/refresh` | Cookie 輪轉換發 Access Token |
-| | `POST /auth/logout` | 登出當前裝置 |
-| | `POST /auth/link/:provider` | 綁定第二身分 |
-| | `POST /auth/link-code` & `POST /auth/link-code/redeem` | 產生連結碼 / 用連結碼加 Google ID Token 綁定 Google（見 W-8） |
-| | `DELETE /auth/identities/:provider`| 解除第三方身分綁定 |
-| | `GET /me` & `DELETE /me` | 查詢個人資料 / 刪除帳號 |
-| **Groups** | `GET /groups` & `POST /groups` | 取得群組列表 / 建立群組 |
-| | `GET, PATCH, DELETE /groups/:id` | 群組詳情 / 修改 / 刪除 |
-| **Members**| `GET /groups/:id/members` | 成員列表與即時淨餘額快照 |
-| | `PATCH /groups/:id/members/:mid` | 變更角色 (Admin/Member) 或設定暱稱 |
-| | `DELETE /groups/:id/members/:mid`| 移除成員 (餘額需歸零) |
-| | `POST /groups/:id/claim-placeholder`| 正式用戶認領虛擬成員 |
-| **Invites**| `POST /groups/:id/invite` | 管理員重新產生 12 小時邀請碼 |
-| | `GET /invites/:token` | 邀請資訊預覽 (群組名稱、成員數) |
-| | `POST /invites/:token/join` | 確認加入群組 |
-| **Expenses**| `GET, POST /groups/:id/expenses` | 開銷列表 (遊標分頁 50 筆) / 新增支出 (`D1.batch()`) |
-| | `GET, PATCH, DELETE /groups/:id/expenses/:eid` | 開銷明細 / 修改 / 刪除 |
-| **Balances**| `GET /groups/:id/balances` | 取得群組全體成員餘額 |
-| **Settlements**| `GET, POST /groups/:id/settlements`| 結算列表 / 記錄一筆付款（新建立的結算直接為已確認） |
-| | `POST /settlements/:sid/undo` | 撤銷結算 |
-| **Stops** | `GET, POST /groups/:id/stops` | 查詢每日站點 / 新增站點 |
-| | `PATCH, DELETE /groups/:id/stops/:sid` | 編輯站點 / 刪除站點 |
-| **Rates** | `GET /rates?date&base&quote` | 查詢參考匯率 (D1 命中快取或調用 Frankfurter) |
-| **LINE** | `POST /line/webhook` | 驗證簽章，被動回覆圖文引導與說明 |
+| 模組            | HTTP 方法與路徑                                        | 說明                                                                                                                    |
+| :-------------- | :----------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| **Auth**        | `POST /auth/google`                                    | Google ID Token 交換 Session                                                                                            |
+|                 | `POST /auth/line`                                      | LINE LIFF ID Token 交換 Session                                                                                         |
+|                 | `POST /auth/refresh`                                   | Cookie 輪轉換發 Access Token                                                                                            |
+|                 | `POST /auth/logout`                                    | 登出當前裝置                                                                                                            |
+|                 | `POST /auth/link/:provider`                            | 綁定第二身分                                                                                                            |
+|                 | `POST /auth/link-code` & `POST /auth/link-code/redeem` | 產生連結碼 / 用連結碼加 Google ID Token 綁定 Google（見 W-8）                                                           |
+|                 | `DELETE /auth/identities/:provider`                    | 解除第三方身分綁定                                                                                                      |
+|                 | `GET /me` & `DELETE /me`                               | 查詢個人資料 / 刪除帳號                                                                                                 |
+| **Groups**      | `GET /groups` & `POST /groups`                         | 取得群組列表 / 建立群組                                                                                                 |
+|                 | `GET, PATCH, DELETE /groups/:id`                       | 群組詳情 / 修改 / 刪除                                                                                                  |
+| **Members**     | `GET /groups/:id/members`                              | 成員列表與即時淨餘額快照                                                                                                |
+|                 | `PATCH /groups/:id/members/:mid`                       | 變更角色 (Admin/Member) 或設定暱稱                                                                                      |
+|                 | `DELETE /groups/:id/members/:mid`                      | 移除成員 (餘額需歸零)                                                                                                   |
+|                 | `POST /groups/:id/claim-placeholder`                   | 正式用戶認領虛擬成員                                                                                                    |
+| **Invites**     | `POST /groups/:id/invite`                              | 管理員重新產生 12 小時邀請碼                                                                                            |
+|                 | `GET /invites/:token`                                  | 邀請資訊預覽 (群組名稱、成員數)                                                                                         |
+|                 | `POST /invites/:token/join`                            | 確認加入群組                                                                                                            |
+| **Expenses**    | `GET, POST /groups/:id/expenses`                       | 開銷列表 (遊標分頁 50 筆) / 新增支出 (`D1.batch()`)                                                                     |
+|                 | `GET, PATCH, DELETE /groups/:id/expenses/:eid`         | 開銷明細 / 修改 / 刪除                                                                                                  |
+| **Balances**    | `GET /groups/:id/balances`                             | 取得群組全體成員餘額                                                                                                    |
+| **Settlements** | `GET, POST /groups/:id/settlements`                    | 結算列表 / 記錄一筆付款（新建立的結算直接為已確認）                                                                     |
+|                 | `POST /settlements/:sid/undo`                          | 撤銷結算                                                                                                                |
+| **Stops**       | `GET, POST /groups/:id/stops`                          | 查詢每日站點 / 新增站點                                                                                                 |
+|                 | `PATCH, DELETE /groups/:id/stops/:sid`                 | 編輯站點 / 刪除站點                                                                                                     |
+| **Rates**       | `GET /rates?date&base&quote`                           | 查詢參考匯率 (D1 命中快取或調用 Frankfurter)                                                                            |
+| **LINE**        | `POST /line/webhook`                                   | 驗證簽章，被動回覆圖文引導與說明；一對一聊天的機票問題回覆 Flight Radar Flex Carousel（見〈Flight Radar — LINE chat〉） |
 
 ### 5.2 每日維護 (Cron)
 
 每日排程依序執行：清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率。
 
-* **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
-* **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。
+- **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
+- **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。
   - 回 204（仍在群組）：保留並改為「已生效」，避免同步延遲的列長期占據清理名額。
   - 帳本無法回答（錯誤或逾時 5 秒）：保留，留待下次。
   - 每次最多檢查 100 筆，由舊到新；任何一筆失敗都不得中斷整個每日排程。
@@ -295,36 +305,36 @@ CREATE TABLE fx_rates (
 
 ## 6. 前端規格與畫面校準 (Frontend & Screen Specs)
 
-* **導覽結構**：
-  - 手機端：底部五標籤（首頁、旅遊、＋記一筆、統計、設定）。點擊「旅遊」不切換路由，跳出「旅遊功能即將推出，敬請期待！」輕量通知；若畫面已存在或動態新增其他儲存結果提示（如支出儲存提示），「旅遊」通知依據現有提示的實際結算幾何高度（防禦進場 transform 瞬態干擾）動態向上堆疊（頂部保留 8px 間距，完全不遮蔽現有提示），且雙方獨立計時、互不干擾。
-  - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態，包含「旅遊」通知按鈕）。
-* **UI 原語**：Tailwind CSS v4 + Radix UI (Dialog、Sheet、Select、Popover)。
-* **首頁呈現**：目前淨收付以使用者的偏好幣別顯示為單一數字；其他幣別依當日最新參考匯率換算後加總（僅供參考，見 ADR 0002）。取不到匯率時退回依幣別並列。群組列與結算畫面一律維持各群組的結算幣別，不換算。「待結算的群組」標題右側提供「我的群組 ›」文字連結，直接前往 `/groups`。
-* **新增開銷表單**：
+- **導覽結構**：
+  - 手機端：底部五標籤（首頁、旅遊、＋記一筆、統計、設定）。點「旅遊」進入 **Travel mode**（見〈Flight Radar〉）。
+  - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態），側欄與底部列一樣依模式切換。
+- **UI 原語**：Tailwind CSS v4 + Radix UI (Dialog、Sheet、Select、Popover)。
+- **首頁呈現**：目前淨收付以使用者的偏好幣別顯示為單一數字；其他幣別依當日最新參考匯率換算後加總（僅供參考，見 ADR 0002）。取不到匯率時退回依幣別並列。群組列與結算畫面一律維持各群組的結算幣別，不換算。「待結算的群組」標題右側提供「我的群組 ›」文字連結，直接前往 `/groups`。
+- **新增開銷表單**：
   - 標籤頁：僅保留「花費」與「轉帳」兩大頁籤（排除「收入」）。
   - 金額輸入框內建安全算式解析器（支援 `+`、`-`、`*`、`/`，防禦 `eval`）。
   - 幣別選單提供 `TWD`、`USD`、`JPY`、`THB`。
-* **靜態登陸頁**：未登入訪客訪問根路徑 `/` 時載入簡潔形象頁，登入後自動轉跳進入 App。
+- **靜態登陸頁**：未登入訪客訪問根路徑 `/` 時載入簡潔形象頁，登入後自動轉跳進入 App。
 
 ### 6.1 寫入後的畫面反應 (Write Latency & Optimistic Updates)
 
 原則：使用者按下送出後，畫面不等「重新抓取」；金額相關的畫面只在伺服器確認後更新，例外是記錄或撤銷結算：只按該筆金額精確移動付款人與收款人的餘額（見 W-4 與 ADR 0004）。每一條都有編號，程式碼審查以此為準。
 
-* **W-1 不等重抓**：刪除支出、撤銷結算、刪除群組、建立群組、加入群組成功後，立刻放行（跳轉或解除按鈕），重新抓取在背景進行。成員的連續修改各自退回失敗的那一筆，並等同一群組最後一筆修改完成後才重新抓取，避免較早回覆蓋掉仍在等待的修改。
-* **W-2 新增支出**：表單結構為「日期與行程」置頂於「金額」之上；金額輸入框下方提供 `+1000, +500, +100, +50, +10, +5, +1` 快捷增額橫向按鈕列；在支援的 LINE 對話框環境下，「發送當前對話框」勾選膠囊位於「分帳方式」標題列右側。按下儲存立刻跳到群組頁，以儲存中的列顯示（見 W-6）。分享卡與 LINE 對話框傳送在背景進行，結果出現後以提示呈現；傳送失敗要讓使用者看到。進入新增頁時先預取邀請連結（盡力而為，失敗不影響）；同時間只發一個「確保邀請」請求。
-* **W-3 背景分享結果的暫存**：背景結果以支出 id 暫存在記憶體，不放進路由狀態或查詢快取（兩者會被存到歷史或本機）。頁面離開或失敗時都要清掉；重新整理後不再顯示提示。登出（主動或重新整理權杖被拒）時，一併清除等待中的分享與「剛儲存」提示；若分享仍在等待邀請連結，登出後不得開始傳送至 LINE 對話框，已發出的傳送無法撤回，但遲到結果不得再顯示提示。
-* **W-4 撤銷結算（先改再問）**：只在該筆結算為「已確認」時，按下即把付款人餘額減、收款人餘額加該筆金額，並把該列標成已撤銷（按鈕消失，防止重複撤銷）。伺服器回覆後以其回傳的結算取代；失敗則只退回這一筆撤銷（反向套回目前的餘額，並把該列改回已確認）並顯示錯誤，不還原舊快照，期間完成的其他付款會保留；若伺服器的最新結果已在退回前取代了畫面上的數字，就以伺服器的為準、不再退回；記錄付款失敗的退回方式相同。失敗後仍向伺服器重新取得餘額與列表，以免畫面與伺服器不一致。
-* **W-5 刪除支出（先改再問）**：按下「刪除這筆」立刻回到群組頁，該筆在列表中隱藏，直到伺服器回覆；期間重新抓取列表也不會讓它重現。餘額、統計與列表上方的累計金額不預先調整，等伺服器確認後重新抓取。失敗時該筆重新顯示，群組頁顯示「刪除失敗，這筆開銷已放回：原因」，可關閉；失敗訊息只顯示在發生的那個群組，登出時清除，且不得存入持久化的查詢快取。確認鈕連按只送出一次刪除。
-* **W-6 儲存中的列（新增與編輯支出）**：按下儲存立刻回到群組頁（編輯則回到詳情頁），群組帳目最上方出現一列「儲存中…」（名稱、金額）。餘額與總額不預先調整，等伺服器確認。成功後該列被真正的列取代；編輯中的原列在期間被該列取代。失敗時該列留在原處，顯示原因，提供「重試」與「放棄」；編輯的「儲存中」或失敗列同時顯示在回到的詳情頁上方；每次編輯各自一列，不互相覆蓋；重試沿用同一個 `Idempotency-Key`，不會重複記帳。「儲存中」列不得存入持久化的查詢快取，登出（含主動登出）時清除（背景分享與提示亦依 W-3 清除），且登出前送出、登出後才回覆的寫入結果一律忽略（不寫入快取、不顯示提示）；登出時仍在等待回覆的任何寫入都會被作廢，其回覆不會寫入快取；登出（含重新整理被拒而自動登出）後不會用新帳號的權杖重送舊帳號的請求；離開群組頁後，該群組遲到的分享結果不會顯示在別的群組上。編輯沒有防重複鍵：若伺服器已套用但回覆遺失，重試會遇到版本過期（EDIT_CONFLICT），此時重新讀取該筆，內容與我們的修改完全相同就視為成功，不同（例如別人另外改過）則顯示衝突，需放棄後重新編輯；已知限制：背景分享結果與「剛儲存」提示自建立起 60 秒內無人取用就丟棄，但已被群組頁取用的分享結果，完成時一律顯示（每筆支出各自一個提示，一次只顯示一個，前一個消失後才輪到下一個，不互相遮住）；伺服器已存好但回覆未到時重新抓取列表，可能暫時同時看到「儲存中」列與真正的列。
-* **W-6a 建立與加入群組**：按下送出後，畫面立刻顯示全螢幕的「建立群組中…」／「加入群組中…」（模態對話框：焦點留在其中，背後的頁面、導覽與認領對話框對鍵盤和輔助技術隱藏，Esc 與點外面都不能關閉），不顯示預先猜測的結果；伺服器回覆後才進入群組。失敗時回到原表單（認領時回到認領對話框內）並顯示原因，輸入不丟失。等待期間返回鍵與頁面連結不會離開（伺服器回覆後才導向）。等待超過 20 秒，畫面加上「還在處理，結果還不確定」與「先離開」按鈕，按下回到群組列表（建立與加入相同）；離開後若請求才成功，群組只會在背景加進列表快取，不自動導向、不跳提示；不設傳輸逾時，因為放棄請求不會取消伺服器已做的事，會造成重複建立。失敗後鍵盤焦點回到等待前的按鈕（認領時為「確認認領」）。建立群組成功後進入成員與邀請頁，成員名單直接用伺服器剛回覆的建立者填入，不再等第二次請求；該頁在剛建立時多一個「回到首頁」連結（一般進入不顯示）。
-* **W-7 登入金鑰下載失敗**：Google 與 LINE 的金鑰下載失敗不得被快取；下一次登入可立刻重試。找不到金鑰編號時才重新下載，且同一供應商 60 秒內至多一次。
-* **W-9 設定頁的人物卡與登入方式**：
+- **W-1 不等重抓**：刪除支出、撤銷結算、刪除群組、建立群組、加入群組成功後，立刻放行（跳轉或解除按鈕），重新抓取在背景進行。成員的連續修改各自退回失敗的那一筆，並等同一群組最後一筆修改完成後才重新抓取，避免較早回覆蓋掉仍在等待的修改。
+- **W-2 新增支出**：表單結構為「日期與行程」置頂於「金額」之上；金額輸入框下方提供 `+1000, +500, +100, +50, +10, +5, +1` 快捷增額橫向按鈕列；在支援的 LINE 對話框環境下，「發送當前對話框」勾選膠囊位於「分帳方式」標題列右側。按下儲存立刻跳到群組頁，以儲存中的列顯示（見 W-6）。分享卡與 LINE 對話框傳送在背景進行，結果出現後以提示呈現；傳送失敗要讓使用者看到。進入新增頁時先預取邀請連結（盡力而為，失敗不影響）；同時間只發一個「確保邀請」請求。
+- **W-3 背景分享結果的暫存**：背景結果以支出 id 暫存在記憶體，不放進路由狀態或查詢快取（兩者會被存到歷史或本機）。頁面離開或失敗時都要清掉；重新整理後不再顯示提示。登出（主動或重新整理權杖被拒）時，一併清除等待中的分享與「剛儲存」提示；若分享仍在等待邀請連結，登出後不得開始傳送至 LINE 對話框，已發出的傳送無法撤回，但遲到結果不得再顯示提示。
+- **W-4 撤銷結算（先改再問）**：只在該筆結算為「已確認」時，按下即把付款人餘額減、收款人餘額加該筆金額，並把該列標成已撤銷（按鈕消失，防止重複撤銷）。伺服器回覆後以其回傳的結算取代；失敗則只退回這一筆撤銷（反向套回目前的餘額，並把該列改回已確認）並顯示錯誤，不還原舊快照，期間完成的其他付款會保留；若伺服器的最新結果已在退回前取代了畫面上的數字，就以伺服器的為準、不再退回；記錄付款失敗的退回方式相同。失敗後仍向伺服器重新取得餘額與列表，以免畫面與伺服器不一致。
+- **W-5 刪除支出（先改再問）**：按下「刪除這筆」立刻回到群組頁，該筆在列表中隱藏，直到伺服器回覆；期間重新抓取列表也不會讓它重現。餘額、統計與列表上方的累計金額不預先調整，等伺服器確認後重新抓取。失敗時該筆重新顯示，群組頁顯示「刪除失敗，這筆開銷已放回：原因」，可關閉；失敗訊息只顯示在發生的那個群組，登出時清除，且不得存入持久化的查詢快取。確認鈕連按只送出一次刪除。
+- **W-6 儲存中的列（新增與編輯支出）**：按下儲存立刻回到群組頁（編輯則回到詳情頁），群組帳目最上方出現一列「儲存中…」（名稱、金額）。餘額與總額不預先調整，等伺服器確認。成功後該列被真正的列取代；編輯中的原列在期間被該列取代。失敗時該列留在原處，顯示原因，提供「重試」與「放棄」；編輯的「儲存中」或失敗列同時顯示在回到的詳情頁上方；每次編輯各自一列，不互相覆蓋；重試沿用同一個 `Idempotency-Key`，不會重複記帳。「儲存中」列不得存入持久化的查詢快取，登出（含主動登出）時清除（背景分享與提示亦依 W-3 清除），且登出前送出、登出後才回覆的寫入結果一律忽略（不寫入快取、不顯示提示）；登出時仍在等待回覆的任何寫入都會被作廢，其回覆不會寫入快取；登出（含重新整理被拒而自動登出）後不會用新帳號的權杖重送舊帳號的請求；離開群組頁後，該群組遲到的分享結果不會顯示在別的群組上。編輯沒有防重複鍵：若伺服器已套用但回覆遺失，重試會遇到版本過期（EDIT_CONFLICT），此時重新讀取該筆，內容與我們的修改完全相同就視為成功，不同（例如別人另外改過）則顯示衝突，需放棄後重新編輯；已知限制：背景分享結果與「剛儲存」提示自建立起 60 秒內無人取用就丟棄，但已被群組頁取用的分享結果，完成時一律顯示（每筆支出各自一個提示，一次只顯示一個，前一個消失後才輪到下一個，不互相遮住）；伺服器已存好但回覆未到時重新抓取列表，可能暫時同時看到「儲存中」列與真正的列。
+- **W-6a 建立與加入群組**：按下送出後，畫面立刻顯示全螢幕的「建立群組中…」／「加入群組中…」（模態對話框：焦點留在其中，背後的頁面、導覽與認領對話框對鍵盤和輔助技術隱藏，Esc 與點外面都不能關閉），不顯示預先猜測的結果；伺服器回覆後才進入群組。失敗時回到原表單（認領時回到認領對話框內）並顯示原因，輸入不丟失。等待期間返回鍵與頁面連結不會離開（伺服器回覆後才導向）。等待超過 20 秒，畫面加上「還在處理，結果還不確定」與「先離開」按鈕，按下回到群組列表（建立與加入相同）；離開後若請求才成功，群組只會在背景加進列表快取，不自動導向、不跳提示；不設傳輸逾時，因為放棄請求不會取消伺服器已做的事，會造成重複建立。失敗後鍵盤焦點回到等待前的按鈕（認領時為「確認認領」）。建立群組成功後進入成員與邀請頁，成員名單直接用伺服器剛回覆的建立者填入，不再等第二次請求；該頁在剛建立時多一個「回到首頁」連結（一般進入不顯示）。
+- **W-7 登入金鑰下載失敗**：Google 與 LINE 的金鑰下載失敗不得被快取；下一次登入可立刻重試。找不到金鑰編號時才重新下載，且同一供應商 60 秒內至多一次。
+- **W-9 設定頁的人物卡與登入方式**：
   - 名稱與頭像固定跟著 User 最早綁定的 Identity（Profile source），與群組裡看到的一致。只有 Profile source 登入時才更新 `users.display_name`／`picture_url`；用另一個方式登入只更新該方式自己的信箱。`GET /me` 的 `signedInWith` 是「這個 session 登入時用的方式」：登入時寫進 `sessions.provider` 與 access token 的 `prv`，refresh 換發新 token 時沿用，所以別的瀏覽器或裝置用另一種方式登入，不會改變這個 session 看到的值；LINE 與 Google 可以各在不同瀏覽器同時登入。遷移（0012）之前建立的 session 沒有這個值，`signedInWith` 退回 `users.last_provider`，再沒有就用最早的 Identity，下次重新登入才有自己的值。`users.last_provider` 不再寫入。Profile source 被解除綁定時，名稱與頭像維持原樣，改由剩下最早的 Identity 接手，並在它下次登入時更新。已被舊版覆蓋的帳號，等 Profile source 下次登入才換回。
   - 設定頁人物卡：名稱與頭像同上；旁邊的標籤跟著這個 session 的登入方式（綠色「LINE」或有彩色 G 的「Google」）；這個 session 是 Google 登入時，信箱以小字顯示在名稱下方，LINE 登入不顯示。Profile source 是 Google 且沒有頭像時，頭像位置顯示 Gmail 信封標誌。
   - 「登入與安全」永遠列出 LINE 與 Google 兩列，LINE 為綠點、Google 為小的 G 標誌，這一區不顯示信箱。已連結：顯示淡綠膠囊「✓ 已連結」，剛完成連結的那一刻打勾彈出一次（頁面打開時就已連結的不動）；兩者都連結時才有小的「解除連結」。未連結的 Google：右邊顯示「連接」按鈕（W-8）。未連結的 LINE：顯示「即將推出」，不提供按鈕。
   - 信箱：只有 Google 的 ID token 帶 `email` 且 `email_verified` 為真時才存入 `identities.email`；LINE 一律不存。每次登入若取得信箱就更新，沒取得時保留原值。刪除帳號時隨登入方式一併刪除。不給群組其他成員看，也不用來寄信。
   - 資料遷移（0011）：刪除所有既有的 Google 綁定，這些人下次用 Google 登入時重新綁定；只靠 Google 登入的人會得到新帳號，原帳號的群組紀錄不會合併。
-* **W-8 在 LINE 內連結 Google（連結碼）**：Google 不接受 LINE 內建瀏覽器登入，所以設定頁依環境分兩種。
+- **W-8 在 LINE 內連結 Google（連結碼）**：Google 不接受 LINE 內建瀏覽器登入，所以設定頁依環境分兩種。
   - 在 LINE 內、尚未連結 Google：「登入與安全」的 Google 那列右邊顯示「連接」按鈕，不顯示 Google 按鈕，也沒有額外的提示文字（按鈕本身就會前往外部瀏覽器）。按下後向伺服器要一個連結碼，用手機的外部瀏覽器開啟 `/link?code=…`。「開啟外部瀏覽器」在 LIFF（LINE app 內）用 `liff.openWindow({ url, external: true })`，因為 LINE 在 LIFF 裡不認 `openExternalBrowser` 網址參數；在沒有 LIFF 的 LINE 內建瀏覽器才改用該參數。在 LIFF 內若 LIFF 無法啟動或開啟失敗，顯示「小芽出了點狀況，請稍後再試。」，不會退回那個沒用的參數。設定頁、登入頁提示框、`/link` 頁三處都適用。
   - 不在 LINE 內、尚未連結 Google：直接顯示 Google 按鈕，成功後走 `POST /auth/link/google`。
   - 已連結 Google，或沒設定 Google 用戶端 ID：不顯示任何連結入口。
@@ -359,21 +369,148 @@ CREATE TABLE fx_rates (
 
 ## 8. 交付階段與實作順序 (Delivery Order & Milestones)
 
-* **Phase 1: 共享核心與資料層 (Shared Core & DB)**
+- **Phase 1: 共享核心與資料層 (Shared Core & DB)**
   - 建立 pnpm monorepo 與 TypeScript 嚴格環境。
   - 實作 `packages/shared`：Zod Schema、確定性零頭分配演算法、Web Worker 還款搜尋引擎與完整屬性測試。
   - 設定 Drizzle ORM 與 D1 SQLite 表結構 Migration。
-* **Phase 2: 後端 API 與身分認證 (Worker Backend & Auth)**
+- **Phase 2: 後端 API 與身分認證 (Worker Backend & Auth)**
   - 實作 Hono 核心框架、Error Handling 與 Idempotency 中介軟體。
   - 實作 Google SSO 與 LINE LIFF ES256 Token 驗證及 Session 輪轉機制。
   - 完成 Groups, Expenses (`D1.batch`), Balances, Settlements, Stops API 端點與整合測試。
-* **Phase 3: 前端介面與全端串接 (React SPA Frontend)**
+- **Phase 3: 前端介面與全端串接 (React SPA Frontend)**
   - 搭建 Vite + React 19 + Tailwind v4 + Radix UI 響應式外殼。
   - 實作 TanStack Query 與 Hono Typed Client 數據快取層。
   - 依校準後之 31 個畫面實作記帳表單（內建算式解析器）、多幣別匯率反推、行程時間軸與結算畫面。
-* **Phase 4: 整合驗收與雲端發布 (Integration & Deploy)**
+- **Phase 4: 整合驗收與雲端發布 (Integration & Deploy)**
   - 配置 GitHub Actions 自動化部署管線 (Staging -> Production)。
   - 設定 Cloudflare WAF 限流規則與 `split.rickchen.si` 路由。
   - 執行 Playwright E2E 測試與手動發布檢核表 (Release Checklist)。
 
 群組成員開啟邀請時，使用 `POST /groups/:id/invite/ensure` 取得現有有效邀請，或在沒有有效邀請時產生 12 小時邀請。已發出的邀請依照各自儲存的到期時間失效。
+
+## Flight Radar — live single-route discovery
+
+- **Travel mode** is on for any path under `/travel` and decided by the URL alone, so refresh and shared links keep it. The bottom nav (and the desktop sidebar) then shows three buttons, left to right: 首頁 / Home (to `/`, which leaves the mode and brings back the five-tab nav), the raised round green **搜尋鍵** / Search key (below) and 追蹤 / Watches (`/travel/watches`, the My Price Watches list with its cancel action, an empty state and an error state); there is no 新增, 統計, 探索 or 航班, and 行程 is not shown while `TRIP_ENABLED` is false. The Search key carries `aria-current="page"` at `/travel`, the other buttons when active, every target is at least 44 px, and 設定 is reached from a small gear in the travel page header. Under it the `<html>` element carries the `travel-mode` class (so dialogs that mount under `<body>`, like the Price Watch dialog, get the same palette; it is removed on leaving `/travel` and on unmount, never persisted), which switches the nav and page surfaces to the green glass palette (page `#e9f3ec`, nav `#f6fffa`, edges `#cfe6d6`, muted text `#4a6f5c`; no glow, no gradient text, every text and background pair at least 4.5:1). **Glow exception:** only the voice panel (orb, rings and level bars) and the searching card may glow or use gradients behind text, and their text pairs still reach 4.5:1 and their targets 44 px. Every primary button in the mode (the 搜尋航班 button in the sheet, the 搜尋鍵, 問小芽, the Price Watch dialog buttons) is one dark green (`#245b41`, white text 7.9:1) with a darker hover (`#143f2a`); disabled and pending show a solid pale green (`#cfe6d6`) with `#3d6350` text (5.1:1), never dimmed with opacity, so the label stays readable. The brighter `#2e9d71` is decoration only, never behind text (white on it is 3.4:1). Inside the mode the secondary buttons (including 取消追蹤 while pending) use the same solid disabled green instead of opacity; outside it they keep the normal dimmed disabled look. Button colours (text, background, border) switch instantly in the mode, never fading, so no in-between frame falls under 4.5:1; the press transform and shadow still animate. Leaving the mode drops the class and the normal palette returns.
+- `/travel` is the signed-in Flight Radar screen; sign-in returns visitors to it. `/travel/flights` (the former 航班 page) and any `/travel` request carrying search parameters (old bookmarks, LINE portal and Price Watch links) still work: `/travel/flights` redirects to `/travel` with every parameter kept, and `/travel` runs the search it carries on arrival. `/trips/latest` redirects to `/travel`; Group Trip remains disabled. There is no 探索 page, no 航班 tab, no Fare Ticker and no Price Strip (ADR 0008).
+
+### Flight Radar — 搜尋鍵, 搜尋面板 and 語音搜尋
+
+- The **搜尋鍵** is a button, not a link, drawn like 新增 in the normal nav: a raised `size-14` round green circle with a search icon, named `搜尋` / "Search". The desktop sidebar carries the same key. A **tap** (also Enter and Space from the keyboard) opens the **搜尋面板** on `/travel`, navigating there first from `/travel/watches`. The page receives the request through the router's history state (`{ sheet?, micHint?, prompt? }`), acts on it once and clears it, so refresh and Back never repeat it.
+- The **搜尋面板** is a sheet (a non-modal dialog labelled `搜尋面板` / "Search sheet", so the globe and page stay readable) that rises from the bottom over a dim layer that does not catch taps. It holds the search form (airports, swap, dates and calendar, 旅客與艙等 summary row) and a sticky `搜尋航班` button. Escape or a search closes it; Escape inside an open airport list or the passengers sheet closes only that. The Route Chip opens the same sheet. A search started from the sheet scrolls the results to the top.
+- **語音搜尋** (voice search) starts when the 搜尋鍵 is held for about 0.35 s and the browser can record (`getUserMedia` and `MediaRecorder` present; otherwise a long press behaves like a tap). The **voice panel** (dialog labelled `語音搜尋`) opens above the key with the title `聆聽中` as a split-flap line, an orb that follows the microphone level, rings, a row of 44 level bars, the seconds left (`還有 N 秒`) and the hint `放開送出 · 往上滑取消`. The recording is at most 15 s (a limit of the app only; the worker bounds cost by the 1 MB size and the rate limit): at 15 s it is released for the User. Sliding the finger up more than about 70 px turns the hint to `放開即取消`; letting go there throws the recording away and sends nothing.
+- On release the panel shows `辨識中…`, the recording is sent to `POST /api/v1/flights/voice`, the words come back and are typed into the panel (about 70 ms a character), then after about 0.9 s the panel closes and the page runs the existing prompt search once (`POST /api/v1/flights/search` with `{ prompt, defaults }`), showing the searching card and then the list. No extra confirmation step.
+- **Failures never show an error dialog.** The microphone refused or unusable: no panel; the 搜尋面板 opens with the hint `這裡不能用麥克風，請用下方欄位搜尋`. Nothing heard (empty text): the panel says `沒聽清楚，再長按說一次`. The request failed (network, `SERVICE_UNAVAILABLE`, `RATE_LIMITED`): the same message plus a `重試` button that sends the same recording again (kept in memory only until the panel closes).
+- `POST /api/v1/flights/voice` (signed-in only, like the other flights POST routes): the body is the audio itself with a `Content-Type` of `audio/*`; an empty body, any other type or more than 1 MB is `VALIDATION_FAILED`. It is limited to 6 per User per minute by the group `flights_voice` (`RATE_LIMITED` with `Retry-After`) counted before the body is read; the body is read with a 1 MB cap even when no Content-Length is sent. The Worker sends the audio to Groq Whisper (`whisper-large-v3-turbo`, language hint `zh` or `en` from the User's Language, a ten-second bound) and replies `{ text }` (empty when nothing was heard); a missing key, a provider failure or a timeout is `SERVICE_UNAVAILABLE`. **Neither the audio nor the words are stored or logged**, and neither appears in an error body. The privacy policy names Groq.
+- The search form's behaviour (party, cabin, trip type, comboboxes, calendar) is described in the sections below and is unchanged by the sheet.
+
+- Traditional Chinese and English labels follow the User's Language. TPE is the default origin with TSA, RMQ and KHH quick choices or an explicit airport code. Searches price the chosen party (adults 1 to 9, children 0 to 8 and infants 0 to 4, never more infants than adults and at most 9 travellers in all; infants ride on a lap) in the chosen cabin (`經濟艙` economy by default, `豪華經濟艙` premium economy, `商務艙` business, `頭等艙` first) as a round trip (default) or one way, using Preferred currency and exact departure date (and return date for a round trip), with an optional budget. Fares are the source's totals for the adults and children of the party, never per person, and never multiplied for infants: children use the source's own pricing (no 75% estimate). Infants go to the Google Flights link only (passenger code 4, lap infant, after the adults and children) and the shown fare excludes them, because the research note `docs/research/fast-flights-limits.md` found the source prices infants backwards; the container validates `infants` (an integer, at most the adults and within nine) but does not send them to the source. The shared party schema, worker request and cache key (`infants` is part of the intent), the container's `build_query`, the Google link, the LINE card (`含稅來回・不含嬰兒`) and the watch and portal query strings all carry it, and an infant never makes a search non-standard (the source price is the same, so fare history still applies). Everywhere the price is shown with infants the note `價格不含嬰兒` (English `Price excludes infants`) appears: in the sheet and after the results footnote. A search that leaves these at their defaults (1 adult, economy, round trip) is the same search it always was: the new fields are absent from the request, the cache key and Price Watches. The flight source container carries the party, cabin and trip type; an empty cabin (for example first class on a thin route) returns no fares rather than an error, and the results show `這個艙等目前沒有可確認的頭等艙票價，請換個艙等或到 Google 航班查看。` (English `No verified First fares for this search. Try another cabin or check Google Flights.`). One-way search is built and tested offline against the library's query construction; it has not been run against live Google Flights. Fare history and daily maintenance stay fixed at 1 adult, economy, round trip: a search with any other party, cabin or trip type is not recorded in fare history and its Deal Signal has no history to compare with.
+- `POST /api/v1/flights/search` validates airport/date/currency inputs and refuses past departures. It returns source fares with airline, outbound times, stops, duration, deterministic Deal Signals and Google Flights `?tfs=` links. Fare and budget amounts use integer currency minor units.
+- Current `fast-flights` round-trip quotes describe outbound choices before the user selects a return. Unavailable return times are explicitly labelled as selected on Google Flights, never invented. Native `low`/`typical`/`high` is accepted only from Google's price indicator when present; absent indicators stay `unknown` and conservatively show Hold. This is an upstream limitation against the original complete-inbound-summary goal.
+- Initial signals: over budget or native high → Hold; native low within budget → Strong Buy; native typical within budget → Buy; unknown → Hold. Over-budget deltas are explicit. No historical percentages are claimed by this slice.
+- Source facts are shared in D1 for 30 minutes, with budget-specific signals recomputed per request. User limits are 10 searches/minute and 40/hour; cached requests still respect these limits but never start the container. Expired cache entries are removed by daily maintenance; a cached row that no longer parses (corrupt or from an older schema) is treated as a miss and replaced by a live lookup. Counters cascade on account deletion.
+- Timeout, rate limit, challenge, empty and invalid upstream responses return a direct-link fallback with exact route/dates. Challenges are never bypassed. The source runs in a private Cloudflare Container with a ten-minute idle sleep and one maximum instance.
+
+### Flight Radar — daily history and highlights
+
+- A shared catalog contains 27 Taiwan-origin destination airports with English/Traditional Chinese names, climate and vibe tags, and approximate discovery flight durations. These durations never replace live itinerary times or imply prices.
+- Every successful live source lookup stores one observed daily minimum per origin/destination/currency/advance-window bucket (`0–14`, `15–30`, `31–60`, `61+` days ahead). Repeated observations can lower that day's minimum; they never add another historical day. Cached replies do not create observations, and neither do searches with the direct-only or no-red-eye filter: the baseline compares unfiltered fares only. History covers today and the preceding 59 UTC dates, with daily purging.
+- Deal Signals use deterministic code. Budget overruns, time-rule violations, native high prices, or a fare more than 15% above the historical mean mean Hold. Otherwise native low, at least 15% below the historical mean, or the lowest tenth percentile mean Strong Buy; native typical or within ±15% of the mean mean Buy. Native high and budget/time violations take precedence over bargain indicators.
+- Strong Buy also covers a **top** fare (Google lists it among its top flights) in the cheapest third of its search: with the search's fares sorted by price ascending, the cutoff is the price at index `ceil(n/3)-1`, and a top fare at or below it is Strong Buy, unless it is over budget or breaks a time rule. "Its search" is one lookup (one route and one departure date, all the fares Google returned for it), so each searched date has its own cheapest third. A fare that is not top is never raised by this rule. It is computed once, in the Worker where the Deal Signal is computed (`evaluateDealSignal` with `top` and `cheapestThird`, fed by `buildFlightReply`), so `/travel`, the LINE carousel and Price Watch all see the same signal. **Price Watch consequence:** the daily check fires on any Strong Buy card, so web push and LINE alerts can now fire more often than under the history rule alone (a top fare in the cheapest third of the day's fares is enough, even with no history).
+- The Deal Signal is data only (its names Strong Buy, Buy and Hold are internal values): nowhere the User can read or hear shows them, not on fare cards, legends, filters, the screen-reader advice commentary or the LINE flight carousel's badge (the former `強烈買` / `可買` / `觀望` pills and their English `Strong Buy` / `Buy` / `Hold` are removed, with their i18n strings, and tests assert no such text renders in either language, including the advice commentary written by the worker). The worker's advice states a fact true for every case behind a signal instead: the `best_signal` sentence is offered only when some fare is rated above Hold and reads `{airline} {price} 值得優先考慮。` / `{airline} at {price} is worth considering first.` for Strong Buy (a recommendation, not a price claim: Strong Buy also covers a top cheapest-third fare Google rates high or whose history is far above its mean) or `{airline} {price} 的價格合理。` / `{airline} at {price} is a fair price.` for Buy (Hold alone says nothing about price, so that focus is dropped and the reply leads with the cheapest fare); the tally is `N 個選項中有 M 個值得優先考慮。` / `M of N options are worth considering first.`; the LINE flight bubble's badge reads `優先考慮` / `價格合理` / `價格僅供參考` for Strong Buy / Buy / Hold (Hold also covers an unknown price level and a cheap fare over budget, so its badge claims no price level). A Strong Buy row keeps its `data-strong` flag (highlights and Price Watch still use the signal); a top fare shows the 熱門 tag unless it is Strong Buy. Copy that named or praised the signal is claim-free: the highlights heading is `今日精選航班` / `Today's picks` (empty `今天還沒有已確認的精選航班。` / `No verified picks today yet.`), and watch copy says `優先考慮的票價` / "a fare worth considering first" (`A fare worth considering first or at most {amount}`).
+- Mean/percentage/percentile statistics are returned and displayed only once the same route/currency/window has at least 14 distinct daily observations. Before that, only native price-level and budget facts are shown.
+- `GET /api/v1/flights/highlights?currency=...` returns up to 12 of today's observed Strong Buy route minima in that currency, with concrete future dates. The highlights list in the passengers sheet has honest empty/error states; tapping a verified highlight submits its exact structured search. No synthetic highlights or guessed fares are displayed.
+- Daily maintenance refreshes four rotating catalog routes from TPE in TWD, using unfiltered (stops allowed, any departure time) round-trip economy fares for a concrete future Friday–Monday. Refreshes reuse D1 source caching and do not consume any User's search counters. Source failures do not prevent the remaining routes from refreshing.
+
+### Flight Radar — browser Price Watches
+
+- Every fare card offers Price Watch (`降價叫醒我`). An accessible drawer shows the route, an adjustable suggested target (85% of the observed baseline, rounded down in minor units), and an explicit browser notification action. It requests permission on the user's action, subscribes the browser through `/push-sw.js`, and stores the watch only after subscription registration succeeds. All controls follow account Language and fare currency.
+- A User can keep five active Web Push watches. Creation enforces the cap atomically, and repeating the same active route/filters/channel returns the existing watch. Each watch records the actual baseline, user target, latest checked fare and check time. The My Price Watches list (page `/travel/watches`) displays route/dates/target/latest fare and supports cancellation; triggered watches retain an in-app badge.
+- Authenticated watch/subscription endpoints scope rows to the current User. Both tables reference `users` with `ON DELETE CASCADE`; account deletion removes watch and subscription data. A deleted User's otherwise unexpired access token cannot register new subscriptions or watches.
+- Daily maintenance checks active watches and sends one encrypted VAPID Web Push alert when a verified fare is Strong Buy or at/below the target. The notification contains no sprout icon and opens `/travel?` plus the serialized search (the same flat query as the LINE portal link, so `/travel` runs it on arrival). Concurrent checks use an atomic claim. Each watch is processed in isolation: an unexpected failure on one watch is logged as an error class only (`flight_watch_failed`, never ids or messages) and the remaining watches are still checked. After a successful push-service acknowledgement the watch becomes triggered; transient/undelivered failures keep it active, while stale 404/410 subscriptions are removed.
+- Watches expire after their departure date or 60 days, freeing active slots. Browser push requires configured VAPID keys, a supported browser/PWA and permission; unavailable/denied push shows a localized explanation. No permission request runs on page load. Browser subscription endpoints are restricted to verified FCM, Mozilla and Apple push hosts.
+
+### Flight Radar — prompt and button discovery
+
+- Searches accept an explicit canonical intent or `{prompt, defaults}`. User quotas are checked before prompt parsing; structured Entity Pill and panel searches skip parsing entirely. Canonical intents carry a representative destination plus an optional theme; a theme selects the actual route candidates, while every fare card carries its own exact route intent.
+- Per the implementation-session decision, Groq `openai/gpt-oss-120b` with low reasoning effort and strict `json_schema` replaces the originally proposed Llama model (which does not support Groq strict schema mode). Outputs are also validated by a strict local schema. Primary failures, throttles, timeout or invalid output fall back to Workers AI `@cf/meta/llama-3.3-70b-instruct-fp8-fast`; both providers have bounded six-second waits. Provider output never supplies fare amounts or Deal Signals.
+- Fuzzy next-weekend and next-month-weekend intent anchors to the first matching Friday in Taiwan's target calendar window; three days means Friday–Sunday, four days Friday–Monday. Exact resolved dates always appear in the Entity Pills. Explicit global three-letter airport codes remain accepted outside the catalog.
+- Theme searches select up to four matching catalog destinations in parallel. Exact-destination searches compare the requested departure/return pair with both dates shifted one day earlier and one day later, omitting past candidates. Results sort by deterministic Deal Signal then fare. Direct-only and 22:00–05:59 red-eye departure exclusions filter returned data as well as source queries; budget overruns remain visible as Hold.
+- The server's highlights reply may still carry Vibe Recipes (season-aware escapes, themes, weekend windows, fixed-holiday bridges), but `/travel` no longer renders a recipe deck.
+- The search form's origin and destination are accessible comboboxes over the destination catalog plus TPE/TSA/RMQ/KHH, matching Chinese name, English name or code in either Language. With the field empty it offers `最近用過` ("Recent": this browser's last searches, airport codes only, kept in local storage with every read and write wrapped in try/catch) above `熱門目的地` ("Popular destinations", the six popular destinations NRT, KIX, OKA, ICN, BKK, HKG; the origin field's list is headed `熱門`); any well-formed three-letter code is accepted even when unlisted. Choosing an option commits at once; typing a code the catalog lists commits as it is typed, while any other well-formed code (it may be the start of a longer name, like "osa" for Osaka) commits on Enter or when the field loses focus; half-typed text is dropped on leaving. A swap button exchanges origin and destination. The form is controlled by the active intent: a prompt result, Entity Pill edit, Adaptive Next-Move Chip, highlight tap or LINE portal link updates every field to what was searched.
+
+### Flight Radar — mobile redesign
+
+- `/travel` is mobile-first in the Travel mode green glass palette with light glass surfaces and a layered shadow; figures use tabular numerals. **Type and material (Travel mode only):** the shell adds `preconnect` links and one stylesheet link for Schibsted Grotesk and Noto Sans TC from Google Fonts (`display=swap`) while any `/travel` path is open and removes them on leaving, and `.travel-mode body` sets `"Schibsted Grotesk", "Noto Sans TC"` ahead of the normal system stack, which stays as the fallback if the fonts are blocked or slow; other screens never load or use them. (The app sets no Content-Security-Policy, so Google Fonts is allowed; if one is added, its `style-src` and `font-src` must allow `fonts.googleapis.com` and `fonts.gstatic.com`.) A subtle paper grain (an inline SVG noise at 4% opacity) is fixed behind the page, above the page colour (body is its own stacking context) but below every card and all text; at 4% the muted text stays at 4.65:1 even on the darkest grain. Fare cards (`.fare`) have ticket notches: a half circle in the page colour cut into each side at mid height, inside the card's 16 px padding so no text is covered; card and text colours are unchanged. The 搜尋航班 button carries a shine sweep (a 3.6 s repeating highlight peaking at 20% white, which keeps their white text above 4.5:1) that is off under `prefers-reduced-motion`. Top to bottom before any search: the header, the search summary and the hint card, with the verified highlights in the passengers sheet. After a search (while it runs and once it has results) the results come first: the advice line, the price list, then the Adaptive Next-Move Chips (a region labelled "Ideas to try"); the Price Watch drawer stays last. When a search finishes the page scrolls so the results are at the top of the screen (smooth scroll, a plain jump under reduced motion).
+- The search summary (a region labelled "Search summary") is the Route Chip, full width, with `aria-haspopup="dialog"`; it opens the 搜尋面板. There is no hero card, no `重新探索航班` button and no prompt box. Nothing overflows at 360 px.
+- The Route Chip is one outlined green chip (border and text at least 4.5:1 on white, never dimmed with opacity) with a pencil icon, showing the route and dates as `台北桃園 → 沖繩 1/8（五）– 1/11（一）` (English `Taipei Taoyuan → Okinawa Jan 8 – Jan 11`). It adds ` · 單程` (English ` · One-way`) for a one-way search, which then shows the departure date alone, and ` · N 人` (English ` · N travellers`) only when adults plus children is more than one, never an assumed `1 位成人`: `台北桃園 → 沖繩 1/8（五） · 單程 · 3 人`. It stays on one line (`white-space: nowrap`, never broken mid-word, at most the card's width), is at least 44 px tall, and the date range is never truncated: when the card is narrower than 32 rem the chip shows airport codes and short dates (`TPE → OKA 1/8–1/11`, both languages) while its accessible name keeps the full city names and dates; only the city-name route may ellipsize on a wide card. The ` · 單程` and ` · N 人` parts show in both forms. Tapping it opens the 搜尋面板, replacing the old `修改` button and the dates line.
+- The 搜尋面板 holds a `行程類型` choice of `來回` and `單程` (real radio inputs drawn as 44 px pills, selected: white on `#245b41`; choosing 單程 removes the return date field and the search sends no return date, switching back restores one) and one summary row, `旅客與艙等` (English "Passengers and cabin"), at least 48 px tall and full width, showing the current choice as `1 位成人・經濟艙・來回` (English `1 adult · Economy · Round trip`, with infants named when there are any, wrapping rather than scrolling at 360 px). Tapping the row opens the **passengers sheet**, a full-screen `role="dialog"` (`aria-modal`, labelled with the row's name) that rises in (a 250 ms ease-out, none under `prefers-reduced-motion`): focus moves to its `完成` (Done) button, Tab and Shift+Tab wrap inside it, Escape or `完成` closes it and focus returns to the summary row. The sheet holds stepper rows for `成人`, `孩童（2–11 歲）` and `嬰兒（2 歲以下）` (44 px round minus and plus buttons; adults never below 1 or below the infants; infants never above the adults, with `每位成人最多帶 1 位嬰兒` shown at that limit; adults, children and infants never above 9 together, with `最多 9 位旅客` shown at the limit and the plus buttons disabled), the note `價格不含嬰兒` while infants are above 0, and a `艙等` choice of the four cabins in a two-column grid. Every text and background pair is at least 4.5:1 at rest, hover and disabled (disabled steppers are solid pale green, never dimmed with opacity), buttons use `press-pill` and change colour instantly (no colour transitions in Travel).
+- Budget, theme and the time/direct rules are not drawn as pills: they are fields in the passengers sheet (a budget is cleared in its field). The 搜尋面板 closes by itself when any search starts (panel Search, highlight tap, voice search or a hand-over).
+- The panel holds the airport pickers, the swap button, departure and return date fields with a calendar picker, budget, theme and the red-eye and direct-only rules. The native date fields remain (typed entry, screen readers) and the `用日曆選日期` ("Pick dates on a calendar") toggle opens a month calendar under them: a labelled group with previous and next month buttons (the previous one stops at the current month), 44 px day buttons, past days disabled and struck through. A round trip takes a range: the first tap sets the departure day (and a return three days later so an abandoned pick is still valid) and says `接著選回程日期`, a later day ends the range and closes the calendar, an earlier or equal day restarts it; a one-way trip takes one day and closes. Edge days are white on `#245b41`, days between are `#e4f9e9`. A past departure date is rejected on search with a message. Searching submits the displayed canonical intent directly, with no prompt-parse request.
+- The last submitted search is kept in this browser (search conditions only) and restored into the pills and fields, labelled "last search", when `/travel` opens without a LINE portal link. Opening `/travel` never starts a search by itself; the label disappears when a new search starts.
+- A failed search shows its error below the panel, since the panel has closed.
+- Fare results are one vertical list of every fare, under the heading `全部航班 N 筆` (English "All flights (N)") with the sort buttons beside it (see below). The fares are one `<ul>` (labelled `票價選項` / "Fares"), cards rising in one after another (each starts 90 ms after the one above, a short rise and fade of the card only, none under reduced motion), so the page scrolls vertically and never sideways (no horizontal scroll at 360 px), and every fare is reachable by Tab (its link, then its bell). Each card has the airline (with its 熱門 tag where it applies) on top, a time line `08:00 ── ✈ ── 10:35` from outbound departure to arrival (an inline SVG plane, no other icon), and `直飛・2 小時 40 分` / `轉機 1 次・3 小時 10 分` (English `Nonstop · 2 h 40 min` / `1 stop · 3 h 10 min`; stops alone when no duration is known), then the price at the bottom left (26 px, tabular numerals, plain text, no rolling digits). Prices ascend by default. A Strong Buy card (Deal Signal, flagged `data-strong`, no label) has an amber edge (6 px left border) and a cream background and is the only highlighted kind; a 熱門 card is plain with its green tag (`#245b41` text on `#e4f9e9`, with a pale green edge). The first 10 cards show, then a `顯示全部 N 個航班` button (English `Show all N flights`, 52 px) reveals the rest. One footnote after the list, never per card: `價格為來回總價・1 位成人，來自 Google 航班，訂票前請再確認。` (English `Prices are round-trip totals for 1 adult from Google Flights. Check again before you book.`); for any other party, cabin or one-way search it names them instead: `價格為來回總價，全部 2 位成人, 1 位孩童・商務艙，來自 Google 航班，訂票前請再確認。` (English `Prices are round-trip totals for all 2 adults, 1 child, Business, from Google Flights. Check again before you book.`). Each card is a link to Google Flights; a 44 px bell icon button at its bottom right, outside the link, opens Price Watch. Cards add the history lines (after 14 observed days) and the over-budget note when they apply. Flight numbers and baggage are not shown (the data has neither); dates and return times are not repeated on cards. Before the first search a hint card (`長按「搜尋」，說出想去哪裡`) tells the User about 語音搜尋; there is no prompt box on the page, and a prompt sentence only arrives through 語音搜尋 or a hand-over.
+- Dates are never shown as raw ISO dates on `/travel`. One shared formatter writes Traditional Chinese `M/D（週）` (`12/4（五）– 12/7（一）`) and English `Mon D` (`Dec 4 – Dec 7`); the pill drops the weekday. Cards and the highlights use it.
+- A search fare carries a boolean `top` (Google listed it among its top flights); a source or cached fare without it is not top. The Worker passes it through to the cards unchanged. Every fare of the searched date is one list, client-side sorted from the fares already returned (no new request); the default is price ascending (equal prices keep the reply's order), and a top fare carries a small 熱門 tag (English "Top"); fares without `top` carry none. 熱門 only marks: it never changes the order.
+- **Sort buttons and fare tags.** Two toggle buttons `價格` and `時間` (English "Price" and "Time") sit in the results header, right of the list title, 12 px labels, at least 44 px tall (measured at 360 px: 54 px and 53 px wide in English, 44 px each in Chinese, group 111 px and 92 px), on the page's `press-pill` style so colour changes instantly in Travel mode. Exactly one is active (`aria-pressed="true"`, solid `#26684b` with white text; the other is white with `#143f2a` text and a `#245b41` border; hover on the inactive one is `#e4f9e9`; no opacity dimming, no disabled state, every pair at least 4.5:1). Tapping the inactive button sorts by it ascending; tapping the active one reverses it; an arrow `↑` or `↓` after the label of the active button shows the direction (the inactive button reserves the space invisibly). Price ascending is cheapest first (the default); time orders by outbound departure, earliest first when ascending, ties broken by price. The aria-label states the current order (`依價格排序，低到高` / `依價格排序，高到低` / `依時間排序，早到晚` / `依時間排序，晚到早`; English "Sort by price, low to high", "…high to low", "Sort by time, earliest first", "…latest first"), and the order text beside the heading follows it. The choice is kept while the User searches again and is not saved. Fares of the shown date carry tags beside the airline, on matching fares only: `最便宜` (English "Cheapest": lowest price of the shown set, ties all tagged; white on `#26684b`), `最快` ("Fastest": shortest duration, ties all tagged; `#245b41` on `#e4f9e9` with a `#245b41` border) and `紅眼` ("Red-eye": departs before 05:00 or at 22:00 or later; white on `#2b3a6b`). Tags never use amber.
+- When a Price Watch is saved from a card, that card plays a stamp (`已追蹤` / "Watching", tilted, scales in and fades over 1.5 s), the bell rings and ten particles burst from it; every time the same fare is watched again the animation replays. Every motion above (split-flap, the searching card, cards rising in, stamp, bell, burst) is switched off under reduced motion in both CSS (`prefers-reduced-motion`) and script (a rolling digit rechecks the preference every step and settles on the real text at once if it turns on mid-roll); the saved watch is then announced only by a visually hidden status (`已加入降價雷達` / "Price Watch added") that is present with or without motion.
+- While a search runs the results area is the **searching card** (marked busy): the route arc with a plane that flies along it, the origin and destination codes at its ends, the words `搜尋航班` with a brightness wave moving across them and three dots, one of three step lines that rotate (`連線航班資料` / `比對各家航空公司` / `整理最便宜的組合`) and a sweep bar. With reduced motion the plane is static and nothing moves. Empty and degraded results keep their message and direct Google Flights link and show no list.
+- The advice is one line (the first sentence of the server's grounded commentary) directly above the price list, not in a card; the Adaptive Next-Move Chips follow it.
+- Every control on the screen (Entity Pills, airport fields, swap, rule checkboxes' rows, chips and the 搜尋鍵) has a touch target of at least 44 px, and keyboard focus is always drawn.
+- With the device set to reduced motion the searching card's plane and wave stand still, the cards appear without rising and the voice panel's orb, rings and bars stop moving. There is no price roll on the list.
+- The header is a headline naming the destination's city (`下一站，沖繩！`, English `Next stop, Okinawa!`; `下一站，去哪裡？` / `Where to next?` for a theme search, which has no single destination) with a one-line tagline under it, and a 48 px bell button (`降價雷達`, English "Price Watch radar", inline SVG) on its right that links to `/travel/watches` (My Price Watches). There is no eyebrow label or gradient text. (The globe was dropped in #100 and brought back by owner decision in #125; see the Route Globe bullet below.)
+- The Route Globe (see the glossary) sits at the top right of the header, about 118 px (a 200 px canvas scaled to 118 px, `role="img"`, named `Globe turned to Okinawa` / `地球儀轉向沖繩`; not focusable and no tap target), bobbing gently by 5 px (a 5 s ease-in-out loop, off under reduced motion), as in the reference mock; it left the route card (supersedes the last-row placement of #125). It is drawn as the reference mock draws it (see the pixel-parity section: dot lattice, airports, route arc, plane; the land outlines of #125 were removed). It faces the search's destination on load and after every search, and turns to a catalogue airport as the User picks one or types its code (`nrt`) or its English or Traditional Chinese city name (`Osaka`, `大阪`, exact match, any case) in the destination field of the editing panel, then drops a marker there (it grows as the globe arrives). Countries are not recognised. Input that matches no catalogue airport, including a well-formed code the catalogue does not list, leaves the globe and its marker where they are. It eases to the new place; under reduced motion it jumps there at once with the marker full size.
+- The header's left column holds the headline (24 px), the tagline, the **distance and flight time readouts** and the bell and gear buttons, so the globe has the right side. The readouts are `距離 655 公里` and `飛行 1h 19m` (English `Distance 655 km`, `Flight 1h 19m`; the time is 30 minutes plus the distance at 800 km/h; shown only when both airports are in the catalog, never `NaN`). When the route changes both numbers roll to the new values (800 ms, an ease-out that settles); under reduced motion they jump. The rolling figures are `aria-hidden`; assistive tech reads the settled sentence once (`655 km · ≈ 1 h 19 min`). The route card no longer repeats them.
+### Flight Radar — look of the reference mock
+
+The look follows the reference mock ("Flight Radar 綠色玻璃") except its phone frame, page title, fake data and the Travel bottom nav. Colours: page `#f6fff8` with a 28 px grid under the cards; paper grain at 7% multiply above the content (z-index 30, under dialogs); font stack `"Schibsted Grotesk","Noto Sans TC",sans-serif` at 14 px / 1.5; the headline, leg line and 118 px Route Globe; the 40 px Route Chip and sort buttons; the fare card (airline badge, codes with the plane path and duration chip, times, small `NT$` and a 28 px price, a pill Price Watch button with a bell and the label `降價叫醒我`), with no amber edge, no signal pill and no ticket notches; the ticket-shaped 搜尋面板 (segmented trip switch, passengers summary row, route rows with the 44 px swap, dashed perforation with half-circle notches, a date row that opens the inline calendar, the airport list); the passengers sheet on the page colour with 34 px steppers and the cabin grid; and the green gradient search button with the mock's shine sweep.
+
+Text that only repeats or comments stays in the page as screen-reader-only text (`sr-only`): the results order, the advice sentence, the duration line, history, percentile and over-budget lines, the restored-search note and the price footnote of a plain 1-adult search. The 降價雷達 bell and 設定 gear are round 34 px buttons, 10 px apart so their 44 px hit areas meet and never overlap. The budget cap, theme, red-eye and direct-only rules and today's verified highlights (`今日值得買的航班`) live in the passengers sheet under the cabins. The native departure and return date inputs stay in the form for keyboards and screen readers, visually hidden until focused; the calendar is the visible picker.
+
+Honest disclosures (kept visible although the mock has no such line; small `fr-lg` text, 11 px muted): under the fares, when the party is not 1 adult or has an infant, the price basis (`round-trip totals for all 2 adults, Economy`) and `Price excludes infants`; on a connecting fare, `1 stop · 3h 52m` in the duration chip of the route line. The tests assert the `sr-only` class is absent on these nodes, because jest-dom does not see its clipping.
+
+Forced exceptions (the mock value would break the 4.5:1 text or 44 px target rules):
+- **Shine peak 5% white, not the mock's 53%.** At 53% white text on the button's `#2a7a58` end is 1.97:1 mid-sweep; at 5% it stays at least 4.5:1 with the grain.
+- **Picked calendar day and pressed Price Watch fill `#245b41`, not `#2e9d71`.** White on `#2e9d71` is 3.40:1 (3.32:1 under the grain); on `#245b41` it is 7.93:1.
+- **Disabled calendar day and stepper are solid pale green with `#3d6350` text (5.14:1), not 25% and 30% opacity** (about 1.5:1). The disabled search button likewise.
+- **The currency prefix `NT$` is the muted ink `#4a6f5c`, opaque, not `#143f2a` at 55% opacity** (3.19:1; ours 5.43:1 under the grain).
+- **The sheet's cabin choices are 40 px tall (mock 36 px) with a 2 px hit area above and below**, a 44 px target that stops at the 4 px gap so neighbours never overlap.
+- **Colour transitions are instant** (the mock fades 0.2 s), so no frame of a fade falls under 4.5:1.
+- **44 px targets by hit area.** Where the mock's visible control is smaller (route chip and sort buttons 40 px, Price Watch pill 38 px, calendar arrows 32 px, steppers 34 px, trip switch 34 px, sheet Done 40 px) the look is the mock's and a `.fr-hit` pseudo-element makes the tap area at least 44 px. Calendar days are 44 px at 390 px; at 360 px the mock's grid would give 39.7 px, so under 390 px the calendar bleeds into the card padding and a day is 44.3 px.
+- **Airport list rows are at least 44 px tall** (the mock's are 41 px).
+- **Grain over the content**: muted text `#4a6f5c` stays 5.46:1 on white and 4.94:1 on `#e4f9e9` under the darkest grain.
+
+Unverified: desktop widths; English strings (the mock is zh-TW only); multiply grain cost on low-end phones; the microphone in LINE's in-app browser on a real device.
+
+### Flight Radar — progressive deal commentary and Adaptive Next-Move Chips
+
+- Fare cards, Deal Signals and `[查看航班]` links render as soon as `POST /api/v1/flights/search` returns. The SPA then calls `POST /api/v1/flights/advise` with the Language, the search intent and the returned cards (airline, price, outbound time, stops, Deal Signal, over-budget delta); the advice section fades in when it arrives (no motion under reduced-motion). It is skipped when a search returns no cards, cleared when a new search starts, and an advise failure shows nothing — no error banner and no spinner.
+- The reply is `{commentary, moves}`: one or two plain-language sentences and 3–4 Adaptive Next-Move Chips, each `{id, label, patch}` where `patch` is a structured `SearchIntentPatch`. Wording follows the request Language (`zh-TW` or `en`).
+- Grounding: the server writes every sentence and label from the request's verified facts (cheapest fare, best fare (worth considering first, or a fair price) by Deal Signal, over-budget delta, nonstop option, worth-considering count); the Deal Signal's own names are never written. The model never writes text: Groq `openai/gpt-oss-120b` strict `json_schema` (Workers AI `@cf/meta/llama-3.3-70b-instruct-fp8-fast` as fallback, three-second bounds) may only return an enum `focus` and an ordered list of chip ids, so a model-written fare, percentage or time cannot reach a card. Choices the results do not support are ignored. Deal Signals are unchanged and stay deterministic. The request facts come from the caller and are used only for wording that caller sees.
+- Chips are computed from the results and the intent: leave Thursday (when departing Fri–Sun and still in the future), allow stops or direct only, raise the budget to the cheapest fare (only when every shown fare is over budget), skip red-eye flights (only when a shown fare departs 22:00–05:59), try a comparable catalog destination with the same budget, one week earlier/later and one day more or fewer. At least three chips remain for any trip of two or more nights; order and the final four come from the model's ordering when available, otherwise from the fixed default order. A morning-out/evening-back chip is not offered because intents carry no departure-window condition.
+- Model timeout, 429, error or invalid/extra output returns the deterministic commentary and default chips with status 200. Advise requests are limited to 20 per User per minute (`RATE_LIMITED` with `Retry-After`), counted separately from searches.
+- Tapping a chip merges its patch into the active intent (a swapped destination replaces the theme), updates the Entity Pills in place and submits the structured intent to `POST /api/v1/flights/search` directly, with no prompt-parse call and no LLM parse. Chips use the shared press-pill spring feedback, which respects reduced motion.
+
+### Flight Radar — LINE chat Flex Carousel and Quick Reply
+
+- Only one-on-one chat events (`source.type === "user"`) get any reply besides the welcome. Group and room events, including text, postbacks and flight questions, are ignored. Replies are `zh-TW` only (ADR 0003) and use the free `replyToken`; the Bot never pushes here.
+- A one-on-one text message is a flight question when it names a flight/travel word (`機票`, `航班`, `飛往`, `出國`, `旅行`, `flight`, `fly`, `trip`, …), or a catalog destination in Chinese or English together with an intent verb (`去`, `飛`, `玩`, `to`, `go`, `visit`; a bare destination name is not enough). Expense-like text is checked first: an amount of 3 or more digits with no flight noun/verb (`機票`, `航班`, `班機`, `飛`, `flight`, `fly`, `airfare`) and no budget marker (`預算`, `budget`, `NT$`, `以內`, a digit followed by `以下`/`內`, `under`, `within`, `below`) and no intent verb (`去`, `飛`, `玩`, `to`, `visit`) directly followed by a catalog destination is never a flight question, so `晚餐 2160，四人均分`, `東京 晚餐 2160` and `旅行 住宿 3000` still get the Rich Menu pointer and run no search and no model call, while `12月4號 2026 去沖繩` and `兩個人去東京 5000內` search. A friend who has never opened LIFF can ask; no User is needed.
+- A flight question calls LINE's loading indicator (`POST /v2/bot/chat/loading/start`, 30 s, cleared by the reply), parses the text with the same Flight Radar prompt parser as `/travel`, runs the same search (`executeFlightSearch`, 30-minute cache, `?tfs=` fallback) and the same advice (`adviseFlights`), inside `waitUntil` after the webhook has answered 200.
+- Per-sender limits are the search limits, 10 per minute and 40 per hour, counted in `line_sender_counters` under the key `line:` + HMAC-SHA256 of the LINE user id (keyed with the channel secret). The table has no foreign key, so unregistered friends are limited too; the raw id is never stored or logged. Rows older than an hour are purged daily. Over the limit, the Bot replies `查詢太頻繁了，請稍等一下再試` and runs nothing. Chip taps count as searches.
+- The reply is two messages: the advice commentary as text, then a `kilo` Flex Carousel with Quick Reply chips. The carousel has at most 5 bubbles: up to 4 flight bubbles ordered by Deal Signal (Strong Buy, Buy, Hold) then lowest price, and 1 portal bubble last. No Flex payload contains `🌱`.
+- Every bubble has the same rows, each text locked to one line, so the cards are one height. A flight bubble: Deal Signal badge and `直飛`/`轉機 N 次` with duration in the header; destination, dates, bold fare (`含稅來回`), outbound and inbound lines with airline, then two insight lines (the 60-day comparison when 14 or more snapshots exist, otherwise Google's price level; then the budget fact) and two footer actions: a `查看航班 ↗` link to Google Flights and the `降價叫醒我` postback (see LINE Price Watch below). Unavailable return times say they follow Google Flights, never invented.
+- The portal bubble keeps the same two footer rows (`打開小芽機票雷達 ↗` and `設定降價提醒 ↗`, both opening the portal) so every bubble stays one height. It opens `https://liff.line.me/<LIFF_ID>/travel?` plus the serialized intent (`origin`, `destination`, `departureDate`, `returnDate`, `currency`, `budget`, `excludeRedEye`, `directOnly`, `theme`); without the `LIFF_ID` variable it opens the same path on the site itself. `/travel` reads that query once on arrival, validates it with the shared intent schema and runs the structured search directly (no prompt parse); a missing or malformed query is ignored and the starter view shows.
+- The 3–4 Adaptive Next-Move Chips become Quick Reply postback items (label cut to LINE's 20 characters). A chip's data is `action=flight&` plus the whole pivoted intent (patch already applied), under 300 characters. Tapping it shows the loading indicator and returns the next carousel and chips with no model parse. Malformed chip data is ignored.
+- No fares (blocked or empty source) reply with a text and the exact Google Flights link. A flight question the parser cannot read replies with a hint to name a destination.
+- `follow` welcome and `action=help` texts mention asking 小芽 for flights and the Flight Radar. The Rich Menu's second button (`我的旅程`) opens LIFF `/travel`. LINE Price Watch and LINE Push are specified next.
+
+### Flight Radar — LINE Price Watch and capped LINE Push
+
+- **One tap in chat.** `降價叫醒我` on a flight bubble sends the postback `action=watch&` + the card's search (same query as the portal) + `fare=<minor units>`, under 300 characters. It is handled for one-on-one chats only, needs no loading indicator and does not count as a search against the sender limits. Replies stay `zh-TW`, free (`replyToken`) and contain no `🌱`.
+- **Linked sender** (a `line` Identity whose `provider_sub` equals the sender's LINE user id; the LINE Login and Messaging API channels must share one provider): the Worker creates a `line_push` Price Watch for that User at once, with baseline = the card fare and target = 85% of it (rounded down, minimum 1 minor unit), and replies with the route and target. The watch is the same row `/travel` lists for Web and LIFF, so it appears in My Price Watches.
+- **Limits.** At most 2 active `line_push` watches per User (atomic with the insert; a third gets `LINE 降價提醒最多同時 2 個…`; repeating the same active route returns the existing watch). Web Push keeps its limit of 5. Creating a `line_push` watch over HTTP needs a linked LINE Identity (`400 VALIDATION_FAILED` otherwise).
+- **Unlinked sender** (never signed in, or a Google-only User whose LINE id is not linked): nothing is created. The reply is a text with `<portal>/travel?<search>&watch=line&fare=<n>`, where `<portal>` is `https://liff.line.me/<LIFF_ID>` or, when `LIFF_ID` is unset, the site origin (as for the portal bubble). `/travel` validates the search and runs it, then shows the route, the target and a `確認設定 LINE 降價提醒` button; opening the link never creates a watch by itself. Only after that tap (the LIFF silent sign-in having signed the User in or created them) does it post the `line_push` watch with the same baseline and target and show `已設定降價提醒，會用 LINE 通知你一次。`; a rejection (cap, no LINE Identity) shows the error. The query is read once on arrival.
+- **Quota guard in chat.** When this month's LINE Push allowance is full, a linked tap creates nothing and the reply sends the User to open the same `/travel` search in the phone's browser for free Web Push.
+- **Inside LIFF.** `GET /api/v1/flights/line-push` returns `{available}`: true only for a User with a LINE Identity while the month's count is below 150. In LIFF (browser Web Push does not exist there) the Price Watch drawer asks for the target as usual and its action is `開啟 LINE 提醒` (`line_push`, no subscription call) when `available`; otherwise it explains that LINE alerts are unavailable (quota full or no LINE link) and offers `用手機瀏覽器開啟`, which opens the current search at `/travel` in the external browser through LIFF. Outside LIFF the browser Web Push flow is unchanged.
+- **Daily delivery.** Maintenance now checks `web_push` and `line_push` watches the same way (atomic claim, same Strong Buy/target test, `latest_fare`/`checked_at` updated). For a match on a `line_push` watch it re-checks the claim, reserves one slot in `line_push_usage` (one row per Taiwan-time calendar month, `INSERT … ON CONFLICT … WHERE count < 150`, so concurrent runs cannot pass 150), then pushes one Flex message with the matched fare's bubble, no `🌱`, and marks the watch `triggered`. The push carries an `X-Line-Retry-Key` (a UUID derived from the watch id, so every attempt for one watch shares it and LINE drops a repeat of a message it already accepted; a 409 answer counts as delivered) and a 10-second timeout. Only a definite 4xx rejection releases the slot; a timeout, network error or 5xx keeps it (the message may have gone out), and in every failure case the watch stays active for the next run. Without a LINE channel token the push is treated as a definite rejection, so the slot is released and the watch stays active. Each watch alerts at most once.
+- **Monthly ceiling.** At 150 pushes in the month no LINE call is made. A watch that matches is still marked `triggered`, so `/travel` shows the in-app triggered badge and the User can set up free Web Push; the counter stays at 150. The counter is checked before every push and resets with the next calendar month.
+- The LINE user id and channel token are never logged or put in counters; the sender counters still store only the keyed hash. Account deletion cascades watches as before.

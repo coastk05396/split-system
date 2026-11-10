@@ -37,16 +37,52 @@ A standalone flight deal discovery experience, opened from the Travel tab or ask
 _Avoid_: Trip (that is a Group with Stops), travel module
 
 **Deal Signal**:
-The buy-timing rating on a flight option—Strong Buy, Buy, or Hold—judged from how the live fare compares against historical norms and the User's budget.
+The buy-timing rating on a flight option—Strong Buy, Buy, or Hold—judged from how the live fare compares against historical norms and the User's budget. Strong Buy has one meaning everywhere (Flight Radar rows, LINE, Price Watch): the fare is a bargain by Google's own price level or by history, or it is a 熱門 fare in the cheapest third of its search. It is never shown as a label in the web app (the 強烈買 / 可買 / 觀望 pills were removed); its names are also kept out of the advice commentary and the LINE badge (which say "worth considering first" for Strong Buy, "fair price" for Buy and nothing about price for Hold, because Strong Buy and Hold each also cover cases whose price is not good or not bad); it only drives the highlights strip, Price Watch triggers and the card's `data-strong` flag.
 _Avoid_: Price score, recommendation tier
 
 **Price Watch**:
 A standing alert a User sets on a route and date window so 小芽 wakes them once its fare reaches Strong Buy or drops below a target amount.
 _Avoid_: Subscription, price tracker
 
+**Travel mode**:
+The state of the app while the URL is under `/travel`: the bottom nav and desktop sidebar swap to three travel buttons (首頁, 搜尋鍵, 追蹤) and drop the expense-splitting ones. The URL is its only state, and 首頁 leaves it. While it is on, the page, nav, primary buttons, fare cards and tags wear the green glass palette (amber only on 最低 and the strong card); the normal palette returns on leaving.
+_Avoid_: Travel tab, trip mode (Trip is the disabled Group feature)
+
+**搜尋鍵 (Search key)**:
+The raised round green button in the middle of Travel mode's nav, drawn like 新增 in the normal nav. A tap opens the 搜尋面板; a long press (about 0.35 s) starts 語音搜尋.
+_Avoid_: Search tab, mic button
+
+**搜尋面板 (Search sheet)**:
+The sheet that rises from the page when the 搜尋鍵 is tapped or the Route Chip is pressed: airports, dates, passengers and a 搜尋航班 button. It is the only place a search is edited by hand; closing it or starting a search puts the User back on the results.
+_Avoid_: Search page, filter drawer
+
+**語音搜尋 (Voice search)**:
+Hold the 搜尋鍵, say where and when, and let go: the words are turned to text, 小芽 reads them as a search, and the search runs by itself. Sliding up and letting go cancels. The recording is never kept.
+_Avoid_: Voice command, dictation
+
 **Entity Pill**:
-One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons and editable in place.
+One of the other conditions of a Flight Radar search—destination vibe, budget cap, or flight-time rule—parsed from a prompt or picked in the fields under the cabins in the passengers sheet. Since the pixel-parity change (#141) they are no longer drawn as chips: the reference mock has none, so they live only as those fields (the route and dates live in the Route Chip).
 _Avoid_: Tag, search parameter
+
+**Party**:
+The adults, children, infants, cabin and trip type (round trip or one way) of a Flight Radar search; adults, children and infants are set in the passengers sheet opened from the 旅客與艙等 summary row. Prices from the flight source are totals for the adults and children of the Party; infants never exceed adults, are passed to the Google Flights link only and are not in the shown price (the source prices them unreliably), which the 價格不含嬰兒 note says. Only the standard Party (1 adult, economy, round trip, infants aside) feeds fare history and the scheduled fare refreshes.
+_Avoid_: Passengers, traveller count
+
+**Route Chip**:
+The single outlined chip on Flight Radar's search summary that states the route and dates of the current search (plus 單程 for a one-way search and N 人 when more than one person travels), shows airport codes with short dates when the card is narrow, and opens the 搜尋面板 when tapped. It replaces the old 修改 button.
+_Avoid_: Route pill, edit button
+
+**Route Globe**:
+The small (about 118 px) dot-lattice globe (a pale sphere, airport dots, the route arc and a plane; no land outlines) at the top right of Flight Radar's header, beside the distance and flight-time readouts. It turns to the catalogue airport the User picks or types as the destination (by code, or by English or Traditional Chinese city name) and drops a marker there; unknown input leaves it where it is, and countries are not recognised. Decoration and feedback only, never a control.
+_Avoid_: Map, 小芽 globe
+
+**熱門 (Top)**:
+The small tag on a fare Google itself lists among its top flights. Flight Radar shows every fare in one vertical list, cheapest first by default; the User can sort it by price or by time, in either direction. 熱門 only marks: it never changes the order, and sorting never adds or removes it.
+_Avoid_: Recommended, featured
+
+**Adaptive Next-Move Chip**:
+One tappable follow-up under a finished Flight Radar search—such as leaving Thursday or allowing stops—chosen from the actual results and carrying a structured edit of the Entity Pills, so one tap re-runs the search without parsing a prompt.
+_Avoid_: Suggestion, quick reply
 
 **User**:
 One real person, who may sign in through more than one Identity.

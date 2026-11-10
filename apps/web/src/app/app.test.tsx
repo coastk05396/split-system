@@ -19,13 +19,14 @@ describe("app shell", () => {
     const tabs = within(screen.getByRole("navigation", { name: "底部導覽" }));
     expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "首頁",
+      "旅遊",
       "新增",
       "統計",
       "設定",
     ]);
-    expect(tabs.getByRole("button", { name: "旅遊" })).toBeVisible();
+    expect(tabs.getByRole("link", { name: "旅遊" })).toBeVisible();
     const sidebar = within(screen.getByRole("navigation", { name: "側邊導覽" }));
-    expect(sidebar.getByRole("button", { name: "旅遊" })).toBeVisible();
+    expect(sidebar.getByRole("link", { name: "旅遊" })).toBeVisible();
   });
 
   it("sends a signed-out deep link to sign-in and back after Google sign-in", async () => {

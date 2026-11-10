@@ -1,32 +1,28 @@
-import { Plus } from "lucide-react";
-import type { ComponentType, ReactNode, SVGProps } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink } from "react-router";
+import { Bell, Plus } from "lucide-react";
+import { type ComponentType, type ReactNode, useEffect } from "react";
+import { Link, NavLink, useLocation } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
 import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { hapticTick } from "./haptics.js";
 import { CuteHomeIcon, CuteSettingsIcon, CuteStatsIcon, type NavIconProps } from "./NavIcons.js";
+import { SearchKey } from "./SearchKey.js";
 import { SelectionPill } from "./SelectionPill.js";
 import { SproutMascot } from "./SproutMascot.js";
 
-type Tab =
-  | {
-      to: string;
-      label: MessageId;
-      icon: ComponentType<NavIconProps>;
-      isAction?: false;
-    }
-  | {
-      action: "tripNotice";
-      label: MessageId;
-      icon: ComponentType<SVGProps<SVGSVGElement>>;
-      isAction: true;
-    };
+type Tab = {
+  to: string;
+  label: MessageId;
+  icon: ComponentType<NavIconProps>;
+};
 
 /** SPEC §6: the same five destinations/actions on every screen size. */
 const TABS: readonly Tab[] = [
   { to: "/", label: "nav.home", icon: CuteHomeIcon },
-  { action: "tripNotice", label: "nav.trip", icon: CuteTripPlaneIcon, isAction: true },
+  {
+    to: "/travel",
+    label: "nav.trip",
+    icon: ({ active: _active, ...props }) => <CuteTripPlaneIcon {...props} />,
+  },
   { to: "/new", label: "nav.new", icon: Plus },
   { to: "/stats", label: "nav.stats", icon: CuteStatsIcon },
   { to: "/settings", label: "nav.settings", icon: CuteSettingsIcon },
@@ -34,31 +30,42 @@ const TABS: readonly Tab[] = [
 
 const SIDEBAR_TABS = TABS.filter((tab) => tab.label !== "nav.new");
 
-function BottomBar({ onTripClick }: { onTripClick: () => void }) {
+/** SPEC §6 Travel mode: any path under /travel swaps the nav for 首頁, the Search key and 追蹤. */
+const TRAVEL_TABS: readonly (Tab | "search")[] = [
+  { to: "/", label: "nav.home", icon: CuteHomeIcon },
+  "search",
+  {
+    to: "/travel/watches",
+    label: "nav.watches",
+    icon: ({ active: _a, ...props }) => <Bell {...props} />,
+  },
+];
+
+/** The tabs of the current mode: [bottom bar, sidebar]. */
+function useTabs() {
+  const { pathname } = useLocation();
+  const travel = pathname === "/travel" || pathname.startsWith("/travel/");
+  return { travel, bottom: travel ? TRAVEL_TABS : TABS, side: travel ? TRAVEL_TABS : SIDEBAR_TABS };
+}
+
+function BottomBar() {
+  const { travel, bottom } = useTabs();
   return (
     <nav
       aria-label={t("nav.bottom")}
       className="glass-nav fixed inset-x-0 bottom-0 z-10 border-t border-sprout-200/80 pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <ul className="mx-auto grid h-17 max-w-md grid-cols-5">
-        {TABS.map((tab) => (
-          <li key={tab.label} className="flex">
-            {tab.isAction ? (
-              <button
-                type="button"
-                onClick={onTripClick}
-                className="press-pill group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium text-ink-muted select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 cursor-pointer"
-              >
-                <tab.icon
-                  aria-hidden="true"
-                  className="relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none"
-                />
-                <span className="relative">{t(tab.label)}</span>
-              </button>
-            ) : (
+      <ul className={`mx-auto grid h-17 max-w-md ${travel ? "grid-cols-3" : "grid-cols-5"}`}>
+        {bottom.map((tab) =>
+          tab === "search" ? (
+            <li key="search" className="flex">
+              <SearchKey variant="bottom" />
+            </li>
+          ) : (
+            <li key={tab.label} className="flex">
               <NavLink
                 to={tab.to}
-                end={tab.to === "/"}
+                end={tab.to === "/" || tab.to.startsWith("/travel")}
                 onPointerDown={tab.to === "/new" ? () => hapticTick(15) : undefined}
                 className={({ isActive }) =>
                   `group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium select-none focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-sprout-700 ${
@@ -96,15 +103,16 @@ function BottomBar({ onTripClick }: { onTripClick: () => void }) {
                   </>
                 )}
               </NavLink>
-            )}
-          </li>
-        ))}
+            </li>
+          ),
+        )}
       </ul>
     </nav>
   );
 }
 
-function Sidebar({ onTripClick }: { onTripClick: () => void }) {
+function Sidebar() {
+  const { travel, side } = useTabs();
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col bg-sprout-900 px-4 py-7 text-white md:flex">
       <Link to="/" className="mb-8 flex items-center gap-3 px-2">
@@ -113,21 +121,16 @@ function Sidebar({ onTripClick }: { onTripClick: () => void }) {
       </Link>
       <nav aria-label={t("nav.side")}>
         <ul className="flex flex-col gap-1">
-          {SIDEBAR_TABS.map((tab) => (
-            <li key={tab.label}>
-              {tab.isAction ? (
-                <button
-                  type="button"
-                  onClick={onTripClick}
-                  className="press-pill relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-[15px] text-white/85 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
-                >
-                  <tab.icon aria-hidden="true" className="relative size-5" />
-                  <span className="relative">{t(tab.label)}</span>
-                </button>
-              ) : (
+          {side.map((tab) =>
+            tab === "search" ? (
+              <li key="search">
+                <SearchKey variant="side" />
+              </li>
+            ) : (
+              <li key={tab.label}>
                 <NavLink
                   to={tab.to}
-                  end={tab.to === "/"}
+                  end={tab.to === "/" || tab.to.startsWith("/travel")}
                   className={({ isActive }) =>
                     `press-pill relative flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
                       isActive ? "font-bold" : "text-white/85 hover:bg-white/10"
@@ -147,182 +150,62 @@ function Sidebar({ onTripClick }: { onTripClick: () => void }) {
                     </>
                   )}
                 </NavLink>
-              )}
-            </li>
-          ))}
+              </li>
+            ),
+          )}
         </ul>
       </nav>
-      <Link
-        to="/new"
-        className="press-pill mt-6 flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-4 py-3 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-500/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-      >
-        <Plus aria-hidden="true" className="size-5" />
-        {t("nav.newExpense")}
-      </Link>
+      {!travel && (
+        <Link
+          to="/new"
+          className="press-pill mt-6 flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-4 py-3 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25)] hover:bg-sprout-500/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          <Plus aria-hidden="true" className="size-5" />
+          {t("nav.newExpense")}
+        </Link>
+      )}
     </aside>
   );
 }
 
-function getToastTopOffset(toast: HTMLElement): number {
-  const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
-  const computed = typeof window !== "undefined" ? window.getComputedStyle(toast) : null;
-  const parsedBottom = computed ? parseFloat(computed.bottom) : NaN;
-  const baseBottom = Number.isFinite(parsedBottom) ? parsedBottom : isDesktop ? 32 : 96;
-  const layoutHeight = toast.offsetHeight || toast.getBoundingClientRect().height || 68;
+const TRAVEL_FONTS =
+  "https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Schibsted+Grotesk:wght@400;600;700&display=swap";
 
-  let distFromBottom = baseBottom + layoutHeight;
-
-  if (typeof window !== "undefined" && computed) {
-    const rect = toast.getBoundingClientRect();
-    if (rect.height > 0 && rect.top !== 0) {
-      let translateY = 0;
-      if (computed.transform && computed.transform !== "none") {
-        try {
-          if (typeof DOMMatrixReadOnly !== "undefined") {
-            const matrix = new DOMMatrixReadOnly(computed.transform);
-            translateY = matrix.m42 || matrix.f || 0;
-          } else {
-            const match = computed.transform.match(/matrix\(([^)]+)\)/);
-            const inner = match?.[1];
-            if (inner) {
-              const parts = inner.split(",").map((s) => parseFloat(s.trim()));
-              const dy = parts[5];
-              if (typeof dy === "number" && Number.isFinite(dy)) {
-                translateY = dy;
-              }
-            }
-          }
-        } catch {
-          // ignore matrix parsing errors and fall back to layout geometry
-        }
-      }
-      const settledTop = rect.top - translateY;
-      const measuredDist = window.innerHeight - settledTop;
-      if (Number.isFinite(measuredDist) && measuredDist > 0) {
-        distFromBottom = Math.max(distFromBottom, measuredDist);
-      }
-    }
-  }
-
-  return distFromBottom + 8;
-}
-
-function useExistingToastOffset(active: boolean, triggerKey: number): number | null {
-  const [offset, setOffset] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!active || typeof document === "undefined") {
-      setOffset(null);
-      return;
-    }
-
-    let resizeObserver: ResizeObserver | null = null;
-    let observedToast: HTMLElement | null = null;
-
-    function sync() {
-      const otherToast = document.querySelector<HTMLElement>(".saved-toast:not(.trip-notice)");
-
-      if (!otherToast) {
-        setOffset(null);
-        if (observedToast && resizeObserver) {
-          resizeObserver.unobserve(observedToast);
-          observedToast = null;
-        }
-        return;
-      }
-
-      if (otherToast !== observedToast) {
-        if (observedToast && resizeObserver) {
-          resizeObserver.unobserve(observedToast);
-        }
-        observedToast = otherToast;
-        if (typeof ResizeObserver !== "undefined") {
-          resizeObserver = resizeObserver ?? new ResizeObserver(sync);
-          resizeObserver.observe(otherToast);
-        }
-      }
-
-      setOffset(getToastTopOffset(otherToast));
-    }
-
-    sync();
-
-    window.addEventListener("resize", sync);
-
-    let mutationObserver: MutationObserver | null = null;
-    if (typeof MutationObserver !== "undefined") {
-      mutationObserver = new MutationObserver(() => {
-        sync();
-      });
-      mutationObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["class", "style"],
-      });
-    }
-
-    return () => {
-      window.removeEventListener("resize", sync);
-      mutationObserver?.disconnect();
-      resizeObserver?.disconnect();
-    };
-  }, [active, triggerKey]);
-
-  return offset;
+function link(rel: string, href: string, crossOrigin = false): HTMLLinkElement {
+  const element = document.createElement("link");
+  element.rel = rel;
+  element.href = href;
+  if (crossOrigin) element.crossOrigin = "anonymous";
+  return element;
 }
 
 /** Mobile: content above a five-tab bottom bar. Desktop: a sidebar beside the content. */
 export function AppShell({ children }: { children: ReactNode }) {
-  const [showTripNotice, setShowTripNotice] = useState(false);
-  const [isLeaving, setIsLeaving] = useState(false);
-  const [triggerKey, setTriggerKey] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const toastOffset = useExistingToastOffset(showTripNotice, triggerKey);
-
-  const triggerTripNotice = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
-    setIsLeaving(false);
-    setShowTripNotice(true);
-    setTriggerKey((k) => k + 1);
-
-    timerRef.current = setTimeout(() => {
-      setIsLeaving(true);
-      exitTimerRef.current = setTimeout(() => {
-        setShowTripNotice(false);
-        setIsLeaving(false);
-      }, 200);
-    }, 2500);
-  }, []);
-
+  const { travel } = useTabs();
+  // On <html>, not the shell div: Radix dialogs mount under <body> and must inherit the palette too.
   useEffect(() => {
+    if (!travel) return;
+    const root = document.documentElement;
+    root.classList.add("travel-mode");
+    // The mock's fonts load for Travel only; the system stack in the CSS covers a blocked or slow fetch.
+    const fonts = [
+      link("preconnect", "https://fonts.googleapis.com"),
+      link("preconnect", "https://fonts.gstatic.com", true),
+      link("stylesheet", TRAVEL_FONTS),
+    ];
+    document.head.append(...fonts);
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+      root.classList.remove("travel-mode");
+      for (const element of fonts) element.remove();
     };
-  }, []);
-
+  }, [travel]);
   return (
     <div className="min-h-dvh md:flex">
-      <Sidebar onTripClick={triggerTripNotice} />
+      <Sidebar />
       <main className="min-w-0 flex-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0">
         <div className="mx-auto w-full max-w-5xl px-5 pt-4 md:px-12 md:pt-12">{children}</div>
       </main>
-      <BottomBar onTripClick={triggerTripNotice} />
-      {showTripNotice && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="trip-notice"
-          style={toastOffset != null ? { bottom: `${toastOffset}px` } : undefined}
-          className={`saved-toast trip-notice ${toastOffset != null ? "is-stacked" : "bottom-24 md:bottom-8"} ${isLeaving ? "is-leaving" : ""} fixed inset-x-0 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-full bg-sprout-900 px-5 py-3 text-sm font-bold text-white shadow-lg transition-[bottom] duration-200`}
-        >
-          <SproutMascot className="size-5 shrink-0" mood="cheer" interactive={false} />
-          <span>{t("nav.tripComingSoon")}</span>
-        </div>
-      )}
+      <BottomBar />
     </div>
   );
 }

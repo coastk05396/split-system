@@ -12,6 +12,12 @@
   --color-sprout-900: #143f2a;
   --color-ink: #163d2a;
   --color-ink-muted: #4f6b5b;
+  /* Travel mode buttons: white text on these is 7.9:1 at rest and 11.8:1 on hover; the disabled pair is 5.1:1.
+     The brighter sprout-500 is decoration only there (3.4:1 under white text). */
+  --color-travel-action: #245b41;
+  --color-travel-action-hover: #143f2a;
+  --color-travel-disabled: #cfe6d6;
+  --color-travel-disabled-ink: #3d6350;
   --color-peach: #ffe3ca;
   --color-line: #06c755;
   --color-telegram: #229ed9;
@@ -35,6 +41,983 @@
   }
 }
 
+/* Travel mode (any /travel path; the class sits on <html> so body-mounted dialogs inherit it): the Flight Radar green glass palette, equal to the
+   reference mock's tokens (--bg #f6fff8, --ink #143f2a, --mut #4a6f5c, --edge #cfe6d6, greens g300..g900). Re-points the shared tokens, so
+   every sprout/ink utility under it follows; leaving /travel drops the class and the normal palette returns. */
+.travel-mode {
+  --travel-page: #f6fff8;
+  --travel-nav: #f6fffa;
+  --color-sprout-200: #cfe6d6;
+  --color-ink: #143f2a;
+  --color-ink-muted: #4a6f5c;
+  /* The mock's layered card shadow. */
+  --fr-sh: 0 1px 2px #143f2a1f, 0 8px 16px -8px #143f2a38, 0 24px 44px -24px #143f2a5c;
+  background-color: var(--travel-page);
+}
+.travel-mode body {
+  background-color: var(--travel-page);
+}
+/* Travel mode: a disabled secondary button is solid pale green (5.1:1), not dimmed; elsewhere it keeps opacity. */
+.travel-mode .secondary-button:disabled {
+  opacity: 1;
+  border-color: var(--color-travel-disabled);
+  background-color: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+  cursor: not-allowed;
+}
+.travel-mode .glass-nav {
+  background-color: var(--travel-nav);
+}
+/* Travel mode type: exactly the mock's stack (Google Fonts, added by the shell; the generic family covers a blocked fetch). */
+.travel-mode body {
+  font-family: "Schibsted Grotesk", "Noto Sans TC", sans-serif;
+  position: relative;
+  /* Own stacking context, so the grid layer's z-index:-1 lands above body's background, not under it. */
+  isolation: isolate;
+}
+/* The mock's faint grid, fading out over the first 65% of the page, drawn under every card. */
+.travel-mode body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(#2e9d7112 1px, transparent 1px),
+    linear-gradient(90deg, #2e9d7112 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask: linear-gradient(#000, #0000 65%);
+}
+/* The mock's paper grain: a multiply layer over the whole screen (7%), above the cards and their text, below dialogs.
+   Both text and its background darken together, so the contrast tests measure the darkest it can be. */
+.travel-mode body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0.07;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .08 0 0 0 0 .25 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Shine sweep on the search buttons. Forced: the mock's peak is 53% white, which leaves white text on the button's #2a7a58 end at 2:1 mid-sweep;
+   a 5% peak keeps it above 4.5:1 even under the 7% grain. */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.05) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shine::after {
+    animation: shine 3.6s 1s infinite;
+  }
+}
+@keyframes shine {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+/* ===== Flight Radar page: the reference mock's component CSS (class names prefixed fr-), same values.
+   Differences that must stay are marked "forced" and listed in docs/SPEC.md. ===== */
+.fr-page {
+  font-family: "Schibsted Grotesk", "Noto Sans TC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.fr-page button:focus-visible,
+.fr-page input:focus-visible {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.fr-page ::selection,
+.fr-sheet ::selection {
+  background: #8de0b8;
+  color: #143f2a;
+}
+.fr-page input,
+.fr-sheet input {
+  caret-color: var(--color-sprout-500);
+}
+/* A 44 px touch target around a smaller visible control: the pseudo-element is part of the control for taps and clicks. */
+.fr-hit {
+  position: relative;
+}
+.fr-hit::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+/* The page: the mock's .in (18px sides; the shell's 20px is pulled in by 2px) and 14px gap between blocks. */
+.fr-in {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-inline: -2px;
+  padding-top: 18px;
+}
+
+/* header */
+.fr-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.fr-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-width: 0;
+}
+.fr-hl {
+  min-width: 0;
+}
+.fr-leg {
+  margin: 6px 0 0;
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+.fr-leg b {
+  color: var(--color-ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fr-mini {
+  position: relative;
+  flex: none;
+  width: 118px;
+  height: 118px;
+  margin: -6px -8px -10px 0;
+}
+
+/* ask bar */
+
+/* chips row: route chip and the sort buttons */
+.fr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+.fr-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 6px 11px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1.5px solid var(--color-sprout-500);
+  box-shadow: var(--fr-sh);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+.fr-chip:hover {
+  border-color: #52c493;
+}
+.fr-chip[aria-expanded="true"] {
+  border-color: var(--color-sprout-500);
+  background: #e4f9e9;
+}
+.fr-chip svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: var(--color-sprout-500);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fr-chip:disabled {
+  cursor: not-allowed;
+  border-color: var(--color-travel-disabled-ink);
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-sbar {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+.fr-sb {
+  position: relative;
+  height: 40px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+.fr-sb i {
+  font-style: normal;
+  font-size: 13px;
+}
+.fr-sb[aria-pressed="true"] {
+  background: var(--color-sprout-600);
+  color: #fff;
+  border-color: var(--color-sprout-600);
+}
+.fr-sb:hover:not([aria-pressed="true"]) {
+  background: #e4f9e9;
+}
+
+/* glass card (the mock's .card) */
+.fr-card {
+  position: relative;
+  padding: 12px 16px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, #fff, #ffffffb0);
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+  backdrop-filter: blur(16px);
+}
+.fr-lb {
+  display: block;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.06em;
+}
+
+/* search panel (the mock's ticket card): trip toggle, party row, route rows with swap, perforation, dates, calendar */
+.fr-opts {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-sprout-200);
+}
+.fr-seg {
+  display: flex;
+  padding: 3px;
+  border-radius: 99px;
+  background: #e4f9e9;
+}
+.fr-seg label {
+  position: relative;
+  display: grid;
+}
+.fr-seg span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 99px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+.fr-seg input:checked + span {
+  background: var(--color-sprout-600);
+  color: #fff;
+}
+.fr-seg input:focus-visible + span {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+}
+.fr-sumr {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 8px 0 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-sprout-200);
+}
+.fr-sumr small {
+  display: block;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.06em;
+}
+.fr-sumr b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.fr-sumr svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: var(--color-sprout-600);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fr-route {
+  position: relative;
+}
+.fr-row {
+  padding: 6px 54px 6px 0;
+}
+.fr-row + .fr-row {
+  border-top: 1px solid var(--color-sprout-200);
+}
+.fr-row input {
+  width: 100%;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 2px 0;
+  color: inherit;
+}
+.fr-swap {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  margin-top: -22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-sprout-500);
+  color: #fff;
+  font-size: 18px;
+  box-shadow: 0 8px 18px -8px var(--color-sprout-500);
+  display: grid;
+  place-items: center;
+}
+.fr-swap svg {
+  width: 20px;
+  height: 20px;
+}
+.fr-ap {
+  position: relative;
+}
+.fr-ap-list {
+  position: absolute;
+  left: 0;
+  right: 6px;
+  top: calc(100% + 8px);
+  z-index: 40;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  max-height: 300px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  border-radius: 16px;
+  box-shadow: 0 20px 44px -14px #143f2a88;
+  scrollbar-width: thin;
+  scrollbar-color: #52c493 transparent;
+}
+.fr-ap-list li {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  min-height: 44px;
+}
+.fr-ap-list li:hover,
+.fr-ap-list li[aria-selected="true"] {
+  background: #e4f9e9;
+}
+.fr-ap-list li b {
+  color: var(--color-sprout-600);
+}
+.fr-ap-list li small {
+  color: var(--color-ink-muted);
+  font-size: 11px;
+}
+.fr-ap-list li.hd {
+  display: block;
+  cursor: default;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.1em;
+  padding: 8px 10px 4px;
+  min-height: 0;
+}
+.fr-ap-list li.hd:hover {
+  background: none;
+}
+.fr-ap-list li.none {
+  display: block;
+  color: var(--color-ink-muted);
+  cursor: default;
+}
+.fr-perf {
+  position: relative;
+  margin: 8px -16px 6px;
+  border-top: 1.5px dashed #2e9d7155;
+}
+.fr-perf::before,
+.fr-perf::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--travel-page);
+  border: 1px solid var(--color-sprout-200);
+}
+.fr-perf::before {
+  left: -11px;
+  clip-path: inset(0 0 0 50%);
+}
+.fr-perf::after {
+  right: -11px;
+  clip-path: inset(0 50% 0 0);
+}
+.fr-date {
+  position: relative;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.fr-date b {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fr-date em {
+  font-style: normal;
+  color: var(--color-sprout-600);
+  font-size: 12px;
+}
+.fr-cal-in {
+  padding-top: 12px;
+}
+/* forced, phones narrower than 390 px: the mock's 7 columns would be 39.7 px at 360 px; the grid bleeds into the card padding so a day is 44.3 px. */
+@media (max-width: 389px) {
+  .fr-cal-in {
+    margin-inline: -16px;
+  }
+  .fr-cal-in .fr-cal-h,
+  .fr-cal-in .fr-cal-n {
+    margin-inline: 16px;
+  }
+}
+.fr-cal-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.fr-cal-h button {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  display: grid;
+  place-items: center;
+}
+.fr-cal-h button:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  border-color: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-cal-h button svg {
+  width: 16px;
+  height: 16px;
+}
+.fr-cal-g {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.fr-cal-g .w {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  padding: 4px 0;
+}
+.fr-d {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.fr-d:hover:not(:disabled) {
+  background: #e4f9e9;
+  transform: scale(1.08);
+}
+/* forced: the mock dims a past day to 25% opacity (about 1.5:1); here #3d6350 text with a strike-through (5.1:1 on the card), the project's no-dimming rule. */
+.fr-d:disabled {
+  cursor: not-allowed;
+  color: var(--color-travel-disabled-ink);
+  text-decoration: line-through;
+}
+.fr-d[data-in-range="true"] {
+  background: #2e9d7133;
+  border-radius: 0;
+}
+/* forced: the mock fills an edge day with #2e9d71 (white 3.4:1); here the action green (7.9:1). */
+.fr-d[aria-pressed="true"] {
+  background: var(--color-travel-action);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 12px;
+}
+.fr-cal-n {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+
+/* passengers sheet: the mock's .sheet (full phone, page colour, 44px top) */
+.fr-sheet {
+  background: var(--travel-page);
+  padding: 44px 18px 24px;
+  font-family: "Schibsted Grotesk", "Noto Sans TC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.fr-sheet button:focus-visible,
+.fr-sheet input:focus-visible {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.fr-shh {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+.fr-shx {
+  position: relative;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 99px;
+  background: var(--color-sprout-600);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+.fr-paxes {
+  display: grid;
+  gap: 14px;
+  padding: 14px 0;
+}
+.fr-pr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+.fr-pr small {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-ink-muted);
+}
+.fr-pax {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fr-pax b {
+  min-width: 42px;
+  text-align: center;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.fr-pax button {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 18px;
+  line-height: 1;
+}
+/* forced: the mock dims a disabled stepper to 30% opacity; here solid pale green with #3d6350 text (5.1:1). */
+.fr-pax button:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+}
+.fr-cabins {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 8px 0 10px;
+  margin-bottom: 4px;
+}
+.fr-cabins label {
+  position: relative;
+  display: grid;
+}
+.fr-cabins span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: #e4f9e9;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* 40 px pill plus 2 px above and below is a 44 px target that stops exactly at the 4 px gap, so neighbours never overlap. */
+.fr-cabins span::before {
+  content: "";
+  position: absolute;
+  inset: -2px 0;
+}
+.fr-cabins input:checked + span {
+  background: var(--color-sprout-600);
+  color: #fff;
+}
+.fr-cabins input:focus-visible + span {
+  outline: 2px solid var(--color-sprout-500);
+  outline-offset: 2px;
+}
+
+/* search button (the mock's .cta) */
+.fr-cta {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  padding: 16px;
+  border-radius: 99px;
+  background: linear-gradient(100deg, #2a7a58, #1f5a40);
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  box-shadow: 0 14px 28px -12px #26684b;
+}
+.fr-cta:disabled {
+  cursor: not-allowed;
+  background: var(--color-travel-disabled);
+  color: var(--color-travel-disabled-ink);
+  box-shadow: none;
+}
+
+.fr-sh {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+.fr-sh b {
+  color: var(--color-sprout-600);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-lg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-ink-muted);
+}
+.fr-lg span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* results: the mock's .res and fare card */
+.fr-res {
+  position: relative;
+  display: grid;
+  gap: 14px;
+}
+
+.fr-fare {
+  position: relative;
+  display: block;
+}
+.fr-fi {
+  position: relative;
+  z-index: 1;
+  display: grid;
+}
+.fr-front {
+  grid-area: 1 / 1;
+  border-radius: 22px;
+  padding: 18px;
+  background: linear-gradient(160deg, #fff, #ffffffc0);
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+}
+.fr-fare:hover .fr-front {
+  border-color: #52c493;
+}
+.fr-fh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.fr-fh i {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 10px/1 sans-serif;
+  font-style: normal;
+  color: #fff;
+  background: var(--color-sprout-600);
+}
+.fr-sig {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--color-sprout-500);
+  color: var(--color-sprout-600);
+  font-weight: 400;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+.fr-fl {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+.fr-fl b {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.fr-path {
+  position: relative;
+  height: 1px;
+  border-top: 1px dashed #2e9d7166;
+  display: grid;
+  place-items: center;
+}
+.fr-path span {
+  position: absolute;
+  top: -11px;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.fr-path svg {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  fill: var(--color-sprout-500);
+}
+.fr-fm {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.fr-tm {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+.fr-tm .ft {
+  width: 0.58em;
+}
+.fr-chs {
+  display: inline-flex;
+  gap: 4px;
+}
+.fr-tg2 {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: #e4f9e9;
+  color: var(--color-sprout-700);
+}
+.fr-tg2.c {
+  background: var(--color-sprout-600);
+  color: #fff;
+}
+.fr-tg2.r {
+  background: #2b3a6b;
+  color: #fff;
+}
+.fr-ff {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 8px;
+}
+.fr-ff strong {
+  font-size: 22px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.fr-ff small {
+  color: var(--color-ink-muted); /* the mock's faded #143f2a is 3.19:1 */
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.fr-watch {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: none;
+  white-space: nowrap;
+  padding: 9px 12px;
+  border-radius: 99px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  font-size: 13px;
+}
+.fr-watch:hover {
+  border-color: var(--color-sprout-500);
+}
+.fr-watch svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  stroke: none;
+  transform-origin: 50% 10%;
+}
+
+/* The airline name is the card's one link; its box stretches over the whole card, the watch button sits above it. */
+.fr-stretch {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+}
+.fr-stretch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+}
+.fr-stretch:focus-visible {
+  outline: none;
+}
+.fr-stretch:focus-visible::after {
+  outline: 2px solid var(--color-sprout-700);
+  outline-offset: 2px;
+}
+.fr-watch {
+  z-index: 2;
+}
+
+.fr-nya {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 18px;
+  text-align: center;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: var(--fr-sh);
+  color: var(--color-ink-muted);
+}
+.fr-nya i {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-sprout-600);
+}
+.fr-nya i svg {
+  width: 22px;
+  height: 22px;
+}
+.fr-nya p {
+  margin: 0;
+}
+.fr-alt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 18px;
+  border-radius: 99px;
+  border: 1px solid var(--color-sprout-600);
+  background: #fff;
+  color: var(--color-sprout-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+/* loading (the mock's skeleton cards under one line of text) */
+
 /* Three-tier asymmetric tactile press feedback:
    press down settles briskly (80ms ease-out); release rebounds gently with a natural squishy spring. */
 .press-card,
@@ -45,6 +1028,14 @@
   transition-timing-function:
     var(--ease-spring), var(--ease-out-expo), var(--ease-out-expo), var(--ease-out-expo),
     var(--ease-out-expo), var(--ease-out-expo);
+}
+/* Travel mode: buttons change colour instantly. A 180ms fade between the pale disabled green and the dark
+   action green passes through frames under 4.5:1; only the press transform and shadow still animate.
+   (No reduced-motion override needed: this only removes motion.) */
+.travel-mode .press-pill {
+  transition-property: transform, box-shadow;
+  transition-duration: 360ms, 220ms;
+  transition-timing-function: var(--ease-spring), var(--ease-out-expo);
 }
 .press-card:active:not(:disabled),
 .press-pill:active:not(:disabled),
@@ -98,6 +1089,76 @@
     inset 0 -2px 6px -2px rgb(20 63 42 / 0.28),
     0 12px 26px -14px #143f2a;
 }
+/* Light glass for the Flight Radar chips and the prompt bar. */
+.glass-chip {
+  background-color: rgb(255 255 255 / 0.82);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+    0 8px 18px -14px rgb(46 157 113 / 0.5),
+    0 1px 3px rgb(20 63 42 / 0.05);
+}
+/* The mock's buttons keep the browser's default padding (Tailwind's reset zeroes it); the fixed sizes centre the content either way. */
+.fr-swap,
+.fr-cal-h button,
+.fr-d,
+.fr-pax button {
+  padding: 1px 6px;
+}
+/* App-only fields under the mock's ticket (native dates, budget, theme, rules). */
+.fr-datesr {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+.fr-datesr:not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.fr-links {
+  display: flex;
+  /* 34 px circles with 10 px between: the 44 px touch targets (fr-hit) meet and never overlap. */
+  gap: 10px;
+}
+.fr-ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  color: var(--color-sprout-900);
+}
+.fr-ic svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fr-extra {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-sprout-200);
+}
+.fr-swap svg,
+.fr-cal-h button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .surface-card {
   box-shadow:
     inset 0 1.5px 0 0 rgb(255 255 255 / 0.95),
@@ -135,6 +1196,19 @@
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.9),
     0 8px 20px -16px #143f2a;
+}
+
+/* The header globe's gentle bob; reduced motion gets none. */
+@media (prefers-reduced-motion: no-preference) {
+  .globe-bob {
+    animation: globe-bob 5s ease-in-out infinite;
+  }
+}
+
+@keyframes globe-bob {
+  50% {
+    transform: translateY(-5px);
+  }
 }
 
 /* Soft panel entrance when switching tabs. */
@@ -1303,5 +2377,636 @@ body::before {
   }
   .splitter-row:active .splitter-avatar {
     transform: none;
+  }
+}
+
+/* The plane waits at the start of the line (the mock's rest position). */
+.fare-plane {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  fill: var(--color-sprout-500);
+  rotate: 90deg;
+}
+.stamp {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  margin-top: -20px;
+  z-index: 3;
+  padding: 4px 12px;
+  border: 2.5px solid var(--color-sprout-600);
+  border-radius: 8px;
+  background: #ffffffe0;
+  color: var(--color-sprout-600);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: rotate(-8deg);
+}
+.ft {
+  display: inline-block;
+  width: 0.62em;
+  text-align: center;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.pt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-sprout-500);
+  pointer-events: none;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stamp {
+    animation: stamp-in 1.5s both;
+  }
+  .pt {
+    animation: burst 0.7s ease-out forwards;
+  }
+  .bell-ring svg {
+    transform-origin: 50% 10%;
+    animation: ring-bell 0.7s;
+  }
+}
+@keyframes stamp-in {
+  0% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(2.2);
+  }
+  16% {
+    opacity: 1;
+    transform: rotate(-8deg) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(1);
+  }
+}
+@keyframes burst {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2);
+  }
+}
+@keyframes ring-bell {
+  15% {
+    transform: rotate(24deg);
+  }
+  35% {
+    transform: rotate(-20deg);
+  }
+  55% {
+    transform: rotate(14deg);
+  }
+  75% {
+    transform: rotate(-8deg);
+  }
+}
+
+/* The passengers sheet rises in; reduced motion just shows it. */
+@media (prefers-reduced-motion: no-preference) {
+  .party-sheet {
+    animation: sheet-rise 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+/* The calendar opens with a short drop-in; reduced motion just shows it. */
+@media (prefers-reduced-motion: no-preference) {
+  .cal-pop {
+    animation: cal-pop 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@keyframes cal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* 語音搜尋: the dark panel that rises over the Travel page while the Search key is held.
+   SPEC: the one place in Travel mode allowed to glow (orb, ring, glowing letters). */
+.vx {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.vx[data-phase="unheard"] {
+  pointer-events: auto;
+}
+.vx-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(6 24 15 / 0.3);
+  animation: vx-fade 0.25s ease-out both;
+}
+.vx-panel {
+  position: absolute;
+  inset: auto 0 0;
+  height: min(520px, 80dvh);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgb(6 24 15 / 0) 0%, #06180f 38%, #0a2a1a 100%);
+  color: #eafff3;
+  animation: vx-rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.vx-scan {
+  position: absolute;
+  inset-inline: 0;
+  height: 120px;
+  background: linear-gradient(
+    180deg,
+    rgb(94 224 166 / 0),
+    rgb(94 224 166 / 0.12),
+    rgb(94 224 166 / 0)
+  );
+  animation: vx-scan 3.2s linear infinite;
+}
+.vx-status {
+  position: absolute;
+  inset: 92px 20px auto;
+  margin: 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.vx-left {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #a8d9bf;
+}
+.vx-fl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05em;
+  height: 1.55em;
+  padding: 0 0.18em;
+  margin: 0 1.5px;
+  border-radius: 5px;
+  background: #10311f;
+  color: #d9ffe9;
+  position: relative;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  animation: vx-flip 0.45s both;
+}
+.vx-fl::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 1px;
+  background: rgb(0 0 0 / 0.55);
+}
+.vx-left .vx-fl {
+  font-size: 14px;
+}
+.vx-glow {
+  color: #eafff3;
+  text-shadow: 0 0 16px rgb(94 224 166 / 0.6);
+}
+.vx-ch {
+  display: inline-block;
+  animation: vx-glow-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.vx-wave {
+  display: inline-block;
+  animation: vx-wave 1.2s ease-in-out infinite;
+}
+.vx-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.15em;
+  margin-left: 4px;
+  vertical-align: -0.2em;
+  background: #5ee0a6;
+  animation: vx-blink 0.8s steps(2) infinite;
+}
+.vx-orbit {
+  position: absolute;
+  left: 50%;
+  top: 306px;
+  width: 0;
+  height: 0;
+  transform: scale(var(--s, 0.8));
+  transition: transform 0.35s;
+}
+.vx-orb {
+  position: absolute;
+  left: -75px;
+  top: -75px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #c9ffe3 0%, #2e9d71 46%, #0d4f34 100%);
+  box-shadow:
+    0 0 70px 10px rgb(46 157 113 / 0.65),
+    inset 0 0 30px rgb(255 255 255 / 0.35);
+  animation: vx-breathe 1.6s ease-in-out infinite;
+}
+.vx-ring {
+  position: absolute;
+  left: -75px;
+  top: -75px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  border: 1px solid #5ee0a6;
+  animation: vx-ring 2.4s ease-out infinite;
+}
+.vx-bar {
+  position: absolute;
+  left: -1.5px;
+  top: calc(-11px - var(--lv, 0) * 14px * var(--k, 1));
+  width: 3px;
+  height: calc(22px + var(--lv, 0) * 28px * var(--k, 1));
+  border-radius: 2px;
+  background: #7be0b0;
+  transform: rotate(var(--a)) translateY(-104px);
+  transition:
+    height 0.08s,
+    top 0.08s;
+}
+.vx-hint {
+  position: absolute;
+  inset: auto 20px 104px;
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  color: #a8d9bf;
+}
+.vx-anchor {
+  position: absolute;
+  left: 50%;
+  bottom: 36px;
+  width: 58px;
+  height: 58px;
+  margin-left: -29px;
+  border-radius: 50%;
+  border: 2px solid #5ee0a6;
+  animation: vx-ring 1.6s ease-out infinite;
+}
+.vx-actions {
+  position: absolute;
+  inset: auto 20px 48px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+.vx-btn {
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid #5ee0a6;
+  background: transparent;
+  color: #eafff3;
+  font-weight: 700;
+}
+@keyframes vx-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vx-rise {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+@keyframes vx-scan {
+  from {
+    top: -120px;
+  }
+  to {
+    top: 100%;
+  }
+}
+@keyframes vx-flip {
+  0% {
+    transform: perspective(260px) rotateX(-90deg);
+    opacity: 0;
+  }
+  60% {
+    transform: perspective(260px) rotateX(14deg);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(260px) rotateX(0);
+  }
+}
+@keyframes vx-glow-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(6px);
+  }
+}
+@keyframes vx-wave {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+@keyframes vx-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes vx-breathe {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+@keyframes vx-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.3);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vx *,
+  .vx {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Travel page after the Search-key redesign: one slim summary row, the searching card, one list. */
+.fr-chips .fr-chip {
+  width: 100%;
+  justify-content: space-between;
+}
+.fr-hintcard {
+  margin: 14px 0 0;
+  padding: 18px 16px;
+  border-radius: 18px;
+  border: 1.5px dashed var(--color-sprout-200);
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-ink-muted);
+}
+.fr-rh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fr-rh h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+.fr-price {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+.fr-rise {
+  animation: fr-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+@keyframes fr-rise {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.97);
+  }
+}
+.sc {
+  padding: 22px 20px 20px;
+  border-radius: 24px;
+  background: #fff;
+  border: 1px solid var(--color-sprout-200);
+  box-shadow: 0 14px 28px -18px #143f2a;
+}
+.sc-arc {
+  display: block;
+  width: 100%;
+  max-width: 310px;
+  margin: 0 auto;
+  overflow: visible;
+}
+.sc-draw {
+  stroke-dasharray: 100;
+  animation: sc-draw 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.sc-rp {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sc-rp 1.9s ease-out infinite;
+}
+.sc-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+.sc-title {
+  margin: 16px 0 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-ink);
+}
+.sc-ch {
+  display: inline-block;
+  animation: sc-ch 1.6s ease-in-out infinite;
+}
+.sc-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: var(--color-sprout-500);
+  animation: sc-dot 1.2s ease-in-out infinite;
+}
+.sc-dot:first-of-type {
+  margin-left: 6px;
+}
+.sc-steps {
+  position: relative;
+  height: 20px;
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+.sc-steps span {
+  position: absolute;
+  inset: 0 0 auto;
+  opacity: 0;
+  animation: sc-step 7.8s ease-in-out infinite;
+}
+.sc-bar {
+  position: relative;
+  height: 4px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #dff0e5;
+}
+.sc-bar i {
+  position: absolute;
+  inset-block: 0;
+  width: 90px;
+  background: linear-gradient(90deg, transparent, rgb(46 157 113 / 0.35), transparent);
+  animation: sc-sweep 1.4s ease-in-out infinite;
+}
+.sc[data-motion="reduced"] * {
+  animation: none !important;
+}
+.sc[data-motion="reduced"] .sc-steps span:first-child {
+  opacity: 1;
+}
+@keyframes sc-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes sc-rp {
+  from {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+@keyframes sc-ch {
+  0%,
+  100% {
+    opacity: 0.3;
+    filter: blur(0.8px);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes sc-dot {
+  0%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes sc-step {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  6%,
+  30% {
+    opacity: 1;
+    transform: none;
+  }
+  36%,
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes sc-sweep {
+  from {
+    left: -90px;
+  }
+  to {
+    left: 100%;
+  }
+}
+/* The 搜尋面板: a sheet that rises over the Travel page. */
+.fr-sheet-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background: rgb(6 24 15 / 0.35);
+}
+.fr-sheet {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  margin-inline: auto;
+  max-width: 28rem;
+  padding: 10px 16px 0;
+  overflow-y: auto;
+  border-radius: 24px 24px 0 0;
+  background: var(--color-sprout-50);
+  box-shadow: 0 -18px 40px -20px #143f2a;
+  animation: fr-sheet-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fr-sheet-grip {
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  margin-bottom: 10px;
+  border-radius: 2px;
+  background: var(--color-sprout-200);
+}
+.fr-sheet-cta {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgb(246 255 248 / 0), var(--color-sprout-50) 30%);
+}
+@keyframes fr-sheet-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fr-rise,
+  .fr-sheet {
+    animation: none;
   }
 }

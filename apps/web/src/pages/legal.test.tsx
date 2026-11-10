@@ -9,7 +9,8 @@ describe("policy pages (decisions 26, 29)", () => {
     renderApp({ path: "/privacy" });
 
     expect(await screen.findByRole("heading", { level: 1, name: "隱私權政策" })).toBeVisible();
-    expect(screen.getByText(/版本 1\.0/)).toBeVisible();
+    expect(screen.getByText(/版本 1\.1/)).toBeVisible();
+    expect(screen.getByText(/Groq/)).toBeVisible();
     expect(screen.getAllByRole("link", { name: "privacy@rickchen.si" })[0]).toHaveAttribute(
       "href",
       "mailto:privacy@rickchen.si",
