@@ -1,4 +1,4 @@
-/** The longest a 語音搜尋 recording may run; the worker enforces the same ceiling by size. */
+/** The longest a 語音搜尋 recording may run. Only the app enforces it; the worker bounds cost by size (1 MB) and rate (6 a minute). */
 export const MAX_RECORDING_SECONDS = 15;
 
 /** One recording in progress. */
@@ -11,8 +11,11 @@ export interface Recording {
 
 /** The microphone behind 語音搜尋; tests pass a fake, like the other browser seams. */
 export interface VoiceRecorder {
-  /** Rejects when the microphone is denied or unusable. `onLevel` gets the loudness, 0 to 1. */
-  start(onLevel: (level: number) => void): Promise<Recording>;
+  /**
+   * Rejects when the microphone is denied or unusable. `onLevel` gets the loudness, 0 to 1.
+   * `onFail` runs once if the recorder breaks after it started (the microphone is already off then).
+   */
+  start(onLevel: (level: number) => void, onFail?: () => void): Promise<Recording>;
 }
 
 /** The browser's microphone, or undefined where it cannot record (some in-app browsers). */
@@ -25,7 +28,7 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
   )
     return undefined;
   return {
-    async start(onLevel) {
+    async start(onLevel, onFail) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       let recorder: MediaRecorder;
       let context: AudioContext | undefined;
@@ -60,6 +63,13 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
         frame = requestAnimationFrame(measure);
       };
       frame = requestAnimationFrame(measure);
+      let failed = false;
+      recorder.onerror = () => {
+        if (failed) return;
+        failed = true;
+        release();
+        onFail?.();
+      };
       const release = () => {
         cancelAnimationFrame(frame);
         for (const track of stream.getTracks()) track.stop();
@@ -67,7 +77,11 @@ export function createVoiceRecorder(): VoiceRecorder | undefined {
       };
       return {
         stop: () =>
-          new Promise<Blob>((resolve) => {
+          new Promise<Blob>((resolve, reject) => {
+            if (failed) {
+              reject(new Error("recorder failed"));
+              return;
+            }
             const finish = () => {
               release();
               resolve(new Blob(chunks, { type: recorder.mimeType }));

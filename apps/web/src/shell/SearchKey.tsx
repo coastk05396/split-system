@@ -304,25 +304,26 @@ export function SearchKey({ variant }: { variant: "bottom" | "side" }) {
     hapticTick(20);
     h.left = MAX_RECORDING_SECONDS;
     setPhase({ kind: "listening", left: h.left, cancelling: false });
-    h.recording = recorder.start(setLevel);
-    h.recording.then(
-      () => {
-        h.readyAt = Date.now();
-        // The 15 s count starts when the microphone opens, not while the permission prompt is up.
-        if (hold.current !== h) return;
-        h.ticker = setInterval(() => {
-          h.left -= 1;
-          setPhase({ kind: "listening", left: h.left, cancelling: h.cancelling });
-          if (h.left <= 0) void release(h, h.cancelling);
-        }, 1000);
-      },
-      () => {
-        if (hold.current !== h) return;
-        hold.current = null;
-        close();
-        go({ sheet: true, micHint: true });
-      },
-    );
+    const failMic = () => {
+      if (hold.current !== h) return;
+      clearTimeout(h.timer);
+      clearInterval(h.ticker);
+      hold.current = null;
+      setLevel(0);
+      close();
+      go({ sheet: true, micHint: true });
+    };
+    h.recording = recorder.start(setLevel, failMic);
+    h.recording.then(() => {
+      h.readyAt = Date.now();
+      // The 15 s count starts when the microphone opens, not while the permission prompt is up.
+      if (hold.current !== h) return;
+      h.ticker = setInterval(() => {
+        h.left -= 1;
+        setPhase({ kind: "listening", left: h.left, cancelling: h.cancelling });
+        if (h.left <= 0) void release(h, h.cancelling);
+      }, 1000);
+    }, failMic);
   }
 
   async function release(h: Hold, cancel: boolean) {

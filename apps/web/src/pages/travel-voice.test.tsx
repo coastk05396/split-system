@@ -197,6 +197,19 @@ describe("語音搜尋: long-press the Search key", () => {
     expect(screen.queryByRole("dialog", { name: "語音搜尋" })).toBeNull();
   });
 
+  it("falls back to the search sheet when the recorder breaks after it started", async () => {
+    const { api, log, breakDown } = await start();
+    await hold();
+    act(() => {
+      breakDown();
+    });
+    const sheet = await screen.findByRole("dialog", { name: "搜尋面板" });
+    expect(within(sheet).getByText(/這裡不能用麥克風/)).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "語音搜尋" })).toBeNull();
+    expect(log.open).toBe(0);
+    expect(api.voiceRequests).toHaveLength(0);
+  });
+
   it("opens the search sheet on a pointer tap where the browser cannot record", async () => {
     renderApp({ path: "/travel", cookieUser: makeUser("Rick") });
     await screen.findByRole("heading", { name: "下一站，沖繩！" });
