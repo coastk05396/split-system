@@ -272,6 +272,7 @@ describe("public flight routes and daily pipeline", () => {
                 return_transfers: 0,
                 duration_to: 840,
                 duration_back: 780,
+                found_at: "2026-11-15T12:00:00Z",
               },
             ],
           }),
@@ -438,5 +439,99 @@ describe("public flight routes and daily pipeline", () => {
       priceTwd: 6800,
       airlines: ["JL"],
     });
+  });
+
+  it("drops Stage 2 fares missing found_at or with malformed found_at timestamps", async () => {
+    const cronNow = Date.parse("2026-11-15T16:30:00Z");
+    const fakeFetch: typeof fetch = (input) => {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(rawUrl);
+      const destination = url.searchParams.get("destination");
+      const origin = url.searchParams.get("origin");
+      if (destination === "HND") {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                origin_airport: "TSA",
+                destination: "TYO",
+                destination_airport: "HND",
+                airline: "JL",
+                departure_at: "2026-12-05T08:30:00+08:00",
+                return_at: "2026-12-09T14:00:00+09:00",
+                price: 6800,
+                transfers: 0,
+                return_transfers: 0,
+              },
+            ],
+          }),
+        );
+      }
+      if (destination === "NRT") {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                origin_airport: "TPE",
+                destination: "TYO",
+                destination_airport: "NRT",
+                airline: "JX",
+                departure_at: "2026-12-06T09:00:00+08:00",
+                return_at: "2026-12-10T15:00:00+09:00",
+                price: 6500,
+                transfers: 0,
+                return_transfers: 0,
+                found_at: "not-a-date",
+              },
+            ],
+          }),
+        );
+      }
+      if (origin === "TPE" && url.searchParams.get("one_way") === "false") {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                origin_airport: "TSA",
+                destination: "TYO",
+                destination_airport: "HND",
+                airline: "JL",
+                departure_at: "2026-12-05T08:30:00+08:00",
+                return_at: "2026-12-09T14:00:00+09:00",
+                price: 6800,
+                transfers: 0,
+                return_transfers: 0,
+              },
+              {
+                origin: "TPE",
+                origin_airport: "TPE",
+                destination: "TYO",
+                destination_airport: "NRT",
+                airline: "JX",
+                departure_at: "2026-12-06T09:00:00+08:00",
+                return_at: "2026-12-10T15:00:00+09:00",
+                price: 6500,
+                transfers: 0,
+                return_transfers: 0,
+              },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(Response.json({ success: true, data: [] }));
+    };
+
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    const db = createDb(env.DB);
+    const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
+
+    expect(items).toHaveLength(0);
   });
 });

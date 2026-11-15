@@ -1,5 +1,6 @@
 import { type DailyFlightItem, type Language, sortDailyFlights } from "@split/shared";
-import { ChevronRight, Plane } from "lucide-react";
+import { ChevronRight, Pause, Plane, Play } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { getLocale, t } from "../i18n/messages.js";
 import { useDailyFlights } from "./api.js";
@@ -8,44 +9,73 @@ import { FlightBetaBadge } from "./FlightBetaBadge.js";
 import { flightDestinationLabel, tripGoHref } from "./ui.js";
 
 /**
- * Interactive horizontal marquee of top verified flight deals for signed-in Home.
- * Loops seamlessly via duplicated GPU-composited track and pauses on hover/focus.
+ * Interactive horizontal marquee of top daily flight deals for signed-in Home.
+ * Loops seamlessly via duplicated GPU-composited track and pauses on hover, focus, or explicit toggle.
  */
 export function FlightDealsMarquee() {
   const locale = getLocale();
   const flights = useDailyFlights();
+  const [paused, setPaused] = useState(false);
   const topDeals = sortDailyFlights(flights.data.items, "discount", "desc").slice(0, 8);
+  const isFallback = flights.isPending || flights.data.isFallback;
 
   if (topDeals.length === 0) return null;
 
   return (
-    <section aria-labelledby="home-flights-marquee" className="flex flex-col gap-3">
+    <section aria-labelledby="home-flights-marquee" className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 id="home-flights-marquee" className="text-xl font-bold">
             {t("home.flightsMarquee.title")}
           </h2>
           <FlightBetaBadge />
-          <span className="rounded-full bg-sprout-100 px-2 py-0.5 text-[11px] font-bold text-sprout-700">
-            {t("home.flightsMarquee.badge")}
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+              isFallback ? "bg-amber-100 text-amber-800" : "bg-sprout-100 text-sprout-700"
+            }`}
+          >
+            {isFallback ? t("home.flightsMarquee.fallbackBadge") : t("home.flightsMarquee.badge")}
           </span>
         </div>
 
-        <Link
-          to="/flights"
-          className="press-pill group flex items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700"
-        >
-          <span>{t("home.flightsMarquee.more")}</span>
-          <ChevronRight aria-hidden="true" className="hover-nudge-x size-4" />
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={paused}
+            aria-label={paused ? t("home.flightsMarquee.resume") : t("home.flightsMarquee.pause")}
+            onClick={() => {
+              setPaused((prev) => !prev);
+            }}
+            className="press-pill inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white p-1.5 text-slate-600 shadow-2xs transition-colors hover:border-sprout-300 hover:text-sprout-700 motion-reduce:hidden"
+          >
+            {paused ? (
+              <Play aria-hidden="true" className="size-3.5" />
+            ) : (
+              <Pause aria-hidden="true" className="size-3.5" />
+            )}
+          </button>
+          <Link
+            to="/flights"
+            className="press-pill group flex items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700"
+          >
+            <span>{t("home.flightsMarquee.more")}</span>
+            <ChevronRight aria-hidden="true" className="hover-nudge-x size-4" />
+          </Link>
+        </div>
       </div>
 
-      <div className="flight-marquee flight-marquee-mask -mx-1 overflow-hidden px-1">
+      {flights.data.isFallback && !flights.isPending && (
+        <p className="text-xs text-slate-500">{t("flights.fallbackNote")}</p>
+      )}
+
+      <div
+        className={`flight-marquee flight-marquee-mask -mx-1 overflow-hidden px-1${paused ? " flight-marquee-paused" : ""}`}
+      >
         <div className="flight-marquee-track gap-3 py-1">
           {topDeals.map((item) => (
             <MarqueeDealTile key={item.id} item={item} lang={locale} />
           ))}
-          <div aria-hidden="true" className="flex shrink-0 gap-3">
+          <div aria-hidden="true" className="flight-marquee-clone flex shrink-0 gap-3">
             {topDeals.map((item) => (
               <MarqueeDealTile key={`clone-${item.id}`} item={item} lang={locale} decorative />
             ))}

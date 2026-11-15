@@ -111,14 +111,20 @@ describe("daily flights page", () => {
     const sortGroup = within(topBar).getByRole("group", { name: "排序" });
     const priceSortBtn = within(sortGroup).getByRole("button", { name: /價格/ });
     const discountSortBtn = within(sortGroup).getByRole("button", { name: /降幅/ });
+    expect(priceSortBtn).toHaveAccessibleName("依價格排序（目前由低到高）");
+    expect(discountSortBtn).toHaveAccessibleName("依降幅排序");
     expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("首爾仁川");
     await user.click(priceSortBtn);
+    expect(priceSortBtn).toHaveAccessibleName("依價格排序（目前由高到低）");
     expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("大阪關西");
     await user.click(discountSortBtn);
+    expect(discountSortBtn).toHaveAccessibleName("依降幅排序（目前由高到低）");
     expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("東京成田");
     await user.click(discountSortBtn);
+    expect(discountSortBtn).toHaveAccessibleName("依降幅排序（目前由低到高）");
     expect(screen.getAllByRole("heading", { level: 2 })[0]).not.toHaveTextContent("東京成田");
     await user.click(priceSortBtn);
+    expect(priceSortBtn).toHaveAccessibleName("依價格排序（目前由低到高）");
     expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("首爾仁川");
 
     const icnCard = screen.getByRole("link", { name: /首爾仁川/ });
@@ -238,5 +244,16 @@ describe("daily flights page", () => {
     expect(await screen.findByText("目前沒有符合條件的低價機票")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "重設篩選" }));
     expect(await screen.findByText("東京成田")).toBeVisible();
+  });
+
+  it("keeps signed-out PublicHeader free of a redundant flights link and localizes filter drawer Close", async () => {
+    const user = userEvent.setup();
+    renderApp({ path: "/flights" });
+
+    const header = await screen.findByRole("banner");
+    expect(within(header).queryByRole("link", { name: /低價機票/ })).toBeNull();
+
+    await user.click(await screen.findByRole("button", { name: /篩選/ }));
+    expect(await screen.findByRole("button", { name: "關閉篩選" })).toBeVisible();
   });
 });

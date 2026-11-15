@@ -37,7 +37,7 @@ export function LandingPage() {
 
   return (
     <div className="landing-editorial flex min-h-dvh flex-col">
-      <PublicHeader active="home" />
+      <PublicHeader />
       <main className="flex-1">
         <section className="mx-auto grid max-w-6xl items-center gap-10 px-5 pt-6 pb-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12 md:px-10 md:pt-12 md:pb-20">
           <div>

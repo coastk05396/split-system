@@ -1,4 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ShareBar, ShareRing } from "../expenses/ShareRing.js";
@@ -205,5 +207,24 @@ describe("scrollBehavior", () => {
 
     vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
     expect(scrollBehavior()).toBe("auto");
+  });
+});
+
+describe("menu-content exit animation", () => {
+  it("declares a keyframe closing animation so Radix Presence waits before unmounting", () => {
+    const webRoot = process.cwd().endsWith("apps/web")
+      ? process.cwd()
+      : resolve(process.cwd(), "apps/web");
+    const stylesCss = readFileSync(resolve(webRoot, "src/styles.css"), "utf8");
+    expect(stylesCss).toContain("@keyframes menu-exit");
+    expect(stylesCss).toMatch(/\.menu-content\[data-state="closed"\][^}]*animation:\s*menu-exit\b/);
+    const reducedSections = stylesCss
+      .split("@media (prefers-reduced-motion: reduce)")
+      .slice(1)
+      .join("\n");
+    expect(reducedSections).toMatch(
+      /\.menu-content\[data-state="closed"\][^}]*animation:\s*overlay-exit\b/,
+    );
+    expect(reducedSections).toMatch(/\.flight-marquee-clone\s*\{\s*display:\s*none;\s*\}/);
   });
 });

@@ -1,12 +1,12 @@
 import type { Language } from "@split/shared";
-import { Languages, PlaneTakeoff } from "lucide-react";
+import { Languages } from "lucide-react";
 import { Link } from "react-router";
 import { rememberLocale } from "../i18n/detect.js";
 import { getLocale, setLocale, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 
 /** Shared top navigation bar for public / signed-out views (`/`, `/landing`, `/flights`). */
-export function PublicHeader({ active }: { active?: "home" | "flights" }) {
+export function PublicHeader() {
   const locale = getLocale();
   const nextLocale: Language = locale === "zh-TW" ? "en" : "zh-TW";
 
@@ -22,19 +22,6 @@ export function PublicHeader({ active }: { active?: "home" | "flights" }) {
         <span>{t("app.name")}</span>
       </Link>
       <nav aria-label={t("app.name")} className="flex items-center gap-2 sm:gap-3">
-        {active !== "home" && (
-          <Link
-            to="/flights"
-            className={`press-pill inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition-colors ${
-              active === "flights"
-                ? "border-sprout-500 bg-sprout-500 text-white shadow-sm"
-                : "border-sprout-200 bg-sprout-50/90 text-sprout-800 shadow-xs hover:border-sprout-400 hover:bg-sprout-100/80"
-            }`}
-          >
-            <PlaneTakeoff className="size-3.5" aria-hidden="true" />
-            <span>{t("landing.headerFlights")}</span>
-          </Link>
-        )}
         <button
           type="button"
           onClick={toggleLocale}

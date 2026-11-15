@@ -307,11 +307,10 @@ export function productionFlightSource(
           const retTransfers = candidate.tripType === "ow" ? 0 : (raw.return_transfers ?? 0);
           if (raw.transfers > 0 || retTransfers > 0) return false;
         }
-        if (raw.found_at) {
-          const foundMs = Date.parse(raw.found_at);
-          if (!Number.isNaN(foundMs) && referenceMs - foundMs > MAX_FOUND_AT_AGE_MS) {
-            return false;
-          }
+        if (!raw.found_at) return false;
+        const foundMs = Date.parse(raw.found_at);
+        if (Number.isNaN(foundMs) || referenceMs - foundMs > MAX_FOUND_AT_AGE_MS) {
+          return false;
         }
         return true;
       });

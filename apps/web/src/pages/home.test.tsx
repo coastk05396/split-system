@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
@@ -317,5 +318,39 @@ describe("home", () => {
     for (const row of rows) {
       expect(row.querySelector(".mt-1.flex.items-center")).not.toBeNull();
     }
+  });
+
+  it("labels fallback marquee fares as sample fares instead of live deals", async () => {
+    const { api } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "日本行", settlementCurrency: "TWD", myBalance: -100 });
+      },
+    });
+    api.dailyFlights = { ...api.dailyFlights, isFallback: true };
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(within(marquee).getByText("參考示範")).toBeVisible();
+    expect(within(marquee).queryByText("即時特價")).toBeNull();
+    expect(within(marquee).getByText(/精選參考票價/)).toBeVisible();
+  });
+
+  it("lets mobile and keyboard users pause and resume the flight deals marquee", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "日本行", settlementCurrency: "TWD", myBalance: -100 });
+      },
+    });
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    const pauseBtn = within(marquee).getByRole("button", { name: /暫停/ });
+    expect(pauseBtn).toHaveAttribute("aria-pressed", "false");
+    await user.click(pauseBtn);
+    expect(pauseBtn).toHaveAttribute("aria-pressed", "true");
+    expect(marquee.querySelector(".flight-marquee-paused")).not.toBeNull();
+    await user.click(pauseBtn);
+    expect(pauseBtn).toHaveAttribute("aria-pressed", "false");
   });
 });

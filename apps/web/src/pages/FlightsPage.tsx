@@ -259,15 +259,21 @@ export function FlightsPage() {
           {FLIGHT_SORT_OPTIONS.map((option) => {
             const active = sortBy === option;
             const SortIcon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+            const label = t(SORT_SHORT_LABELS[option]);
+            const dirLabel = t(sortDir === "asc" ? "flights.sortDir.asc" : "flights.sortDir.desc");
+            const ariaLabel = active
+              ? t("flights.sortAriaActive", { label, dir: dirLabel })
+              : t("flights.sortAriaInactive", { label });
             return (
               <ToolbarSegment
                 key={option}
                 active={active}
+                ariaLabel={ariaLabel}
                 onClick={() => {
                   handleSortClick(option);
                 }}
               >
-                <span>{t(SORT_SHORT_LABELS[option])}</span>
+                <span>{label}</span>
                 <SortIcon
                   aria-hidden="true"
                   className={`size-3 ${active ? "text-sprout-600" : "text-slate-400"}`}
@@ -355,7 +361,7 @@ export function FlightsPage() {
                   {t("flights.filtersTitle")}
                 </Dialog.Description>
                 <Dialog.Close
-                  aria-label="Close"
+                  aria-label={t("flights.filtersClose")}
                   className="press-icon rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X aria-hidden="true" className="size-4" />
@@ -597,10 +603,12 @@ function RegionTab({
 
 function ToolbarSegment({
   active,
+  ariaLabel,
   onClick,
   children,
 }: {
   active: boolean;
+  ariaLabel: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -608,6 +616,7 @@ function ToolbarSegment({
     <button
       type="button"
       aria-pressed={active}
+      aria-label={ariaLabel}
       onClick={onClick}
       className={`press-pill inline-flex cursor-pointer items-center gap-0.5 text-xs font-bold transition-colors ${
         active ? "text-sprout-700" : "text-slate-400 hover:text-slate-700"
