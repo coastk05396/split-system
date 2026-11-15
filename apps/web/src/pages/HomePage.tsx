@@ -7,14 +7,13 @@ import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
 import { convertedTotal, pendingTotals } from "../groups/totals.js";
-import { GroupAvatar, LoadError, MaintenanceTag } from "../groups/ui.js";
+import { GroupAvatar, LoadError } from "../groups/ui.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
-import { TRIP_ENABLED } from "../trip/enabled.js";
 import { CuteQuickReceiptIcon, CuteTripPlaneIcon } from "./HomeIcons.js";
 
 /** Screen 2: the person's pending Balances per currency, the Groups owing something, and the two ways to start a Group. */
@@ -186,12 +185,11 @@ function QuickStartSection({ hasGroups }: { hasGroups: boolean }) {
           body={t("home.tab.body")}
         />
         <StartCard
-          to="/groups/new?usage=trip"
+          to="/flights"
           icon={<CuteTripPlaneIcon aria-hidden="true" className="size-7" />}
           iconClass="bg-sprout-100"
-          title={t("home.trip.title")}
-          body={t("home.trip.body")}
-          disabled={!TRIP_ENABLED}
+          title={t("home.flights.title")}
+          body={t("home.flights.body")}
         />
       </div>
     </section>
@@ -266,7 +264,6 @@ function HomeGroupRow({ group }: { group: Group }) {
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-bold text-ink">{group.name}</span>
-            {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
           </div>
           <div>
             <span
@@ -308,11 +305,12 @@ function StartCard(props: {
   iconClass: string;
   title: string;
   body: string;
-  /** Under maintenance: shown with a red tag, not a link. */
-  disabled?: boolean;
 }) {
-  const content = (
-    <>
+  return (
+    <PressableLink
+      to={props.to}
+      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_8px_16px_-6px_rgba(20,63,42,0.12)] active:scale-[0.96] transition-[scale,border-color,box-shadow] duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
+    >
       <span
         className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${props.iconClass} shadow-[inset_0_1.5px_0_0_rgb(255_255_255/0.9),0_3px_8px_-3px_rgba(20,63,42,0.12)] transition-transform duration-200 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95`}
       >
@@ -321,28 +319,9 @@ function StartCard(props: {
       <span className="flex flex-col gap-1">
         <span className="flex items-center gap-1.5 flex-wrap">
           <span className="text-base font-bold text-ink">{props.title}</span>
-          {props.disabled === true && <MaintenanceTag />}
         </span>
         <span className="text-xs text-ink-muted leading-relaxed line-clamp-2">{props.body}</span>
       </span>
-    </>
-  );
-  if (props.disabled === true) {
-    return (
-      <div
-        aria-disabled="true"
-        className="flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 opacity-60 shadow-2xs text-left"
-      >
-        {content}
-      </div>
-    );
-  }
-  return (
-    <PressableLink
-      to={props.to}
-      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_8px_16px_-6px_rgba(20,63,42,0.12)] active:scale-[0.96] transition-[scale,border-color,box-shadow] duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
-    >
-      {content}
     </PressableLink>
   );
 }

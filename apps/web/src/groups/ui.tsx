@@ -393,14 +393,6 @@ export const primaryButton =
   "press-pill flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_6px_14px_-8px_#143f2a] hover:bg-sprout-500/90 disabled:opacity-50";
 export const secondaryButton =
   "press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:opacity-50";
-/** The red tag on every Trip entry while the Trip module is under maintenance. */
-export function MaintenanceTag() {
-  return (
-    <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
-      {t("trip.maintenance")}
-    </span>
-  );
-}
 export const card = "surface-card rounded-[1.75rem] border border-sprout-200/80 bg-white";
 export const input =
   "w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none transition-[border-color,box-shadow] duration-180 focus:border-sprout-500 focus:ring-3 focus:ring-sprout-500/15";

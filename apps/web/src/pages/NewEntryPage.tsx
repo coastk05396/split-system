@@ -2,10 +2,9 @@ import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link, Navigate, useSearchParams } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
-import { GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
+import { GroupAvatar, LoadError, Loading, primaryButton } from "../groups/ui.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { t } from "../i18n/messages.js";
-import { TRIP_ENABLED } from "../trip/enabled.js";
 
 /**
  * ＋記一筆: pick the Group (screen 4's 選擇群組), or go straight there when there is one. From
@@ -58,7 +57,6 @@ export function NewEntryPage() {
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-base font-bold text-ink">{g.name}</span>
-                      {g.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
                     </div>
                     <span className="text-xs text-ink-muted">
                       {t("groups.memberCount", { count: g.memberCount })}

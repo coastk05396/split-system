@@ -8,7 +8,7 @@ import { ExpenseSavedToast } from "../expenses/ExpenseSavedToast.js";
 import { useDeleteFailure, useSavedShares } from "../expenses/writes.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
-import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
+import { LoadError, Loading, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { hapticTick } from "../shell/haptics.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
@@ -73,7 +73,6 @@ function GroupDetail({ group }: { group: Group }) {
                 <Plane aria-hidden="true" className="size-3.5" />
                 {t("group.tripBadge")}
               </span>
-              {!TRIP_ENABLED && <MaintenanceTag />}
             </span>
           ) : undefined
         }

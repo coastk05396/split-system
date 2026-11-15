@@ -34,7 +34,7 @@ describe("RouteError", () => {
 
     renderFailingRoute(new TypeError("Failed to fetch dynamically imported module: x.js"));
 
-    expect(await screen.findByRole("heading", { name: "小芽分帳有新版本了" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "小芽有新版本了" })).toBeVisible();
     expect(screen.getByRole("button", { name: "重新整理" })).toBeVisible();
     expect(reload).not.toHaveBeenCalled();
   });

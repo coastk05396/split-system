@@ -55,9 +55,9 @@ describe("inviteFlexMessage", () => {
     expect(content).toMatchObject({
       url: `${window.location.origin}/join/tok-1`,
       title: "台南小旅行",
-      text: `一起用小芽分帳記「台南小旅行」的開銷吧！${window.location.origin}/join/tok-1`,
-      telegramText: "一起用小芽分帳記「台南小旅行」的開銷吧！",
-      copyText: `一起用小芽分帳記「台南小旅行」的開銷吧！${window.location.origin}/join/tok-1`,
+      text: `一起用小芽記「台南小旅行」的開銷吧！${window.location.origin}/join/tok-1`,
+      telegramText: "一起用小芽記「台南小旅行」的開銷吧！",
+      copyText: `一起用小芽記「台南小旅行」的開銷吧！${window.location.origin}/join/tok-1`,
       copyLabel: "複製邀請連結",
       copiedNotice: "已複製邀請連結",
     });

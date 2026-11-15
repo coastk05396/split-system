@@ -3,11 +3,10 @@ import { ArrowRight, ChevronRight, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { useGroups } from "../groups/api.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
-import { GroupAvatar, LoadError, Loading, MaintenanceTag, primaryButton } from "../groups/ui.js";
+import { GroupAvatar, LoadError, Loading, primaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
-import { TRIP_ENABLED } from "../trip/enabled.js";
 
 /** Screen 12 (group list) and screen 19 (no Groups yet). */
 export function GroupsPage() {
@@ -61,7 +60,6 @@ function GroupRow({ group }: { group: Group }) {
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-bold text-ink">{group.name}</span>
-            {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
           </div>
           <span className="whitespace-nowrap text-xs text-ink-muted">
             {t("groups.memberCount", { count: group.memberCount })}

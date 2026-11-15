@@ -5,7 +5,7 @@ import type { LineMessage } from "./reply-client.js";
 export const HELP_POSTBACK_DATA = "action=help";
 
 export const WELCOME_TEXT = [
-  "嗨，歡迎加入小芽分帳 🌱",
+  "嗨，歡迎加入小芽 🌱",
   "聚餐快分、旅行慢慢記，一群人的開銷交給小芽。",
   "點下方「小芽快捷選單」就能建立群組、記一筆或查看結算。",
 ].join("\n");

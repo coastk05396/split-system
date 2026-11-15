@@ -33,7 +33,7 @@ beforeAll(async () => {
 
 function landingHeading() {
   // Two API calls and a route change come first; allow for a busy machine.
-  return screen.findByRole("heading", { level: 1, name: /一筆快分/ }, { timeout: 3000 });
+  return screen.findByRole("heading", { level: 1, name: /搶低價機票/ }, { timeout: 3000 });
 }
 
 describe("settings (screen 11)", () => {

@@ -63,7 +63,7 @@ export function richMenu(liffId: string): RichMenu {
   return {
     size: { width: WIDTH, height: HEIGHT },
     selected: true,
-    name: "小芽分帳 預設選單",
+    name: "小芽 預設選單",
     chatBarText: "小芽快捷選單",
     areas,
   };

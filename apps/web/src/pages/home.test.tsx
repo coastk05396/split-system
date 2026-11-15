@@ -128,24 +128,22 @@ describe("home", () => {
     expect(screen.queryByRole("link", { name: /還有/ })).toBeNull();
   });
 
-  it("offers quick split first and shows Trip as under maintenance, when user has no groups", async () => {
+  it("offers quick split first and cheap flights board second, with no maintenance tag", async () => {
     renderApp({ cookieUser: me });
 
     const quick = await screen.findByRole("link", { name: /快速分帳/ });
     expect(quick).toHaveAttribute("href", "/groups/new?usage=tab");
-    expect(screen.queryByRole("link", { name: /旅行行程/ })).toBeNull();
-    const tag = screen.getByText("保養中");
-    expect(tag).toBeVisible();
-    expect(screen.getByText("旅行行程")).toBeVisible();
+    const flights = screen.getByRole("link", { name: /今日低價機票/ });
+    expect(flights).toHaveAttribute("href", "/flights");
+    expect(screen.queryByText("保養中")).toBeNull();
     expect(screen.queryByText(/適合：/)).toBeNull();
     expect(screen.getByText("吃飯、搭車，立刻記一筆")).toBeVisible();
-    expect(screen.getByText("為旅程記行程與開銷")).toBeVisible();
-    // The quick-split card comes first, the Trip card under it.
-    expect(quick.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("台灣出發特價航線，連假低價一次看")).toBeVisible();
+    expect(quick.compareDocumentPosition(flights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // Verify duplicate buttons are completely removed
     expect(screen.queryByRole("link", { name: "查看群組" })).toBeNull();
-    expect(screen.queryByRole("link", { name: /新增分帳或旅程/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /建立新分帳群組/ })).toBeNull();
   });
 
   it("renders greeting without punctuation alongside the waving Sprout mascot, and p-5 balance card", async () => {

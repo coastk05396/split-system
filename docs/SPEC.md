@@ -1,19 +1,21 @@
-# 小芽分帳 (YiQiFen / Split-System) — 產品與技術架構規格書 (v1 Build-Ready Spec)
+# 小芽 (Sprout / Split-System) — 產品與技術架構規格書
 
-> **專案名稱**：小芽分帳 (Short: 小芽)  
+> **專案名稱**：小芽 (英文：Sprout)  
 > **正式網域**：`split.rickchen.si`  
-> **狀態**：Build-Ready Specification (Wayfinder Completed)  
-> **基礎設施原則**：100% Cloudflare Free Tier / Zero-Server / Local-First Development  
+> **狀態**：Active Specification (Daily Flights + Expense Splitting)  
+> **基礎設施原則**：100% Cloudflare Edge / Zero-Server / Local-First Development  
 
 ---
 
 ## 1. 產品概述與邊界 (Product Overview & Scope)
 
 ### 1.1 產品定位
-「小芽分帳」是一款專為好友、室友與團體旅遊打造的輕量化分帳與記帳工具。兼具「日常聚會累加分帳 (Running Tab)」與「旅遊行程分帳 (Trip)」，深度整合 LINE LIFF (手機端原生體驗) 與 Web App (桌面端全功能)，並以小豆芽吉祥物作為親切的系統通知角色。
+「小芽」(Sprout) 結合「每日便宜航班情報 (`Daily Flights`)」與「親友群組分帳 (`Expense Splitting`)」，以小豆芽吉祥物貫穿親切、直接、免打字的設計體驗，讓好友從找到神價機票到旅途結算都能在同一處完成。
 
 ### 1.2 系統邊界
-* **In-Scope (v1 發布範圍)**：
+* **In-Scope**：
+  - 每日便宜航班 (`/flights`)：免登入即可瀏覽，台灣出發五機場 (`TPE`, `TSA`, `KHH`, `RMQ`, `TNN`) 分區特價看板、台灣國定連假標記、`🔥 神價` / `↓ X%` 折扣標記、`🌙 紅眼` 標記、幽靈票過濾與雙語 Trip.com (`tw.trip.com` / `www.trip.com`) 導購轉址。
+  - 首頁登陸頁 (`/` 未登入)：雙核心展示「即時浮動特價機票看板」與「快速分帳預覽」，可直接在首頁切換地區分頁、點擊機票前往 Trip.com 或進入 `/flights` 完整看板，並支援中英文切換與 Google/LINE 登入。
   - 介面語言：繁體中文 (`zh-TW`，預設) 與英文 (`en`)；語言存在帳號上，於設定頁切換，首次依裝置語言決定。
   - 幣別支援：新台幣 (`TWD`，整數元)、美元 (`USD`，美分)、日元 (`JPY`，整數元) 與泰銖 (`THB`，satang，兩位小數)。
   - 雙軌登入：桌面端 Google SSO、手機端 LINE LIFF 靜默自動登入；支援已登入狀態下的手動身分綁定。
@@ -230,14 +232,25 @@ CREATE TABLE stops (
   updated_at INTEGER NOT NULL
 );
 
--- 12. 每日匯率快取表
-CREATE TABLE fx_rates (
-  rate_date TEXT NOT NULL,
-  base_currency TEXT NOT NULL,
-  quote_currency TEXT NOT NULL,
-  rate_scaled INTEGER NOT NULL,
-  fetched_at INTEGER NOT NULL,
-  PRIMARY KEY (rate_date, base_currency, quote_currency)
+-- 13. 每日便宜航班快照表
+CREATE TABLE daily_flights (
+  id TEXT PRIMARY KEY,
+  digest_date TEXT NOT NULL, -- YYYY-MM-DD (UTC+8)
+  origin TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  trip_type TEXT NOT NULL, -- 'rt' | 'ow'
+  out_date TEXT NOT NULL,  -- YYYY-MM-DD
+  in_date TEXT,            -- YYYY-MM-DD or NULL
+  price_twd INTEGER NOT NULL,
+  discount_pct INTEGER NOT NULL,
+  tag TEXT NOT NULL,       -- 'steal' | 'below_market' | 'normal'
+  airlines_json TEXT NOT NULL, -- JSON array of airline IATA codes
+  transfers INTEGER NOT NULL,
+  return_transfers INTEGER,
+  is_red_eye INTEGER NOT NULL DEFAULT 0, -- 1 if any leg departs/arrives 00:00–05:59
+  outbound_dep TEXT,       -- HH:mm or ISO
+  inbound_dep TEXT,        -- HH:mm or ISO
+  created_at INTEGER NOT NULL
 );
 ```
 
@@ -278,11 +291,15 @@ CREATE TABLE fx_rates (
 | **Stops** | `GET, POST /groups/:id/stops` | 查詢每日站點 / 新增站點 |
 | | `PATCH, DELETE /groups/:id/stops/:sid` | 編輯站點 / 刪除站點 |
 | **Rates** | `GET /rates?date&base&quote` | 查詢參考匯率 (D1 命中快取或調用 Frankfurter) |
+| **Flights** | `GET /flights/daily` | 公開端點：取得每日已驗證便宜航班清單（無需登入；無快取時回傳內建基準清單） |
+| | `GET /flights/go` | 公開端點：校驗航班查詢參數並 `302` 導向對應語言的 Trip.com 搜尋頁（`zh-TW` → `tw.trip.com`，`en` → `www.trip.com`；無開放轉址風險） |
 | **LINE** | `POST /line/webhook` | 驗證簽章，被動回覆圖文引導與說明 |
 
 ### 5.2 每日維護 (Cron)
 
-每日排程依序執行：清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率。
+每日排程依序執行：清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率 ➔ 更新每日便宜航班 (`refreshDailyFlights`)。
+
+* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 或種子候選抓取台灣出發低價票；經即時驗證過濾「幽靈票」（無結果或即時價格高於快取價 20% 且高於 NT$800 者予以刪除），保留並標記 `🌙 紅眼`（起降時間於 `00:00–05:59`），依基準票價計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%) 後寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。
 
 * **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
 * **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。
@@ -296,15 +313,20 @@ CREATE TABLE fx_rates (
 ## 6. 前端規格與畫面校準 (Frontend & Screen Specs)
 
 * **導覽結構**：
-  - 手機端：底部五標籤（首頁、旅遊、＋記一筆、統計、設定）。點擊「旅遊」不切換路由，跳出「旅遊功能即將推出，敬請期待！」輕量通知；若畫面已存在或動態新增其他儲存結果提示（如支出儲存提示），「旅遊」通知依據現有提示的實際結算幾何高度（防禦進場 transform 瞬態干擾）動態向上堆疊（頂部保留 8px 間距，完全不遮蔽現有提示），且雙方獨立計時、互不干擾。
-  - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態，包含「旅遊」通知按鈕）。
+  - 手機端：底部五標籤（首頁、`航班 /flights`、＋記一筆、統計、設定）。點擊「航班」直接切換至 `/flights` 每日便宜航班看板。
+  - 桌面端：響應式左側欄雙欄佈局（共用相同路由與狀態，側欄顯示「小芽 / Sprout」品牌與 `航班 /flights` 導覽連結）。
+  - 首頁「快速開始」兩張卡片：左卡為「快速分帳」，右卡為「便宜航班」（直接連結至 `/flights`）。建立群組表單專注於分帳群組建立，並移除介面上的「保養中」紅色標籤與 `旅遊 (保養中)` 選項。
+* **每日便宜航班看板 (`/flights`)**：
+  - 權限：支援**未登入訪客**與**已登入使用者**存取。已登入者包覆於 `AppShell` 內；未登入者顯示簡潔頂部列（`小芽 / Sprout` 標誌回首頁、語言切換 `中文 / EN` 與「登入」按鈕）。
+  - 篩選與排序：支援地區分頁（`全部`、`🇯🇵 日本`、`🇰🇷 韓國`、`🌴 東南亞`、`🇭🇰 港澳大陸`、`🌍 歐美紐澳`）、出發地（`全部` / `TPE` / `KHH` / `RMQ` / `TSA` / `TNN`）、行程類型（`全部` / `來回` / `單程`）、月份與台灣連假篩選、直飛限定切換，以及排序切換（`價格最低` / `折扣最多`）。
+  - 卡片標記與訂票：顯示國旗、城市與機場代碼、日期與天數、連假徽章、航空公司與直飛/轉機、出發時間、`🔥 神價` / `↓ X% 低於行情` 徽章、`🌙 紅眼`（`Red-eye`）徽章、Verified TWD 價格與「前往 Trip.com ↗」外連（導向 `/api/v1/flights/go?...&lang=<zh-TW|en>`）。
 * **UI 原語**：Tailwind CSS v4 + Radix UI (Dialog、Sheet、Select、Popover)。
 * **首頁呈現**：目前淨收付以使用者的偏好幣別顯示為單一數字；其他幣別依當日最新參考匯率換算後加總（僅供參考，見 ADR 0002）。取不到匯率時退回依幣別並列。群組列與結算畫面一律維持各群組的結算幣別，不換算。「待結算的群組」標題右側提供「我的群組 ›」文字連結，直接前往 `/groups`。
 * **新增開銷表單**：
   - 標籤頁：僅保留「花費」與「轉帳」兩大頁籤（排除「收入」）。
   - 金額輸入框內建安全算式解析器（支援 `+`、`-`、`*`、`/`，防禦 `eval`）。
   - 幣別選單提供 `TWD`、`USD`、`JPY`、`THB`。
-* **靜態登陸頁**：未登入訪客訪問根路徑 `/` 時載入簡潔形象頁，登入後自動轉跳進入 App。
+* **靜態登陸頁 (`/`)**：未登入訪客訪問根路徑 `/` 時載入雙核心形象首頁——包含頂部 `航班` 快速入口與語言切換、互動式「即時浮動特價機票看板」（地區切換、動畫數字票價、`🔥 神價` / `↓ X%` 浮動標籤、直連 Trip.com 訂票與前往 `/flights` 按鈕）以及分帳收據預覽卡片；登入後自動轉跳進入 App 首頁。
 
 ### 6.1 寫入後的畫面反應 (Write Latency & Optimistic Updates)
 

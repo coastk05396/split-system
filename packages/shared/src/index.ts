@@ -11,5 +11,6 @@ export * from "./labels.js";
 export * from "./auth.js";
 export * from "./groups.js";
 export * from "./stops.js";
+export * from "./flights.js";
 export * from "./payment-plan.js";
 export * from "./payment-plan-worker.js";

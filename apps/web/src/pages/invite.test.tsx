@@ -28,7 +28,7 @@ describe("Invite share", () => {
     await user.click(screen.getByRole("button", { name: /複製邀請連結/ }));
 
     expect(await navigator.clipboard.readText()).toBe(
-      `一起用小芽分帳記「週末台南小旅行」的開銷吧！${window.location.origin}/join/tok-abc`,
+      `一起用小芽記「週末台南小旅行」的開銷吧！${window.location.origin}/join/tok-abc`,
     );
     expect(await screen.findByRole("status")).toHaveTextContent("已複製邀請連結");
     await user.click(screen.getByRole("button", { name: "關閉 QR Code" }));
@@ -92,11 +92,11 @@ describe("Invite share", () => {
     const line = await screen.findByRole("link", { name: "透過 LINE 分享" });
     expect(line).toHaveAttribute(
       "href",
-      `https://line.me/R/share?text=${encodeURIComponent(`一起用小芽分帳記「台南」的開銷吧！${joinUrl}`)}`,
+      `https://line.me/R/share?text=${encodeURIComponent(`一起用小芽記「台南」的開銷吧！${joinUrl}`)}`,
     );
     expect(screen.getByRole("link", { name: "透過 Telegram 分享" })).toHaveAttribute(
       "href",
-      `https://t.me/share/url?url=${encodeURIComponent(joinUrl)}&text=${encodeURIComponent("一起用小芽分帳記「台南」的開銷吧！")}`,
+      `https://t.me/share/url?url=${encodeURIComponent(joinUrl)}&text=${encodeURIComponent("一起用小芽記「台南」的開銷吧！")}`,
     );
   });
 

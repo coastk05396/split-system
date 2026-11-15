@@ -45,7 +45,7 @@ describe("group detail", () => {
     expect(screen.queryByRole("link", { name: "邀請成員" })).toBeNull();
   });
 
-  it("hides the 行程 tab of an existing Trip under maintenance and tags it in red", async () => {
+  it("hides the 行程 tab of an existing Trip when TRIP_ENABLED is false without a maintenance tag", async () => {
     trip.enabled = false;
     let id = "";
     renderApp({
@@ -57,7 +57,7 @@ describe("group detail", () => {
     });
 
     expect(await screen.findByRole("heading", { level: 1, name: "週末台南小旅行" })).toBeVisible();
-    expect(screen.getByText("保養中")).toBeVisible();
+    expect(screen.queryByText("保養中")).toBeNull();
     const tabs = within(screen.getByRole("tablist", { name: "群組分頁" }));
     expect(tabs.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["帳目", "結算"]);
   });

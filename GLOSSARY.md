@@ -5,11 +5,11 @@ A group expense-splitting app for everyday gatherings and trips, used mainly thr
 ## Language
 
 **小芽**:
-The product's name (in full, 小芽分帳) and its sprout mascot, who speaks in a friendly voice in notifications and empty states.
-_Avoid_: 一起分, Bot (when meaning the mascot)
+The product name ("小芽" in zh-TW, "Sprout" in English) and its sprout mascot, who speaks in a friendly voice in notifications and empty states across both daily cheap flights and group expense splitting.
+_Avoid_: 小芽分帳, Sprout Split, 一起分, Bot (when meaning the mascot)
 
 **Group**:
-A set of people who share expenses; the one concept behind both a running tab and a trip.
+A set of people who share expenses.
 _Avoid_: Room, team, party
 
 **Group avatar**:
@@ -21,32 +21,24 @@ The overlapping pictures of a Group's first four Members on a Group card, with t
 _Avoid_: Avatar row, member faces
 
 **Running Tab**:
-A Group with no itinerary, used for ongoing everyday splitting.
+A Group used for ongoing everyday or travel expense splitting.
 _Avoid_: Casual group, daily group
 
-**Trip**:
-A Group with the travel module on: dated itinerary stops, and an optional default Expense currency for travel spending.
-_Avoid_: Journey, tour
-
-**Stop**:
-One planned place or activity on one day of a Trip, with a time range, category, text location and note; an Expense may link to it.
-_Avoid_: Itinerary item, activity, waypoint
-
-**Flight Radar**:
-A standalone flight deal discovery experience, opened from the Travel tab or asked of 小芽 in a one-on-one LINE chat, separate from any Group's Trip.
-_Avoid_: Trip (that is a Group with Stops), travel module
+**Daily Flights**:
+The curated daily board (`每日航班` / `/flights`) of verified cheap flights departing Taiwan, accessible both signed in and signed out, updated daily and linked to Trip.com for booking.
+_Avoid_: Flight Radar, Price Watch, Trip module
 
 **Deal Signal**:
-The buy-timing rating on a flight option—Strong Buy, Buy, or Hold—judged from how the live fare compares against historical norms and the User's budget.
-_Avoid_: Price score, recommendation tier
+How a verified fare compares to the destination's typical baseline fare: `steal` (`🔥 神價`, discount >= 30%), `below_market` (`低於行情`, discount >= 15%), or `normal`.
+_Avoid_: Strong Buy, Price Score
 
-**Price Watch**:
-A standing alert a User sets on a route and date window so 小芽 wakes them once its fare reaches Strong Buy or drops below a target amount.
-_Avoid_: Subscription, price tracker
+**Ghost Fare**:
+A stale or misleading cached ticket (`幽靈票`) whose live verification check finds no matching itinerary or a live price more than 20% AND NT$800 above the cached fare; always dropped before display.
+_Avoid_: Phantom ticket, cache hit
 
-**Entity Pill**:
-One tappable filter chip in Flight Radar—such as destination vibe, dates, budget cap, or flight-time rule—parsed from a prompt or picked from buttons and editable in place.
-_Avoid_: Tag, search parameter
+**Red-eye Flight**:
+A flight (`紅眼班機`) whose outbound or inbound departure or arrival falls between `00:00` and `05:59`; kept in Daily Flights and marked with a `🌙 紅眼` / `Red-eye` badge so travelers decide intentionally.
+_Avoid_: Overnight flight (when meaning the UI badge)
 
 **User**:
 One real person, who may sign in through more than one Identity.

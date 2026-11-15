@@ -110,7 +110,8 @@ describe("POST /line/webhook", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]?.replyToken).toBe("r-follow");
     const text = sent[0]?.messages.map((m) => m.text).join("\n") ?? "";
-    expect(text).toContain("小芽分帳");
+    expect(text).toContain("歡迎加入小芽");
+    expect(text).not.toContain("小芽分帳");
     expect(text).toContain("選單");
     // Decision 14: the welcome no longer suggests typing an Expense sentence.
     expect(text).not.toContain("四人均分");

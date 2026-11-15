@@ -1,5 +1,6 @@
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
 import type { Bindings } from "./env.js";
+import { productionFlightSource, type FlightSource } from "./flights/daily.js";
 import {
   createLineReplyClient,
   type LineReplyClient,
@@ -14,6 +15,8 @@ export interface AppDeps {
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
   rateSource: RateSource;
   lineReplyClient: (env: Bindings) => LineReplyClient;
+  /** Optional flight discovery/verification source; defaults to productionFlightSource when omitted. */
+  flightSource?: (env: Bindings) => FlightSource;
 }
 
 const verifiers = new WeakMap<Bindings, IdentityVerifier>();
@@ -38,4 +41,5 @@ export const productionDeps: AppDeps = {
     env.LINE_CHANNEL_ACCESS_TOKEN === undefined || env.LINE_CHANNEL_ACCESS_TOKEN === ""
       ? silentReplyClient
       : createLineReplyClient(env.LINE_CHANNEL_ACCESS_TOKEN),
+  flightSource: (env) => productionFlightSource(env),
 };

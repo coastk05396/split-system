@@ -1,5 +1,6 @@
 import { type ComponentType, lazy, Suspense } from "react";
 import {
+  Link,
   Navigate,
   Outlet,
   redirect,
@@ -8,8 +9,10 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
+import { PublicHeader } from "../flights/PublicHeader.js";
 import { RouteError } from "./RouteError.js";
 import { Loading } from "../groups/ui.js";
+import { t } from "../i18n/messages.js";
 import { AppShell } from "../shell/AppShell.js";
 import { HomePage } from "../pages/HomePage.js";
 import { NotFoundPage } from "../pages/NotFoundPage.js";
@@ -18,6 +21,9 @@ import { TRIP_ENABLED } from "../trip/enabled.js";
 
 const LandingPage = lazy(() =>
   import("../pages/LandingPage.js").then((m) => ({ default: m.LandingPage })),
+);
+const FlightsPage = lazy(() =>
+  import("../pages/FlightsPage.js").then((m) => ({ default: m.FlightsPage })),
 );
 const SignInPage = lazy(() =>
   import("../pages/SignInPage.js").then((m) => ({ default: m.SignInPage })),
@@ -77,6 +83,38 @@ function SignInRoute() {
   );
 }
 
+function FlightsRoute() {
+  const { state } = useAuth();
+  if (state.status === "loading") return <Splash />;
+  const content = (
+    <Suspense fallback={<Loading />}>
+      <FlightsPage />
+    </Suspense>
+  );
+  if (state.status === "signedIn") {
+    return <AppShell>{content}</AppShell>;
+  }
+  return (
+    <div className="landing-editorial flex min-h-dvh flex-col">
+      <PublicHeader active="flights" />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-5 pt-2 md:px-10 md:pt-4">{content}</main>
+      <footer className="border-t border-sprout-900/10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-6 text-xs text-ink-muted md:flex-row md:items-center md:justify-between md:px-10">
+          <span>{t("landing.footer")}</span>
+          <span className="flex gap-4">
+            <Link to="/terms" className="hover:text-sprout-900">
+              {t("signIn.terms")}
+            </Link>
+            <Link to="/privacy" className="hover:text-sprout-900">
+              {t("signIn.privacy")}
+            </Link>
+          </span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
   return async () => ({ Component: (await load())[name] });
 }
@@ -87,6 +125,7 @@ export const routes: RouteObject[] = [
     lazy: page(() => import("../pages/LandingPage.js"), "LandingPage"),
     ErrorBoundary: RouteError,
   },
+  { path: "/flights", Component: FlightsRoute, ErrorBoundary: RouteError },
   { path: "/sign-in", Component: SignInRoute, ErrorBoundary: RouteError },
   // Opened in the phone's own browser from LINE, so it must work signed out.
   {
