@@ -4,10 +4,10 @@ test.describe("Golden Path E2E (SPEC §7.3)", () => {
   test("sign in → create group → add member → add expense → settle balance", async ({ page }) => {
     // 1. Visit root page and navigate to sign-in
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /一筆快分/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /搶低價機票/ })).toBeVisible();
 
-    // Click "登入開始使用"
-    await page.getByRole("link", { name: "登入開始使用" }).click();
+    // Click "登入"
+    await page.getByRole("link", { name: "登入", exact: true }).click();
     await expect(page).toHaveURL(/\/sign-in/);
 
     // 2. Sign in using the test identity form
