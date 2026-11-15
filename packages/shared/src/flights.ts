@@ -1450,7 +1450,7 @@ const DEFAULT_SEEDS: readonly SeedSpec[] = [
   },
 ];
 
-/** Builds curated, verified daily flight deals relative to `referenceDateIso`. */
+/** Builds curated reference daily flight deals relative to `referenceDateIso`. */
 export function getDefaultDailyFlights(
   referenceDateIso = new Date().toISOString().slice(0, 10),
 ): DailyFlightItem[] {

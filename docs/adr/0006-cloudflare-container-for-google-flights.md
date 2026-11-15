@@ -1,6 +1,6 @@
 # Cloudflare Container for Google Flights queries (Superseded for Discovery by ADR 0007)
 
-> **Status**: Narrowed / Superseded for broad discovery by [ADR 0007](0007-daily-flights-and-trip-com-redirect.md). Google's calendar-graph `batchexecute` RPC requires BotGuard challenges (`HTTP 400`), so broad multi-month discovery is performed via Travelpayouts' cached data API instead, reserving live `fast-flights` SSR verification strictly for confirming Stage-1 candidates and removing Ghost Fares.
+> **Status**: Narrowed / Superseded for broad discovery by [ADR 0007](0007-daily-flights-and-trip-com-redirect.md). Google's calendar-graph `batchexecute` RPC requires BotGuard challenges (`HTTP 400`), so broad multi-month discovery and route-and-date candidate re-queries are performed via Travelpayouts' cached data API instead (while live `fast-flights` SSR may optionally back `FlightSource.verifyCandidate`).
 
 SPEC v1 restricted the deployment to the Cloudflare Free Tier and a single TypeScript Worker. Flight Radar needs live Google Flights fares and Google's own price-level classification (`low`, `typical`, `high`) through `AWeirdDev/flights` (`fast-flights`), whose runtime depends on native Rust and C libraries (`primp` for browser TLS fingerprinting and `selectolax` for HTML parsing) that cannot run inside a TypeScript Worker or Cloudflare's Pyodide Python runtime.
 

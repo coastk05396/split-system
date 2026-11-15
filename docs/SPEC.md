@@ -232,6 +232,16 @@ CREATE TABLE stops (
   updated_at INTEGER NOT NULL
 );
 
+-- 12. 每日匯率快取表
+CREATE TABLE fx_rates (
+  rate_date TEXT NOT NULL,
+  base_currency TEXT NOT NULL,
+  quote_currency TEXT NOT NULL,
+  rate_scaled INTEGER NOT NULL,
+  fetched_at INTEGER NOT NULL,
+  PRIMARY KEY (rate_date, base_currency, quote_currency)
+);
+
 -- 13. 每日便宜航班快照表
 CREATE TABLE daily_flights (
   id TEXT PRIMARY KEY,

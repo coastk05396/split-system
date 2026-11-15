@@ -21,8 +21,8 @@ export interface AppDeps {
 
 const verifiers = new WeakMap<Bindings, IdentityVerifier>();
 
-export const productionDeps: AppDeps = {
-  verifier: (env) => {
+export const productionDeps = {
+  verifier: (env: Bindings) => {
     const existing = verifiers.get(env);
     if (existing !== undefined) return existing;
     const verifier = createJoseVerifier({
@@ -37,9 +37,9 @@ export const productionDeps: AppDeps = {
   },
   now: Date.now,
   rateSource: productionRateSource(),
-  lineReplyClient: (env) =>
+  lineReplyClient: (env: Bindings) =>
     env.LINE_CHANNEL_ACCESS_TOKEN === undefined || env.LINE_CHANNEL_ACCESS_TOKEN === ""
       ? silentReplyClient
       : createLineReplyClient(env.LINE_CHANNEL_ACCESS_TOKEN),
-  flightSource: (env) => productionFlightSource(env),
-};
+  flightSource: (env: Bindings) => productionFlightSource(env),
+} satisfies AppDeps;

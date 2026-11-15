@@ -335,4 +335,108 @@ describe("public flight routes and daily pipeline", () => {
     expect(staleResp.isFallback).toBe(true);
     expect(staleResp.items.length).toBeGreaterThanOrEqual(15);
   });
+
+  it("normalizes city codes using origin_airport/destination_airport and checks found_at against the actual verification clock", async () => {
+    const cronNow = Date.parse("2026-11-15T16:30:00Z"); // 2026-11-16 00:30 in Asia/Taipei (UTC+8)
+    const fakeFetch = (input: RequestInfo | URL): Promise<Response> => {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(rawUrl);
+      const origin = url.searchParams.get("origin");
+      const destination = url.searchParams.get("destination");
+
+      if (destination === "HND") {
+        // 24h old at 2026-11-15T16:30:00Z (must pass even though digestDate is 2026-11-16 in UTC+8)
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                origin_airport: "TSA",
+                destination: "TYO",
+                destination_airport: "HND",
+                airline: "JL",
+                departure_at: "2026-12-05T08:30:00+08:00",
+                return_at: "2026-12-09T14:00:00+09:00",
+                price: 6800,
+                transfers: 0,
+                return_transfers: 0,
+                found_at: "2026-11-14T16:30:00Z",
+              },
+            ],
+          }),
+        );
+      }
+      if (destination === "NRT") {
+        // 48h 1m old at 2026-11-15T16:30:00Z (must be rejected)
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                origin_airport: "TPE",
+                destination: "TYO",
+                destination_airport: "NRT",
+                airline: "JX",
+                departure_at: "2026-12-06T09:00:00+08:00",
+                return_at: "2026-12-10T15:00:00+09:00",
+                price: 6500,
+                transfers: 0,
+                return_transfers: 0,
+                found_at: "2026-11-13T16:29:00Z",
+              },
+            ],
+          }),
+        );
+      }
+      if (origin === "TPE" && url.searchParams.get("one_way") === "false") {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                origin_airport: "TSA",
+                destination: "TYO",
+                destination_airport: "HND",
+                airline: "JL",
+                departure_at: "2026-12-05T08:30:00+08:00",
+                return_at: "2026-12-09T14:00:00+09:00",
+                price: 6800,
+                transfers: 0,
+                return_transfers: 0,
+              },
+              {
+                origin: "TPE",
+                origin_airport: "TPE",
+                destination: "TYO",
+                destination_airport: "NRT",
+                airline: "JX",
+                departure_at: "2026-12-06T09:00:00+08:00",
+                return_at: "2026-12-10T15:00:00+09:00",
+                price: 6500,
+                transfers: 0,
+                return_transfers: 0,
+              },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(Response.json({ success: true, data: [] }));
+    };
+
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    const db = createDb(env.DB);
+    const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
+
+    expect(items.map((x) => `${x.origin}-${x.dest}`)).toEqual(["TSA-HND"]);
+    expect(items[0]).toMatchObject({
+      origin: "TSA",
+      dest: "HND",
+      priceTwd: 6800,
+      airlines: ["JL"],
+    });
+  });
 });

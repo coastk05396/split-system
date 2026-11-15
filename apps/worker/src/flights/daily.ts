@@ -50,7 +50,7 @@ export interface VerifiedFlightPrice {
 
 export interface FlightSource {
   fetchCandidates(digestDate: string): Promise<FlightCandidate[]>;
-  verifyCandidate?(candidate: FlightCandidate): Promise<VerifiedFlightPrice | null>;
+  verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
 }
 
 // 5 origins * 2 trip types = 10 discovery calls + <=30 candidate checks = <=40 subrequests (<50 Workers limit).
@@ -68,7 +68,9 @@ const TAIPEI_OFFSET_MS = 8 * 3_600_000;
 
 const travelpayoutsItemSchema = z.object({
   origin: z.string(),
+  origin_airport: z.string().optional().nullable(),
   destination: z.string(),
+  destination_airport: z.string().optional().nullable(),
   airline: z.string().optional().default("CI"),
   departure_at: z.string().optional().nullable(),
   return_at: z.string().optional().nullable(),
@@ -98,6 +100,26 @@ export function taipeiDate(now: number): string {
 function toFlightOrigin(code: string): FlightOrigin | null {
   const upper = code.toUpperCase();
   return (FLIGHT_ORIGINS as readonly string[]).includes(upper) ? (upper as FlightOrigin) : null;
+}
+
+function resolveOriginAirport(
+  raw: Pick<TravelpayoutsItem, "origin" | "origin_airport">,
+): FlightOrigin | null {
+  if (raw.origin_airport) {
+    const byAirport = toFlightOrigin(raw.origin_airport);
+    if (byAirport) return byAirport;
+  }
+  return toFlightOrigin(raw.origin);
+}
+
+function resolveDestinationAirport(
+  raw: Pick<TravelpayoutsItem, "destination" | "destination_airport">,
+) {
+  if (raw.destination_airport) {
+    const byAirport = getDestinationMeta(raw.destination_airport);
+    if (byAirport) return byAirport;
+  }
+  return getDestinationMeta(raw.destination);
 }
 
 function extractTimePart(iso: string | null | undefined): string | null {
@@ -202,8 +224,8 @@ export function productionFlightSource(
           if (data === null) continue;
 
           for (const raw of data) {
-            const parsedOrigin = toFlightOrigin(raw.origin);
-            const meta = getDestinationMeta(raw.destination);
+            const parsedOrigin = resolveOriginAirport(raw);
+            const meta = resolveDestinationAirport(raw);
             if (!parsedOrigin || !meta || !raw.departure_at) continue;
 
             const outDate = raw.departure_at.slice(0, 10);
@@ -242,7 +264,7 @@ export function productionFlightSource(
       return balanceByRegion(collected);
     },
 
-    async verifyCandidate(candidate) {
+    async verifyCandidate(candidate, now = Date.now()) {
       const token = env.TRAVELPAYOUTS_TOKEN;
       if (!token) return null;
 
@@ -265,10 +287,15 @@ export function productionFlightSource(
       });
       if (data === null || data.length === 0) return null;
 
-      const referenceMs = Date.parse(`${candidate.digestDate ?? candidate.outDate}T23:59:59Z`);
+      const referenceMs = now;
       const requireDirect = candidate.transfers === 0 && (candidate.returnTransfers ?? 0) === 0;
 
       const matches = data.filter((raw) => {
+        const rowOrigin = resolveOriginAirport(raw);
+        const rowDest = resolveDestinationAirport(raw);
+        if (rowOrigin !== candidate.origin || rowDest?.airport !== candidate.dest) {
+          return false;
+        }
         if (!raw.departure_at || raw.departure_at.slice(0, 10) !== candidate.outDate) {
           return false;
         }
@@ -348,7 +375,7 @@ export async function refreshDailyFlights(
     let inboundArr = candidate.inboundArr ?? null;
 
     if (source.verifyCandidate !== undefined) {
-      const verified = await source.verifyCandidate(candidate);
+      const verified = await source.verifyCandidate(candidate, now);
       if (verified === null || isGhostFare(candidate.priceTwd, verified.priceTwd)) {
         continue;
       }

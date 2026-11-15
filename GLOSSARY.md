@@ -21,8 +21,16 @@ The overlapping pictures of a Group's first four Members on a Group card, with t
 _Avoid_: Avatar row, member faces
 
 **Running Tab**:
-A Group used for ongoing everyday or travel expense splitting.
+A Group with no itinerary, used for ongoing everyday splitting.
 _Avoid_: Casual group, daily group
+
+**Trip**:
+A Group with the travel module on: dated itinerary stops, and an optional default Expense currency for travel spending.
+_Avoid_: Journey, tour
+
+**Stop**:
+One planned place or activity on one day of a Trip, with a time range, category, text location and note; an Expense may link to it.
+_Avoid_: Itinerary item, activity, waypoint
 
 **Daily Flights**:
 The curated daily board (`每日航班` / `/flights`) of verified cheap flights departing Taiwan, accessible both signed in and signed out, updated daily and linked to Trip.com for booking.
