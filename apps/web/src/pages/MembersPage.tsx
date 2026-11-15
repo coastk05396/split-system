@@ -13,6 +13,7 @@ import { Check, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { ApiFailure } from "../api/errors.js";
+import { scrollBehavior } from "../shell/motion.js";
 import {
   isUnsavedMember,
   useAddPlaceholder,
@@ -262,13 +263,13 @@ function MemberControls({
       )}
       <Dialog.Root open={renaming} onOpenChange={setRenaming}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
+          <Dialog.Overlay className="dialog-overlay fixed inset-0 z-30 bg-sprout-900/70" />
           <Dialog.Content
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               renameTriggerRef.current?.focus();
             }}
-            className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[calc(100%-2rem)] md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[2rem] md:p-6"
+            className="dialog-content dialog-sheet fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[calc(100%-2rem)] md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[2rem] md:p-6"
           >
             <Dialog.Title className="text-xl font-bold">{t("members.renameTitle")}</Dialog.Title>
             <Dialog.Description className="mt-2 text-sm text-ink-muted">
@@ -299,7 +300,10 @@ function MemberControls({
                   maxLength={50}
                   value={draftName}
                   onFocus={(event) => {
-                    event.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+                    event.currentTarget.scrollIntoView({
+                      block: "center",
+                      behavior: scrollBehavior(),
+                    });
                   }}
                   onChange={(event) => {
                     setDraftName(event.target.value);
@@ -313,13 +317,13 @@ function MemberControls({
                 </p>
               )}
               <div className="flex gap-3">
-                <Dialog.Close className="flex-1 rounded-full border border-sprout-200 px-4 py-3 font-bold">
+                <Dialog.Close className="press-pill flex-1 rounded-full border border-sprout-200 px-4 py-3 font-bold">
                   {t("common.cancel")}
                 </Dialog.Close>
                 <button
                   type="submit"
                   disabled={!draftName.trim() || patch.isPending}
-                  className="flex-1 rounded-full bg-sprout-600 px-4 py-3 font-bold text-white disabled:opacity-50"
+                  className="press-pill flex-1 rounded-full bg-sprout-600 px-4 py-3 font-bold text-white disabled:opacity-50"
                 >
                   {t("members.renameSave")}
                 </button>
@@ -388,8 +392,8 @@ function ConfirmDialog(props: {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
-        <Dialog.Content className="fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[calc(100%-2rem)] md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[2rem] md:p-6">
+        <Dialog.Overlay className="dialog-overlay fixed inset-0 z-30 bg-sprout-900/70" />
+        <Dialog.Content className="dialog-content dialog-sheet fixed inset-x-0 bottom-0 z-40 max-h-[85dvh] overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:inset-x-auto md:top-1/2 md:bottom-auto md:left-1/2 md:w-[calc(100%-2rem)] md:max-w-sm md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[2rem] md:p-6">
           <Dialog.Title className="text-xl font-bold text-sprout-900">{props.title}</Dialog.Title>
           <Dialog.Description className="mt-2 text-sm text-ink-muted">
             {props.body}

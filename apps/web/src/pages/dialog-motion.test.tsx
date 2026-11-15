@@ -21,7 +21,7 @@ describe("dialog motion", () => {
     await user.click(await screen.findByRole("button", { name: "刪除群組" }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveClass("dialog-content", "glass-dialog");
+    expect(dialog).toHaveClass("dialog-content", "dialog-sheet", "glass-dialog");
   });
 
   it("gives the delete-expense dialog the shared animation too", async () => {
@@ -60,6 +60,33 @@ describe("dialog motion", () => {
     expect(await screen.findByRole("dialog", { name: "刪除「晚餐」？" })).toHaveClass(
       "dialog-content",
       "glass-dialog",
+    );
+  });
+
+  it("gives the invite QR and member rename dialogs the shared overlay and sheet/dialog motion", async () => {
+    const user = userEvent.setup();
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, {
+          name: "室友",
+          role: "admin",
+          invite: { token: "tok-qr" },
+          others: [{ name: "阿哲", status: "placeholder" }],
+        });
+      },
+      pathFor: () => `/groups/${id}/members`,
+    });
+
+    await user.click(await screen.findByRole("button", { name: "邀請成員" }));
+    expect(await screen.findByRole("dialog", { name: "邀請成員" })).toHaveClass("dialog-content");
+    await user.click(screen.getByRole("button", { name: "關閉 QR Code" }));
+
+    await user.click(screen.getByRole("button", { name: "修改 阿哲 的名稱" }));
+    expect(await screen.findByRole("dialog", { name: "修改成員名稱" })).toHaveClass(
+      "dialog-content",
+      "dialog-sheet",
     );
   });
 });

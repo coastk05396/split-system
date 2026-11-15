@@ -202,3 +202,36 @@ export function CuteSettingsIcon({
     </svg>
   );
 }
+
+/**
+ * Cute Flights Icon: Chubby rounded plane climbing upward-right with a soft takeoff trail.
+ * Matches CuteHomeIcon / CuteStatsIcon / CuteSettingsIcon stroke weight and active tint.
+ */
+export function CuteFlightsIcon({
+  active = false,
+  strokeWidth = active ? 2.4 : 1.9,
+  className = "size-5",
+  ...props
+}: NavIconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...props}
+    >
+      {/* Rounded ascending airplane body + swept wings + tail */}
+      <path
+        d="M20.3 4.8a1.9 1.9 0 0 0-2.4-.3l-3.9 2.4L7.2 5.4a1.1 1.1 0 0 0-1.1.4l-.8.9a.9.9 0 0 0 .2 1.4l4.7 2.8-2.6 2.8-2.7-.5a.9.9 0 0 0-.9.3l-.5.6a.8.8 0 0 0 .1 1.1l2.7 1.9 1.9 2.7a.8.8 0 0 0 1.1.1l.6-.5a.9.9 0 0 0 .3-.9l-.5-2.7 2.8-2.6 2.8 4.7a.9.9 0 0 0 1.4.2l.9-.8a1.1 1.1 0 0 0 .4-1.1l-1.5-6.8 2.4-3.9a1.9 1.9 0 0 0-.3-2.4z"
+        fill={active ? "currentColor" : "none"}
+        fillOpacity={active ? 0.24 : 0}
+      />
+      {/* Gentle curved contrail */}
+      <path d="M3.5 20.2c2-.2 3.8-.8 5.4-1.8" strokeOpacity={active ? 0.9 : 0.7} />
+    </svg>
+  );
+}

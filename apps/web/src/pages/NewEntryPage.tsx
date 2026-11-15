@@ -42,17 +42,17 @@ export function NewEntryPage() {
             <li
               key={g.id}
               className="list-stagger-item"
-              style={{ animationDelay: `${index * 40}ms` }}
+              style={{ animationDelay: `${Math.min(index, 5) * 25}ms` }}
             >
               <PressableLink
                 to={`/groups/${g.id}/expenses/new`}
-                className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-[scale,border-color] duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
+                className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
                 <div className="flex min-w-0 items-center gap-3.5">
                   <GroupAvatar
                     name={g.name}
                     groupId={g.id}
-                    className="size-11 shrink-0 text-base transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-95 group-active:-rotate-2 md:size-12 md:text-lg motion-reduce:transform-none"
+                    className="size-11 shrink-0 text-base transition-transform duration-180 ease-(--ease-spring) group-active:scale-95 group-active:-rotate-2 md:size-12 md:text-lg motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:rotate-0 motion-reduce:group-active:scale-100 motion-reduce:group-active:rotate-0"
                   />
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
@@ -67,7 +67,7 @@ export function NewEntryPage() {
                   <AvatarStack members={g.memberPreview} total={g.memberCount} />
                   <ChevronRight
                     aria-hidden="true"
-                    className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0"
+                    className="hover-nudge-x size-5 shrink-0 text-ink-muted"
                   />
                 </div>
               </PressableLink>

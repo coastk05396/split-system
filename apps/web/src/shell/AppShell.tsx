@@ -2,26 +2,28 @@ import { Plus } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 import { type MessageId, t } from "../i18n/messages.js";
-import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { hapticTick } from "./haptics.js";
-import { CuteHomeIcon, CuteSettingsIcon, CuteStatsIcon, type NavIconProps } from "./NavIcons.js";
+import {
+  CuteFlightsIcon,
+  CuteHomeIcon,
+  CuteSettingsIcon,
+  CuteStatsIcon,
+  type NavIconProps,
+} from "./NavIcons.js";
 import { SelectionPill } from "./SelectionPill.js";
 import { SproutMascot } from "./SproutMascot.js";
-
-function FlightsNavIcon({ active: _active, strokeWidth: _strokeWidth, ...props }: NavIconProps) {
-  return <CuteTripPlaneIcon {...props} />;
-}
 
 interface Tab {
   to: string;
   label: MessageId;
   icon: ComponentType<NavIconProps>;
+  beta?: boolean;
 }
 
 /** SPEC §6: the same five destinations/actions on every screen size. */
 const TABS: readonly Tab[] = [
   { to: "/", label: "nav.home", icon: CuteHomeIcon },
-  { to: "/flights", label: "nav.flights", icon: FlightsNavIcon },
+  { to: "/flights", label: "nav.flights", icon: CuteFlightsIcon, beta: true },
   { to: "/new", label: "nav.new", icon: Plus },
   { to: "/stats", label: "nav.stats", icon: CuteStatsIcon },
   { to: "/settings", label: "nav.settings", icon: CuteSettingsIcon },
@@ -58,21 +60,31 @@ function BottomBar() {
                   )}
                   {tab.to === "/new" ? (
                     <span
-                      className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-all duration-300 ease-(--ease-spring) active:scale-[0.85] active:-rotate-3 active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] group-active:scale-[0.85] group-active:-rotate-3 group-active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)] motion-reduce:transition-none motion-reduce:transform-none ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
+                      className={`relative -mt-5 flex size-12 items-center justify-center rounded-full text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.3),0_6px_14px_-6px_#143f2a] transition-[transform,background-color] duration-180 ease-(--ease-spring) active:scale-95 active:-rotate-3 group-active:scale-95 group-active:-rotate-3 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:rotate-0 motion-reduce:active:scale-100 motion-reduce:active:rotate-0 motion-reduce:group-active:scale-100 motion-reduce:group-active:rotate-0 ${isActive ? "bg-sprout-600" : "bg-sprout-500"}`}
                     >
                       <tab.icon aria-hidden="true" className="size-6" />
                     </span>
                   ) : (
-                    <tab.icon
-                      aria-hidden="true"
-                      active={isActive}
-                      strokeWidth={isActive ? 2.4 : 1.9}
-                      className={`relative size-5.5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
-                        isActive
-                          ? "-translate-y-0.5 scale-[1.1] nav-icon-pop motion-reduce:translate-y-0 motion-reduce:scale-100"
-                          : ""
-                      }`}
-                    />
+                    <span className="relative inline-flex items-center justify-center">
+                      <tab.icon
+                        aria-hidden="true"
+                        active={isActive}
+                        strokeWidth={isActive ? 2.4 : 1.9}
+                        className={`relative size-5.5 transition-transform duration-180 ease-(--ease-spring) motion-reduce:transition-none ${
+                          isActive
+                            ? "-translate-y-0.5 scale-[1.08] motion-reduce:translate-y-0 motion-reduce:scale-100"
+                            : ""
+                        }`}
+                      />
+                      {tab.beta && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute -top-1.5 -right-4.5 rounded-full border border-amber-300/90 bg-amber-50 px-1 py-[1px] text-[7.5px] leading-none font-extrabold tracking-wider text-amber-700 uppercase"
+                        >
+                          {t("flights.betaBadge")}
+                        </span>
+                      )}
+                    </span>
                   )}
                   <span className="relative">{t(tab.label)}</span>
                 </>
@@ -115,6 +127,14 @@ function Sidebar() {
                     )}
                     <tab.icon aria-hidden="true" active={isActive} className="relative size-5" />
                     <span className="relative">{t(tab.label)}</span>
+                    {tab.beta && (
+                      <span
+                        aria-hidden="true"
+                        className="relative ml-auto rounded-full border border-amber-300/35 bg-amber-300/20 px-1.5 py-0.5 text-[9.5px] leading-none font-bold tracking-wider text-amber-200 uppercase"
+                      >
+                        {t("flights.betaBadge")}
+                      </span>
+                    )}
                   </>
                 )}
               </NavLink>

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { EASE_OUT, prefersReducedMotion } from "./motion.js";
+import { EASE_IN_OUT, prefersReducedMotion } from "./motion.js";
 
 /** Where each pill last was, by its `layoutId`: the next one slides in from there. */
 const lastBox = new Map<string, DOMRect>();
@@ -32,7 +32,7 @@ export function SelectionPill({ layoutId, className }: { layoutId: string; class
             },
             { transformOrigin: "0 0", transform: "none" },
           ],
-          { duration: 280, easing: EASE_OUT },
+          { duration: 240, easing: EASE_IN_OUT },
         );
       }
     }

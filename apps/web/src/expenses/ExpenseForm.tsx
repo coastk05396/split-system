@@ -26,6 +26,7 @@ import {
 import { type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useLineShare } from "../platform/line-share.js";
 import { hapticTick } from "../shell/haptics.js";
+import { scrollBehavior } from "../shell/motion.js";
 import { Odometer } from "../shell/Odometer.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { CategoryIcon, categoryTone } from "./CategoryIcon.js";
@@ -144,7 +145,7 @@ export function ExpenseForm({
           <Tabs.Trigger
             key={kind}
             value={kind}
-            className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-ink"
+            className="press-pill relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-ink"
           >
             {activeKind === kind && (
               <SelectionPill
@@ -172,13 +173,13 @@ export function ExpenseForm({
       <Tabs.Content value="spend" className="tab-panel">
         <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
           <details className="metadata-ticket rounded-2xl border border-sprout-200 bg-white/70">
-            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-sprout-700">
+            <summary className="press-pill flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-sprout-700">
               <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
               <span className="flex-1 font-bold">{t("expense.metadata")}</span>
               <span className="text-xs tabular-nums">{draft.date}</span>
               <ChevronDown aria-hidden="true" className="metadata-chevron size-4" />
             </summary>
-            <div className="border-t border-dashed border-sprout-200 px-4 pt-3 pb-4">
+            <div className="collapse-enter border-t border-dashed border-sprout-200 px-4 pt-3 pb-4">
               <p className="mb-3 text-xs text-ink-muted">{t("expense.metadataHint")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <PickerPill text={t("expense.date")} icon={CalendarDays}>
@@ -233,7 +234,7 @@ export function ExpenseForm({
               {CATEGORIES.map((category) => (
                 <label
                   key={category}
-                  className={`press-pill flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-sprout-200 bg-white px-2.5 py-1 text-xs hover:border-sprout-500 has-[:checked]:font-bold active:scale-95 transition-transform duration-200 ease-(--ease-spring) sm:px-3 sm:py-1.5 sm:text-sm ${categoryTone(category).chip}`}
+                  className={`press-pill flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-sprout-200 bg-white px-2.5 py-1 text-xs hover:border-sprout-500 has-[:checked]:font-bold sm:px-3 sm:py-1.5 sm:text-sm ${categoryTone(category).chip}`}
                 >
                   <input
                     type="radio"
@@ -406,13 +407,15 @@ function AmountSection({
         </p>
       )}
       {conversion.kind !== "same" && (
-        <ConversionFields
-          draft={draft}
-          conversion={conversion}
-          settlementCurrency={settlementCurrency}
-          rate={rate}
-          update={update}
-        />
+        <div className="collapse-enter">
+          <ConversionFields
+            draft={draft}
+            conversion={conversion}
+            settlementCurrency={settlementCurrency}
+            rate={rate}
+            update={update}
+          />
+        </div>
       )}
     </section>
   );
@@ -650,7 +653,7 @@ function PayersSection({
       setRendered(true);
       setClosing(false);
       const scrollTimer = setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+        bottomRef.current?.scrollIntoView({ block: "end", behavior: scrollBehavior() });
       }, 50);
       return () => {
         clearTimeout(scrollTimer);
@@ -711,7 +714,7 @@ function PayersSection({
             onClick={() => {
               setOpen((prev) => !prev);
             }}
-            className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
+            className={`${card} press-pill flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
           >
             <div className="flex min-w-0 items-center gap-3">
               <Avatar
@@ -743,7 +746,7 @@ function PayersSection({
                       <li
                         key={m.id}
                         className="list-stagger-item"
-                        style={{ animationDelay: `${index * 25}ms` }}
+                        style={{ animationDelay: `${Math.min(index, 5) * 25}ms` }}
                       >
                         <button
                           type="button"
@@ -757,7 +760,7 @@ function PayersSection({
                           }`}
                         >
                           <div
-                            className={`transition-transform duration-140 ease-(--ease-spring) ${
+                            className={`transition-transform duration-140 ease-(--ease-spring) motion-reduce:transition-none motion-reduce:scale-100 ${
                               isSelected ? "scale-[1.06]" : ""
                             }`}
                           >

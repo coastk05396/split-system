@@ -138,8 +138,12 @@ describe("home", () => {
     expect(screen.queryByText("保養中")).toBeNull();
     expect(screen.queryByText(/適合：/)).toBeNull();
     expect(screen.getByText("吃飯、搭車，立刻記一筆")).toBeVisible();
-    expect(screen.getByText("台灣出發特價航線，連假低價一次看")).toBeVisible();
+    expect(screen.getByText("台灣出發精選航線，即時特價一次看")).toBeVisible();
     expect(quick.compareDocumentPosition(flights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // New user with 0 groups also sees the interactive flight deals marquee below Quick Start
+    const marqueeRegion = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(marqueeRegion.querySelector(".flight-marquee-track")).not.toBeNull();
 
     // Verify duplicate buttons are completely removed
     expect(screen.queryByRole("link", { name: "查看群組" })).toBeNull();
@@ -216,7 +220,7 @@ describe("home", () => {
     expect(myGroupsLink).toHaveAttribute("href", "/groups");
   });
 
-  it("keeps the start cards below the pending groups", async () => {
+  it("hides quick start cards when user has groups and shows the flight deals marquee below pending groups", async () => {
     renderApp({
       cookieUser: me,
       seed: (groups) => {
@@ -225,13 +229,22 @@ describe("home", () => {
     });
 
     const pending = await screen.findByText("欠錢群組B");
-    const quick = screen.getByRole("link", { name: /^快速分帳/ });
-    // Groups exist, so 快速分帳 goes to the Group picker, not to creating another Group.
-    expect(quick).toHaveAttribute("href", "/new?pick=1");
-    expect(pending.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "快速開始" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^快速分帳/ })).toBeNull();
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(marquee.querySelector(".flight-marquee-track")).not.toBeNull();
+    expect(within(marquee).getByText("BETA")).toBeVisible();
+    expect(within(marquee).getByRole("link", { name: /全部機票/ })).toHaveAttribute(
+      "href",
+      "/flights",
+    );
+    expect(
+      pending.compareDocumentPosition(marquee) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it("renders quick start in a 50/50 bento grid with squircle icons", async () => {
+  it("renders quick start in a 50/50 bento grid with squircle icons and Beta tag on Flights card", async () => {
     renderApp({ cookieUser: me });
 
     const quickSection = await screen.findByRole("region", { name: "快速開始" });
@@ -239,8 +252,16 @@ describe("home", () => {
     expect(bentoGrid).toHaveClass("grid-cols-2", "gap-3");
 
     const quickLink = screen.getByRole("link", { name: /快速分帳/ });
+    expect(quickLink).toHaveClass("press-card");
+    expect(quickLink.className).not.toContain("active:scale-");
+    expect(quickLink.className).not.toContain("transition-[scale");
     const iconContainer = quickLink.querySelector(".size-12.rounded-2xl.bg-peach");
     expect(iconContainer).not.toBeNull();
+
+    const flightsLink = within(quickSection).getByRole("link", { name: /今日低價機票/ });
+    expect(within(flightsLink).getByText("BETA")).toBeVisible();
+    // Redesigned cohesive Sprout plane icon (no old neon #4ade80 / cyan #7dd3fc sky fill)
+    expect(flightsLink.innerHTML).not.toContain("#7dd3fc");
   });
 
   it("renders pending groups with warm balance badges and right avatar stack", async () => {

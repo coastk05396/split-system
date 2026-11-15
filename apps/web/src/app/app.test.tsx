@@ -19,7 +19,7 @@ describe("app shell", () => {
     const tabs = within(screen.getByRole("navigation", { name: "底部導覽" }));
     expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "首頁",
-      "機票",
+      "BETA機票",
       "新增",
       "統計",
       "設定",

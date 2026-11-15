@@ -3,6 +3,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Avatar, card } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
+import { scrollBehavior } from "../shell/motion.js";
 import { ShareBar } from "./ShareRing.js";
 import { evaluateSplit, type SplitDraft, type SplitStatus } from "./split-draft.js";
 
@@ -92,7 +93,7 @@ export function SplitEditor({
       if (!equal) return;
       // Equal splits open a dropdown: bring its last row above the bottom bar.
       const scrollTimer = setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+        bottomRef.current?.scrollIntoView({ block: "end", behavior: scrollBehavior() });
       }, 50);
       return () => {
         clearTimeout(scrollTimer);
@@ -162,7 +163,7 @@ export function SplitEditor({
           onClick={() => {
             setOpen(!open);
           }}
-          className={`${card} flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
+          className={`${card} press-pill flex min-h-[52px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:border-sprout-500 focus-visible:ring-2 focus-visible:ring-sprout-500`}
         >
           <div className="flex items-center -space-x-2 overflow-hidden py-0.5">
             {members
@@ -227,7 +228,7 @@ export function SplitEditor({
                   <li
                     key={m.id}
                     aria-label={m.displayName}
-                    style={{ animationDelay: `${index * 25}ms` }}
+                    style={{ animationDelay: `${Math.min(index, 5) * 25}ms` }}
                     className={`${card} splitter-row list-stagger-item flex items-center gap-3 px-4 py-3`}
                     data-included={takesPart}
                   >

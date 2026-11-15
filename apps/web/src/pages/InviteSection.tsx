@@ -57,13 +57,13 @@ export function InviteSection({ group }: { group: Group }) {
       {share !== null && (
         <Dialog.Root open={open} onOpenChange={setOpen}>
           <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-30 bg-sprout-900/70" />
+            <Dialog.Overlay className="dialog-overlay fixed inset-0 z-30 bg-sprout-900/70" />
             <Dialog.Content
               onCloseAutoFocus={(event) => {
                 event.preventDefault();
                 triggerRef.current?.focus();
               }}
-              className="fixed top-1/2 left-1/2 z-40 max-h-[90dvh] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl"
+              className="dialog-content fixed top-1/2 left-1/2 z-40 max-h-[90dvh] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>

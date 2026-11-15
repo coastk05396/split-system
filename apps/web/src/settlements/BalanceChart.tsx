@@ -29,7 +29,6 @@ export function BalanceChart({
   defaultOpen?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [animKey, setAnimKey] = useState(0);
   const seated = rows.filter((r) => r.status !== "former");
   const open = seated.filter((r) => r.balance !== 0).sort((a, b) => b.balance - a.balance);
   if (open.length === 0) return null;
@@ -39,7 +38,7 @@ export function BalanceChart({
   return (
     <section
       aria-labelledby="balance-chart"
-      className={`surface-card settle-stagger-1 flex flex-col rounded-3xl border border-sprout-200 bg-white transition-[padding] duration-200 ${
+      className={`surface-card settle-stagger-1 flex flex-col rounded-3xl border border-sprout-200 bg-white ${
         isOpen ? "p-5" : "py-2.5 px-4"
       }`}
     >
@@ -48,7 +47,6 @@ export function BalanceChart({
         id="balance-chart"
         aria-expanded={isOpen}
         onClick={() => {
-          if (!isOpen) setAnimKey((k) => k + 1);
           setIsOpen(!isOpen);
         }}
         className="press-pill flex w-full items-center justify-between text-left select-none rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600"
@@ -63,7 +61,7 @@ export function BalanceChart({
           <span className="press-icon flex size-8 shrink-0 items-center justify-center rounded-full text-sprout-700 hover:bg-sprout-100">
             <ChevronDown
               aria-hidden="true"
-              className={`size-5 transition-transform duration-220 ease-(--ease-spring) ${
+              className={`size-5 transition-transform duration-200 ease-(--ease-spring) motion-reduce:transition-none ${
                 isOpen ? "rotate-180" : ""
               }`}
             />
@@ -73,12 +71,12 @@ export function BalanceChart({
 
       <div className="collapse-grid" data-closing={!isOpen ? "true" : undefined} inert={!isOpen}>
         <div className="collapse-grid-inner pt-3">
-          <ul key={animKey} aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
+          <ul aria-label={t("settle.chartTitle")} className="flex flex-col gap-3">
             {open.map((r, index) => {
               const owed = r.balance > 0;
               const name = localName(r.displayName);
               // Rows set off one after another, capped so a long list is not a long wait.
-              const delay = `${String(Math.min(index, 6) * 60)}ms`;
+              const delay = `${String(Math.min(index, 5) * 40)}ms`;
               const width = `${String(Math.max(4, Math.round((Math.abs(r.balance) / largest) * 85)))}%`;
               return (
                 <li

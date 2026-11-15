@@ -6,6 +6,7 @@ import { useLineShare } from "../platform/line-share.js";
 import { card, failureMessage, input, primaryButton, secondaryButton } from "../groups/ui.js";
 import { t } from "../i18n/messages.js";
 import { useKeyboardInset } from "../shell/keyboard.js";
+import { scrollBehavior } from "../shell/motion.js";
 
 export interface ConfirmTarget {
   payerName: string;
@@ -138,7 +139,7 @@ function ConfirmForm({
           inputMode="decimal"
           value={text}
           onFocus={(e) => {
-            e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+            e.currentTarget.scrollIntoView({ block: "center", behavior: scrollBehavior() });
           }}
           onChange={(e) => {
             setText(e.target.value);
@@ -207,7 +208,7 @@ function SheetContent({ children }: { children: ReactNode }) {
       onFocus={(event) => {
         if (event.target instanceof HTMLInputElement) setTyping(true);
       }}
-      className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6"
+      className="dialog-content dialog-sheet glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6"
     >
       {children}
     </Dialog.Content>

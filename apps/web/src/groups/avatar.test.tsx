@@ -70,7 +70,7 @@ describe("GroupAvatar", () => {
 });
 
 describe("AvatarStack", () => {
-  it("shows at most four avatars, counts the rest, and keeps the spring touch-spread classes", () => {
+  it("shows at most four avatars, counts the rest, and uses GPU transform stack spacing without layout transitions", () => {
     const members = [
       { name: "小宇", pictureUrl: null },
       { name: "宜庭", pictureUrl: null },
@@ -81,8 +81,9 @@ describe("AvatarStack", () => {
     ];
     const { container } = render(<AvatarStack members={members} total={8} />);
     const stack = container.querySelector("span");
-    expect(stack?.className).toContain("group-active:space-x-1");
-    expect(stack?.className).toContain("ease-(--ease-spring)");
+    expect(stack?.className).toContain("avatar-stack");
+    expect(stack?.className).not.toContain("transition-[margin]");
+    expect(container.querySelector(".avatar-stack-item")).not.toBeNull();
     expect(screen.getByText("+4")).toBeInTheDocument();
   });
 });

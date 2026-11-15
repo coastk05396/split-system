@@ -3,6 +3,7 @@ import { formatAmount, type Group } from "@split/shared";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { t } from "../i18n/messages.js";
+import { scrollBehavior } from "../shell/motion.js";
 import { useDeleteGroup, useMembers } from "./api.js";
 import { failureMessage, input, secondaryButton } from "./ui.js";
 
@@ -25,7 +26,7 @@ export function DeleteGroupDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-        <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
+        <Dialog.Content className="dialog-content dialog-sheet glass-dialog fixed inset-x-0 bottom-0 z-30 flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
           {open && <DeleteForm group={group} />}
         </Dialog.Content>
       </Dialog.Portal>
@@ -59,7 +60,7 @@ function DeleteForm({ group }: { group: Group }) {
         <input
           value={typed}
           onFocus={(e) => {
-            e.currentTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+            e.currentTarget.scrollIntoView({ block: "center", behavior: scrollBehavior() });
           }}
           onChange={(e) => {
             setTyped(e.target.value);

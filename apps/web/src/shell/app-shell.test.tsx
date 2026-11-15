@@ -34,15 +34,18 @@ describe("AppShell navigation", () => {
 
     const floatingButton = newLink.querySelector("span");
     expect(floatingButton).toHaveClass(
-      "active:scale-[0.85]",
+      "active:scale-95",
       "active:-rotate-3",
-      "active:shadow-[0_0_0_8px_rgba(46,157,113,0.25)]",
-      "duration-300",
+      "motion-reduce:transition-none",
+      "motion-reduce:scale-100",
+      "motion-reduce:rotate-0",
       "ease-(--ease-spring)",
     );
+    expect(floatingButton?.className).not.toContain("transition-all");
+    expect(floatingButton?.className).not.toContain("active:shadow-[");
   });
 
-  it("links to 機票 (/flights) in both bottom navigation and sidebar with no maintenance toast", () => {
+  it("links to 機票 (/flights) with cohesive nav icon SVG and Beta badge in both bottom nav and sidebar", () => {
     render(
       <MemoryRouter initialEntries={["/flights"]}>
         <AppShell>
@@ -55,11 +58,17 @@ describe("AppShell navigation", () => {
     const bottomFlightLink = within(bottomNav).getByRole("link", { name: "機票" });
     expect(bottomFlightLink).toHaveAttribute("href", "/flights");
     expect(bottomFlightLink).toHaveAttribute("aria-current", "page");
+    const bottomFlightSvg = bottomFlightLink.querySelector("svg");
+    expect(bottomFlightSvg).toHaveAttribute("stroke", "currentColor");
+    expect(within(bottomFlightLink).getByText("BETA")).toBeVisible();
 
     const sidebar = screen.getByRole("navigation", { name: "側邊導覽" });
     const sideFlightLink = within(sidebar).getByRole("link", { name: "機票" });
     expect(sideFlightLink).toHaveAttribute("href", "/flights");
     expect(sideFlightLink).toHaveAttribute("aria-current", "page");
+    const sideFlightSvg = sideFlightLink.querySelector("svg");
+    expect(sideFlightSvg).toHaveAttribute("stroke", "currentColor");
+    expect(within(sideFlightLink).getByText("BETA")).toBeVisible();
     expect(screen.queryByRole("status")).toBeNull();
   });
 });

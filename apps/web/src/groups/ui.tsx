@@ -81,7 +81,7 @@ export function LoadError({ error, onRetry }: { error: unknown; onRetry: () => v
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-full border border-sprout-200 px-5 py-2 font-bold"
+        className="press-pill rounded-full border border-sprout-200 px-5 py-2 font-bold"
       >
         {t("common.retry")}
       </button>
@@ -307,7 +307,7 @@ export function GroupAvatar({
       aria-hidden="true"
       className={`inline-flex shrink-0 select-none items-center justify-center rounded-2xl border font-bold ${palette.bg} ${palette.text} ${palette.border} ${palette.shadow} ${
         interactive
-          ? "transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-95 group-active:-rotate-1 motion-reduce:transition-none"
+          ? "transition-transform duration-180 ease-(--ease-spring) group-active:scale-95 group-active:-rotate-1 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:rotate-0 motion-reduce:group-active:scale-100 motion-reduce:group-active:rotate-0"
           : ""
       } ${className}`}
     >
@@ -380,7 +380,7 @@ export function AvatarTip({
           aria-hidden="true"
           className="pointer-events-none absolute right-0 bottom-full left-0 z-10 mb-1.5 flex justify-center"
         >
-          <span className="swap-in rounded-full bg-ink px-2.5 py-1 text-xs font-bold whitespace-nowrap text-white shadow-md">
+          <span className="avatar-tip swap-in rounded-full bg-ink px-2.5 py-1 text-xs font-bold whitespace-nowrap text-white shadow-md">
             {name}
           </span>
         </span>

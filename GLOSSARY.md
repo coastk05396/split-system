@@ -37,7 +37,7 @@ The curated daily board (`每日航班` / `/flights`) of verified cheap flights 
 _Avoid_: Flight Radar, Price Watch, Trip module
 
 **Deal Signal**:
-How a verified fare compares to the destination's typical baseline fare: `steal` (`🔥 神價`, discount >= 30%), `below_market` (`低於行情`, discount >= 15%), or `normal`.
+How a verified fare compares to the destination's typical baseline fare: domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the card UI renders any discount `>= 15%` uniformly as quiet emerald text `省 X%` / `Save X%`.
 _Avoid_: Strong Buy, Price Score
 
 **Ghost Fare**:
@@ -45,7 +45,7 @@ A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by St
 _Avoid_: Phantom ticket, cache hit
 
 **Red-eye Flight**:
-A flight (`紅眼班機`) whose outbound or inbound departure or arrival falls between `00:00` and `05:59`; kept in Daily Flights and marked with a `🌙 紅眼` / `Red-eye` badge so travelers decide intentionally.
+A flight (`紅眼班機`) whose outbound or inbound departure or arrival falls between `00:00` and `05:59`; kept in Daily Flights and marked with a Lucide moon icon + `紅眼` / `Red-eye` badge so travelers decide intentionally.
 _Avoid_: Overnight flight (when meaning the UI badge)
 
 **User**:

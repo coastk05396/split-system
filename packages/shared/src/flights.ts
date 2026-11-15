@@ -15,6 +15,8 @@ export type DealTag = (typeof DEAL_TAGS)[number];
 
 export const FLIGHT_SORT_OPTIONS = ["price", "discount"] as const;
 export type FlightSortBy = (typeof FLIGHT_SORT_OPTIONS)[number];
+export type FlightSortDirection = "asc" | "desc";
+export type FlightStopsFilter = "all" | "direct" | "transfer";
 
 /** Multiplier converting typical roundtrip baseline fares into one-way deal baselines. */
 export const ONE_WAY_BASELINE_FACTOR = 0.58;
@@ -1088,11 +1090,21 @@ export function buildTripComUrl(
 export interface DailyFlightsFilter {
   region: FlightRegion | "all";
   origin: FlightOrigin | "all";
+  /** `"all"` or a destination airport IATA code (e.g. `"NRT"`). */
+  dest?: string;
   tripType: FlightTripType | "all";
   /** `"all"`, `"holiday"`, or a `"YYYY-MM"` month prefix. */
   month: string;
+  /** `"all"` or an airline IATA code (e.g. `"CI"`). */
+  airline?: string;
   directOnly: boolean;
   holidayOnly: boolean;
+  /** `"all"`, `"direct"`, or `"transfer"`. Overrides `directOnly` when provided. */
+  stops?: FlightStopsFilter;
+  /** Maximum TWD fare ceiling (inclusive), or `null` for no limit. */
+  maxPriceTwd?: number | null;
+  /** Exclude flights with red-eye segments. */
+  excludeRedEye?: boolean;
 }
 
 /** Filters daily flight deals by user-selected tabs and quick filter chips. */
@@ -1100,11 +1112,24 @@ export function filterDailyFlights(
   items: readonly DailyFlightItem[],
   filter: DailyFlightsFilter,
 ): DailyFlightItem[] {
+  const stopsMode: FlightStopsFilter = filter.stops ?? (filter.directOnly ? "direct" : "all");
+  const normalizedDest =
+    filter.dest !== undefined && filter.dest !== "all" ? filter.dest.toUpperCase() : null;
+  const normalizedAirline =
+    filter.airline !== undefined && filter.airline !== "all" ? filter.airline.toUpperCase() : null;
   return items.filter((item) => {
     if (filter.region !== "all" && item.region !== filter.region) return false;
     if (filter.origin !== "all" && item.origin !== filter.origin) return false;
+    if (normalizedDest !== null && item.dest.toUpperCase() !== normalizedDest) return false;
     if (filter.tripType !== "all" && item.tripType !== filter.tripType) return false;
-    if (filter.directOnly && (item.transfers > 0 || (item.returnTransfers ?? 0) > 0)) return false;
+    const maxStops = Math.max(item.transfers, item.returnTransfers ?? 0);
+    if (stopsMode === "direct" && maxStops > 0) return false;
+    if (stopsMode === "transfer" && maxStops === 0) return false;
+    if (filter.maxPriceTwd != null && item.priceTwd > filter.maxPriceTwd) return false;
+    if (filter.excludeRedEye && item.isRedEye) return false;
+    if (normalizedAirline !== null) {
+      if (!item.airlines.some((code) => code.toUpperCase() === normalizedAirline)) return false;
+    }
     if (filter.holidayOnly || filter.month === "holiday") {
       if (matchTaiwanHoliday(item.outDate, item.inDate) === null) return false;
     }
@@ -1115,16 +1140,23 @@ export function filterDailyFlights(
   });
 }
 
-/** Sorts daily flights by lowest TWD price or steepest discount percentage. */
+/** Natural initial direction when switching to a sort key. */
+export function defaultSortDirection(sortBy: FlightSortBy): FlightSortDirection {
+  return sortBy === "discount" ? "desc" : "asc";
+}
+
+/** Sorts daily flights by TWD price or discount percentage in either direction. */
 export function sortDailyFlights(
   items: readonly DailyFlightItem[],
   sortBy: FlightSortBy,
+  direction: FlightSortDirection = defaultSortDirection(sortBy),
 ): DailyFlightItem[] {
+  const sign = direction === "asc" ? 1 : -1;
   return [...items].sort((a, b) => {
     if (sortBy === "discount") {
-      return b.discountPct - a.discountPct || a.priceTwd - b.priceTwd;
+      return sign * (a.discountPct - b.discountPct) || a.priceTwd - b.priceTwd;
     }
-    return a.priceTwd - b.priceTwd || b.discountPct - a.discountPct;
+    return sign * (a.priceTwd - b.priceTwd) || b.discountPct - a.discountPct;
   });
 }
 

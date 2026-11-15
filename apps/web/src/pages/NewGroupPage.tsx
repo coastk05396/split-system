@@ -1,6 +1,6 @@
 import { CURRENCY_CODES, type CurrencyCode } from "@split/shared";
 import { ArrowRight } from "lucide-react";
-import { type SubmitEvent, useId, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useCreateGroup } from "../groups/api.js";
@@ -33,16 +33,25 @@ export function NewGroupPage() {
   const [name, setName] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [diceRolling, setDiceRolling] = useState(false);
+  const diceTimerRef = useRef<number | undefined>(undefined);
   const [settlementCurrency, setSettlementCurrency] = useState<CurrencyCode>(
     state.status === "signedIn" ? state.user.preferredCurrency : "TWD",
   );
 
+  useEffect(
+    () => () => {
+      window.clearTimeout(diceTimerRef.current);
+    },
+    [],
+  );
+
   function rollPalette() {
+    window.clearTimeout(diceTimerRef.current);
     setPaletteIndex((prev) => (prev + 1) % GROUP_PALETTES.length);
     setDiceRolling(true);
-    setTimeout(() => {
+    diceTimerRef.current = window.setTimeout(() => {
       setDiceRolling(false);
-    }, 400);
+    }, 240);
   }
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
@@ -86,7 +95,7 @@ export function NewGroupPage() {
               <GroupAvatar
                 name={name}
                 paletteIndex={paletteIndex}
-                className="size-12 rounded-2xl text-lg shadow-2xs transition-[scale] duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95"
+                className="size-12 rounded-2xl text-lg shadow-2xs transition-transform duration-160 ease-(--ease-spring) group-active:scale-95 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:group-active:scale-100"
                 interactive={false}
               />
             </button>
@@ -95,7 +104,7 @@ export function NewGroupPage() {
               onClick={rollPalette}
               aria-label="隨機換色"
               title="隨機換色"
-              className={`absolute -bottom-1 -right-1 flex size-5.5 items-center justify-center rounded-full border border-sprout-200 bg-white text-xs shadow-xs transition-transform duration-300 ease-(--ease-spring) hover:scale-115 active:scale-90 ${
+              className={`absolute -bottom-1 -right-1 flex size-5.5 items-center justify-center rounded-full border border-sprout-200 bg-white text-xs shadow-xs transition-transform duration-240 ease-(--ease-spring) active:scale-90 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:rotate-0 motion-reduce:active:scale-100 ${
                 diceRolling ? "rotate-[360deg] scale-110" : ""
               }`}
             >

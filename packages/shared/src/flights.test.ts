@@ -153,6 +153,89 @@ describe("flights domain helpers", () => {
       }).map((x) => x.id),
     ).toEqual(["dec-ny"]);
     expect(sortDailyFlights(custom.slice(0, 2), "price").map((x) => x.id)).toEqual(["a", "b"]);
+    expect(sortDailyFlights(custom.slice(0, 2), "price", "desc").map((x) => x.id)).toEqual([
+      "b",
+      "a",
+    ]);
     expect(sortDailyFlights(custom.slice(0, 2), "discount").map((x) => x.id)).toEqual(["b", "a"]);
+    expect(sortDailyFlights(custom.slice(0, 2), "discount", "asc").map((x) => x.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(
+      filterDailyFlights(custom, {
+        region: "all",
+        origin: "all",
+        tripType: "all",
+        month: "all",
+        directOnly: false,
+        holidayOnly: false,
+        stops: "transfer",
+      }).map((x) => x.id),
+    ).toEqual(["c"]);
+    expect(
+      filterDailyFlights(custom.slice(0, 2), {
+        region: "all",
+        origin: "all",
+        tripType: "all",
+        month: "all",
+        directOnly: false,
+        holidayOnly: false,
+        maxPriceTwd: 6000,
+      }).map((x) => x.id),
+    ).toEqual(["a"]);
+    expect(
+      filterDailyFlights(
+        [
+          { ...seed0, id: "red", isRedEye: true },
+          { ...seed0, id: "day", isRedEye: false },
+        ],
+        {
+          region: "all",
+          origin: "all",
+          tripType: "all",
+          month: "all",
+          directOnly: false,
+          holidayOnly: false,
+          excludeRedEye: true,
+        },
+      ).map((x) => x.id),
+    ).toEqual(["day"]);
+
+    expect(
+      filterDailyFlights(
+        [
+          { ...seed0, id: "mm-nrt", dest: "NRT", airlines: ["MM"] },
+          { ...seed0, id: "ci-kix", dest: "KIX", airlines: ["CI", "JX"] },
+        ],
+        {
+          region: "all",
+          origin: "all",
+          tripType: "all",
+          month: "all",
+          directOnly: false,
+          holidayOnly: false,
+          dest: "kix",
+        },
+      ).map((x) => x.id),
+    ).toEqual(["ci-kix"]);
+
+    expect(
+      filterDailyFlights(
+        [
+          { ...seed0, id: "mm-nrt", dest: "NRT", airlines: ["MM"] },
+          { ...seed0, id: "ci-kix", dest: "KIX", airlines: ["CI", "JX"] },
+        ],
+        {
+          region: "all",
+          origin: "all",
+          tripType: "all",
+          month: "all",
+          directOnly: false,
+          holidayOnly: false,
+          airline: "jx",
+        },
+      ).map((x) => x.id),
+    ).toEqual(["ci-kix"]);
   });
 });

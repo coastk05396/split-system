@@ -37,7 +37,7 @@ export function ShareRing({ shares }: { shares: readonly number[] }) {
             strokeWidth="6"
             strokeDasharray={`${String(length)} ${String(CIRCUMFERENCE - length)}`}
             strokeDashoffset={-offset}
-            className="transition-[stroke-dasharray,stroke-dashoffset] duration-300 ease-(--ease-spring) motion-reduce:transition-none"
+            className="transition-[stroke-dasharray,stroke-dashoffset] duration-240 ease-(--ease-in-out) motion-reduce:transition-none"
           />
         );
         offset += length;
@@ -54,23 +54,28 @@ export function ShareRing({ shares }: { shares: readonly number[] }) {
 export function ShareBar({ shares }: { shares: readonly number[] }) {
   const total = shares.reduce((sum, s) => sum + s, 0);
   if (total <= 0) return null;
+  let offsetPct = 0;
   return (
     <div
       aria-hidden="true"
-      className="flex h-2 w-full overflow-hidden rounded-full bg-sprout-150 p-0.5 gap-0.5"
+      className="relative h-2 w-full overflow-hidden rounded-full bg-sprout-150"
     >
-      {shares.map((share, i) =>
-        share > 0 ? (
+      {shares.map((share, i) => {
+        if (share <= 0) return null;
+        const fraction = share / total;
+        const startPct = offsetPct;
+        offsetPct += fraction * 100;
+        return (
           <span
             key={i}
             style={{
-              flexGrow: share,
+              transform: `translateX(${String(startPct)}%) scaleX(${String(fraction)})`,
               backgroundColor: SHARE_COLOURS[i % SHARE_COLOURS.length],
             }}
-            className="h-full rounded-full transition-[flex-grow] duration-300 ease-(--ease-out-expo) motion-reduce:transition-none"
+            className="absolute inset-0 origin-left transition-transform duration-240 ease-(--ease-in-out) motion-reduce:transition-none"
           />
-        ) : null,
-      )}
+        );
+      })}
     </div>
   );
 }

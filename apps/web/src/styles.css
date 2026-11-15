@@ -19,9 +19,13 @@
   --font-sans:
     "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
 
-  /* Fluid ease-out and spring release curves for tactile micro-interactions. */
+  /* Fluid ease-out, ease-in-out, drawer, and spring release curves for tactile micro-interactions. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-poke: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @layer base {
@@ -36,12 +40,12 @@
 }
 
 /* Three-tier asymmetric tactile press feedback:
-   press down settles briskly (80ms ease-out); release rebounds gently with a natural squishy spring. */
+   press down settles briskly (100ms ease-out); release rebounds gently under 220ms. */
 .press-card,
 .press-pill,
 .press-icon {
   transition-property: transform, background-color, border-color, box-shadow, color, opacity;
-  transition-duration: 360ms, 180ms, 180ms, 220ms, 180ms, 180ms;
+  transition-duration: 220ms, 180ms, 180ms, 200ms, 180ms, 180ms;
   transition-timing-function:
     var(--ease-spring), var(--ease-out-expo), var(--ease-out-expo), var(--ease-out-expo),
     var(--ease-out-expo), var(--ease-out-expo);
@@ -49,8 +53,8 @@
 .press-card:active:not(:disabled),
 .press-pill:active:not(:disabled),
 .press-icon:active:not(:disabled) {
-  transition-duration: 80ms, 80ms, 80ms, 80ms, 80ms, 80ms;
-  transition-timing-function: ease-out;
+  transition-duration: 100ms, 100ms, 100ms, 100ms, 100ms, 100ms;
+  transition-timing-function: var(--ease-out);
 }
 .press-card:active:not(:disabled) {
   transform: scale(0.97);
@@ -149,57 +153,44 @@
   }
 }
 .tab-panel[data-state="active"] {
-  animation: tab-enter 180ms var(--ease-out-expo);
+  animation: tab-enter 160ms var(--ease-out);
 }
 
-/* Spatial dropdown menu entrance anchored to its trigger's transform-origin. */
-@keyframes menu-enter {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-@keyframes menu-exit {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.97) translateY(-1px);
-  }
-}
+/* Spatial interruptible dropdown menu transitions anchored to trigger transform-origin. */
 .menu-content {
   transform-origin: var(--radix-dropdown-menu-content-transform-origin, 50% 0%);
-  background-color: rgb(255 255 255 / 0.95);
+  background-color: rgb(255 255 255 / 0.96);
   box-shadow:
     inset 0 1px 0 0 rgb(255 255 255 / 0.9),
     0 16px 32px -12px rgb(20 63 42 / 0.22);
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 180ms var(--ease-out);
 }
 .menu-content[data-state="open"] {
-  animation: menu-enter 180ms var(--ease-out-expo);
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.95) translateY(-2px);
+  }
 }
 .menu-content[data-state="closed"] {
-  animation: menu-exit 120ms ease-out;
+  opacity: 0;
+  transform: scale(0.97) translateY(-1px);
 }
 
-/* Smooth reveal for collapsible lists (split participants, cancelled settlements). */
-@keyframes collapse-enter {
-  from {
+/* Interruptible reveal for collapsible panels & lists. */
+.collapse-enter {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 200ms var(--ease-out);
+  @starting-style {
     opacity: 0;
     transform: translateY(-6px);
   }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.collapse-enter {
-  animation: collapse-enter 220ms var(--ease-out-expo);
 }
 
 .collapse-grid {
@@ -325,25 +316,59 @@
 }
 
 .dialog-content[data-state="open"] {
-  animation: dialog-enter 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: dialog-enter 220ms var(--ease-out);
 }
 .dialog-content[data-state="closed"] {
-  animation: dialog-exit 160ms ease-out;
+  animation: dialog-exit 160ms var(--ease-out);
 }
 .dialog-overlay[data-state="open"] {
-  animation: overlay-enter 260ms ease-out;
+  animation: overlay-enter 200ms var(--ease-out);
 }
 .dialog-overlay[data-state="closed"] {
-  animation: overlay-exit 160ms ease-out;
+  animation: overlay-exit 160ms var(--ease-out);
+}
+
+@keyframes sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheet-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+@media (max-width: 767px) {
+  .dialog-sheet[data-state="open"] {
+    animation: sheet-enter 280ms var(--ease-drawer);
+  }
+  .dialog-sheet[data-state="closed"] {
+    animation: sheet-exit 180ms var(--ease-out);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dialog-content[data-state="open"],
-  .dialog-content[data-state="closed"] {
+  .dialog-content[data-state="closed"],
+  .dialog-sheet[data-state="open"],
+  .dialog-sheet[data-state="closed"] {
     animation-name: overlay-enter;
     animation-duration: 120ms;
   }
-  .dialog-content[data-state="closed"] {
+  .dialog-content[data-state="closed"],
+  .dialog-sheet[data-state="closed"] {
     animation-name: overlay-exit;
   }
 }
@@ -368,10 +393,10 @@
   }
 }
 .bar-grow-right {
-  animation: bar-grow-right 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: bar-grow-right 280ms var(--ease-out-expo) backwards;
 }
 .bar-grow-left {
-  animation: bar-grow-left 650ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: bar-grow-left 280ms var(--ease-out-expo) backwards;
 }
 
 /* The statistics chart draws itself once when its page opens. */
@@ -385,7 +410,7 @@
 }
 .stats-bar-enter {
   transform-origin: bottom;
-  animation: stats-bar-enter 650ms var(--ease-out-expo) both;
+  animation: stats-bar-enter 280ms var(--ease-out-expo) both;
 }
 @keyframes stats-ring-enter {
   from {
@@ -396,7 +421,7 @@
   }
 }
 .stats-ring-enter {
-  animation: stats-ring-enter 650ms var(--ease-out-expo) both;
+  animation: stats-ring-enter 280ms var(--ease-out-expo) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .stats-bar-enter,
@@ -409,7 +434,7 @@
 @keyframes settle-pop {
   from {
     opacity: 0.45;
-    transform: scale(0.8);
+    transform: scale(0.92);
   }
   to {
     opacity: 1;
@@ -417,14 +442,14 @@
   }
 }
 .settle-pop {
-  animation: settle-pop 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: settle-pop 200ms var(--ease-out);
 }
 
 /* Core balance and spending amounts stay solid, crisp, and high-contrast at all times. */
 .count-up {
   display: inline-block;
   opacity: 1;
-  transition: color 250ms ease-out;
+  transition: color 220ms var(--ease-out);
 }
 .count-up[data-updating="true"] {
   opacity: 1;
@@ -455,14 +480,14 @@
   }
 }
 .count-settle-pop {
-  animation: count-settle-pop 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: count-settle-pop 160ms var(--ease-out-expo) both;
 }
 
 /* A single ring that opens out of the tick when everything is settled. */
 @keyframes settle-ring {
   from {
     opacity: 0.55;
-    transform: scale(0.6);
+    transform: scale(0.9);
   }
   to {
     opacity: 0;
@@ -470,7 +495,7 @@
   }
 }
 .settle-ring {
-  animation: settle-ring 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: settle-ring 520ms var(--ease-out-expo) both;
 }
 
 /* Sprout halo pulse: gentle tender green glow on live sync or item update */
@@ -480,53 +505,32 @@
   }
   35% {
     box-shadow:
-      0 0 0 3px rgba(46, 157, 113, 0.45),
-      0 0 18px -2px rgba(46, 157, 113, 0.35);
-  }
-  70% {
-    box-shadow:
-      0 0 0 4px rgba(46, 157, 113, 0.18),
-      0 0 12px -3px rgba(46, 157, 113, 0.2);
+      0 0 0 3px rgba(46, 157, 113, 0.4),
+      0 0 14px -2px rgba(46, 157, 113, 0.28);
   }
   100% {
     box-shadow: 0 0 0 0 rgba(46, 157, 113, 0);
   }
 }
 .halo-pulse {
-  animation: halo-pulse 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: halo-pulse 280ms var(--ease-out) both;
 }
 
-/* A new row drops in under its day and glows with a soft sprout halo, so the eye finds where it was logged. */
+/* A new row drops in under its day and fades out a soft sprout tint, so the eye finds where it was logged. */
 @keyframes row-arrive {
   0% {
     opacity: 0;
-    transform: translateY(-14px);
-    background-color: var(--color-sprout-100);
-    box-shadow:
-      0 0 0 2px rgba(46, 157, 113, 0.4),
-      0 0 24px -2px rgba(46, 157, 113, 0.35);
-  }
-  30% {
-    box-shadow:
-      0 0 0 3px rgba(46, 157, 113, 0.5),
-      0 0 28px -2px rgba(46, 157, 113, 0.45);
-    background-color: var(--color-sprout-100);
-  }
-  60% {
-    box-shadow:
-      0 0 0 2px rgba(46, 157, 113, 0.3),
-      0 0 16px -4px rgba(46, 157, 113, 0.25);
+    transform: translateY(-10px);
     background-color: var(--color-sprout-100);
   }
   100% {
     opacity: 1;
     transform: none;
     background-color: transparent;
-    box-shadow: none;
   }
 }
 .row-arrive {
-  animation: row-arrive 1200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: row-arrive 280ms var(--ease-out) both;
   border-radius: 1.5rem;
 }
 
@@ -534,7 +538,7 @@
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -542,7 +546,7 @@
   }
 }
 .rise {
-  animation: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: rise 240ms var(--ease-out) backwards;
 }
 
 /* A digit that changes rolls in from below, like a taxi meter. */
@@ -558,11 +562,10 @@
 }
 .digit-roll {
   display: inline-block;
-  animation: digit-roll 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: digit-roll 200ms var(--ease-out);
 }
 
-/* A label that swaps (清空 / 全選, the head count) lifts in from just below. Its parent keeps the
-   focus; only the text inside is remounted. */
+/* A label that swaps (清空 / 全選, the head count, AvatarTip) lifts in from just below. */
 @keyframes swap-in {
   from {
     opacity: 0;
@@ -575,12 +578,16 @@
 }
 .swap-in {
   display: inline-block;
-  animation: swap-in 260ms var(--ease-spring);
+  animation: swap-in 180ms var(--ease-out);
+}
+.avatar-tip {
+  transform-origin: 50% 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .swap-in {
-    animation: none;
+    animation-name: overlay-enter;
+    animation-duration: 120ms;
   }
 }
 
@@ -596,32 +603,20 @@
 }
 .sprout-sway {
   transform-origin: 50% 90%;
-  animation: sprout-sway 1.6s ease-in-out infinite;
+  animation: sprout-sway 1.6s var(--ease-in-out) infinite;
 }
 @keyframes invite-pulse {
   0% {
-    transform: scale(0.9);
+    transform: scale(0.92);
     opacity: 0.7;
   }
   100% {
-    transform: scale(1.5);
+    transform: scale(1.45);
     opacity: 0;
   }
 }
 .invite-pulse {
-  animation: invite-pulse 1.8s ease-out infinite;
-}
-@keyframes link-ping {
-  70% {
-    box-shadow: 0 0 0 8px rgb(6 199 85 / 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgb(6 199 85 / 0);
-  }
-}
-.link-ping {
-  box-shadow: 0 0 0 0 rgb(6 199 85 / 0.5);
-  animation: link-ping 2s infinite;
+  animation: invite-pulse 1.8s var(--ease-out) infinite;
 }
 
 /* Every Google entry: a white face (Google's G needs white), ringed in Google's four colours, with
@@ -658,11 +653,11 @@
 @keyframes linked-pop {
   from {
     opacity: 0;
-    transform: scale(0.6);
+    transform: scale(0.92);
   }
 }
 .linked-pop {
-  animation: linked-pop 420ms var(--ease-spring) backwards;
+  animation: linked-pop 240ms var(--ease-spring) backwards;
 }
 .press-pill.press-deep:active:not(:disabled) {
   transform: scale(0.92);
@@ -682,26 +677,49 @@
   .digit-roll,
   .sprout-sway,
   .invite-pulse,
-  .link-ping,
   .linked-pop,
-  .tab-panel[data-state="active"],
-  .menu-content[data-state="open"],
-  .menu-content[data-state="closed"],
-  .collapse-enter,
   .empty-bloom,
   .sprout-greet,
   .mascot-poke,
   .leaf-particle {
     animation: none;
   }
+  .tab-panel[data-state="active"] {
+    animation-name: overlay-enter;
+    animation-duration: 120ms;
+    animation-timing-function: var(--ease-out);
+  }
+  .menu-content,
+  .collapse-enter {
+    transform: none;
+    transition: opacity 120ms var(--ease-out);
+  }
+  .menu-content[data-state="open"] {
+    transform: none;
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
+  }
+  .menu-content[data-state="closed"] {
+    transform: none;
+  }
+  .collapse-enter {
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
+  }
   .count-up {
-    transition: none;
+    transition: color 120ms var(--ease-out);
   }
   .press-card:active:not(:disabled),
   .press-pill:active:not(:disabled),
   .press-icon:active:not(:disabled),
   .press-pill.press-deep:active:not(:disabled) {
     transform: none;
+    scale: 1;
+    rotate: none;
   }
 }
 
@@ -750,7 +768,7 @@ body::before {
   }
 }
 .mascot-bob {
-  animation: mascot-bob 3.4s ease-in-out infinite;
+  animation: mascot-bob 3.4s var(--ease-in-out) infinite;
 }
 .mascot-eye {
   transform-box: fill-box;
@@ -760,7 +778,7 @@ body::before {
 .mascot-leaves {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: mascot-sway 3.4s ease-in-out 6;
+  animation: mascot-sway 3.4s var(--ease-in-out) 6;
 }
 
 /* Little four-point stars that twinkle around a cheering mascot. */
@@ -781,7 +799,7 @@ body::before {
   height: 12px;
   background: #ffc27a;
   clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
-  animation: twinkle 1.8s ease-in-out infinite;
+  animation: twinkle 1.8s var(--ease-in-out) infinite;
 }
 
 /* Squishy spring wiggle for poking the mascot */
@@ -806,7 +824,7 @@ body::before {
   }
 }
 .mascot-poke {
-  animation: mascot-poke 750ms cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
+  animation: mascot-poke 650ms var(--ease-poke) both !important;
 }
 
 /* Cheerful waving arm/leaf for the mascot */
@@ -825,7 +843,7 @@ body::before {
 .mascot-wave {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  animation: mascot-wave 450ms ease-in-out infinite;
+  animation: mascot-wave 450ms var(--ease-in-out) 6;
 }
 
 /* All-settled celebration: lightweight floating sprout leaves & confetti */
@@ -916,7 +934,7 @@ body::before {
   border-radius: 0 70% 0 70%;
   pointer-events: none;
   animation-duration: 1.2s;
-  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-timing-function: var(--ease-out-expo);
   animation-fill-mode: both;
 }
 .leaf-particle.p1 {
@@ -981,7 +999,7 @@ body::before {
 }
 .row-leave,
 .expense-delete-slide {
-  animation: expense-delete-slide 180ms ease-out forwards;
+  animation: expense-delete-slide 180ms var(--ease-out) forwards;
   pointer-events: none;
 }
 .saved-toast {
@@ -1000,18 +1018,10 @@ body::before {
   transform: translateY(12px);
 }
 
-/* Smooth positioning transition when stacked above other notifications */
-.trip-notice {
-  transition:
-    opacity 180ms var(--ease-out-expo),
-    transform 180ms var(--ease-out-expo),
-    bottom 200ms var(--ease-out-expo);
-}
-
 /* Category selection micro-bloom stamp */
 @keyframes category-bloom {
   0% {
-    transform: scale(0.88);
+    transform: scale(0.92);
   }
   60% {
     transform: scale(1.04);
@@ -1036,14 +1046,14 @@ body::before {
   }
 }
 .copy-icon-pop {
-  animation: copy-icon-pop 140ms ease-out both;
+  animation: copy-icon-pop 140ms var(--ease-out) both;
 }
 
 /* Dialog emblem micro-entrance */
 @keyframes dialog-icon-enter {
   0% {
     opacity: 0.6;
-    transform: scale(0.85) translateY(4px);
+    transform: scale(0.92) translateY(4px);
   }
   100% {
     opacity: 1;
@@ -1051,40 +1061,7 @@ body::before {
   }
 }
 .dialog-icon-enter {
-  animation: dialog-icon-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Navigation tab selection: a brief, controlled pop. */
-@keyframes nav-icon-pop {
-  0% {
-    transform: scale(0.92);
-  }
-  40% {
-    transform: scale(1.04) rotate(-1deg);
-  }
-  75% {
-    transform: scale(1) rotate(0deg);
-  }
-  100% {
-    transform: scale(1) rotate(0deg);
-  }
-}
-.nav-icon-pop {
-  animation: nav-icon-pop 180ms var(--ease-spring) both;
-}
-
-/* Connected transfer arrow subtle nudge in direction of payment */
-@keyframes transfer-arrow-nudge {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(2.5px);
-  }
-}
-.transfer-arrow-pulse {
-  animation: transfer-arrow-nudge 1.6s ease-in-out infinite;
+  animation: dialog-icon-enter 200ms var(--ease-out-expo) both;
 }
 
 /* Staggered cascade entrance for settlement screen (0ms and +90ms) */
@@ -1118,7 +1095,7 @@ body::before {
   animation: settle-cascade-in-2 240ms var(--ease-spring) 90ms both;
 }
 
-/* Staggered cascade entrance for list items (25ms offset per row) */
+/* Staggered cascade entrance for list items */
 @keyframes list-stagger-in {
   from {
     opacity: 0;
@@ -1131,27 +1108,21 @@ body::before {
 }
 
 .list-stagger-item {
-  animation: list-stagger-in 180ms var(--ease-spring) both;
+  animation: list-stagger-in 160ms var(--ease-out) both;
 }
 
-/* Floating speech bubble spring pop-in for stats monthly bar */
-@keyframes bubble-spring {
-  0% {
-    opacity: 0;
-    transform: translateY(6px) scale(0.7);
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.08);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
+/* Floating speech bubble spring pop-in for stats monthly bar (interruptible transition) */
 .bubble-spring {
-  animation: bubble-spring 260ms var(--ease-spring) both;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transform-origin: 50% 100%;
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 200ms var(--ease-spring);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(4px) scale(0.92);
+  }
 }
 
 /* Hide scrollbar for seamless touch rails */
@@ -1165,27 +1136,41 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .collapse-grid {
-    transition: opacity 120ms ease-out;
+    transition:
+      grid-template-rows 0ms,
+      opacity 120ms var(--ease-out);
+  }
+  .collapse-grid[data-closing="true"] {
+    transition:
+      grid-template-rows 0ms 120ms,
+      opacity 120ms var(--ease-out);
   }
   .settle-stagger-1,
   .settle-stagger-2,
   .list-stagger-item,
-  .bubble-spring,
   .category-bloom,
   .copy-icon-pop,
-  .dialog-icon-enter,
-  .nav-icon-pop,
-  .transfer-arrow-pulse {
+  .dialog-icon-enter {
     animation: none;
+  }
+  .bubble-spring {
+    transform: none;
+    transition: opacity 120ms var(--ease-out);
+    @starting-style {
+      opacity: 0;
+      transform: none;
+    }
   }
   .row-leave,
   .expense-delete-slide {
-    animation-name: none;
+    animation-name: overlay-exit;
+    animation-duration: 120ms;
+    animation-timing-function: var(--ease-out);
   }
   .saved-toast,
   .saved-toast.is-leaving {
     transform: none;
-    transition: opacity 120ms ease-out;
+    transition: opacity 120ms var(--ease-out);
     @starting-style {
       transform: none;
     }
@@ -1206,20 +1191,22 @@ body::before {
 
 /* Quiet paper and a softly lifted clay receipt for the editorial landing page. */
 .landing-editorial {
-  background: #f8f5ee;
+  background:
+    radial-gradient(60rem 30rem at 12% -6%, rgb(46 157 113 / 0.11), transparent 70%),
+    radial-gradient(50rem 28rem at 92% 4%, rgb(14 165 233 / 0.09), transparent 70%),
+    linear-gradient(180deg, #f6fbf8 0%, #f9fcff 46%, #ffffff 100%);
 }
 .clay-receipt {
-  background: linear-gradient(145deg, #fffefb, #f3efe5);
-  border: 0.5px solid rgb(255 255 255 / 0.95);
+  background: linear-gradient(145deg, #ffffff, #f6faf8);
+  border: 1px solid rgb(226 232 240 / 0.9);
   box-shadow:
     inset 0.5px 0.5px 0 0 #fff,
-    inset -0.5px -0.5px 0 0 rgb(120 105 78 / 0.14),
-    0 18px 36px -24px rgb(74 64 42 / 0.35),
-    0 3px 6px -4px rgb(74 64 42 / 0.16);
-  transform: rotate(-2deg);
+    0 18px 36px -24px rgb(15 23 42 / 0.2),
+    0 4px 10px -4px rgb(46 157 113 / 0.12);
+  transform: rotate(-1.5deg);
   transition: transform 240ms var(--ease-spring);
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .clay-receipt:hover {
     transform: translateY(-4px) rotate(0deg);
   }
@@ -1287,21 +1274,167 @@ body::before {
 }
 .splitter-avatar {
   transition:
-    opacity 160ms ease-out,
+    opacity 160ms var(--ease-out),
     transform 180ms var(--ease-spring);
 }
 .splitter-row:active .splitter-avatar {
   transform: scale(0.96);
 }
+/* Flight deals marquee & tactile flight card motion (GPU composite transforms only). */
+@keyframes flight-marquee-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.flight-marquee-mask {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 18px,
+    #000 calc(100% - 18px),
+    transparent
+  );
+}
+.flight-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: flight-marquee-scroll 34s linear infinite;
+  will-change: transform;
+}
+.flight-marquee:focus-within .flight-marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes flight-badge-enter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+.flight-badge-enter {
+  animation: flight-badge-enter 180ms var(--ease-out) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .settled-stamp {
+  .settled-stamp,
+  .flight-marquee-track {
     animation: none;
+  }
+  .flight-badge-enter {
+    animation-name: overlay-enter;
+    animation-duration: 120ms;
+  }
+  .flight-marquee {
+    overflow-x: auto;
   }
   .metadata-chevron,
   .splitter-avatar {
     transition: none;
   }
   .splitter-row:active .splitter-avatar {
+    transform: none;
+  }
+}
+
+/* Soft horizontal fade at the trailing edge of overflowing mobile tab rails. */
+.scroll-fade-x {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 16px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to right, black 0%, black calc(100% - 16px), transparent 100%);
+}
+
+/* GPU-composited avatar stack spread & pointer-isolated hover nudges. */
+.avatar-stack-item,
+.hover-nudge-x,
+.flight-card-plane,
+.stats-cat-icon {
+  transition: transform 180ms var(--ease-spring);
+}
+.flight-card-city {
+  transition: color 150ms var(--ease-out);
+}
+.flight-card-route {
+  transition:
+    border-color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .group:active .avatar-stack-item:nth-child(2) {
+    transform: translateX(4px);
+  }
+  .group:active .avatar-stack-item:nth-child(3) {
+    transform: translateX(8px);
+  }
+  .group:active .avatar-stack-item:nth-child(4) {
+    transform: translateX(12px);
+  }
+  .group:active .avatar-stack-item:nth-child(5) {
+    transform: translateX(16px);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .flight-marquee:hover .flight-marquee-track {
+    animation-play-state: paused;
+  }
+  .flight-card:hover {
+    border-color: rgb(46 157 113 / 0.55);
+  }
+  .flight-card:hover .flight-card-city {
+    color: var(--color-sprout-700);
+  }
+  .flight-card:hover .flight-card-route {
+    border-color: rgb(46 157 113 / 0.4);
+    background-color: var(--color-sprout-100);
+  }
+  .flight-card:hover .flight-card-plane {
+    transform: translateX(2px);
+  }
+  .stats-cat-btn:hover .stats-cat-icon {
+    transform: scale(1.05);
+  }
+  .group:hover .hover-nudge-x {
+    transform: translateX(3px);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .group:hover .avatar-stack-item:nth-child(2) {
+      transform: translateX(2px);
+    }
+    .group:hover .avatar-stack-item:nth-child(3) {
+      transform: translateX(4px);
+    }
+    .group:hover .avatar-stack-item:nth-child(4) {
+      transform: translateX(6px);
+    }
+    .group:hover .avatar-stack-item:nth-child(5) {
+      transform: translateX(8px);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-stack-item,
+  .hover-nudge-x,
+  .flight-card-plane,
+  .stats-cat-icon {
+    transition: none;
+  }
+  .group:active .avatar-stack-item:nth-child(n),
+  .group:hover .avatar-stack-item:nth-child(n),
+  .group:hover .hover-nudge-x,
+  .flight-card:hover .flight-card-plane,
+  .stats-cat-btn:hover .stats-cat-icon {
     transform: none;
   }
 }
