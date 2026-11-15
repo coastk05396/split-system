@@ -126,6 +126,12 @@ export function LandingPage() {
                 ))}
               </div>
 
+              {flights.data.isFallback && (
+                <p className="mt-2.5 rounded-xl bg-peach/60 px-3 py-1.5 text-[11px] font-medium text-sprout-900">
+                  {t("flights.fallbackNote")}
+                </p>
+              )}
+
               <ul className="mt-4 flex flex-col gap-2.5" aria-live="polite">
                 {boardItems.map((item) => {
                   const dest = flightDestinationLabel(item, locale);

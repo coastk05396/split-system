@@ -1,10 +1,12 @@
 import {
+  computeArrivalTimeHm,
   computeDealSignal,
   FLIGHT_ORIGINS,
   getDefaultDailyFlights,
   getDestinationMeta,
   hasRedEyeLeg,
   isGhostFare,
+  ONE_WAY_BASELINE_FACTOR,
   type DailyFlightItem,
   type DailyFlightsResponse,
   type FlightOrigin,
@@ -32,10 +34,14 @@ export interface FlightCandidate {
   inboundDep: string | null;
   outboundArr?: string | null;
   inboundArr?: string | null;
+  digestDate?: string;
 }
 
 export interface VerifiedFlightPrice {
   priceTwd: number | null;
+  airlines?: string[];
+  transfers?: number;
+  returnTransfers?: number | null;
   outboundDep?: string | null;
   inboundDep?: string | null;
   outboundArr?: string | null;
@@ -47,17 +53,18 @@ export interface FlightSource {
   verifyCandidate?(candidate: FlightCandidate): Promise<VerifiedFlightPrice | null>;
 }
 
+// 5 origins * 2 trip types = 10 discovery calls + <=30 candidate checks = <=40 subrequests (<50 Workers limit).
 const REGION_LIMITS: Readonly<Record<FlightRegion, number>> = {
-  jp: 14,
-  kr: 6,
-  sea: 8,
+  jp: 10,
+  kr: 5,
+  sea: 6,
   hkmo: 4,
-  longhaul: 8,
+  longhaul: 5,
 };
 
-const SCAN_ORIGINS: readonly FlightOrigin[] = ["TPE", "KHH", "RMQ", "TSA"];
-
 const D1_INSERT_CHUNK_SIZE = 5;
+const MAX_FOUND_AT_AGE_MS = 48 * 3_600_000;
+const TAIPEI_OFFSET_MS = 8 * 3_600_000;
 
 const travelpayoutsItemSchema = z.object({
   origin: z.string(),
@@ -71,7 +78,10 @@ const travelpayoutsItemSchema = z.object({
   duration: z.number().int().positive().optional().nullable(),
   duration_to: z.number().int().positive().optional().nullable(),
   duration_back: z.number().int().positive().optional().nullable(),
+  found_at: z.string().optional().nullable(),
 });
+
+type TravelpayoutsItem = z.infer<typeof travelpayoutsItemSchema>;
 
 const travelpayoutsResponseSchema = z.object({
   success: z.boolean().optional(),
@@ -79,8 +89,6 @@ const travelpayoutsResponseSchema = z.object({
 });
 
 type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
-const TAIPEI_OFFSET_MS = 8 * 3_600_000;
 
 /** Current YYYY-MM-DD in Asia/Taipei (`UTC+8`). */
 export function taipeiDate(now: number): string {
@@ -96,27 +104,6 @@ function extractTimePart(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const match = iso.match(/T(\d{2}:\d{2})/);
   return match?.[1] ?? null;
-}
-
-function extractArrivalTimePart(
-  depIso: string | null | undefined,
-  durationMinutes: number | null | undefined,
-): string | null {
-  if (
-    !depIso ||
-    durationMinutes === null ||
-    durationMinutes === undefined ||
-    durationMinutes <= 0
-  ) {
-    return null;
-  }
-  const depHm = extractTimePart(depIso);
-  if (!depHm) return null;
-  const parts = depHm.split(":");
-  const totalMinutes = (Number(parts[0]) * 60 + Number(parts[1]) + durationMinutes) % (24 * 60);
-  const arrH = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
-  const arrM = String(totalMinutes % 60).padStart(2, "0");
-  return `${arrH}:${arrM}`;
 }
 
 function parseAirlinesJson(json: string): string[] {
@@ -153,10 +140,37 @@ function balanceByRegion(candidates: readonly FlightCandidate[]): FlightCandidat
   return selected;
 }
 
+async function fetchTravelpayoutsPrices(
+  fetchFn: FetchFn,
+  token: string,
+  query: Record<string, string>,
+  logContext: { event: string; [key: string]: unknown },
+): Promise<TravelpayoutsItem[] | null> {
+  try {
+    const url = new URL("https://api.travelpayouts.com/aviasales/v3/prices_for_dates");
+    for (const [k, v] of Object.entries(query)) {
+      url.searchParams.set(k, v);
+    }
+    const res = await fetchFn(url.toString(), {
+      headers: { "X-Access-Token": token },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) {
+      console.warn(JSON.stringify({ ...logContext, status: res.status }));
+      return null;
+    }
+    const body = travelpayoutsResponseSchema.parse(await res.json());
+    return body.data;
+  } catch (error) {
+    console.warn(JSON.stringify({ ...logContext, error: String(error) }));
+    return null;
+  }
+}
+
 /**
- * Stage 1 & 2 production source: discovers Taiwan-outbound fares via Travelpayouts
- * (`v3/prices_for_dates`) and verifies each route's live fare before persistence.
- * Falls back to curated baseline seed candidates when `TRAVELPAYOUTS_TOKEN` is unset.
+ * Production source backed by Travelpayouts `v3/prices_for_dates` discovery + candidate verification.
+ * Returns no candidates when `TRAVELPAYOUTS_TOKEN` is unset or upstream yields nothing so
+ * `listDailyFlights` discloses fallback reference deals (`isFallback: true`) cleanly.
  */
 export function productionFlightSource(
   env: Bindings,
@@ -164,171 +178,144 @@ export function productionFlightSource(
 ): FlightSource {
   return {
     async fetchCandidates(digestDate) {
-      const seeds = getDefaultDailyFlights(digestDate).map<FlightCandidate>((item) => ({
-        id: item.id,
-        origin: item.origin,
-        dest: item.dest,
-        tripType: item.tripType,
-        outDate: item.outDate,
-        inDate: item.inDate,
-        priceTwd: item.priceTwd,
-        airlines: item.airlines,
-        transfers: item.transfers,
-        returnTransfers: item.returnTransfers,
-        outboundDep: item.outboundDep,
-        inboundDep: item.inboundDep,
-      }));
-
       const token = env.TRAVELPAYOUTS_TOKEN;
-      if (!token) return seeds;
+      if (!token) return [];
 
       const collected: FlightCandidate[] = [];
       const seenKeys = new Set<string>();
 
-      for (const origin of SCAN_ORIGINS) {
+      for (const origin of FLIGHT_ORIGINS) {
         for (const oneWay of [false, true]) {
-          try {
-            const url = new URL("https://api.travelpayouts.com/aviasales/v3/prices_for_dates");
-            url.searchParams.set("origin", origin);
-            url.searchParams.set("currency", "twd");
-            url.searchParams.set("unique", "true");
-            url.searchParams.set("sorting", "price");
-            url.searchParams.set("limit", "30");
-            url.searchParams.set("one_way", oneWay ? "true" : "false");
+          const data = await fetchTravelpayoutsPrices(
+            fetchFn,
+            token,
+            {
+              origin,
+              currency: "twd",
+              unique: "true",
+              sorting: "price",
+              limit: "30",
+              one_way: oneWay ? "true" : "false",
+            },
+            { event: "travelpayouts_fetch_failed", origin, oneWay },
+          );
+          if (data === null) continue;
 
-            const res = await fetchFn(url.toString(), {
-              headers: { "X-Access-Token": token },
-              signal: AbortSignal.timeout(8_000),
+          for (const raw of data) {
+            const parsedOrigin = toFlightOrigin(raw.origin);
+            const meta = getDestinationMeta(raw.destination);
+            if (!parsedOrigin || !meta || !raw.departure_at) continue;
+
+            const outDate = raw.departure_at.slice(0, 10);
+            const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
+            const tripType: FlightTripType = inDate ? "rt" : "ow";
+            const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
+            if (seenKeys.has(dedupeKey)) continue;
+            seenKeys.add(dedupeKey);
+
+            collected.push({
+              id: `${digestDate}-${dedupeKey.toLowerCase()}`,
+              origin: parsedOrigin,
+              dest: meta.airport,
+              tripType,
+              outDate,
+              inDate,
+              priceTwd: Math.round(raw.price),
+              airlines: [raw.airline.toUpperCase()],
+              transfers: raw.transfers,
+              returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
+              outboundDep: extractTimePart(raw.departure_at),
+              inboundDep: extractTimePart(raw.return_at),
+              outboundArr: computeArrivalTimeHm(
+                raw.departure_at,
+                raw.duration_to ?? raw.duration,
+                meta.airport,
+              ),
+              inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
+              digestDate,
             });
-            if (!res.ok) {
-              console.warn(
-                JSON.stringify({
-                  event: "travelpayouts_fetch_failed",
-                  origin,
-                  oneWay,
-                  status: res.status,
-                }),
-              );
-              continue;
-            }
-
-            const body = travelpayoutsResponseSchema.parse(await res.json());
-            for (const raw of body.data) {
-              const parsedOrigin = toFlightOrigin(raw.origin);
-              const meta = getDestinationMeta(raw.destination);
-              if (!parsedOrigin || !meta || !raw.departure_at) continue;
-
-              const outDate = raw.departure_at.slice(0, 10);
-              const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
-              const tripType: FlightTripType = inDate ? "rt" : "ow";
-              const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
-              if (seenKeys.has(dedupeKey)) continue;
-              seenKeys.add(dedupeKey);
-
-              collected.push({
-                id: `${digestDate}-${dedupeKey.toLowerCase()}`,
-                origin: parsedOrigin,
-                dest: meta.airport,
-                tripType,
-                outDate,
-                inDate,
-                priceTwd: Math.round(raw.price),
-                airlines: [raw.airline.toUpperCase()],
-                transfers: raw.transfers,
-                returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
-                outboundDep: extractTimePart(raw.departure_at),
-                inboundDep: extractTimePart(raw.return_at),
-                outboundArr: extractArrivalTimePart(
-                  raw.departure_at,
-                  raw.duration_to ?? raw.duration,
-                ),
-                inboundArr: extractArrivalTimePart(raw.return_at, raw.duration_back),
-              });
-            }
-          } catch (error) {
-            console.warn(
-              JSON.stringify({
-                event: "travelpayouts_fetch_failed",
-                origin,
-                oneWay,
-                error: String(error),
-              }),
-            );
           }
         }
       }
 
-      if (collected.length === 0) return seeds;
+      if (collected.length === 0) return [];
       return balanceByRegion(collected);
     },
 
     async verifyCandidate(candidate) {
       const token = env.TRAVELPAYOUTS_TOKEN;
-      if (!token || candidate.id.includes("-seed-")) {
-        return {
-          priceTwd: candidate.priceTwd,
-          outboundDep: candidate.outboundDep,
-          inboundDep: candidate.inboundDep,
-          outboundArr: candidate.outboundArr ?? null,
-          inboundArr: candidate.inboundArr ?? null,
-        };
+      if (!token) return null;
+
+      const query: Record<string, string> = {
+        origin: candidate.origin,
+        destination: candidate.dest,
+        departure_at: candidate.outDate,
+        one_way: candidate.tripType === "ow" ? "true" : "false",
+        currency: "twd",
+        sorting: "price",
+        limit: "10",
+      };
+      if (candidate.tripType === "rt" && candidate.inDate) {
+        query["return_at"] = candidate.inDate;
       }
 
-      try {
-        const url = new URL("https://api.travelpayouts.com/aviasales/v3/prices_for_dates");
-        url.searchParams.set("origin", candidate.origin);
-        url.searchParams.set("destination", candidate.dest);
-        url.searchParams.set("departure_at", candidate.outDate);
-        if (candidate.tripType === "rt" && candidate.inDate) {
-          url.searchParams.set("return_at", candidate.inDate);
+      const data = await fetchTravelpayoutsPrices(fetchFn, token, query, {
+        event: "travelpayouts_verify_failed",
+        id: candidate.id,
+      });
+      if (data === null || data.length === 0) return null;
+
+      const referenceMs = Date.parse(`${candidate.digestDate ?? candidate.outDate}T23:59:59Z`);
+      const requireDirect = candidate.transfers === 0 && (candidate.returnTransfers ?? 0) === 0;
+
+      const matches = data.filter((raw) => {
+        if (!raw.departure_at || raw.departure_at.slice(0, 10) !== candidate.outDate) {
+          return false;
         }
-        url.searchParams.set("one_way", candidate.tripType === "ow" ? "true" : "false");
-        url.searchParams.set("currency", "twd");
-        url.searchParams.set("sorting", "price");
-        url.searchParams.set("limit", "5");
-
-        const res = await fetchFn(url.toString(), {
-          headers: { "X-Access-Token": token },
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (!res.ok) {
-          console.warn(
-            JSON.stringify({
-              event: "travelpayouts_verify_failed",
-              id: candidate.id,
-              status: res.status,
-            }),
-          );
-          return null;
+        if (candidate.tripType === "rt") {
+          const retDate = raw.return_at ? raw.return_at.slice(0, 10) : null;
+          if (retDate !== candidate.inDate) return false;
         }
+        if (requireDirect) {
+          const retTransfers = candidate.tripType === "ow" ? 0 : (raw.return_transfers ?? 0);
+          if (raw.transfers > 0 || retTransfers > 0) return false;
+        }
+        if (raw.found_at) {
+          const foundMs = Date.parse(raw.found_at);
+          if (!Number.isNaN(foundMs) && referenceMs - foundMs > MAX_FOUND_AT_AGE_MS) {
+            return false;
+          }
+        }
+        return true;
+      });
+      if (matches.length === 0) return null;
 
-        const body = travelpayoutsResponseSchema.parse(await res.json());
-        const best = body.data[0];
-        if (!best) return null;
+      const sameAirline = matches.find(
+        (raw) => raw.airline.toUpperCase() === candidate.airlines[0],
+      );
+      const best = sameAirline ?? [...matches].sort((a, b) => a.price - b.price)[0];
+      if (!best) return null;
 
-        return {
-          priceTwd: Math.round(best.price),
-          outboundDep: extractTimePart(best.departure_at) ?? candidate.outboundDep,
-          inboundDep: extractTimePart(best.return_at) ?? candidate.inboundDep,
-          outboundArr:
-            extractArrivalTimePart(best.departure_at, best.duration_to ?? best.duration) ??
-            candidate.outboundArr ??
-            null,
-          inboundArr:
-            extractArrivalTimePart(best.return_at, best.duration_back) ??
-            candidate.inboundArr ??
-            null,
-        };
-      } catch (error) {
-        console.warn(
-          JSON.stringify({
-            event: "travelpayouts_verify_failed",
-            id: candidate.id,
-            error: String(error),
-          }),
-        );
-        return null;
-      }
+      return {
+        priceTwd: Math.round(best.price),
+        airlines: [best.airline.toUpperCase()],
+        transfers: best.transfers,
+        returnTransfers: candidate.tripType === "rt" ? (best.return_transfers ?? 0) : null,
+        outboundDep: extractTimePart(best.departure_at) ?? candidate.outboundDep,
+        inboundDep: extractTimePart(best.return_at) ?? candidate.inboundDep,
+        outboundArr:
+          computeArrivalTimeHm(
+            best.departure_at,
+            best.duration_to ?? best.duration,
+            candidate.dest,
+          ) ??
+          candidate.outboundArr ??
+          null,
+        inboundArr:
+          computeArrivalTimeHm(best.return_at, best.duration_back, candidate.origin) ??
+          candidate.inboundArr ??
+          null,
+      };
     },
   };
 }
@@ -340,7 +327,6 @@ export function productionFlightSource(
 export async function refreshDailyFlights(
   db: Db,
   source: FlightSource,
-  _env: Bindings,
   now: number,
 ): Promise<DailyFlightItem[]> {
   const digestDate = taipeiDate(now);
@@ -353,6 +339,9 @@ export async function refreshDailyFlights(
     if (meta === null || candidate.priceTwd <= 0) continue;
 
     let finalPrice = candidate.priceTwd;
+    let airlines = candidate.airlines;
+    let transfers = candidate.transfers;
+    let returnTransfers = candidate.returnTransfers;
     let outboundDep = candidate.outboundDep;
     let inboundDep = candidate.inboundDep;
     let outboundArr = candidate.outboundArr ?? null;
@@ -366,6 +355,11 @@ export async function refreshDailyFlights(
       if (verified.priceTwd !== null) {
         finalPrice = Math.round(verified.priceTwd);
       }
+      if (verified.airlines !== undefined && verified.airlines.length > 0) {
+        airlines = verified.airlines;
+      }
+      if (verified.transfers !== undefined) transfers = verified.transfers;
+      if (verified.returnTransfers !== undefined) returnTransfers = verified.returnTransfers;
       if (verified.outboundDep !== undefined) outboundDep = verified.outboundDep;
       if (verified.inboundDep !== undefined) inboundDep = verified.inboundDep;
       if (verified.outboundArr !== undefined) outboundArr = verified.outboundArr;
@@ -374,7 +368,9 @@ export async function refreshDailyFlights(
 
     const isRedEye = hasRedEyeLeg([outboundDep, inboundDep, outboundArr, inboundArr]);
     const baseline =
-      candidate.tripType === "ow" ? Math.round(meta.baselineTwd * 0.58) : meta.baselineTwd;
+      candidate.tripType === "ow"
+        ? Math.round(meta.baselineTwd * ONE_WAY_BASELINE_FACTOR)
+        : meta.baselineTwd;
     const { discountPct, tag } = computeDealSignal(finalPrice, baseline);
 
     rows.push({
@@ -388,9 +384,9 @@ export async function refreshDailyFlights(
       priceTwd: finalPrice,
       discountPct,
       tag,
-      airlinesJson: JSON.stringify(candidate.airlines),
-      transfers: candidate.transfers,
-      returnTransfers: candidate.returnTransfers,
+      airlinesJson: JSON.stringify(airlines),
+      transfers,
+      returnTransfers,
       isRedEye: isRedEye ? 1 : 0,
       outboundDep,
       inboundDep,
@@ -408,9 +404,9 @@ export async function refreshDailyFlights(
       priceTwd: finalPrice,
       discountPct,
       tag,
-      airlines: candidate.airlines,
-      transfers: candidate.transfers,
-      returnTransfers: candidate.returnTransfers,
+      airlines,
+      transfers,
+      returnTransfers,
       isRedEye,
       outboundDep,
       inboundDep,
@@ -425,7 +421,7 @@ export async function refreshDailyFlights(
     }
     await db.batch([db.delete(dailyFlights), ...insertStmts]);
   } else {
-    await db.delete(dailyFlights).where(eq(dailyFlights.digestDate, digestDate));
+    await db.delete(dailyFlights);
   }
 
   return items;

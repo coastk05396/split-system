@@ -1,4 +1,4 @@
-import type { DailyFlightsResponse } from "@split/shared";
+import { getDefaultDailyFlights, type DailyFlightsResponse } from "@split/shared";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
@@ -28,9 +28,14 @@ function setupApp(flightSource?: FlightSource) {
 }
 
 describe("public flight routes and daily pipeline", () => {
-  it("GET /flights/daily serves curated baseline deals without requiring authentication", async () => {
+  it("GET /flights/daily serves curated fallback deals when D1 has no verified digest", async () => {
+    const db = createDb(env.DB);
+    const seedEnv = { ...env, TRAVELPAYOUTS_TOKEN: "" };
+    const seeded = await refreshDailyFlights(db, productionFlightSource(seedEnv), clock.now);
+    expect(seeded).toEqual([]);
+
     const app = setupApp();
-    const res = await app.request("https://split.test/api/v1/flights/daily", {}, env);
+    const res = await app.request("https://split.test/api/v1/flights/daily", {}, seedEnv);
     expect(res.status).toBe(200);
 
     const body = await res.json<DailyFlightsResponse>();
@@ -74,7 +79,6 @@ describe("public flight routes and daily pipeline", () => {
     expect(enLocation).toContain("locale=en-US");
     expect(enLocation).toContain("triptype=ow");
 
-    // Rejects invalid airport code / open redirect attempts
     const badRes = await app.request(
       "https://split.test/api/v1/flights/go?origin=https://evil.com&dest=NRT&outDate=2026-12-01&tripType=ow",
       {},
@@ -153,7 +157,7 @@ describe("public flight routes and daily pipeline", () => {
     };
 
     const db = createDb(env.DB);
-    await refreshDailyFlights(db, fakeSource, env, clock.now);
+    await refreshDailyFlights(db, fakeSource, clock.now);
 
     const app = setupApp(fakeSource);
     const res = await app.request("https://split.test/api/v1/flights/daily", {}, env);
@@ -176,27 +180,46 @@ describe("public flight routes and daily pipeline", () => {
     });
   });
 
-  it("chunks 20+ row seed digests across consecutive days without PK collisions", async () => {
+  it("chunks 20+ row verified digests across consecutive days without PK collisions", async () => {
     const db = createDb(env.DB);
-    const seedEnv = { ...env, TRAVELPAYOUTS_TOKEN: "" };
-    const source = productionFlightSource(seedEnv);
+    const verifiedBatchSource: FlightSource = {
+      fetchCandidates: (digestDate) =>
+        Promise.resolve(
+          getDefaultDailyFlights(digestDate).map((item, idx) => ({
+            id: `verified-${idx}-${item.origin}-${item.dest}`,
+            origin: item.origin,
+            dest: item.dest,
+            tripType: item.tripType,
+            outDate: item.outDate,
+            inDate: item.inDate,
+            priceTwd: item.priceTwd,
+            airlines: item.airlines,
+            transfers: item.transfers,
+            returnTransfers: item.returnTransfers,
+            outboundDep: item.outboundDep,
+            inboundDep: item.inboundDep,
+            digestDate,
+          })),
+        ),
+      verifyCandidate: (candidate) => Promise.resolve({ priceTwd: candidate.priceTwd }),
+    };
 
-    const day1 = await refreshDailyFlights(db, source, seedEnv, clock.now);
-    const day2 = await refreshDailyFlights(db, source, seedEnv, clock.now + 86_400_000);
+    const day1 = await refreshDailyFlights(db, verifiedBatchSource, clock.now);
+    const day2 = await refreshDailyFlights(db, verifiedBatchSource, clock.now + 86_400_000);
     expect(day1.length).toBeGreaterThanOrEqual(20);
     expect(day2.length).toBe(day1.length);
 
-    const res = await setupApp(source).request(
+    const res = await setupApp(verifiedBatchSource).request(
       "https://split.test/api/v1/flights/daily",
       {},
-      seedEnv,
+      env,
     );
     const body = await res.json<DailyFlightsResponse>();
     expect(body.isFallback).toBe(false);
     expect(body.items.length).toBe(day2.length);
   });
 
-  it("verifies Travelpayouts deals via X-Access-Token, tags arrival red-eyes, drops ghost fares, and falls back when stale", async () => {
+  it("verifies Travelpayouts deals via X-Access-Token, computes destination-tz arrival red-eyes, rejects mismatched directness, and falls back when stale", async () => {
     const seenUrls: URL[] = [];
     const seenAuthHeaders: (string | null)[] = [];
 
@@ -213,7 +236,7 @@ describe("public flight routes and daily pipeline", () => {
 
       const destination = url.searchParams.get("destination");
       if (destination === "BKK") {
-        // Stage 2 live check jumps > 20% and > NT$800 -> discarded as ghost fare
+        // Direct candidate only receives a connecting alternative -> must be rejected
         return Promise.resolve(
           Response.json({
             success: true,
@@ -221,34 +244,34 @@ describe("public flight routes and daily pipeline", () => {
               {
                 origin: "TPE",
                 destination: "BKK",
-                airline: "FD",
+                airline: "TG",
                 departure_at: "2026-12-10T10:00:00+08:00",
-                return_at: "2026-12-14T15:00:00+08:00",
-                price: 5800,
-                transfers: 0,
+                return_at: "2026-12-14T15:00:00+07:00",
+                price: 3600,
+                transfers: 1,
                 return_transfers: 0,
               },
             ],
           }),
         );
       }
-      if (destination === "NRT") {
-        // Stage 2 live confirmation within tolerance + arrival red-eye (21:00 + 270m = 01:30)
+      if (destination === "LHR") {
+        // TPE 19:00+08 + 840m = 01:00 in Europe/London -> arrival red-eye
         return Promise.resolve(
           Response.json({
             success: true,
             data: [
               {
                 origin: "TPE",
-                destination: "NRT",
-                airline: "JX",
-                departure_at: "2026-12-11T21:00:00+08:00",
-                return_at: "2026-12-15T13:00:00+09:00",
-                price: 6950,
+                destination: "LHR",
+                airline: "CI",
+                departure_at: "2026-12-01T19:00:00+08:00",
+                return_at: "2026-12-10T21:15:00+00:00",
+                price: 19900,
                 transfers: 0,
                 return_transfers: 0,
-                duration_to: 270,
-                duration_back: 220,
+                duration_to: 840,
+                duration_back: 780,
               },
             ],
           }),
@@ -261,22 +284,22 @@ describe("public flight routes and daily pipeline", () => {
             data: [
               {
                 origin: "TPE",
-                destination: "NRT",
-                airline: "JX",
-                departure_at: "2026-12-11T21:00:00+08:00",
-                return_at: "2026-12-15T13:00:00+09:00",
-                price: 6800,
+                destination: "LHR",
+                airline: "BR",
+                departure_at: "2026-12-01T19:00:00+08:00",
+                return_at: "2026-12-10T21:15:00+00:00",
+                price: 19500,
                 transfers: 0,
                 return_transfers: 0,
-                duration_to: 270,
-                duration_back: 220,
+                duration_to: 840,
+                duration_back: 780,
               },
               {
                 origin: "TPE",
                 destination: "BKK",
                 airline: "FD",
                 departure_at: "2026-12-10T10:00:00+08:00",
-                return_at: "2026-12-14T15:00:00+08:00",
+                return_at: "2026-12-14T15:00:00+07:00",
                 price: 3500,
                 transfers: 0,
                 return_transfers: 0,
@@ -293,17 +316,17 @@ describe("public flight routes and daily pipeline", () => {
     const items = await refreshDailyFlights(
       db,
       productionFlightSource(tpEnv, fakeFetch),
-      tpEnv,
       clock.now,
     );
 
     expect(seenUrls.length).toBeGreaterThan(0);
     expect(seenUrls.every((u) => !u.searchParams.has("token"))).toBe(true);
     expect(seenAuthHeaders.every((h) => h === "tp-secret-token")).toBe(true);
-    expect(items.map((x) => x.dest)).toEqual(["NRT"]);
+    expect(items.map((x) => x.dest)).toEqual(["LHR"]);
     expect(items[0]).toMatchObject({
-      dest: "NRT",
-      priceTwd: 6950,
+      dest: "LHR",
+      airlines: ["CI"],
+      priceTwd: 19900,
       isRedEye: true,
     });
 

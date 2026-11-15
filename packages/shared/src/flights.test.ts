@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTripComUrl,
+  computeArrivalTimeHm,
   computeDealSignal,
   filterDailyFlights,
   getDefaultDailyFlights,
@@ -21,6 +22,8 @@ describe("flights domain helpers", () => {
     expect(isRedEyeTime("23:55")).toBe(false);
     expect(isRedEyeTime(null)).toBe(false);
     expect(isRedEyeTime(undefined)).toBe(false);
+    expect(computeArrivalTimeHm("2026-12-01T19:00:00+08:00", 840, "LHR")).toBe("01:00");
+    expect(computeArrivalTimeHm("2026-12-11T21:00:00+08:00", 210, "NRT")).toBe("01:30");
   });
 
   it("identifies ghost fares when verifier returns null or jumps > 20% and > NT$800", () => {
@@ -133,6 +136,22 @@ describe("flights domain helpers", () => {
         holidayOnly: false,
       }).map((x) => x.id),
     ).toEqual(["a", "b"]);
+
+    const holidayDec: DailyFlightItem[] = [
+      { ...seed0, id: "dec-normal", outDate: "2026-12-10", inDate: "2026-12-14" },
+      { ...seed0, id: "dec-ny", outDate: "2026-12-31", inDate: "2027-01-04" },
+      { ...seed0, id: "feb-228", outDate: "2027-02-26", inDate: "2027-03-02" },
+    ];
+    expect(
+      filterDailyFlights(holidayDec, {
+        region: "all",
+        origin: "all",
+        tripType: "all",
+        month: "2026-12",
+        directOnly: false,
+        holidayOnly: true,
+      }).map((x) => x.id),
+    ).toEqual(["dec-ny"]);
     expect(sortDailyFlights(custom.slice(0, 2), "price").map((x) => x.id)).toEqual(["a", "b"]);
     expect(sortDailyFlights(custom.slice(0, 2), "discount").map((x) => x.id)).toEqual(["b", "a"]);
   });

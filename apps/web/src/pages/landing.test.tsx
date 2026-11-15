@@ -24,7 +24,8 @@ describe("public landing route", () => {
 
   it("lets visitors filter live floating deals and toggle to English on the landing page", async () => {
     const user = userEvent.setup();
-    renderApp({ path: "/landing" });
+    const { api } = renderApp({ path: "/landing" });
+    api.dailyFlights = { ...api.dailyFlights, isFallback: true };
 
     const board = await screen.findByRole("region", { name: "今日浮動特價機票" });
     await user.click(within(board).getByRole("button", { name: "日本" }));
@@ -38,5 +39,8 @@ describe("public landing route", () => {
       }),
     ).toBeVisible();
     expect(screen.getByText("Sprout")).toBeVisible();
+    expect(
+      await screen.findByText("Showing curated preview deals while live data syncs."),
+    ).toBeVisible();
   });
 });

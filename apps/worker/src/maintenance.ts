@@ -85,7 +85,7 @@ export async function dailyMaintenance(env: Bindings, now: number): Promise<void
   await refreshRates(db, productionDeps.rateSource, now);
   try {
     const flightSource = productionDeps.flightSource?.(env) ?? productionFlightSource(env);
-    await refreshDailyFlights(db, flightSource, env, now);
+    await refreshDailyFlights(db, flightSource, now);
   } catch (error) {
     console.error(JSON.stringify({ event: "daily_flights_refresh_failed", error: String(error) }));
   }

@@ -291,7 +291,7 @@ CREATE TABLE daily_flights (
 | **Stops** | `GET, POST /groups/:id/stops` | 查詢每日站點 / 新增站點 |
 | | `PATCH, DELETE /groups/:id/stops/:sid` | 編輯站點 / 刪除站點 |
 | **Rates** | `GET /rates?date&base&quote` | 查詢參考匯率 (D1 命中快取或調用 Frankfurter) |
-| **Flights** | `GET /flights/daily` | 公開端點：取得每日已驗證便宜航班清單（無需登入；無快取時回傳內建基準清單） |
+| **Flights** | `GET /flights/daily` | 公開端點：取得每日特價航班清單（無需登入；D1 無有效未來日期快取時回傳 `isFallback: true` 精選參考清單） |
 | | `GET /flights/go` | 公開端點：校驗航班查詢參數並 `302` 導向對應語言的 Trip.com 搜尋頁（`zh-TW` → `tw.trip.com`，`en` → `www.trip.com`；無開放轉址風險） |
 | **LINE** | `POST /line/webhook` | 驗證簽章，被動回覆圖文引導與說明 |
 
@@ -299,7 +299,7 @@ CREATE TABLE daily_flights (
 
 每日排程依序執行：清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率 ➔ 更新每日便宜航班 (`refreshDailyFlights`)。
 
-* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 或種子候選抓取台灣出發低價票；經即時驗證過濾「幽靈票」（無結果或即時價格高於快取價 20% 且高於 NT$800 者予以刪除），保留並標記 `🌙 紅眼`（起降時間於 `00:00–05:59`），依基準票價計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%) 後寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。
+* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 依五個台灣出發機場與地區配額抓取候選低價票（未設定 `TRAVELPAYOUTS_TOKEN` 或無候選時不寫入假資料至 D1，讓 `GET /flights/daily` 回傳 `isFallback: true` 參考票價並於前端顯示提示）；Stage 2 透過可抽換的 `FlightSource.verifyCandidate` 驗證並比對路線、日期、直飛與新鮮度，過濾「幽靈票」（無符合結果、直飛降為轉機、時效過舊，或驗證價格高於發現價 20% 且高於 NT$800 者予以刪除），並依抵達機場當地時區計算到達時間以標記 `🌙 紅眼`（起降時間於 `00:00–05:59`），依基準票價計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%) 後分塊寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。
 
 * **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
 * **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。

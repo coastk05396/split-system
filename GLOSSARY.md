@@ -33,7 +33,7 @@ How a verified fare compares to the destination's typical baseline fare: `steal`
 _Avoid_: Strong Buy, Price Score
 
 **Ghost Fare**:
-A stale or misleading cached ticket (`幽靈票`) whose live verification check finds no matching itinerary or a live price more than 20% AND NT$800 above the cached fare; always dropped before display.
+A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by Stage 2 verification (`FlightSource.verifyCandidate`) when no matching fresh itinerary exists or the re-checked price rises by more than 20% AND NT$800 above discovery; always dropped before display.
 _Avoid_: Phantom ticket, cache hit
 
 **Red-eye Flight**:

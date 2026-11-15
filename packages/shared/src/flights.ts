@@ -16,6 +16,9 @@ export type DealTag = (typeof DEAL_TAGS)[number];
 export const FLIGHT_SORT_OPTIONS = ["price", "discount"] as const;
 export type FlightSortBy = (typeof FLIGHT_SORT_OPTIONS)[number];
 
+/** Multiplier converting typical roundtrip baseline fares into one-way deal baselines. */
+export const ONE_WAY_BASELINE_FACTOR = 0.58;
+
 export const flightOriginSchema = z.enum(FLIGHT_ORIGINS);
 export const flightRegionSchema = z.enum(FLIGHT_REGIONS);
 export const flightTripTypeSchema = z.enum(FLIGHT_TRIP_TYPES);
@@ -912,6 +915,78 @@ export const dailyFlightsResponseSchema = z.object({
 
 export type DailyFlightsResponse = z.infer<typeof dailyFlightsResponseSchema>;
 
+const COUNTRY_TIMEZONES: Readonly<Record<string, string>> = {
+  TW: "Asia/Taipei",
+  JP: "Asia/Tokyo",
+  KR: "Asia/Seoul",
+  TH: "Asia/Bangkok",
+  VN: "Asia/Ho_Chi_Minh",
+  SG: "Asia/Singapore",
+  MY: "Asia/Kuala_Lumpur",
+  PH: "Asia/Manila",
+  ID: "Asia/Makassar",
+  HK: "Asia/Hong_Kong",
+  MO: "Asia/Macau",
+  CN: "Asia/Shanghai",
+  GB: "Europe/London",
+  FR: "Europe/Paris",
+  DE: "Europe/Berlin",
+  NL: "Europe/Amsterdam",
+  TR: "Europe/Istanbul",
+  AE: "Asia/Dubai",
+  US: "America/Los_Angeles",
+  CA: "America/Vancouver",
+  AU: "Australia/Sydney",
+  NZ: "Pacific/Auckland",
+};
+
+const AIRPORT_TIMEZONES: Readonly<Record<string, string>> = {
+  JFK: "America/New_York",
+  LGA: "America/New_York",
+  EWR: "America/New_York",
+  IAD: "America/New_York",
+  DCA: "America/New_York",
+  MEL: "Australia/Melbourne",
+};
+
+/** Resolves the IANA local timezone for an origin or destination airport IATA code. */
+export function getAirportTimeZone(airport: string): string {
+  const upper = airport.toUpperCase();
+  const specific = AIRPORT_TIMEZONES[upper];
+  if (specific !== undefined) return specific;
+  const meta = DESTINATION_BY_AIRPORT.get(upper);
+  if (meta !== undefined) {
+    return COUNTRY_TIMEZONES[meta.countryCode] ?? "Asia/Taipei";
+  }
+  return "Asia/Taipei";
+}
+
+/** Computes local `HH:mm` arrival time in the arrival airport's timezone from departure ISO + minutes. */
+export function computeArrivalTimeHm(
+  depIso: string | null | undefined,
+  durationMinutes: number | null | undefined,
+  arrivalAirport: string,
+): string | null {
+  if (
+    !depIso ||
+    durationMinutes === null ||
+    durationMinutes === undefined ||
+    durationMinutes <= 0
+  ) {
+    return null;
+  }
+  const normalizedIso = /(?:Z|[+-]\d{2}:?\d{2})$/.test(depIso) ? depIso : `${depIso}+08:00`;
+  const depMs = Date.parse(normalizedIso);
+  if (Number.isNaN(depMs)) return null;
+  const arrMs = depMs + durationMinutes * 60_000;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: getAirportTimeZone(arrivalAirport),
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(arrMs));
+}
+
 /** True when the flight time falls within 00:00–05:59 local time. */
 export function isRedEyeTime(isoOrHm: string | null | undefined): boolean {
   if (typeof isoOrHm !== "string" || isoOrHm.trim() === "") return false;
@@ -1032,7 +1107,8 @@ export function filterDailyFlights(
     if (filter.directOnly && (item.transfers > 0 || (item.returnTransfers ?? 0) > 0)) return false;
     if (filter.holidayOnly || filter.month === "holiday") {
       if (matchTaiwanHoliday(item.outDate, item.inDate) === null) return false;
-    } else if (filter.month !== "all") {
+    }
+    if (filter.month !== "all" && filter.month !== "holiday") {
       if (!item.outDate.startsWith(filter.month)) return false;
     }
     return true;
@@ -1383,14 +1459,18 @@ export function getDefaultDailyFlights(
     if (meta === null) return [];
     const outDate =
       typeof seed.offsetDays === "string"
-        ? seed.offsetDays
+        ? seed.offsetDays < referenceDateIso
+          ? addDays(referenceDateIso, 30)
+          : seed.offsetDays
         : addDays(referenceDateIso, seed.offsetDays);
     const inDate =
       seed.tripType === "rt" && seed.stayDays !== undefined
         ? addDays(outDate, seed.stayDays)
         : null;
     const baseline =
-      seed.tripType === "ow" ? Math.round(meta.baselineTwd * 0.58) : meta.baselineTwd;
+      seed.tripType === "ow"
+        ? Math.round(meta.baselineTwd * ONE_WAY_BASELINE_FACTOR)
+        : meta.baselineTwd;
     const { discountPct, tag } = computeDealSignal(seed.priceTwd, baseline);
     const isRedEye = hasRedEyeLeg([seed.outboundDep, seed.inboundDep]);
 
