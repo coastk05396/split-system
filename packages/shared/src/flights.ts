@@ -1132,6 +1132,16 @@ export interface DailyFlightsFilter {
 }
 
 /** Filters daily flight deals by user-selected tabs and quick filter chips. */
+export function getFlightCityCode(dest: string): string {
+  const upper = dest.toUpperCase();
+  return (getDestinationMeta(upper)?.cityCode ?? upper).toUpperCase();
+}
+
+export function matchesFlightDest(itemDest: string, selectedDest: string): boolean {
+  const target = selectedDest.toUpperCase();
+  return itemDest.toUpperCase() === target || getFlightCityCode(itemDest) === target;
+}
+
 export function filterDailyFlights(
   items: readonly DailyFlightItem[],
   filter: DailyFlightsFilter,
@@ -1144,7 +1154,7 @@ export function filterDailyFlights(
   return items.filter((item) => {
     if (filter.region !== "all" && item.region !== filter.region) return false;
     if (filter.origin !== "all" && item.origin !== filter.origin) return false;
-    if (normalizedDest !== null && item.dest.toUpperCase() !== normalizedDest) return false;
+    if (normalizedDest !== null && !matchesFlightDest(item.dest, normalizedDest)) return false;
     if (filter.tripType !== "all" && item.tripType !== filter.tripType) return false;
     const maxStops = Math.max(item.transfers, item.returnTransfers ?? 0);
     if (stopsMode === "direct" && maxStops > 0) return false;
