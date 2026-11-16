@@ -69,10 +69,6 @@ const zhTW = {
   "home.flights.body": "台灣出發精選航線，即時特價一次看",
   "home.flightsMarquee.title": "今日低價機票",
   "home.flightsMarquee.more": "全部機票",
-  "home.flightsMarquee.badge": "即時特價",
-  "home.flightsMarquee.fallbackBadge": "參考示範",
-  "home.flightsMarquee.pause": "暫停輪播",
-  "home.flightsMarquee.resume": "繼續輪播",
   "home.tab.title": "快速分帳",
   "home.tab.body": "吃飯、搭車，立刻記一筆",
   "home.tab.hint": "適合：聚餐分帳、室友合租、日常活動",
@@ -593,7 +589,8 @@ const zhTW = {
   "flights.tripDays": "{days} 天",
   "flights.tripOneWay": "單程",
   "flights.bookCta": "查看",
-  "flights.fallbackNote": "顯示精選參考票價，稍後會同步最新每日行情。",
+  "flights.refreshSchedule": "每日 00:30（台灣時間）更新",
+  "flights.fallbackNote": "顯示精選參考票價，每日 00:30（台灣時間）更新最新行情。",
 } as const;
 
 export type MessageId = keyof typeof zhTW;

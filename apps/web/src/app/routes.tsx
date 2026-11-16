@@ -97,7 +97,9 @@ function FlightsRoute() {
   return (
     <div className="landing-editorial flex min-h-dvh flex-col">
       <PublicHeader />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-5 pt-2 md:px-10 md:pt-4">{content}</main>
+      <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-5 pt-2 md:px-10 md:pt-4">
+        {content}
+      </main>
       <footer className="border-t border-sprout-900/10">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-6 text-xs text-ink-muted md:flex-row md:items-center md:justify-between md:px-10">
           <span>{t("landing.footer")}</span>

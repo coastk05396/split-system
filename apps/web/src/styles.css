@@ -1314,8 +1314,7 @@ body::before {
   animation: flight-marquee-scroll 34s linear infinite;
   will-change: transform;
 }
-.flight-marquee:focus-within .flight-marquee-track,
-.flight-marquee-paused .flight-marquee-track {
+.flight-marquee:focus-within .flight-marquee-track {
   animation-play-state: paused;
 }
 

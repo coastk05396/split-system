@@ -1,6 +1,5 @@
 import { type DailyFlightItem, type Language, sortDailyFlights } from "@split/shared";
-import { ChevronRight, Pause, Plane, Play } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, Plane } from "lucide-react";
 import { Link } from "react-router";
 import { getLocale, t } from "../i18n/messages.js";
 import { useDailyFlights } from "./api.js";
@@ -10,14 +9,13 @@ import { flightDestinationLabel, tripGoHref } from "./ui.js";
 
 /**
  * Interactive horizontal marquee of top daily flight deals for signed-in Home.
- * Loops seamlessly via duplicated GPU-composited track and pauses on hover, focus, or explicit toggle.
+ * Loops seamlessly via duplicated GPU-composited track and pauses on hover or focus.
  */
 export function FlightDealsMarquee() {
   const locale = getLocale();
   const flights = useDailyFlights();
-  const [paused, setPaused] = useState(false);
   const topDeals = sortDailyFlights(flights.data.items, "discount", "desc").slice(0, 8);
-  const isFallback = flights.isPending || flights.data.isFallback;
+  const showFallback = flights.data.isFallback && !flights.isPending;
 
   if (topDeals.length === 0) return null;
 
@@ -29,48 +27,22 @@ export function FlightDealsMarquee() {
             {t("home.flightsMarquee.title")}
           </h2>
           <FlightBetaBadge />
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-              isFallback ? "bg-amber-100 text-amber-800" : "bg-sprout-100 text-sprout-700"
-            }`}
-          >
-            {isFallback ? t("home.flightsMarquee.fallbackBadge") : t("home.flightsMarquee.badge")}
-          </span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            aria-pressed={paused}
-            aria-label={paused ? t("home.flightsMarquee.resume") : t("home.flightsMarquee.pause")}
-            onClick={() => {
-              setPaused((prev) => !prev);
-            }}
-            className="press-pill inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white p-1.5 text-slate-600 shadow-2xs transition-colors hover:border-sprout-300 hover:text-sprout-700 motion-reduce:hidden"
-          >
-            {paused ? (
-              <Play aria-hidden="true" className="size-3.5" />
-            ) : (
-              <Pause aria-hidden="true" className="size-3.5" />
-            )}
-          </button>
-          <Link
-            to="/flights"
-            className="press-pill group flex items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700"
-          >
-            <span>{t("home.flightsMarquee.more")}</span>
-            <ChevronRight aria-hidden="true" className="hover-nudge-x size-4" />
-          </Link>
-        </div>
+        <Link
+          to="/flights"
+          className="press-pill group flex shrink-0 items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700"
+        >
+          <span>{t("home.flightsMarquee.more")}</span>
+          <ChevronRight aria-hidden="true" className="hover-nudge-x size-4" />
+        </Link>
       </div>
 
-      {flights.data.isFallback && !flights.isPending && (
-        <p className="text-xs text-slate-500">{t("flights.fallbackNote")}</p>
-      )}
+      <p className="text-xs text-slate-500">
+        {showFallback ? t("flights.fallbackNote") : t("flights.refreshSchedule")}
+      </p>
 
-      <div
-        className={`flight-marquee flight-marquee-mask -mx-1 overflow-hidden px-1${paused ? " flight-marquee-paused" : ""}`}
-      >
+      <div className="flight-marquee flight-marquee-mask -mx-1 overflow-hidden px-1">
         <div className="flight-marquee-track gap-3 py-1">
           {topDeals.map((item) => (
             <MarqueeDealTile key={item.id} item={item} lang={locale} />

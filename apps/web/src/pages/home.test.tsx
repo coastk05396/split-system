@@ -1,5 +1,4 @@
 import { screen, within } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
@@ -320,7 +319,7 @@ describe("home", () => {
     }
   });
 
-  it("labels fallback marquee fares as sample fares instead of live deals", async () => {
+  it("omits fallback/pause clutter and displays the daily 00:30 refresh schedule in fallback and live modes", async () => {
     const { api } = renderApp({
       cookieUser: me,
       seed: (groups) => {
@@ -330,27 +329,23 @@ describe("home", () => {
     api.dailyFlights = { ...api.dailyFlights, isFallback: true };
 
     const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
-    expect(within(marquee).getByText("參考示範")).toBeVisible();
+    expect(within(marquee).queryByText("參考示範")).toBeNull();
     expect(within(marquee).queryByText("即時特價")).toBeNull();
-    expect(within(marquee).getByText(/精選參考票價/)).toBeVisible();
+    expect(within(marquee).queryByRole("button", { name: /暫停|繼續/ })).toBeNull();
+    expect(within(marquee).getByText(/每日 00:30（台灣時間）更新/)).toBeVisible();
   });
 
-  it("lets mobile and keyboard users pause and resume the flight deals marquee", async () => {
-    const user = userEvent.setup();
-    renderApp({
+  it("also displays the daily 00:30 refresh schedule when live flight deals are loaded", async () => {
+    const { api } = renderApp({
       cookieUser: me,
       seed: (groups) => {
         groups.add(me, { name: "日本行", settlementCurrency: "TWD", myBalance: -100 });
       },
     });
+    api.dailyFlights = { ...api.dailyFlights, isFallback: false };
 
     const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
-    const pauseBtn = within(marquee).getByRole("button", { name: /暫停/ });
-    expect(pauseBtn).toHaveAttribute("aria-pressed", "false");
-    await user.click(pauseBtn);
-    expect(pauseBtn).toHaveAttribute("aria-pressed", "true");
-    expect(marquee.querySelector(".flight-marquee-paused")).not.toBeNull();
-    await user.click(pauseBtn);
-    expect(pauseBtn).toHaveAttribute("aria-pressed", "false");
+    expect(within(marquee).queryByText("即時特價")).toBeNull();
+    expect(within(marquee).getByText(/每日 00:30（台灣時間）更新/)).toBeVisible();
   });
 });

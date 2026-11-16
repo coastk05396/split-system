@@ -534,4 +534,180 @@ describe("public flight routes and daily pipeline", () => {
 
     expect(items).toHaveLength(0);
   });
+
+  it("parses Travelpayouts one-way fares with duration_back: 0 and caps total upstream fetches well under 50 subrequests", async () => {
+    const cronNow = Date.parse("2026-11-16T03:00:00Z");
+    const destinations = [
+      "NRT",
+      "HND",
+      "KIX",
+      "OKA",
+      "FUK",
+      "CTS",
+      "NGO",
+      "ICN",
+      "PUS",
+      "BKK",
+      "DAD",
+      "SIN",
+      "SGN",
+      "KUL",
+      "HKG",
+      "MFM",
+      "LHR",
+      "CDG",
+      "FRA",
+      "LAX",
+      "YVR",
+      "SYD",
+    ];
+    let fetchCount = 0;
+
+    const fakeFetch: typeof fetch = (input) => {
+      fetchCount += 1;
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(rawUrl);
+      const origin = url.searchParams.get("origin") ?? "TPE";
+      const destination = url.searchParams.get("destination");
+      const oneWay = url.searchParams.get("one_way") === "true";
+
+      if (destination !== null) {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin,
+                destination,
+                airline: "IT",
+                departure_at: "2026-12-05T09:15:00+08:00",
+                return_at: oneWay ? null : "2026-12-09T14:00:00+09:00",
+                price: 3200,
+                transfers: 0,
+                return_transfers: oneWay ? 0 : 0,
+                duration: 165,
+                duration_to: 165,
+                duration_back: oneWay ? 0 : 180,
+                found_at: "2026-11-15T12:00:00Z",
+              },
+            ],
+          }),
+        );
+      }
+
+      // Return one-way fares with duration_back: 0 and round-trips across many destinations
+      const data = destinations.map((dest, idx) => ({
+        origin,
+        destination: dest,
+        airline: "IT",
+        departure_at: "2026-12-05T09:15:00+08:00",
+        return_at: oneWay ? null : "2026-12-09T14:00:00+09:00",
+        price: 3200 + idx * 100,
+        transfers: 0,
+        return_transfers: 0,
+        duration: 165,
+        duration_to: 165,
+        duration_back: oneWay ? 0 : 180,
+        found_at: "2026-11-15T12:00:00Z",
+      }));
+      return Promise.resolve(Response.json({ success: true, data }));
+    };
+
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    const db = createDb(env.DB);
+    const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
+
+    expect(items.some((item) => item.tripType === "ow")).toBe(true);
+    // 10 discovery calls + <= 20 verify calls <= 30 external fetches (<50 Workers Free subrequest cap)
+    expect(fetchCount).toBeLessThanOrEqual(30);
+    expect(items.length).toBeGreaterThanOrEqual(15);
+    expect(items.length).toBeLessThanOrEqual(20);
+  });
+
+  it("skips discovery items whose found_at is already stale so fresher candidates keep Stage 2 quota", async () => {
+    const cronNow = Date.parse("2026-11-16T03:00:00Z");
+    const fakeFetch: typeof fetch = (input) => {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(rawUrl);
+      const origin = url.searchParams.get("origin");
+      const destination = url.searchParams.get("destination");
+
+      if (destination === "NRT") {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                destination: "NRT",
+                airline: "JX",
+                departure_at: "2026-12-08T09:00:00+08:00",
+                return_at: "2026-12-12T15:00:00+09:00",
+                price: 5900,
+                transfers: 0,
+                return_transfers: 0,
+                duration_to: 185,
+                duration_back: 215,
+                found_at: "2026-11-15T20:00:00Z",
+              },
+            ],
+          }),
+        );
+      }
+
+      if (origin === "TPE" && url.searchParams.get("one_way") === "false") {
+        return Promise.resolve(
+          Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                destination: "KIX",
+                airline: "IT",
+                departure_at: "2026-12-05T08:00:00+08:00",
+                return_at: "2026-12-09T14:00:00+09:00",
+                price: 4200,
+                transfers: 0,
+                return_transfers: 0,
+                found_at: "2026-11-10T00:00:00Z", // > 48h old at discovery
+              },
+              {
+                origin: "TPE",
+                destination: "NRT",
+                airline: "JX",
+                departure_at: "2026-12-08T09:00:00+08:00",
+                return_at: "2026-12-12T15:00:00+09:00",
+                price: 5900,
+                transfers: 0,
+                return_transfers: 0,
+                found_at: "2026-11-15T20:00:00Z", // fresh
+              },
+            ],
+          }),
+        );
+      }
+
+      return Promise.resolve(Response.json({ success: true, data: [] }));
+    };
+
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    const db = createDb(env.DB);
+    const verifiedDests: string[] = [];
+    const baseSource = productionFlightSource(tpEnv, fakeFetch);
+    const wrappedSource: FlightSource = {
+      fetchCandidates: (d, n) => baseSource.fetchCandidates(d, n),
+      verifyCandidate: (cand, n) => {
+        verifiedDests.push(cand.dest);
+        return baseSource.verifyCandidate
+          ? baseSource.verifyCandidate(cand, n)
+          : Promise.resolve(null);
+      },
+    };
+    const items = await refreshDailyFlights(db, wrappedSource, cronNow);
+
+    expect(verifiedDests).toEqual(["NRT"]);
+    expect(items.map((x) => x.dest)).toEqual(["NRT"]);
+  });
 });
