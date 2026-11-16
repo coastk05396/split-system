@@ -103,6 +103,67 @@ export function flightOriginCityLabel(origin: string, lang: Language): string {
 
 const MS_PER_DAY = 86_400_000;
 
+const EN_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+interface MonthDay {
+  month: number;
+  day: number;
+}
+
+function parseMonthDay(iso: string): MonthDay | null {
+  const match = /^\d{4}-(\d{2})-(\d{2})/.exec(iso);
+  if (match === null) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  return month >= 1 && month <= 12 && day >= 1 && day <= 31 ? { month, day } : null;
+}
+
+function monthDayLabel({ month, day }: MonthDay, lang: Language): string {
+  return lang === "en" ? `${EN_MONTHS[month - 1] ?? ""} ${day}` : `${month}月${day}日`;
+}
+
+/**
+ * Fare dates without the year (the board only holds the current season): `12月1日 – 5日`,
+ * cross-month `12月28日 – 1月3日`, one-way `12月1日`, same-day `12月9日 當天來回`;
+ * English `Dec 1 – 5`, `Dec 28 – Jan 3`, `Dec 1`, `Dec 9 · same day`.
+ */
+export function formatFareDates(outDate: string, inDate: string | null, lang: Language): string {
+  const out = parseMonthDay(outDate);
+  if (out === null) return outDate;
+  const outLabel = monthDayLabel(out, lang);
+  if (inDate === null) return outLabel;
+  const back = parseMonthDay(inDate);
+  if (back === null) return outLabel;
+  if (out.month === back.month && out.day === back.day) {
+    return lang === "en" ? `${outLabel} · same day` : `${outLabel} 當天來回`;
+  }
+  const backLabel =
+    out.month === back.month
+      ? lang === "en"
+        ? `${back.day}`
+        : `${back.day}日`
+      : monthDayLabel(back, lang);
+  return `${outLabel} – ${backLabel}`;
+}
+
+/** Stops on the worse leg; 0 means nonstop. */
+export function fareStops(item: DailyFlightItem): number {
+  return Math.max(item.transfers, item.returnTransfers ?? 0);
+}
+
 function formatTripSpan(item: DailyFlightItem): string {
   if (item.inDate === null) return t("flights.tripOneWay");
   const outMs = Date.parse(`${item.outDate}T00:00:00Z`);

@@ -319,6 +319,53 @@ describe("home", () => {
     }
   });
 
+  it("shows city-only names, a route chip, and discounts only from 15% on the marquee tiles", async () => {
+    const { api } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "日本行", settlementCurrency: "TWD", myBalance: -100 });
+      },
+    });
+    const base = {
+      origin: "TPE" as const,
+      region: "jp" as const,
+      tripType: "rt" as const,
+      outDate: "2026-12-10",
+      inDate: "2026-12-14",
+      tag: "normal" as const,
+      airlines: ["IT"],
+      transfers: 0,
+      returnTransfers: 0,
+      isRedEye: false,
+      outboundDep: "10:00",
+      inboundDep: "15:00",
+    };
+    api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T01:00:00.000Z",
+      isFallback: false,
+      items: [
+        { ...base, id: "oka", dest: "OKA", priceTwd: 4631, discountPct: 55 },
+        { ...base, id: "nrt", dest: "NRT", priceTwd: 5000, discountPct: 15 },
+        { ...base, id: "kix", dest: "KIX", priceTwd: 6000, discountPct: 14 },
+      ],
+    };
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    const tiles = [...marquee.querySelectorAll<HTMLAnchorElement>("a[href*='flights/go']")].filter(
+      (a) => a.closest("[aria-hidden]") === null,
+    );
+    const text = tiles.map((tile) => tile.textContent);
+    expect(text[0]).toContain("沖繩");
+    expect(text[0]).toContain("TPE ⇄ OKA");
+    expect(text[0]).toContain("省 55%");
+    expect(text[1]).toContain("東京");
+    expect(text[1]).toContain("省 15%");
+    expect(text[2]).toContain("大阪");
+    expect(text[2]).not.toMatch(/省|↓/);
+    expect(marquee.textContent).not.toMatch(/沖繩那霸|東京成田|大阪關西|直飛/);
+  });
+
   it("omits fallback/pause clutter and displays the daily 08:00 refresh schedule in fallback and live modes", async () => {
     const { api } = renderApp({
       cookieUser: me,

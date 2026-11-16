@@ -36,8 +36,20 @@ _Avoid_: Itinerary item, activity, waypoint
 The curated daily board (`每日航班` / `/flights`) of verified cheap flights departing Taiwan, accessible both signed in and signed out, updated daily and linked to Trip.com for booking.
 _Avoid_: Flight Radar, Price Watch, Trip module
 
+**City Card**:
+One collapsed row on the Daily Flights board per destination city, summarising that city's cheapest fare and expandable to its fares.
+_Avoid_: Fare card, destination tile
+
+**Curated Destination**:
+An airport in the hand-maintained catalog (~80–90 major travel airports across Asia, Europe, North America, Oceania, and the Middle East) with verified localized city names, country flags, and IANA timezones; unlisted minor airports are filtered out.
+_Avoid_: Open airport list, destination whitelist, global airport dump
+
+**Flight Region**:
+One of the five top-level board tabs (`日本`, `韓國`, `東南亞`, `港澳中`, `長程`); finer geographic sub-regions (Europe, North America, Oceania, Middle East & Islands) and individual countries live inside the filter drawer rather than adding more top-level tabs.
+_Avoid_: Continent tab, region pill (when meaning the sub-region filter)
+
 **Deal Signal**:
-How a verified fare compares to the Travelpayouts monthly route median (`/v2/prices/month-matrix` per origin, destination, trip type, and departure month, when at least 3 prices exist), falling back to the median of that day's Stage 1 candidate fares for the same destination and trip type (no signal when too few candidates exist in both): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; on the board only fares discounted 40% or more get the solid emphasis; any smaller positive discount (including `normal`) shows as plain text. Shown to users as `省 X%` / `Save X%`.
+How a verified fare compares to the Travelpayouts monthly route median (`/v2/prices/month-matrix` per origin, destination, trip type, and departure month, when at least 3 prices exist), falling back to the median of that day's Stage 1 candidate fares for the same destination and trip type (no signal when too few candidates exist in both): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a soft pill from 40%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
 _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price)
 
 **Ghost Fare**:

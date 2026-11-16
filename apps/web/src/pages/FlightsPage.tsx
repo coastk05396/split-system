@@ -20,11 +20,10 @@ import { useState } from "react";
 import { useDailyFlights } from "../flights/api.js";
 import { CityFlightCard } from "../flights/CityFlightCard.js";
 import { groupByCity } from "../flights/groups.js";
-import { FlightsIconTile, FlightsTitle } from "../flights/FlightsTitle.js";
+import { FlightsTitle } from "../flights/FlightsTitle.js";
 import { flightsUpdatedNote } from "../flights/ui.js";
 import { Loading } from "../groups/ui.js";
 import { getLocale, type MessageId, t } from "../i18n/messages.js";
-import { SelectionPill } from "../shell/SelectionPill.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 
 const REGION_LABELS: Record<FlightRegion, MessageId> = {
@@ -178,47 +177,46 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     (excludeRedEye ? 1 : 0);
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 pb-8">
+    <div className="flex min-w-0 flex-col gap-4 pb-8">
       {!standalone && (
-        <header className="-mx-3 flex items-center gap-2.5 rounded-3xl bg-linear-to-b from-sprout-50 to-transparent px-3 pt-4 pb-1">
-          <FlightsIconTile />
+        <header className="px-1 pt-4">
           <FlightsTitle />
         </header>
       )}
 
       <div
         data-testid="flights-top-bar"
-        className="flex flex-nowrap items-end justify-between gap-3 border-b border-slate-200/80"
+        role="group"
+        aria-label={t("flights.regionLabel")}
+        className="flex flex-nowrap justify-between overflow-hidden border-b border-fl-hair px-1"
       >
-        <div
-          role="group"
-          aria-label={t("flights.regionLabel")}
-          className="scroll-fade-x flex min-w-0 flex-1 items-center gap-5 overflow-x-auto pr-4"
+        <RegionTab
+          active={region === "all"}
+          onClick={() => {
+            selectRegion("all");
+          }}
         >
+          {t("flights.region.all")}
+        </RegionTab>
+        {FLIGHT_REGIONS.map((r) => (
           <RegionTab
-            active={region === "all"}
+            key={r}
+            active={region === r}
             onClick={() => {
-              selectRegion("all");
+              selectRegion(r);
             }}
           >
-            {t("flights.region.all")}
+            {t(REGION_LABELS[r])}
           </RegionTab>
-          {FLIGHT_REGIONS.map((r) => (
-            <RegionTab
-              key={r}
-              active={region === r}
-              onClick={() => {
-                selectRegion(r);
-              }}
-            >
-              {t(REGION_LABELS[r])}
-            </RegionTab>
-          ))}
-        </div>
+        ))}
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-full bg-slate-100 p-1">
+        <div
+          role="group"
+          aria-label={t("flights.tripTypeLabel")}
+          className="flex h-[50px] min-w-0 flex-1 items-center rounded-xl bg-fl-track p-[3px]"
+        >
           {(["rt", "ow"] as const).map((type) => (
             <button
               key={type}
@@ -227,10 +225,10 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
               onClick={() => {
                 setTripType(type);
               }}
-              className={`press-pill min-h-9 flex-1 cursor-pointer rounded-full px-3 text-sm whitespace-nowrap transition-colors ${
+              className={`press-pill h-full min-w-0 flex-1 cursor-pointer truncate rounded-[9px] px-3 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
                 activeTripType === type
-                  ? "bg-white font-bold text-sprout-700 shadow-sm"
-                  : "font-medium text-slate-500"
+                  ? "bg-fl-ink font-semibold text-white"
+                  : "font-medium text-[#5a645e]"
               }`}
             >
               {t(type === "rt" ? "flights.tripType.rt" : "flights.tripType.ow")}
@@ -242,12 +240,12 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
           <Dialog.Trigger asChild>
             <button
               type="button"
-              className="press-pill inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-sprout-500 bg-white px-4 text-sm font-bold text-sprout-700"
+              className="press-pill inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-[#d6d2c7] bg-white px-3.5 text-sm font-semibold text-fl-ink focus-visible:outline-2 focus-visible:outline-fl-green"
             >
               <SlidersHorizontal aria-hidden="true" className="size-4" />
               <span>{t("flights.filtersBtn")}</span>
               {activeDrawerCount > 0 && (
-                <span className="inline-flex size-5 items-center justify-center rounded-full bg-sprout-500 text-[11px] font-bold text-white tabular-nums">
+                <span className="inline-flex size-5 items-center justify-center rounded-full bg-fl-green text-[11px] font-bold text-white tabular-nums">
                   {activeDrawerCount}
                 </span>
               )}
@@ -444,11 +442,14 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </Dialog.Root>
       </div>
 
-      <p className="text-xs font-medium text-slate-500 tabular-nums">
-        {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
-          count: filtered.length,
-        })}
-      </p>
+      <div className="flex items-baseline justify-between px-1 text-[13px] leading-[18px] text-fl-muted">
+        <span className="tabular-nums">
+          {t(groups.length === 1 ? "flights.destinations.one" : "flights.destinations", {
+            count: groups.length,
+          })}
+        </span>
+        <span>{t("flights.sortedByPrice")}</span>
+      </div>
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-200/80 bg-white px-6 py-10 text-center shadow-2xs">
@@ -495,17 +496,13 @@ function RegionTab({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`press-pill relative min-h-11 shrink-0 cursor-pointer pb-2 text-[15px] font-bold whitespace-nowrap transition-colors ${
-        active ? "text-sprout-700" : "font-medium text-slate-500 hover:text-slate-900"
+      className={`press-pill -mb-px min-h-11 min-w-0 cursor-pointer truncate border-b-2 text-[15px] whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
+        active
+          ? "border-fl-green font-semibold text-fl-ink"
+          : "border-transparent font-medium text-fl-muted hover:text-fl-ink"
       }`}
     >
       {children}
-      {active && (
-        <SelectionPill
-          layoutId="flights-region-underline"
-          className="inset-x-0 bottom-0 h-[3px] rounded-full bg-sprout-500"
-        />
-      )}
     </button>
   );
 }

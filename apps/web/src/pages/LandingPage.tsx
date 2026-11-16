@@ -78,7 +78,7 @@ export function LandingPage() {
             >
               <div className="flex items-center gap-2.5">
                 <FlightsIconTile />
-                <FlightsTitle as="h2" />
+                <FlightsTitle as="h2" size="md" />
               </div>
 
               <div

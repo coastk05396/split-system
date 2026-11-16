@@ -16,6 +16,20 @@
   --color-line: #06c755;
   --color-telegram: #229ed9;
 
+  /* Flights board v2 (warm paper): tokens from .scratch/flights-v2 mocks. */
+  --color-fl-paper: #f5f3ee;
+  --color-fl-ink: #121915;
+  --color-fl-green: #0e5a3a;
+  --color-fl-tint: #e6f1ea;
+  --color-fl-muted: #66706a;
+  --color-fl-hair: #e4e0d6;
+  --color-fl-hair-soft: #f0ede6;
+  --color-fl-sheet: #faf9f5;
+  --color-fl-first: #eef5f0;
+  --color-fl-track: #eae7df;
+  --font-serif-tc: "Noto Serif TC", "Noto Sans TC", serif;
+  --font-num: "Newsreader", "Noto Serif TC", serif;
+
   --font-sans:
     "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
 
@@ -1206,6 +1220,9 @@ body::before {
     radial-gradient(50rem 28rem at 92% 4%, rgb(14 165 233 / 0.09), transparent 70%),
     linear-gradient(180deg, #f6fbf8 0%, #f9fcff 46%, #ffffff 100%);
 }
+.flights-paper {
+  background: var(--color-fl-paper);
+}
 .clay-receipt {
   background: linear-gradient(145deg, #ffffff, #f6faf8);
   border: 1px solid rgb(226 232 240 / 0.9);
@@ -1400,16 +1417,6 @@ body::before {
 @media (hover: hover) and (pointer: fine) {
   .flight-marquee:hover .flight-marquee-track {
     animation-play-state: paused;
-  }
-  .flight-card:hover {
-    border-color: rgb(46 157 113 / 0.55);
-  }
-  .flight-card:hover .flight-card-city {
-    color: var(--color-sprout-700);
-  }
-  .flight-card:hover .flight-card-route {
-    border-color: rgb(46 157 113 / 0.4);
-    background-color: var(--color-sprout-100);
   }
   .flight-card:hover .flight-card-plane {
     transform: translateX(2px);

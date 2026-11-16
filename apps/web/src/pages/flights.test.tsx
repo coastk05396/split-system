@@ -147,11 +147,12 @@ describe("daily flights page", () => {
     const nrt = cityHeadings()[0] as HTMLElement;
     // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, direct, 5,680, 省 45%)
     expect(nrt).toHaveTextContent("TPE ⇄ NRT");
-    expect(nrt).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
+    expect(nrt).toHaveTextContent("樂桃航空");
     expect(nrt).toHaveTextContent("5,680");
     expect(nrt).toHaveTextContent("省 45%");
     expect(nrt).toHaveTextContent("紅眼");
-    expect(nrt).not.toHaveTextContent(/起|成田/);
+    // No directness and no fare count on the collapsed card
+    expect(nrt).not.toHaveTextContent(/起|成田|直飛|轉機|筆/);
     expect(nrt.textContent).not.toMatch(/\d{1,2}\/\d{1,2}/);
     expect(document.querySelectorAll('svg[data-country="JP"]').length).toBe(2);
 
@@ -169,18 +170,23 @@ describe("daily flights page", () => {
       "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&tripType=rt&lang=zh-TW&inDate=2027-02-07",
       "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&tripType=rt&lang=zh-TW&inDate=2027-01-16",
     ]);
-    expect(rows[0]).toHaveTextContent("12/10 – 12/14");
-    expect(rows[0]).toHaveTextContent("TPE ⇄ NRT");
-    expect(rows[0]).toHaveTextContent("樂桃航空 · 直飛 · 紅眼");
+    expect(rows[0]).toHaveTextContent("12月10日 – 14日");
+    expect(rows[0]).toHaveTextContent("最低價 · 樂桃航空 · 紅眼");
     expect(rows[0]).toHaveTextContent("5,680");
-    expect(rows[0]).toHaveTextContent("省 45%");
-    // Two airports of one city in one card: each row shows its own airport pair
-    expect(rows[1]).toHaveTextContent("TSA ⇄ HND");
-    expect(rows[2]).toHaveTextContent("KHH ⇄ NRT");
-    expect(rows[2]).toHaveTextContent("1轉");
-    expect(rows[0]).toHaveClass("bg-sprout-50");
-    expect(rows[1]).not.toHaveClass("bg-sprout-50");
+    expect(rows[1]).toHaveTextContent("3月5日 – 9日");
+    // The route chip lives on the card header only, never per row; nonstop shows no directness
+    expect(rows.every((r) => !/⇄|→|直飛|省/.test(r.textContent))).toBe(true);
+    expect(rows[0]).not.toHaveTextContent(/轉機|出發/);
+    // Only fares from another origin than the card's (TPE) say where they leave from
+    expect(rows[1]).toHaveTextContent("松山出發 · 中華航空");
+    expect(rows[2]).toHaveTextContent("高雄出發 · 台灣虎航 · 轉機 1 次");
+    expect(rows[3]).toHaveTextContent("1月12日 – 16日");
+    expect(rows[3]).not.toHaveTextContent("出發");
+    expect(rows[0]?.closest("li")).toHaveClass("bg-fl-first");
+    expect(rows[1]?.closest("li")).not.toHaveClass("bg-fl-first");
     expect(rows.every((r) => !/Trip\.com/i.test(r.textContent))).toBe(true);
+    // 4 fares fit: no 看全部 footer
+    expect(screen.queryByRole("button", { name: /看全部/ })).toBeNull();
 
     // Collapse again
     await user.click(toggle);
@@ -196,7 +202,8 @@ describe("daily flights page", () => {
     expect(screen.queryByRole("group", { name: "排序" })).toBeNull();
     expect(screen.queryByRole("button", { name: /最划算|價格最低/ })).toBeNull();
     expect(screen.queryByText(/降幅/)).toBeNull();
-    expect(screen.getByText("6 筆")).toBeVisible();
+    expect(screen.getByText("3 個目的地")).toBeVisible();
+    expect(screen.getByText("價格由低到高")).toBeVisible();
     expect(cityHeadings().map((h) => h.textContent.match(/東京|大阪|首爾/)?.[0])).toEqual([
       "東京",
       "首爾",
@@ -214,10 +221,10 @@ describe("daily flights page", () => {
 
     // KHH: ICN has no KHH fare so it disappears; NRT keeps only its KHH row
     expect(cityHeadings()).toHaveLength(2);
+    expect(screen.getByText("2 個目的地")).toBeVisible();
     expect(screen.queryByText("首爾")).toBeNull();
     const nrt = cityHeadings().find((h) => h.textContent.includes("東京")) as HTMLElement;
     expect(nrt).toHaveTextContent("KHH ⇄ NRT");
-    expect(nrt).toHaveTextContent("1 筆");
     await user.click(within(nrt).getByRole("button"));
     const rows = rowsOf(nrt);
     expect(rows).toHaveLength(1);
@@ -242,40 +249,47 @@ describe("daily flights page", () => {
     expect(cityHeadings()).toHaveLength(2);
     expect(cityHeadings()[0]).toHaveTextContent("曼谷");
     expect(cityHeadings()[0]).toHaveTextContent("TPE → BKK");
-    expect(cityHeadings()[1]).toHaveTextContent("1轉");
+    await user.click(within(cityHeadings()[1] as HTMLElement).getByRole("button"));
+    // One-way rows show the outbound date only; the 1-stop fare says so
+    expect(rowsOf(cityHeadings()[1] as HTMLElement)[0]).toHaveTextContent("12月18日");
+    expect(rowsOf(cityHeadings()[1] as HTMLElement)[0]).toHaveTextContent("轉機 1 次");
+    expect(rowsOf(cityHeadings()[1] as HTMLElement)[0]).not.toHaveTextContent("–");
 
+    // All region tabs fit at once: the row never scrolls horizontally (no scrollbar at 360/390px)
     const tabs = screen.getByRole("group", { name: "目的地" });
-    expect(tabs.className).toContain("overflow-x-auto");
-    for (const name of ["全部地區", "日本", "韓國", "東南亞", "港澳", "長程"]) {
+    expect(tabs.className).not.toMatch(/overflow-x-(auto|scroll)/);
+    expect(tabs.className).toContain("overflow-hidden");
+    expect(within(tabs).getAllByRole("button")).toHaveLength(6);
+    for (const name of ["全部", "日本", "韓國", "東南亞", "港澳", "長程"]) {
       expect(within(tabs).getByRole("button", { name })).toBeVisible();
     }
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("whitespace-nowrap");
   });
 
-  it("shows a solid pill from 40% up, plain green text below it (cards and rows), and nothing for normal fares", async () => {
+  it("shows a soft pill from 40%, plain green text for 15-39%, and nothing below 15% (cards only, never rows)", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
 
-    // Tokyo 45% is solid; Osaka 21% is a signal below 40%: plain text
-    expect(screen.getByText("省 45%").className).toContain("bg-sprout-600");
+    // Tokyo 45% is a soft tinted pill (not solid green); Osaka 21% is plain text
+    const pill = screen.getByText("省 45%");
+    expect(pill.className).toContain("bg-fl-tint");
+    expect(pill.className).not.toContain("bg-sprout-600");
     const quiet = screen.getByText("省 21%");
-    expect(quiet.className).not.toContain("bg-sprout-600");
-    expect(quiet.className).toContain("text-sprout-700");
+    expect(quiet.className).not.toContain("bg-");
+    expect(quiet.className).toContain("text-fl-green");
     // ICN's cheapest round trip is normal: no badge at all
     expect(cityHeadings()[1]).toHaveTextContent("首爾");
     expect(cityHeadings()[1]).not.toHaveTextContent("省");
 
-    // Expanded rows follow the same threshold: 45% solid, 18% plain
+    // Expanded rows carry price and link only: no discount marker
     await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
-    const rows = rowsOf(cityHeadings()[0] as HTMLElement);
-    expect(within(rows[0] as HTMLElement).getByText("省 45%").className).toContain("bg-sprout-600");
-    const row18 = within(rows[2] as HTMLElement).getByText("省 18%");
-    expect(row18.className).not.toContain("bg-sprout-600");
-    expect(row18.className).toContain("text-sprout-700");
+    expect(rowsOf(cityHeadings()[0] as HTMLElement).every((r) => !/省/.test(r.textContent))).toBe(
+      true,
+    );
   });
 
-  it("renders 45% as a solid pill, 25% as 省 text, 12% as a ↓ arrow with an accessible label, and 0% as nothing", async () => {
+  it("draws 45% as a soft pill, 25% and 15% as plain 省 text, and nothing at 14% or 0%", async () => {
     const { api } = setup();
     const deal = (dest: string, region: DailyFlightItem["region"], pct: number, price: number) =>
       fare(`d-${dest}`, {
@@ -291,28 +305,77 @@ describe("daily flights page", () => {
       items: [
         deal("NRT", "jp", 45, 3000),
         deal("KIX", "jp", 25, 3100),
-        deal("FUK", "jp", 12, 3200),
+        deal("FUK", "jp", 15, 3200),
+        deal("PUS", "kr", 14, 3250),
         deal("ICN", "kr", 0, 3300),
       ],
       isFallback: false,
     };
     await screen.findAllByRole("heading", { level: 2 });
-    const [tokyo, osaka, fukuoka, seoul] = cityHeadings() as [
+    const [tokyo, osaka, fukuoka, busan, seoul] = cityHeadings() as [
+      HTMLElement,
       HTMLElement,
       HTMLElement,
       HTMLElement,
       HTMLElement,
     ];
 
-    expect(within(tokyo).getByText("省 45%").className).toContain("bg-sprout-600");
-    const plain = within(osaka).getByText("省 25%");
-    expect(plain.className).toContain("text-sprout-700");
-    expect(plain.className).not.toContain("bg-sprout-600");
-    const arrow = within(fukuoka).getByText("↓12%");
-    expect(arrow.className).not.toContain("bg-sprout-600");
-    expect(arrow.getAttribute("aria-hidden")).toBe("true");
-    expect(within(fukuoka).getByText("省 12%")).toHaveClass("sr-only");
-    expect(seoul).not.toHaveTextContent(/省|↓/);
+    expect(within(tokyo).getByText("省 45%").className).toContain("bg-fl-tint");
+    for (const [card, text] of [
+      [osaka, "省 25%"],
+      [fukuoka, "省 15%"],
+    ] as const) {
+      const plain = within(card).getByText(text);
+      expect(plain.className).toContain("text-fl-green");
+      expect(plain.className).not.toContain("bg-");
+    }
+    expect(busan).not.toHaveTextContent(/省|↓|%/);
+    expect(seoul).not.toHaveTextContent(/省|↓|%/);
+  });
+
+  it("never mentions 直飛 on cards, and lists 轉機 N 次 only for fares with stops", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    expect(screen.queryByText(/直飛|Nonstop/)).toBeNull();
+    for (const card of cityHeadings()) {
+      await user.click(within(card).getByRole("button"));
+      for (const row of rowsOf(card)) {
+        expect(row).not.toHaveTextContent(/直飛|0 次/);
+      }
+    }
+    const stopRows = screen.getAllByRole("link").filter((a) => /轉機/.test(a.textContent));
+    expect(stopRows.map((a) => a.textContent)).toEqual([expect.stringContaining("轉機 1 次")]);
+  });
+
+  it("caps an expanded card at 5 fares with a 看全部 N 筆 footer that expands and collapses", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T01:00:00.000Z",
+      items: Array.from({ length: 7 }, (_, i) =>
+        fare(`s-${String(i)}`, {
+          dest: "ICN",
+          region: "kr",
+          priceTwd: 4000 + i * 100,
+          outDate: `2026-12-${String(10 + i).padStart(2, "0")}`,
+          inDate: `2026-12-${String(14 + i).padStart(2, "0")}`,
+        }),
+      ),
+      isFallback: false,
+    };
+    await screen.findAllByRole("heading", { level: 2 });
+    const card = cityHeadings()[0] as HTMLElement;
+    await user.click(within(card).getByRole("button"));
+    expect(rowsOf(card)).toHaveLength(5);
+
+    await user.click(screen.getByRole("button", { name: "看全部 7 筆" }));
+    expect(rowsOf(card)).toHaveLength(7);
+    expect(rowsOf(card)[6]).toHaveTextContent("12月16日 – 20日");
+    await user.click(screen.getByRole("button", { name: "收合" }));
+    expect(rowsOf(card)).toHaveLength(5);
+    expect(screen.getByRole("button", { name: "看全部 7 筆" })).toBeVisible();
   });
 
   it("orders city cards by their cheapest fare, lowest first, with ties going to the higher discount", async () => {
@@ -343,7 +406,7 @@ describe("daily flights page", () => {
     );
   });
 
-  it("draws the solid pill at exactly 40% and up, and region filters never change which cards are solid", async () => {
+  it("draws the pill at exactly 40% and up, and region filters never change which cards get it", async () => {
     const user = userEvent.setup();
     const deal = (dest: string, region: DailyFlightItem["region"], pct: number) =>
       fare(`deal-${dest}`, {
@@ -370,7 +433,11 @@ describe("daily flights page", () => {
 
     const solidCities = () =>
       cityHeadings()
-        .filter((h) => h.querySelector(".bg-sprout-600") !== null)
+        .filter((h) =>
+          [...h.querySelectorAll("span")].some(
+            (n) => /^省 \d+%$/.test(n.textContent) && n.className.includes("bg-fl-tint"),
+          ),
+        )
         .map((h) => h.textContent.match(/東京|大阪|福岡|首爾|釜山/)?.[0]);
     expect(solidCities()).toEqual(["東京", "大阪"]);
     expect(screen.getAllByText(/^省 \d+%$/)).toHaveLength(5);
@@ -398,18 +465,23 @@ describe("daily flights page", () => {
     expect(screen.getByText("Updated daily at 8 AM")).toBeVisible();
     expect(screen.queryByRole("group", { name: "Sort" })).toBeNull();
     expect(screen.queryByText(/Drop|Best value|Lowest price/)).toBeNull();
-    expect(screen.getByText("6 fares")).toBeVisible();
+    expect(screen.getByText("3 destinations")).toBeVisible();
+    expect(screen.getByText("Price: low to high")).toBeVisible();
     const nrt = cityHeadings()[0] as HTMLElement;
     expect(nrt).toHaveTextContent("Tokyo");
     expect(nrt).not.toHaveTextContent("Narita");
-    expect(nrt).toHaveTextContent("Peach · Nonstop · 4 fares");
+    expect(nrt).toHaveTextContent("Peach");
     expect(nrt).toHaveTextContent("Save 45%");
     expect(nrt).toHaveTextContent("Red-eye");
+    expect(nrt).not.toHaveTextContent(/Nonstop|fares/);
     await user.click(within(nrt).getByRole("button"));
     expect(rowsOf(nrt)[0]).toHaveAttribute("href", expect.stringContaining("lang=en"));
+    expect(rowsOf(nrt)[0]).toHaveTextContent("Dec 10 – 14");
+    expect(rowsOf(nrt)[0]).toHaveTextContent("Lowest · Peach · Red-eye");
+    expect(rowsOf(nrt)[2]).toHaveTextContent("From Kaohsiung · Tigerair Taiwan · 1 stop");
   });
 
-  it("uses singular English counts: 1 fare, 2 stops", async () => {
+  it("uses singular English counts: 1 destination, 2 stops", async () => {
     const user = userEvent.setup();
     const { api } = setup();
     api.dailyFlights = {
@@ -420,12 +492,14 @@ describe("daily flights page", () => {
     };
     await screen.findAllByRole("heading", { level: 2 });
     await user.click(screen.getByRole("button", { name: "切換為英文" }));
-    expect(await screen.findByText("1 fare")).toBeVisible();
-    expect(cityHeadings()[0]).toHaveTextContent("2 stops · 1 fare");
-    expect(screen.queryByText(/1 fares/)).toBeNull();
+    expect(await screen.findByText("1 destination")).toBeVisible();
+    expect(cityHeadings()[0]).toHaveTextContent("China Airlines");
+    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
+    expect(rowsOf(cityHeadings()[0] as HTMLElement)[0]).toHaveTextContent("2 stops");
+    expect(screen.queryByText(/1 destinations/)).toBeNull();
   });
 
-  it("uses plural English counts: 2 fares, 1 stop", async () => {
+  it("uses singular English stops: 1 stop across two fares of one destination", async () => {
     const user = userEvent.setup();
     const { api } = setup();
     api.dailyFlights = {
@@ -439,8 +513,10 @@ describe("daily flights page", () => {
     };
     await screen.findAllByRole("heading", { level: 2 });
     await user.click(screen.getByRole("button", { name: "切換為英文" }));
-    expect(await screen.findByText("2 fares")).toBeVisible();
-    expect(cityHeadings()[0]).toHaveTextContent("1 stop · 2 fares");
+    expect(await screen.findByText("1 destination")).toBeVisible();
+    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
+    expect(rowsOf(cityHeadings()[0] as HTMLElement)).toHaveLength(2);
+    expect(rowsOf(cityHeadings()[0] as HTMLElement)[0]).toHaveTextContent("1 stop");
   });
 
   it("renders inside AppShell when signed in and supports inline region tabs + empty reset", async () => {
@@ -467,15 +543,43 @@ describe("daily flights page", () => {
 
     const header = await screen.findByRole("banner");
     expect(within(header).queryByRole("link", { name: /低價機票/ })).toBeNull();
-    // One header row: mascot logo only (no 小芽 wordmark), the title block inside it, no second title card
+    // Two tiers: utility bar (mascot, language toggle, 登入) above the title block
     expect(within(header).getByRole("heading", { level: 1, name: "今日低價機票" })).toBeVisible();
     expect(within(header).getByRole("link", { name: "小芽" })).toHaveAttribute("href", "/");
     expect(within(header).queryByText("小芽")).toBeNull();
+    const lang = within(header).getByRole("button", { name: "切換為英文" });
+    expect(lang).toHaveTextContent("EN");
+    expect(lang.className).toMatch(/min-h-11/);
+    const login = within(header).getByRole("link", { name: "登入" });
+    expect(login).toHaveAttribute("href", "/sign-in");
+    expect(login.className).toMatch(/h-11/);
+    expect(
+      lang
+        .closest("nav")
+        ?.compareDocumentPosition(within(header).getByRole("heading", { level: 1 })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(within(header).getByText("每天 08:00 更新")).toBeVisible();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
 
     await user.click(await screen.findByRole("button", { name: /篩選/ }));
     expect(await screen.findByRole("button", { name: "關閉篩選" })).toBeVisible();
+  });
+
+  it("never ellipsizes the expanded date or detail lines and keeps the segmented hit areas at 44px", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    const firstCard = (await screen.findAllByRole("heading", { level: 2 }))[0] as HTMLElement;
+    await user.click(within(firstCard).getByRole("button"));
+    const row = rowsOf(firstCard)[0] as HTMLElement;
+    const [dates, detail] = Array.from(row.querySelectorAll<HTMLElement>("span.block"));
+    for (const line of [dates, detail]) {
+      expect(line).not.toHaveClass("truncate");
+      expect(line).not.toHaveClass("whitespace-nowrap");
+    }
+    expect(row.querySelector(".font-num")?.parentElement).toHaveClass("shrink-0");
+
+    expect(screen.getByRole("group", { name: "行程" })).toHaveClass("h-[50px]");
   });
 
   it("prevents mobile grid/drawer clipping and shows only the update date in the footer", async () => {
@@ -490,6 +594,12 @@ describe("daily flights page", () => {
     // Lines never wrap: ellipsis fallback on the title and secondary lines
     expect(firstCard.querySelector(".flight-card-city")?.className).toContain("truncate");
     expect(within(firstCard).getByText("樂桃航空").className).toContain("truncate");
+    // City shrinks/truncates inside the row; the route chip stays intact and wraps instead of collapsing
+    expect(firstCard.querySelector(".flight-card-city")).toHaveClass("min-w-0", "max-w-full");
+    expect(firstCard.querySelector(".flight-card-city")).not.toHaveClass("shrink-0");
+    expect(firstCard.querySelector(".flight-card-route")).toHaveClass("shrink-0");
+    expect(firstCard.querySelector(".flight-card-route")).not.toHaveClass("truncate");
+    expect(firstCard.querySelector(".flight-card-route")?.parentElement).toHaveClass("flex-wrap");
     // Footer carries only the digest date (no tagline, no disclaimer)
     expect(screen.getByText("11/16 更新")).toBeVisible();
     expect(screen.queryByText(/參考價格為浮動/)).toBeNull();

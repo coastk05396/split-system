@@ -96,8 +96,8 @@ function FlightsRoute() {
     return <AppShell>{content}</AppShell>;
   }
   return (
-    <div className="landing-editorial flex min-h-dvh flex-col">
-      <PublicHeader title={<FlightsTitle compact />} />
+    <div className="flights-paper flex min-h-dvh flex-col">
+      <PublicHeader title={<FlightsTitle />} />
       <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-5 pt-2 md:px-10 md:pt-4">
         {content}
       </main>

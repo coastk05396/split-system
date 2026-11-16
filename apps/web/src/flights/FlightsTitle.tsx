@@ -1,31 +1,29 @@
-import { getLocale, t } from "../i18n/messages.js";
+import { t } from "../i18n/messages.js";
 import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { FlightBetaBadge } from "./FlightBetaBadge.js";
 
 /**
- * The flights board title, shared by /flights (signed in and out) and the landing page: a big
- * one-line title with a small BETA pill beside it, then a soft grey refresh note.
- * `compact` shrinks the English title for the crowded public header at 390px.
+ * The flights board title, shared by /flights (signed in and out) and the landing page: a serif
+ * one-line title with a thin-outline BETA label beside it, then a muted refresh note.
  */
 export function FlightsTitle({
   as: Heading = "h1",
-  compact = false,
+  size = "lg",
 }: {
   as?: "h1" | "h2";
-  compact?: boolean;
+  size?: "lg" | "md";
 }) {
-  const size = compact && getLocale() === "en" ? "text-base" : "text-[22px]";
   return (
     <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         <Heading
-          className={`leading-tight font-black tracking-tight whitespace-nowrap text-slate-900 sm:text-2xl ${size}`}
+          className={`font-serif-tc font-bold whitespace-nowrap text-fl-ink ${size === "lg" ? "text-[28px] leading-9" : "text-[22px] leading-[30px]"}`}
         >
           {t("flights.title")}
         </Heading>
         <FlightBetaBadge />
       </div>
-      <p className="mt-0.5 truncate text-[13px] leading-tight text-slate-500">
+      <p className="mt-0.5 truncate text-[13px] leading-[18px] text-fl-muted">
         {t("flights.subtitle")}
       </p>
     </div>
