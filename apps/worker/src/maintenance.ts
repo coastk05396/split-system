@@ -77,15 +77,43 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
   }
 }
 
-/** Daily maintenance keeps account cleanup ahead of the reference-rate refresh. */
-export async function dailyMaintenance(env: Bindings, now: number): Promise<void> {
-  const db = createDb(env.DB);
-  await purgeExpired(env, now);
-  await commitAccountCleanups(env);
-  await refreshRates(db, productionDeps.rateSource, now);
+/** Daily account cleanup and ECB reference-rate refresh (00:30 Taipei / 16:30 UTC). */
+export const MAINTENANCE_CRON = "30 16 * * *";
+
+/** Daily Flights scan (08:00 Taipei / 00:00 UTC) so it gets the full subrequest budget. */
+export const FLIGHTS_CRON = "0 0 * * *";
+
+async function scheduledDailyFlights(db: ReturnType<typeof createDb>, env: Bindings, now: number) {
   try {
     await refreshDailyFlights(db, productionDeps.flightSource(env), now);
   } catch (error) {
     console.error(JSON.stringify({ event: "daily_flights_refresh_failed", error: String(error) }));
   }
+}
+
+async function runAccountAndRateMaintenance(env: Bindings, now: number): Promise<void> {
+  const db = createDb(env.DB);
+  await purgeExpired(env, now);
+  await commitAccountCleanups(env);
+  await refreshRates(db, productionDeps.rateSource, now);
+}
+
+/** Daily maintenance keeps account cleanup ahead of the reference-rate and flight refreshes. */
+export async function dailyMaintenance(env: Bindings, now: number): Promise<void> {
+  const db = createDb(env.DB);
+  await runAccountAndRateMaintenance(env, now);
+  await scheduledDailyFlights(db, env, now);
+}
+
+/** Dispatches by Cron schedule so flight scanning never shares subrequests with cleanup/rates. */
+export async function runScheduled(cron: string, env: Bindings, now: number): Promise<void> {
+  if (cron === FLIGHTS_CRON) {
+    await scheduledDailyFlights(createDb(env.DB), env, now);
+    return;
+  }
+  if (cron === MAINTENANCE_CRON) {
+    await runAccountAndRateMaintenance(env, now);
+    return;
+  }
+  await dailyMaintenance(env, now);
 }

@@ -9,6 +9,7 @@ import {
   refreshDailyFlights,
   type FlightSource,
 } from "../src/flights/daily.js";
+import { collectVerifiedDailyFlights, formatDailyFlightsSyncSql } from "../src/flights/pipeline.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
 import type { RateSource } from "../src/rates/rate-source.js";
 import { clock, fakeVerifier } from "./auth-harness.js";
@@ -441,7 +442,7 @@ describe("public flight routes and daily pipeline", () => {
     });
   });
 
-  it("drops Stage 2 fares missing found_at or with malformed found_at timestamps", async () => {
+  it("accepts Stage 2 fares when Travelpayouts v3 omits found_at, while still dropping malformed found_at timestamps", async () => {
     const cronNow = Date.parse("2026-11-15T16:30:00Z");
     const fakeFetch: typeof fetch = (input) => {
       const rawUrl =
@@ -532,7 +533,7 @@ describe("public flight routes and daily pipeline", () => {
     const db = createDb(env.DB);
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
-    expect(items).toHaveLength(0);
+    expect(items.map((x) => `${x.origin}-${x.dest}`)).toEqual(["TSA-HND"]);
   });
 
   it("parses Travelpayouts one-way fares with duration_back: 0 and caps total upstream fetches well under 50 subrequests", async () => {
@@ -709,5 +710,55 @@ describe("public flight routes and daily pipeline", () => {
 
     expect(verifiedDests).toEqual(["NRT"]);
     expect(items.map((x) => x.dest)).toEqual(["NRT"]);
+  });
+
+  it("collectVerifiedDailyFlights and formatDailyFlightsSyncSql generate valid D1 SQL for manual sync", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z"); // 08:00 Taipei
+    const source: FlightSource = {
+      fetchCandidates: () =>
+        Promise.resolve([
+          {
+            id: "manual-tpe-oka",
+            origin: "TPE",
+            dest: "OKA",
+            tripType: "rt",
+            outDate: "2026-12-10",
+            inDate: "2026-12-14",
+            priceTwd: 4590,
+            airlines: ["MM"],
+            transfers: 0,
+            returnTransfers: 0,
+            outboundDep: "09:40",
+            inboundDep: "16:20",
+          },
+        ]),
+    };
+
+    const collected = await collectVerifiedDailyFlights(source, cronNow);
+    expect(collected.items).toHaveLength(1);
+    const sql = formatDailyFlightsSyncSql(collected.rows);
+    expect(sql).toContain("DELETE FROM daily_flights;");
+    expect(sql).toContain("INSERT INTO daily_flights");
+
+    const db = createDb(env.DB);
+    await env.DB.exec("DELETE FROM daily_flights;");
+    for (const stmt of sql.split(";\n").filter((s) => s.trim().length > 0)) {
+      await env.DB.prepare(stmt).run();
+    }
+    const resp = await listDailyFlights(db, cronNow);
+    expect(resp.isFallback).toBe(false);
+    expect(resp.items.map((i) => i.id)).toEqual(["manual-tpe-oka"]);
+
+    // Verify empty-row DELETE-only SQL and single-quote escaping round-trip cleanly
+    expect(formatDailyFlightsSyncSql([])).toBe("DELETE FROM daily_flights;\n");
+    const [firstRow] = collected.rows;
+    expect(firstRow).toBeDefined();
+    if (firstRow) {
+      const quotedSql = formatDailyFlightsSyncSql([{ ...firstRow, id: "id-with'quote" }]);
+      expect(quotedSql).toContain("'id-with''quote'");
+      expect(() => formatDailyFlightsSyncSql([{ ...firstRow, priceTwd: Number.NaN }])).toThrow(
+        /Invalid numeric SQL literal/,
+      );
+    }
   });
 });

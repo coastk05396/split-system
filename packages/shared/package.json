@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./flights": "./src/flights.ts",
     "./payment-plan.worker": "./src/payment-plan.worker.ts"
   },
   "scripts": {

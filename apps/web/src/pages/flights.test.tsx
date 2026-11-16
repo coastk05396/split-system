@@ -257,7 +257,7 @@ describe("daily flights page", () => {
     expect(await screen.findByRole("button", { name: "關閉篩選" })).toBeVisible();
   });
 
-  it("prevents mobile grid/drawer clipping and always shows the 00:30 daily refresh schedule", async () => {
+  it("prevents mobile grid/drawer clipping and always shows the 08:00 daily refresh schedule", async () => {
     const user = userEvent.setup();
     const { api } = renderApp({ path: "/flights" });
     api.dailyFlights = {
@@ -273,7 +273,7 @@ describe("daily flights page", () => {
     expect(list).toHaveClass("grid-cols-1", "md:grid-cols-2");
     expect(listItem).toHaveClass("min-w-0");
     expect(firstCard).toHaveClass("w-full", "min-w-0");
-    expect(screen.getByText(/每日 00:30（台灣時間）更新/)).toBeVisible();
+    expect(screen.getByText(/每日 08:00（台灣時間）更新/)).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /篩選/ }));
     const dialog = await screen.findByRole("dialog", { name: "篩選條件" });

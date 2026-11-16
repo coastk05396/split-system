@@ -589,8 +589,8 @@ const zhTW = {
   "flights.tripDays": "{days} 天",
   "flights.tripOneWay": "單程",
   "flights.bookCta": "查看",
-  "flights.refreshSchedule": "每日 00:30（台灣時間）更新",
-  "flights.fallbackNote": "顯示精選參考票價，每日 00:30（台灣時間）更新最新行情。",
+  "flights.refreshSchedule": "每日 08:00（台灣時間）更新",
+  "flights.fallbackNote": "顯示精選參考票價，每日 08:00（台灣時間）更新最新行情。",
 } as const;
 
 export type MessageId = keyof typeof zhTW;

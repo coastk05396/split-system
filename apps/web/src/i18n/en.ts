@@ -601,8 +601,8 @@ export const en: Record<MessageId, string> = {
   "flights.tripDays": "{days}d",
   "flights.tripOneWay": "One-way",
   "flights.bookCta": "View",
-  "flights.refreshSchedule": "Refreshes daily at 00:30 (GMT+8)",
-  "flights.fallbackNote": "Showing curated preview deals; daily fares refresh at 00:30 (GMT+8).",
+  "flights.refreshSchedule": "Refreshes daily at 08:00 (GMT+8)",
+  "flights.fallbackNote": "Showing curated preview deals; daily fares refresh at 08:00 (GMT+8).",
 };
 
 export const enErrors: Record<ErrorCode, string> = {
