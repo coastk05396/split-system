@@ -82,7 +82,7 @@ function TripSummary({ group }: { group: Group }) {
       {group.me.role === "admin" && (
         <Link
           to={`/groups/${group.id}/trip`}
-          className="flex shrink-0 items-center gap-1 rounded-full bg-white px-3 py-2 text-sm font-bold"
+          className="press-pill flex shrink-0 items-center gap-1 rounded-full bg-white px-3 py-2 text-sm font-bold"
         >
           <Settings aria-hidden="true" className="size-4" />
           {t("trip.settings")}
@@ -133,7 +133,7 @@ function DayPicker({
           onClick={() => {
             onChoose(d);
           }}
-          className="relative flex min-w-14 flex-1 flex-col items-center rounded-xl py-2 text-ink-muted transition-colors aria-pressed:text-ink"
+          className="press-pill relative flex min-w-14 flex-1 flex-col items-center rounded-xl py-2 text-ink-muted transition-colors aria-pressed:text-ink"
         >
           {d === day && (
             <SelectionPill
@@ -163,7 +163,7 @@ function DayPlan({
   const expenses = useStopExpenses(group.id);
   const date = dayLabel(day);
   return (
-    <section className="flex flex-col gap-4">
+    <section key={day} className="collapse-enter flex flex-col gap-4">
       <h2 className="text-sm font-bold text-sprout-600">
         {t("trip.dayHeading", {
           n: String(index + 1).padStart(2, "0"),

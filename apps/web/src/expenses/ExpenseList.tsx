@@ -121,7 +121,7 @@ export function ExpenseList({
               <ul className="flex flex-col gap-2">
                 {day.items.map((e, itemIndex) => {
                   const globalIndex = rows.findIndex((r) => r.id === e.id);
-                  const delay = (globalIndex >= 0 ? globalIndex : itemIndex) * 35;
+                  const delay = Math.min(globalIndex >= 0 ? globalIndex : itemIndex, 5) * 25;
                   return (
                     <li
                       key={e.id}
@@ -184,10 +184,10 @@ export function PendingRow({ save }: { save: PendingSave }) {
         </span>
         {failed && (
           <span className="flex gap-2 text-xs font-bold">
-            <button type="button" className="min-h-11 px-2" onClick={save.retry}>
+            <button type="button" className="press-pill min-h-11 px-2" onClick={save.retry}>
               {t("expense.saveRetry")}
             </button>
-            <button type="button" className="min-h-11 px-2" onClick={save.discard}>
+            <button type="button" className="press-pill min-h-11 px-2" onClick={save.discard}>
               {t("expense.saveDiscard")}
             </button>
           </span>
@@ -223,7 +223,7 @@ function ExpenseRow({
       className={`${card} group flex items-center gap-3 px-4 py-3 text-ink hover:border-sprout-500 active:bg-sprout-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600`}
     >
       <span
-        className={`flex size-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1.5px_1px_0_rgba(255,255,255,0.9),0_2px_6px_-1px_rgba(20,63,42,0.08)] transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-[1.08] motion-reduce:transform-none ${categoryTone(expense.category).badge}`}
+        className={`flex size-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1.5px_1px_0_rgba(255,255,255,0.9),0_2px_6px_-1px_rgba(20,63,42,0.08)] transition-transform duration-160 ease-(--ease-spring) group-active:scale-[1.08] motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:group-active:scale-100 ${categoryTone(expense.category).badge}`}
       >
         <CategoryIcon category={expense.category} />
       </span>

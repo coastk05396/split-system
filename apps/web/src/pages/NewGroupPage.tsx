@@ -1,7 +1,7 @@
 import { CURRENCY_CODES, type CurrencyCode } from "@split/shared";
-import { ArrowRight, Plane, ReceiptText } from "lucide-react";
-import { type SubmitEvent, type ReactNode, useId, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { ArrowRight } from "lucide-react";
+import { type SubmitEvent, useEffect, useId, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useCreateGroup } from "../groups/api.js";
 import {
@@ -9,27 +9,23 @@ import {
   GROUP_PALETTES,
   GroupAvatar,
   input,
-  MaintenanceTag,
   primaryButton,
   Progress,
   useLeaveBlock,
   ScreenHeader,
 } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
-import { SelectionPill } from "../shell/SelectionPill.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
-import { TRIP_ENABLED } from "../trip/enabled.js";
 
 function isCurrency(value: string): value is CurrencyCode {
   return (CURRENCY_CODES as readonly string[]).includes(value);
 }
 
 /**
- * Screen 6 as amended: name, usage (Running Tab or Trip) and the Settlement currency (fixed
- * after the first Expense), which starts at the User's Preferred currency. Then on to Members and Invite.
+ * Screen 6 as amended: name and the Settlement currency (fixed after the first Expense),
+ * which starts at the User's Preferred currency. Then on to Members and Invite.
  */
 export function NewGroupPage() {
-  const [params] = useSearchParams();
   const navigate = useNavigate();
   const create = useCreateGroup();
   const leave = useLeaveBlock(create.isPending);
@@ -37,23 +33,31 @@ export function NewGroupPage() {
   const [name, setName] = useState("");
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [diceRolling, setDiceRolling] = useState(false);
-  const [isTrip, setIsTrip] = useState(TRIP_ENABLED && params.get("usage") === "trip");
+  const diceTimerRef = useRef<number | undefined>(undefined);
   const [settlementCurrency, setSettlementCurrency] = useState<CurrencyCode>(
     state.status === "signedIn" ? state.user.preferredCurrency : "TWD",
   );
 
+  useEffect(
+    () => () => {
+      window.clearTimeout(diceTimerRef.current);
+    },
+    [],
+  );
+
   function rollPalette() {
+    window.clearTimeout(diceTimerRef.current);
     setPaletteIndex((prev) => (prev + 1) % GROUP_PALETTES.length);
     setDiceRolling(true);
-    setTimeout(() => {
+    diceTimerRef.current = window.setTimeout(() => {
       setDiceRolling(false);
-    }, 400);
+    }, 240);
   }
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     create.mutate(
-      { name: name.trim(), isTrip, settlementCurrency },
+      { name: name.trim(), isTrip: false, settlementCurrency },
       {
         onSuccess: (group) => {
           leave();
@@ -91,7 +95,7 @@ export function NewGroupPage() {
               <GroupAvatar
                 name={name}
                 paletteIndex={paletteIndex}
-                className="size-12 rounded-2xl text-lg shadow-2xs transition-[scale] duration-300 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95"
+                className="size-12 rounded-2xl text-lg shadow-2xs transition-transform duration-160 ease-(--ease-spring) group-active:scale-95 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:group-active:scale-100"
                 interactive={false}
               />
             </button>
@@ -100,7 +104,7 @@ export function NewGroupPage() {
               onClick={rollPalette}
               aria-label="隨機換色"
               title="隨機換色"
-              className={`absolute -bottom-1 -right-1 flex size-5.5 items-center justify-center rounded-full border border-sprout-200 bg-white text-xs shadow-xs transition-transform duration-300 ease-(--ease-spring) hover:scale-115 active:scale-90 ${
+              className={`absolute -bottom-1 -right-1 flex size-5.5 items-center justify-center rounded-full border border-sprout-200 bg-white text-xs shadow-xs transition-transform duration-240 ease-(--ease-spring) active:scale-90 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:rotate-0 motion-reduce:active:scale-100 ${
                 diceRolling ? "rotate-[360deg] scale-110" : ""
               }`}
             >
@@ -119,28 +123,6 @@ export function NewGroupPage() {
           />
         </div>
       </div>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 font-bold">{t("create.usage")}</legend>
-        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-sprout-150 p-1">
-          <UsageOption
-            label="usage.tab"
-            icon={<ReceiptText aria-hidden="true" className="size-5" />}
-            checked={!isTrip}
-            onCheck={() => {
-              setIsTrip(false);
-            }}
-          />
-          <UsageOption
-            label="usage.trip"
-            icon={<Plane aria-hidden="true" className="size-5" />}
-            checked={isTrip}
-            disabled={!TRIP_ENABLED}
-            onCheck={() => {
-              setIsTrip(true);
-            }}
-          />
-        </div>
-      </fieldset>
       <CurrencySelect
         label="create.settlementCurrency"
         hint={t("create.settlementHint")}
@@ -166,44 +148,6 @@ export function NewGroupPage() {
         <ArrowRight aria-hidden="true" className="size-5" />
       </button>
     </form>
-  );
-}
-
-function UsageOption(props: {
-  label: MessageId;
-  icon: ReactNode;
-  checked: boolean;
-  /** Under maintenance: greyed out with a red tag, and it cannot be picked. */
-  disabled?: boolean;
-  onCheck: () => void;
-}) {
-  const disabled = props.disabled === true;
-  return (
-    <label
-      className={`relative flex items-center justify-center gap-2 rounded-xl py-3 has-focus-visible:ring-2 has-focus-visible:ring-sprout-500 ${
-        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-      } ${props.checked ? "font-bold text-ink" : "text-ink-muted"}`}
-    >
-      {props.checked && (
-        <SelectionPill
-          layoutId="new-group-usage-selection"
-          className="inset-0 rounded-xl bg-white shadow-[0_3px_10px_-7px_#143f2a]"
-        />
-      )}
-      <input
-        type="radio"
-        name="usage"
-        checked={props.checked}
-        disabled={disabled}
-        onChange={props.onCheck}
-        className="sr-only"
-      />
-      <span className="relative flex items-center gap-2">
-        {props.icon}
-        {t(props.label)}
-        {disabled && <MaintenanceTag />}
-      </span>
-    </label>
   );
 }
 

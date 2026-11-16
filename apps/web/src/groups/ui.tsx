@@ -81,7 +81,7 @@ export function LoadError({ error, onRetry }: { error: unknown; onRetry: () => v
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-full border border-sprout-200 px-5 py-2 font-bold"
+        className="press-pill rounded-full border border-sprout-200 px-5 py-2 font-bold"
       >
         {t("common.retry")}
       </button>
@@ -307,7 +307,7 @@ export function GroupAvatar({
       aria-hidden="true"
       className={`inline-flex shrink-0 select-none items-center justify-center rounded-2xl border font-bold ${palette.bg} ${palette.text} ${palette.border} ${palette.shadow} ${
         interactive
-          ? "transition-transform duration-300 ease-(--ease-spring) group-hover:scale-105 group-hover:rotate-2 group-active:scale-95 group-active:-rotate-1 motion-reduce:transition-none"
+          ? "transition-transform duration-180 ease-(--ease-spring) group-active:scale-95 group-active:-rotate-1 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:rotate-0 motion-reduce:group-active:scale-100 motion-reduce:group-active:rotate-0"
           : ""
       } ${className}`}
     >
@@ -380,7 +380,7 @@ export function AvatarTip({
           aria-hidden="true"
           className="pointer-events-none absolute right-0 bottom-full left-0 z-10 mb-1.5 flex justify-center"
         >
-          <span className="swap-in rounded-full bg-ink px-2.5 py-1 text-xs font-bold whitespace-nowrap text-white shadow-md">
+          <span className="avatar-tip swap-in rounded-full bg-ink px-2.5 py-1 text-xs font-bold whitespace-nowrap text-white shadow-md">
             {name}
           </span>
         </span>
@@ -393,14 +393,6 @@ export const primaryButton =
   "press-pill flex items-center justify-center gap-2 rounded-full bg-sprout-500 px-6 py-4 font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_6px_14px_-8px_#143f2a] hover:bg-sprout-500/90 disabled:opacity-50";
 export const secondaryButton =
   "press-pill flex items-center justify-center gap-2 rounded-full border border-sprout-200 bg-white px-6 py-4 font-bold shadow-[inset_0_1px_0_0_rgb(255_255_255/0.9)] hover:border-sprout-500 disabled:opacity-50";
-/** The red tag on every Trip entry while the Trip module is under maintenance. */
-export function MaintenanceTag() {
-  return (
-    <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
-      {t("trip.maintenance")}
-    </span>
-  );
-}
 export const card = "surface-card rounded-[1.75rem] border border-sprout-200/80 bg-white";
 export const input =
   "w-full rounded-2xl border border-sprout-200 bg-white px-4 py-3 outline-none transition-[border-color,box-shadow] duration-180 focus:border-sprout-500 focus:ring-3 focus:ring-sprout-500/15";

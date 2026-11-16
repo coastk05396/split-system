@@ -145,7 +145,7 @@ describe("groupCsv", () => {
 describe("groupCsvFilename", () => {
   it("names the file after the Group and day, without characters filesystems reject", () => {
     expect(groupCsvFilename('東京/大阪: "五天"', "2026-10-29")).toBe(
-      "小芽分帳-東京-大阪-五天-2026-10-29.csv",
+      "小芽-東京-大阪-五天-2026-10-29.csv",
     );
   });
 });

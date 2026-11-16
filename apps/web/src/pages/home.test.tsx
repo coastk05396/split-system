@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
@@ -128,24 +129,26 @@ describe("home", () => {
     expect(screen.queryByRole("link", { name: /還有/ })).toBeNull();
   });
 
-  it("offers quick split first and shows Trip as under maintenance, when user has no groups", async () => {
+  it("offers quick split first and cheap flights board second, with no maintenance tag", async () => {
     renderApp({ cookieUser: me });
 
     const quick = await screen.findByRole("link", { name: /快速分帳/ });
     expect(quick).toHaveAttribute("href", "/groups/new?usage=tab");
-    expect(screen.queryByRole("link", { name: /旅行行程/ })).toBeNull();
-    const tag = screen.getByText("保養中");
-    expect(tag).toBeVisible();
-    expect(screen.getByText("旅行行程")).toBeVisible();
+    const flights = screen.getByRole("link", { name: /今日低價機票/ });
+    expect(flights).toHaveAttribute("href", "/flights");
+    expect(screen.queryByText("保養中")).toBeNull();
     expect(screen.queryByText(/適合：/)).toBeNull();
     expect(screen.getByText("吃飯、搭車，立刻記一筆")).toBeVisible();
-    expect(screen.getByText("為旅程記行程與開銷")).toBeVisible();
-    // The quick-split card comes first, the Trip card under it.
-    expect(quick.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("台灣出發精選航線，即時特價一次看")).toBeVisible();
+    expect(quick.compareDocumentPosition(flights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // New user with 0 groups also sees the interactive flight deals marquee below Quick Start
+    const marqueeRegion = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(marqueeRegion.querySelector(".flight-marquee-track")).not.toBeNull();
 
     // Verify duplicate buttons are completely removed
     expect(screen.queryByRole("link", { name: "查看群組" })).toBeNull();
-    expect(screen.queryByRole("link", { name: /新增分帳或旅程/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /建立新分帳群組/ })).toBeNull();
   });
 
   it("renders greeting without punctuation alongside the waving Sprout mascot, and p-5 balance card", async () => {
@@ -218,7 +221,7 @@ describe("home", () => {
     expect(myGroupsLink).toHaveAttribute("href", "/groups");
   });
 
-  it("keeps the start cards below the pending groups", async () => {
+  it("hides quick start cards when user has groups and shows the flight deals marquee below pending groups", async () => {
     renderApp({
       cookieUser: me,
       seed: (groups) => {
@@ -227,13 +230,22 @@ describe("home", () => {
     });
 
     const pending = await screen.findByText("欠錢群組B");
-    const quick = screen.getByRole("link", { name: /^快速分帳/ });
-    // Groups exist, so 快速分帳 goes to the Group picker, not to creating another Group.
-    expect(quick).toHaveAttribute("href", "/new?pick=1");
-    expect(pending.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "快速開始" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^快速分帳/ })).toBeNull();
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(marquee.querySelector(".flight-marquee-track")).not.toBeNull();
+    expect(within(marquee).getByText("BETA")).toBeVisible();
+    expect(within(marquee).getByRole("link", { name: /全部機票/ })).toHaveAttribute(
+      "href",
+      "/flights",
+    );
+    expect(
+      pending.compareDocumentPosition(marquee) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it("renders quick start in a 50/50 bento grid with squircle icons", async () => {
+  it("renders quick start in a 50/50 bento grid with squircle icons and Beta tag on Flights card", async () => {
     renderApp({ cookieUser: me });
 
     const quickSection = await screen.findByRole("region", { name: "快速開始" });
@@ -241,8 +253,16 @@ describe("home", () => {
     expect(bentoGrid).toHaveClass("grid-cols-2", "gap-3");
 
     const quickLink = screen.getByRole("link", { name: /快速分帳/ });
+    expect(quickLink).toHaveClass("press-card");
+    expect(quickLink.className).not.toContain("active:scale-");
+    expect(quickLink.className).not.toContain("transition-[scale");
     const iconContainer = quickLink.querySelector(".size-12.rounded-2xl.bg-peach");
     expect(iconContainer).not.toBeNull();
+
+    const flightsLink = within(quickSection).getByRole("link", { name: /今日低價機票/ });
+    expect(within(flightsLink).getByText("BETA")).toBeVisible();
+    // Redesigned cohesive Sprout plane icon (no old neon #4ade80 / cyan #7dd3fc sky fill)
+    expect(flightsLink.innerHTML).not.toContain("#7dd3fc");
   });
 
   it("renders pending groups with warm balance badges and right avatar stack", async () => {
@@ -298,5 +318,39 @@ describe("home", () => {
     for (const row of rows) {
       expect(row.querySelector(".mt-1.flex.items-center")).not.toBeNull();
     }
+  });
+
+  it("labels fallback marquee fares as sample fares instead of live deals", async () => {
+    const { api } = renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "日本行", settlementCurrency: "TWD", myBalance: -100 });
+      },
+    });
+    api.dailyFlights = { ...api.dailyFlights, isFallback: true };
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(within(marquee).getByText("參考示範")).toBeVisible();
+    expect(within(marquee).queryByText("即時特價")).toBeNull();
+    expect(within(marquee).getByText(/精選參考票價/)).toBeVisible();
+  });
+
+  it("lets mobile and keyboard users pause and resume the flight deals marquee", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "日本行", settlementCurrency: "TWD", myBalance: -100 });
+      },
+    });
+
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    const pauseBtn = within(marquee).getByRole("button", { name: /暫停/ });
+    expect(pauseBtn).toHaveAttribute("aria-pressed", "false");
+    await user.click(pauseBtn);
+    expect(pauseBtn).toHaveAttribute("aria-pressed", "true");
+    expect(marquee.querySelector(".flight-marquee-paused")).not.toBeNull();
+    await user.click(pauseBtn);
+    expect(pauseBtn).toHaveAttribute("aria-pressed", "false");
   });
 });

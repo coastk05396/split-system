@@ -1,4 +1,9 @@
-import type { CurrencyCode, Me } from "@split/shared";
+import {
+  type CurrencyCode,
+  type DailyFlightsResponse,
+  getDefaultDailyFlights,
+  type Me,
+} from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
 /**
@@ -31,6 +36,8 @@ export interface FakeApi {
   dropNextResponse(route: string): void;
   /** Every request seen, with its headers and body text. */
   requests: { route: string; headers: Headers; body: string | null }[];
+  /** Daily flights payload returned by public GET /api/v1/flights/daily. */
+  dailyFlights: DailyFlightsResponse;
   /** Reference rates by "BASE-QUOTE" (scaled by 1,000,000); a missing pair answers 503 RATE_UNAVAILABLE. */
   rates: Map<string, { rateScaled: number; rateDate?: string; stale?: boolean }>;
   spendingStats: { month: string; category: string; currency: CurrencyCode; amount: number }[];
@@ -131,6 +138,12 @@ export function createFakeApi(): FakeApi {
     requests,
     spendingStats: [],
     spendingDetails: [],
+    dailyFlights: {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T01:00:00.000Z",
+      items: getDefaultDailyFlights("2026-11-16"),
+      isFallback: false,
+    },
     rates: new Map([
       ["USD-TWD", { rateScaled: 31_523_400 }],
       ["TWD-USD", { rateScaled: 31_723 }],
@@ -188,6 +201,8 @@ export function createFakeApi(): FakeApi {
     }
 
     switch (`${method} ${url.pathname}`) {
+      case "GET /api/v1/flights/daily":
+        return json(api.dailyFlights);
       case "GET /api/v1/stats/spending":
         return authed === undefined ? error("UNAUTHORIZED", 401) : json(api.spendingStats);
       case "GET /api/v1/stats/expenses":

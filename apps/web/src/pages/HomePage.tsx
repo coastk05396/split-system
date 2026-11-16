@@ -1,23 +1,27 @@
 import { type CurrencyCode, formatAmount, type Group } from "@split/shared";
 import { ArrowRight, Check, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
 import { useGroups } from "../groups/api.js";
 import { usePreferredRates } from "../expenses/preferred-rates.js";
 import { convertedTotal, pendingTotals } from "../groups/totals.js";
-import { GroupAvatar, LoadError, MaintenanceTag } from "../groups/ui.js";
+import { GroupAvatar, LoadError } from "../groups/ui.js";
 import { AvatarStack } from "../groups/AvatarStack.js";
 import { t } from "../i18n/messages.js";
 import { CountUp } from "../shell/CountUp.js";
 import { useIsUpdating } from "../groups/cache-persistence.js";
 import { PressableLink } from "../shell/PressableLink.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
-import { TRIP_ENABLED } from "../trip/enabled.js";
+import { FlightBetaBadge } from "../flights/FlightBetaBadge.js";
 import { CuteQuickReceiptIcon, CuteTripPlaneIcon } from "./HomeIcons.js";
 
-/** Screen 2: the person's pending Balances per currency, the Groups owing something, and the two ways to start a Group. */
+const FlightDealsMarquee = lazy(() =>
+  import("../flights/FlightDealsMarquee.js").then((m) => ({ default: m.FlightDealsMarquee })),
+);
+
+/** Screen 2: the person's pending Balances per currency, the Groups owing something, and live cheap flights marquee. */
 export function HomePage() {
   const { state } = useAuth();
   const name = state.status === "signedIn" ? state.user.displayName : "";
@@ -50,13 +54,21 @@ export function HomePage() {
           </div>
           {groupsQuery.isSuccess && (
             <>
-              {groups.length > 0 && (
-                <div {...rise(intro, 1)}>
+              <div {...rise(intro, 1)}>
+                {groups.length > 0 ? (
                   <ActiveGroupsSection groups={groups} />
-                </div>
-              )}
+                ) : (
+                  <QuickStartSection />
+                )}
+              </div>
               <div {...rise(intro, 2)}>
-                <QuickStartSection hasGroups={groups.length > 0} />
+                <Suspense
+                  fallback={
+                    <div className="h-24 animate-pulse rounded-2xl bg-white/60 motion-reduce:animate-none" />
+                  }
+                >
+                  <FlightDealsMarquee />
+                </Suspense>
               </div>
             </>
           )}
@@ -164,13 +176,16 @@ function BalanceCard(props: {
           )}
         </>
       ) : (
-        <p className="mt-4 h-10 animate-pulse rounded-lg bg-white/15" aria-busy="true" />
+        <p
+          className="mt-4 h-10 animate-pulse rounded-lg bg-white/15 motion-reduce:animate-none"
+          aria-busy="true"
+        />
       )}
     </section>
   );
 }
 
-function QuickStartSection({ hasGroups }: { hasGroups: boolean }) {
+function QuickStartSection() {
   return (
     <section aria-labelledby="quick-start" className="flex flex-col gap-4">
       <h2 id="quick-start" className="text-xl font-bold">
@@ -178,20 +193,19 @@ function QuickStartSection({ hasGroups }: { hasGroups: boolean }) {
       </h2>
       <div className="grid grid-cols-2 gap-3">
         <StartCard
-          // With Groups already, 快速分帳 means 記在哪個群組, with 建立新群組 on that list.
-          to={hasGroups ? "/new?pick=1" : "/groups/new?usage=tab"}
+          to="/groups/new?usage=tab"
           icon={<CuteQuickReceiptIcon aria-hidden="true" className="size-7" />}
           iconClass="bg-peach"
           title={t("home.tab.title")}
           body={t("home.tab.body")}
         />
         <StartCard
-          to="/groups/new?usage=trip"
+          to="/flights"
           icon={<CuteTripPlaneIcon aria-hidden="true" className="size-7" />}
           iconClass="bg-sprout-100"
-          title={t("home.trip.title")}
-          body={t("home.trip.body")}
-          disabled={!TRIP_ENABLED}
+          title={t("home.flights.title")}
+          badge={<FlightBetaBadge />}
+          body={t("home.flights.body")}
         />
       </div>
     </section>
@@ -211,13 +225,10 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
         </h2>
         <Link
           to="/groups"
-          className="group flex items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700 active:scale-95 transition-transform"
+          className="press-pill group flex items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700"
         >
           <span>{t("home.myGroups")}</span>
-          <ChevronRight
-            aria-hidden="true"
-            className="size-4 transition-transform group-hover:translate-x-0.5"
-          />
+          <ChevronRight aria-hidden="true" className="hover-nudge-x size-4" />
         </Link>
       </div>
 
@@ -244,7 +255,7 @@ function ActiveGroupsSection({ groups }: { groups: Group[] }) {
       {owing.length > pending.length && (
         <Link
           to="/groups"
-          className="flex items-center justify-center gap-1.5 py-2 text-sm font-bold text-sprout-600 hover:text-sprout-700"
+          className="press-pill flex items-center justify-center gap-1.5 py-2 text-sm font-bold text-sprout-600 hover:text-sprout-700"
         >
           {t("home.morePending", { count: owing.length - pending.length })}
           <ArrowRight aria-hidden="true" className="size-4" />
@@ -259,14 +270,13 @@ function HomeGroupRow({ group }: { group: Group }) {
   return (
     <PressableLink
       to={`/groups/${group.id}?tab=settle`}
-      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 active:scale-[0.98] transition-[scale,border-color] duration-200 ease-(--ease-spring) text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
+      className="surface-card group flex items-center justify-between gap-3.5 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs text-ink focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-sprout-600"
     >
       <div className="flex min-w-0 items-center gap-3.5">
         <GroupAvatar name={group.name} groupId={group.id} className="size-11 text-base shrink-0" />
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-bold text-ink">{group.name}</span>
-            {group.isTrip && !TRIP_ENABLED && <MaintenanceTag />}
           </div>
           <div>
             <span
@@ -293,10 +303,7 @@ function HomeGroupRow({ group }: { group: Group }) {
       </div>
       <div className="flex shrink-0 items-center gap-2.5">
         <AvatarStack members={group.memberPreview} total={group.memberCount} />
-        <ChevronRight
-          aria-hidden="true"
-          className="size-5 shrink-0 text-ink-muted transition-transform duration-180 ease-(--ease-out-expo) group-hover:translate-x-0.5 motion-reduce:group-hover:translate-x-0"
-        />
+        <ChevronRight aria-hidden="true" className="hover-nudge-x size-5 shrink-0 text-ink-muted" />
       </div>
     </PressableLink>
   );
@@ -307,42 +314,26 @@ function StartCard(props: {
   icon: ReactNode;
   iconClass: string;
   title: string;
+  badge?: ReactNode;
   body: string;
-  /** Under maintenance: shown with a red tag, not a link. */
-  disabled?: boolean;
 }) {
-  const content = (
-    <>
+  return (
+    <PressableLink
+      to={props.to}
+      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
+    >
       <span
-        className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${props.iconClass} shadow-[inset_0_1.5px_0_0_rgb(255_255_255/0.9),0_3px_8px_-3px_rgba(20,63,42,0.12)] transition-transform duration-200 ease-(--ease-spring) group-hover:scale-105 group-active:scale-95`}
+        className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${props.iconClass} shadow-[inset_0_1.5px_0_0_rgb(255_255_255/0.9),0_3px_8px_-3px_rgba(20,63,42,0.12)] transition-transform duration-160 ease-(--ease-spring) motion-reduce:transition-none motion-reduce:scale-100`}
       >
         {props.icon}
       </span>
       <span className="flex flex-col gap-1">
         <span className="flex items-center gap-1.5 flex-wrap">
           <span className="text-base font-bold text-ink">{props.title}</span>
-          {props.disabled === true && <MaintenanceTag />}
+          {props.badge}
         </span>
         <span className="text-xs text-ink-muted leading-relaxed line-clamp-2">{props.body}</span>
       </span>
-    </>
-  );
-  if (props.disabled === true) {
-    return (
-      <div
-        aria-disabled="true"
-        className="flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 opacity-60 shadow-2xs text-left"
-      >
-        {content}
-      </div>
-    );
-  }
-  return (
-    <PressableLink
-      to={props.to}
-      className="surface-card group flex flex-col gap-3 rounded-2xl border border-sprout-200/80 bg-white p-4 shadow-2xs hover:border-sprout-300 hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.95),0_8px_16px_-6px_rgba(20,63,42,0.12)] active:scale-[0.96] transition-[scale,border-color,box-shadow] duration-200 ease-(--ease-spring) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sprout-600 text-left"
-    >
-      {content}
     </PressableLink>
   );
 }

@@ -3,6 +3,7 @@ import { createDb } from "./db/client.js";
 import { commitAccountCleanups } from "./auth/account-cleanup.js";
 import { productionDeps } from "./deps.js";
 import type { Bindings } from "./env.js";
+import { refreshDailyFlights } from "./flights/daily.js";
 import { groupLedger } from "./ledger-client.js";
 import { refreshRates } from "./rates/rates.js";
 import { groupReservations, linkCodes, rateCounters, sessions } from "./db/schema.js";
@@ -82,4 +83,9 @@ export async function dailyMaintenance(env: Bindings, now: number): Promise<void
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
   await refreshRates(db, productionDeps.rateSource, now);
+  try {
+    await refreshDailyFlights(db, productionDeps.flightSource(env), now);
+  } catch (error) {
+    console.error(JSON.stringify({ event: "daily_flights_refresh_failed", error: String(error) }));
+  }
 }

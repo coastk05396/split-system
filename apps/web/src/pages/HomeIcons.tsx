@@ -49,86 +49,61 @@ export function CuteQuickReceiptIcon({ className = "size-8", ...props }: SVGProp
 }
 
 /**
- * Cute Trip Plane Icon: Chubby cartoon airplane climbing towards adventure with soft fluffy clouds.
+ * Cute Trip Plane Icon: Rounded emerald-lined boarding pass & ascending plane emblem
+ * matching CuteQuickReceiptIcon's warm white-mint palette and golden sprout seal.
  */
 export function CuteTripPlaneIcon({ className = "size-8", ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 32 32" fill="none" className={className} {...props}>
       <defs>
-        <linearGradient id="cloud-grad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="sprout-ticket-bg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#e0f2fe" />
-        </linearGradient>
-        <linearGradient id="plane-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#f0fdf4" />
+          <stop offset="100%" stopColor="#e8f8ef" />
         </linearGradient>
       </defs>
-      {/* Soft fluffy cloud floating beneath */}
-      <path
-        d="M7 26a4 4 0 0 1-1-7.8 5 5 0 0 1 9.5-1.7 4 4 0 0 1 6.5 3.5 4 4 0 0 1-2 7H7z"
-        fill="url(#cloud-grad)"
-        stroke="#7dd3fc"
-        strokeWidth="1.5"
+      {/* Soft mint shadow matching CuteQuickReceiptIcon */}
+      <rect
+        x="4"
+        y="7.5"
+        width="23"
+        height="17"
+        rx="4"
+        fill="#a7f3d0"
+        opacity="0.55"
+        transform="translate(1, 1.5)"
+      />
+      {/* Boarding pass body */}
+      <rect
+        x="4"
+        y="7.5"
+        width="23"
+        height="17"
+        rx="4"
+        fill="url(#sprout-ticket-bg)"
+        stroke="#2e9d71"
+        strokeWidth="2"
         strokeLinejoin="round"
       />
-      {/* Mini cloud fluff accent */}
+      {/* Stub perforation accent */}
       <path
-        d="M23 26a2.5 2.5 0 0 0 2-4 3 3 0 0 0-4.5-1"
-        stroke="#bae6fd"
-        strokeWidth="1.2"
+        d="M21 11v10"
+        stroke="#5fcf9f"
+        strokeWidth="1.6"
         strokeLinecap="round"
+        strokeDasharray="2 2.4"
       />
-      {/* Chubby cartoon airplane flying up-right */}
-      <g transform="translate(10, 4) rotate(16)">
-        {/* Back wing */}
-        <path
-          d="M4 11l-3 4h4l2-4"
-          fill="#86efac"
-          stroke="#2e9d71"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-        {/* Chubby fuselage */}
-        <rect
-          x="2"
-          y="6.5"
-          width="13"
-          height="7.5"
-          rx="3.75"
-          fill="url(#plane-grad)"
-          stroke="#2e9d71"
-          strokeWidth="1.8"
-        />
-        {/* Round cockpit window */}
-        <ellipse
-          cx="12"
-          cy="10.25"
-          rx="2"
-          ry="1.8"
-          fill="#38bdf8"
-          stroke="#0284c7"
-          strokeWidth="1"
-        />
-        {/* Main wing */}
-        <path
-          d="M6 10l-2 5a1 1 0 0 0 1 1.2h4.5a1 1 0 0 0 .9-.6l2.1-5.6"
-          fill="#4ade80"
-          stroke="#2e9d71"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        {/* Tail fin */}
-        <path
-          d="M3 6.5l-1.5-3a.8.8 0 0 1 .7-1.2h2.2c.4 0 .7.3.8.6l1 3.6"
-          fill="#4ade80"
-          stroke="#2e9d71"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        {/* Eye-catching window shine */}
-        <circle cx="12.6" cy="9.6" r="0.6" fill="#ffffff" />
-      </g>
+      {/* Clean ascending plane silhouette on pass */}
+      <path
+        d="M17.2 12.2a1.1 1.1 0 0 0-1.4-.2l-2.3 1.4-4-.9a.7.7 0 0 0-.7.2l-.4.5a.5.5 0 0 0 .1.8l2.7 1.6-1.5 1.6-1.6-.3a.5.5 0 0 0-.5.2l-.3.3a.5.5 0 0 0 .1.7l1.6 1.1 1.1 1.6a.5.5 0 0 0 .7.1l.3-.3a.5.5 0 0 0 .2-.5l-.3-1.6 1.6-1.5 1.6 2.7a.5.5 0 0 0 .8.1l.5-.4a.7.7 0 0 0 .2-.7l-.9-4 1.4-2.3a1.1 1.1 0 0 0-.2-1.4z"
+        fill="#5fcf9f"
+        fillOpacity="0.45"
+        stroke="#2e9d71"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Warm golden destination seal */}
+      <circle cx="24" cy="12" r="2.1" fill="#fef08a" stroke="#eab308" strokeWidth="1.2" />
     </svg>
   );
 }

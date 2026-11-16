@@ -8,7 +8,7 @@ import { ExpenseSavedToast } from "../expenses/ExpenseSavedToast.js";
 import { useDeleteFailure, useSavedShares } from "../expenses/writes.js";
 import { useGroup } from "../groups/api.js";
 import { DeleteGroupDialog } from "../groups/DeleteGroupDialog.js";
-import { LoadError, Loading, MaintenanceTag, ScreenHeader } from "../groups/ui.js";
+import { LoadError, Loading, ScreenHeader } from "../groups/ui.js";
 import { type MessageId, t } from "../i18n/messages.js";
 import { hapticTick } from "../shell/haptics.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
@@ -55,7 +55,11 @@ function GroupDetail({ group }: { group: Group }) {
           className="flex items-center justify-between gap-3 rounded-2xl bg-peach p-3 font-bold"
         >
           <span>{deleteFailure.message}</span>
-          <button type="button" className="min-h-11 px-3" onClick={deleteFailure.dismiss}>
+          <button
+            type="button"
+            className="press-pill min-h-11 px-3"
+            onClick={deleteFailure.dismiss}
+          >
             {t("expense.deleteFailedDismiss")}
           </button>
         </p>
@@ -73,7 +77,6 @@ function GroupDetail({ group }: { group: Group }) {
                 <Plane aria-hidden="true" className="size-3.5" />
                 {t("group.tripBadge")}
               </span>
-              {!TRIP_ENABLED && <MaintenanceTag />}
             </span>
           ) : undefined
         }
@@ -111,7 +114,7 @@ function GroupDetail({ group }: { group: Group }) {
               <Tabs.Trigger
                 key={tab.value}
                 value={tab.value}
-                className="relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-sprout-800 focus-visible:outline-2 focus-visible:outline-sprout-600"
+                className="press-pill relative flex-1 rounded-xl py-2.5 text-ink-muted transition-colors data-[state=active]:font-bold data-[state=active]:text-sprout-800 focus-visible:outline-2 focus-visible:outline-sprout-600"
               >
                 {activeTab === tab.value && (
                   <SelectionPill

@@ -103,14 +103,15 @@ describe("loading", () => {
 });
 
 describe("the home intro", () => {
-  it("lets the balance card, the groups and the start cards rise in turn, the first time only", async () => {
+  it("lets the balance card, the start cards, and the marquee rise in turn, the first time only", async () => {
     const { router } = renderApp({ cookieUser: me });
     await screen.findByRole("heading", { name: "快速開始" });
 
     const rises = document.querySelectorAll<HTMLElement>(".rise");
-    expect(rises).toHaveLength(2);
+    expect(rises).toHaveLength(3);
     expect(rises[0]?.style.animationDelay).toBe("0ms");
-    expect(rises[1]?.style.animationDelay).toBe("120ms");
+    expect(rises[1]?.style.animationDelay).toBe("60ms");
+    expect(rises[2]?.style.animationDelay).toBe("120ms");
 
     // Going away and coming back is not a first visit: no rise.
     await router.navigate("/settings");
@@ -128,18 +129,17 @@ describe("the home intro", () => {
         id = groups.add(me, { name: "室友" });
       },
     });
-    await screen.findByRole("heading", { name: "快速開始" });
+    await screen.findByRole("region", { name: "待結算的群組" });
 
     // Frosted glass bottom bar and hero balance card with glass currency pill
     expect(screen.getByRole("navigation", { name: "底部導覽" })).toHaveClass("glass-nav");
     expect(screen.getByRole("region", { name: "目前淨收付" })).toHaveClass("hero-balance-card");
     expect(screen.getByRole("link", { name: /TWD/ })).toHaveClass("glass-pill", "press-pill");
 
-    // Start card uses card-tier spring press
-    expect(screen.getByRole("link", { name: /快速分帳/ })).toHaveClass(
-      "press-card",
-      "surface-card",
-    );
+    // With groups existing, quick start cards are replaced by the live flight deals marquee
+    expect(screen.queryByRole("heading", { name: "快速開始" })).toBeNull();
+    const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+    expect(marquee.querySelector(".press-card")).not.toBeNull();
 
     // Group detail tabs animate their panel entrance and use pill-tier press on the add button
     await router.navigate(`/groups/${id}`);

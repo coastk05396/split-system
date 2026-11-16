@@ -79,7 +79,7 @@ export function SignInPage() {
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="dialog-overlay glass-overlay fixed inset-0 z-20" />
-              <Dialog.Content className="dialog-content glass-dialog fixed inset-x-0 bottom-0 z-30 flex flex-col gap-4 rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
+              <Dialog.Content className="dialog-content dialog-sheet glass-dialog fixed inset-x-0 bottom-0 z-30 flex flex-col gap-4 rounded-t-[2rem] border-t border-sprout-200/80 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-md md:-translate-y-1/2 md:rounded-3xl md:border md:p-6">
                 <Dialog.Title className="text-lg font-bold">
                   {t("signIn.googleExternalTitle")}
                 </Dialog.Title>

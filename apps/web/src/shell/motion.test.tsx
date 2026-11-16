@@ -1,8 +1,11 @@
 import { act, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ShareBar, ShareRing } from "../expenses/ShareRing.js";
 import { CountUp } from "./CountUp.js";
+import { scrollBehavior } from "./motion.js";
 import { Odometer } from "./Odometer.js";
 import { SelectionPill } from "./SelectionPill.js";
 
@@ -185,11 +188,43 @@ describe("ShareRing", () => {
   it("draws a proportional ShareBar segment for each positive share", () => {
     const { container, rerender } = render(<ShareBar shares={[300, 100, 0]} />);
     const segments = [...container.querySelectorAll("span")];
+    const scaleXOf = (el: Element) =>
+      Number((el as HTMLElement).style.transform.match(/scaleX\(([^)]+)\)/)?.[1]);
     expect(segments).toHaveLength(2);
-    expect((segments[0] as HTMLElement).style.flexGrow).toBe("300");
-    expect((segments[1] as HTMLElement).style.flexGrow).toBe("100");
+    expect(scaleXOf(segments[0] as Element) / scaleXOf(segments[1] as Element)).toBeCloseTo(3, 5);
+    expect((segments[0] as HTMLElement).style.transform).toContain("translateX(0%)");
+    expect((segments[1] as HTMLElement).style.transform).toContain("translateX(75%)");
 
     rerender(<ShareBar shares={[0, 0]} />);
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("scrollBehavior", () => {
+  it("returns smooth scrolling normally and auto when prefers-reduced-motion matches", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: false } as MediaQueryList);
+    expect(scrollBehavior()).toBe("smooth");
+
+    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
+    expect(scrollBehavior()).toBe("auto");
+  });
+});
+
+describe("menu-content exit animation", () => {
+  it("declares a keyframe closing animation so Radix Presence waits before unmounting", () => {
+    const webRoot = process.cwd().endsWith("apps/web")
+      ? process.cwd()
+      : resolve(process.cwd(), "apps/web");
+    const stylesCss = readFileSync(resolve(webRoot, "src/styles.css"), "utf8");
+    expect(stylesCss).toContain("@keyframes menu-exit");
+    expect(stylesCss).toMatch(/\.menu-content\[data-state="closed"\][^}]*animation:\s*menu-exit\b/);
+    const reducedSections = stylesCss
+      .split("@media (prefers-reduced-motion: reduce)")
+      .slice(1)
+      .join("\n");
+    expect(reducedSections).toMatch(
+      /\.menu-content\[data-state="closed"\][^}]*animation:\s*overlay-exit\b/,
+    );
+    expect(reducedSections).toMatch(/\.flight-marquee-clone\s*\{\s*display:\s*none;\s*\}/);
   });
 });

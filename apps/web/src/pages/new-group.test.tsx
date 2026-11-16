@@ -1,30 +1,20 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { QueryObserver } from "@tanstack/react-query";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
-
-// The Trip module is under maintenance in the app; these tests run it switched on.
-const trip = vi.hoisted(() => ({ enabled: true }));
-vi.mock("../trip/enabled.js", () => ({
-  get TRIP_ENABLED() {
-    return trip.enabled;
-  },
-}));
-afterEach(() => {
-  trip.enabled = true;
-});
 
 const me = makeUser("小宇");
 
 describe("create Group", () => {
-  it("creates a Trip with its Settlement currency, then opens Members and Invites", async () => {
+  it("creates a Group with its Settlement currency, then opens Members and Invites", async () => {
     const user = userEvent.setup();
-    const { api, router } = renderApp({ path: "/groups/new?usage=trip", cookieUser: me });
+    const { api, router } = renderApp({ path: "/groups/new", cookieUser: me });
 
     await user.type(await screen.findByLabelText("群組名稱"), "週末台南小旅行");
-    expect(screen.getByRole("radio", { name: /旅行行程/ })).toBeChecked();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText("保養中")).toBeNull();
     await user.selectOptions(screen.getByLabelText("結算幣別"), "USD");
     await user.click(screen.getByRole("button", { name: /建立群組，繼續/ }));
 
@@ -34,7 +24,7 @@ describe("create Group", () => {
     expect(api.groups.members(id)).toHaveLength(1);
     expect(api.groups.summary(id)).toEqual({
       name: "週末台南小旅行",
-      isTrip: true,
+      isTrip: false,
       settlementCurrency: "USD",
     });
   });
@@ -134,22 +124,20 @@ describe("create Group", () => {
     });
   });
 
-  it("defaults to a TWD Running Tab and says the Settlement currency locks", async () => {
+  it("defaults to TWD Settlement currency and says the Settlement currency locks", async () => {
     renderApp({ path: "/groups/new", cookieUser: me });
 
-    expect(await screen.findByRole("radio", { name: /快速分帳/ })).toBeChecked();
-    expect(screen.getByLabelText("結算幣別")).toHaveValue("TWD");
+    expect(await screen.findByLabelText("結算幣別")).toHaveValue("TWD");
     expect(screen.getByText("記下第一筆開銷後就不能再更改。")).toBeVisible();
     expect(screen.getByRole("button", { name: /建立群組，繼續/ })).toBeDisabled();
   });
 
-  it("greys out the Trip option under maintenance and opens a Running Tab instead", async () => {
-    trip.enabled = false;
+  it("ignores ?usage=trip and never shows trip radio or maintenance badge", async () => {
     renderApp({ path: "/groups/new?usage=trip", cookieUser: me });
 
-    expect(await screen.findByRole("radio", { name: /旅行行程/ })).toBeDisabled();
-    expect(screen.getByText("保養中")).toBeVisible();
-    expect(screen.getByRole("radio", { name: /快速分帳/ })).toBeChecked();
+    expect(await screen.findByRole("heading", { name: "建立群組" })).toBeVisible();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText("保養中")).toBeNull();
   });
 
   it("starts the Settlement currency at the Preferred currency", async () => {

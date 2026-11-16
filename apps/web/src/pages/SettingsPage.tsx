@@ -58,12 +58,7 @@ function IconBox({ children, danger = false }: { children: ReactNode; danger?: b
 }
 
 function Chevron() {
-  return (
-    <ChevronRight
-      aria-hidden="true"
-      className="size-5 text-sprout-500 transition-transform duration-300 ease-(--ease-spring) group-hover:translate-x-1 motion-reduce:transition-none"
-    />
-  );
+  return <ChevronRight aria-hidden="true" className="hover-nudge-x size-5 text-sprout-500" />;
 }
 
 /** A settings row that shows its current value and opens the native picker when tapped. */
@@ -145,7 +140,7 @@ export function SettingsPage() {
           <Avatar
             name={user.displayName}
             pictureUrl={user.pictureUrl}
-            className="size-12 text-xl ring-2 ring-sprout-200 transition-transform duration-500 ease-(--ease-spring) group-hover:-rotate-6 group-hover:scale-105 motion-reduce:transition-none"
+            className="size-12 text-xl ring-2 ring-sprout-200"
           />
         )}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
@@ -245,7 +240,7 @@ export function SettingsPage() {
                   <span
                     aria-hidden="true"
                     className={`mr-0.5 size-2.5 rounded-full ${
-                      isLinked ? "link-ping bg-line" : "bg-sprout-200"
+                      isLinked ? "bg-line" : "bg-sprout-200"
                     }`}
                   />
                 ) : (
@@ -355,12 +350,16 @@ export function SettingsPage() {
       </div>
 
       {confirmingDelete && (
-        <div className="dialog-overlay glass-overlay fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center">
+        <div
+          data-state="open"
+          className="dialog-overlay glass-overlay fixed inset-0 z-50 flex items-end justify-center p-4 md:items-center"
+        >
           <div
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-title"
             aria-describedby="delete-body"
+            data-state="open"
             className="dialog-content glass-dialog w-full max-w-sm rounded-3xl border border-sprout-200/80 p-6"
           >
             <h2 id="delete-title" className="text-lg font-bold">

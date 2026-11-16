@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 /**
  * 小芽 the mascot: a round clay-soft sprout with a blinking face. `cheer` squeezes the eyes into
@@ -19,16 +19,25 @@ export function SproutMascot({
 }) {
   const id = useId();
   const [poked, setPoked] = useState(false);
+  const pokeTimerRef = useRef<number | undefined>(undefined);
   const cheer = mood === "cheer" || poked;
   const waving = mood === "wave" && !cheer;
 
+  useEffect(
+    () => () => {
+      window.clearTimeout(pokeTimerRef.current);
+    },
+    [],
+  );
+
   const handlePoke = () => {
     if (!interactive) return;
+    window.clearTimeout(pokeTimerRef.current);
     setPoked(true);
     onClick?.();
-    setTimeout(() => {
+    pokeTimerRef.current = window.setTimeout(() => {
       setPoked(false);
-    }, 750);
+    }, 650);
   };
 
   const svg = (
@@ -136,7 +145,7 @@ export function SproutMascot({
           handlePoke();
         }
       }}
-      className="group relative inline-flex cursor-pointer select-none transition-transform duration-300 ease-(--ease-spring) hover:scale-105 active:scale-95 motion-reduce:transition-none motion-reduce:hover:scale-100"
+      className="group relative inline-flex cursor-pointer select-none transition-transform duration-180 ease-(--ease-spring) active:scale-95 motion-reduce:transition-none motion-reduce:scale-100 motion-reduce:active:scale-100"
     >
       {poked && (
         <span aria-hidden="true" className="pointer-events-none absolute inset-0">

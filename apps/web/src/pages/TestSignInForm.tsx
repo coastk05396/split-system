@@ -51,7 +51,7 @@ export function TestSignInForm() {
           <option value="line">LINE</option>
         </select>
       </label>
-      <button type="submit" className="rounded-full bg-ink py-2.5 font-bold text-white">
+      <button type="submit" className="press-pill rounded-full bg-ink py-2.5 font-bold text-white">
         {t("signIn.test.submit")}
       </button>
     </form>

@@ -4,6 +4,7 @@ import { authRoutes } from "./auth/routes.js";
 import { verifyAccessToken } from "./auth/tokens.js";
 import { type AppDeps, productionDeps } from "./deps.js";
 import { expenseRoutes } from "./expenses/routes.js";
+import { flightRoutes } from "./flights/routes.js";
 import { groupRoutes } from "./groups/routes.js";
 import { lineRoutes } from "./line/routes.js";
 import { groupLedger } from "./ledger-client.js";
@@ -52,6 +53,7 @@ export function createApp(deps: AppDeps) {
     .route("/", expenseRoutes(deps))
     .route("/", settlementRoutes(deps))
     .route("/", rateRoutes(deps))
+    .route("/", flightRoutes(deps))
     .route("/", stopRoutes(deps))
     .route("/", lineRoutes(deps));
 }

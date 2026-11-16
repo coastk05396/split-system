@@ -102,7 +102,7 @@ function CategoryExpenses({ month, category }: { month: string; category: string
         <button
           type="button"
           disabled={query.isFetchingNextPage}
-          className="mt-2 rounded-full px-3 py-2 text-sm font-bold text-sprout-700"
+          className="press-pill mt-2 rounded-full px-3 py-2 text-sm font-bold text-sprout-700"
           onClick={() => void query.fetchNextPage()}
         >
           {t("stats.more")}
@@ -235,7 +235,7 @@ export function StatsPage() {
                         </span>
                       )}
                       <span
-                        className={`w-6 max-w-full rounded-t-xl transition-all duration-300 ease-(--ease-spring) ${
+                        className={`w-6 max-w-full rounded-t-xl transition-[background-color] duration-180 ease-(--ease-out) motion-reduce:transition-none ${
                           interacted ? "" : "stats-bar-enter"
                         } ${selected ? "bg-sprout-500 shadow-2xs" : "bg-sprout-200 group-hover:bg-sprout-300"}`}
                         style={{
@@ -317,7 +317,7 @@ export function StatsPage() {
                           strokeWidth="16"
                           strokeDasharray={`${String(segment.length)} ${String(100 - segment.length)}`}
                           strokeDashoffset={-segment.start}
-                          className="transition-opacity duration-200"
+                          className="transition-opacity duration-200 motion-reduce:transition-none"
                           opacity={
                             selectedCategory === null || selectedCategory === categories[i]?.[0]
                               ? 1
@@ -334,8 +334,10 @@ export function StatsPage() {
                     onClick={() => {
                       if (selectedCategory !== null) setSelectedCategory(null);
                     }}
-                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-all duration-300 focus-visible:outline-2 focus-visible:outline-sprout-600 ${
-                      selectedCategory !== null ? "cursor-pointer hover:bg-sprout-50/50" : ""
+                    className={`relative flex size-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner transition-[background-color,transform] duration-200 ease-(--ease-out-expo) motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-sprout-600 ${
+                      selectedCategory !== null
+                        ? "press-pill cursor-pointer hover:bg-sprout-50/50"
+                        : ""
                     }`}
                   >
                     {selectedCategory !== null && (
@@ -378,13 +380,13 @@ export function StatsPage() {
                           setSelectedCategory(selectedCategory === name ? null : name);
                           setInteracted(true);
                         }}
-                        className={`press-pill group flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-sprout-600 ${
+                        className={`press-pill stats-cat-btn flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-sprout-600 ${
                           selectedCategory === name ? "bg-sprout-100/70" : "hover:bg-sprout-50"
                         }`}
                       >
                         <span
                           aria-hidden="true"
-                          className="flex size-7 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform duration-200 group-hover:scale-105"
+                          className="stats-cat-icon flex size-7 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs"
                           style={{
                             backgroundColor: `${COLOURS[i % COLOURS.length]}18`,
                             border: `1.5px solid ${COLOURS[i % COLOURS.length]}`,
@@ -409,7 +411,7 @@ export function StatsPage() {
             )}
           </section>
           {selectedCategory !== null && (
-            <section className={`${card} px-5 pb-5`}>
+            <section key={selectedCategory} className={`${card} collapse-enter px-5 pb-5`}>
               <CategoryExpenses month={selectedMonth} category={selectedCategory} />
             </section>
           )}

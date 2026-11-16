@@ -8,7 +8,7 @@ describe("app shell", () => {
   it("shows a signed-out visitor the landing page at /", async () => {
     renderApp();
 
-    expect(await screen.findByRole("heading", { level: 1, name: /一筆快分/ })).toBeVisible();
+    expect(await screen.findByRole("heading", { level: 1, name: /搶低價機票/ })).toBeVisible();
     expect(screen.getAllByRole("link", { name: /登入/ })[0]).toHaveAttribute("href", "/sign-in");
   });
 
@@ -19,13 +19,14 @@ describe("app shell", () => {
     const tabs = within(screen.getByRole("navigation", { name: "底部導覽" }));
     expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "首頁",
+      "BETA機票",
       "新增",
       "統計",
       "設定",
     ]);
-    expect(tabs.getByRole("button", { name: "旅遊" })).toBeVisible();
+    expect(tabs.getByRole("link", { name: "機票" })).toHaveAttribute("href", "/flights");
     const sidebar = within(screen.getByRole("navigation", { name: "側邊導覽" }));
-    expect(sidebar.getByRole("button", { name: "旅遊" })).toBeVisible();
+    expect(sidebar.getByRole("link", { name: "機票" })).toHaveAttribute("href", "/flights");
   });
 
   it("sends a signed-out deep link to sign-in and back after Google sign-in", async () => {
@@ -104,6 +105,6 @@ describe("app shell", () => {
 
     await user.click(await screen.findByRole("button", { name: "登出" }));
 
-    expect(await screen.findByRole("heading", { level: 1, name: /一筆快分/ })).toBeVisible();
+    expect(await screen.findByRole("heading", { level: 1, name: /搶低價機票/ })).toBeVisible();
   });
 });

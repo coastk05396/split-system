@@ -49,10 +49,7 @@ export function GoogleFace({
           className="size-5 animate-spin motion-reduce:animate-none"
         />
       ) : (
-        <ArrowRight
-          aria-hidden="true"
-          className="size-5 transition-transform duration-300 ease-(--ease-spring) group-hover:translate-x-1 motion-reduce:transition-none"
-        />
+        <ArrowRight aria-hidden="true" className="hover-nudge-x size-5" />
       )}
     </span>
   );

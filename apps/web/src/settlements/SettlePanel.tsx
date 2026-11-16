@@ -61,14 +61,21 @@ export function SettlePanel({ group }: { group: Group }) {
   const members = useMembers(group.id);
   const [shareNotice, setShareNotice] = useState<{ text: string; isError: boolean } | null>(null);
   const [toastNotice, setToastNotice] = useState<{ text: string; isError: boolean } | null>(null);
+  const [toastLeaving, setToastLeaving] = useState(false);
 
   useEffect(() => {
     if (!toastNotice) return;
-    const timer = window.setTimeout(() => {
+    setToastLeaving(false);
+    const leaveTimer = window.setTimeout(() => {
+      setToastLeaving(true);
+    }, 3820);
+    const clearTimer = window.setTimeout(() => {
       setToastNotice(null);
+      setToastLeaving(false);
     }, 4000);
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(leaveTimer);
+      window.clearTimeout(clearTimer);
     };
   }, [toastNotice]);
 
@@ -206,7 +213,7 @@ export function SettlePanel({ group }: { group: Group }) {
         {toastNotice !== null && (
           <div
             role={toastNotice.isError ? "alert" : "status"}
-            className={`saved-toast fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full ${toastNotice.isError ? "bg-red-700" : "bg-sprout-900"} px-5 py-3 text-sm font-bold text-white shadow-lg md:bottom-8`}
+            className={`saved-toast ${toastLeaving ? "is-leaving" : ""} fixed inset-x-0 bottom-24 z-40 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-full ${toastNotice.isError ? "bg-red-700" : "bg-sprout-900"} px-5 py-3 text-sm font-bold text-white shadow-lg md:bottom-8`}
           >
             {toastNotice.text}
           </div>
@@ -272,7 +279,7 @@ function SettleNotifyActions({
         <Menu.Content
           align="end"
           sideOffset={6}
-          className="menu-content glass-dialog surface-card z-20 flex w-40 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg backdrop-blur-md"
+          className="menu-content glass-dialog surface-card z-20 flex w-40 flex-col gap-1 rounded-2xl border border-sprout-200/90 bg-white/95 p-1.5 shadow-lg"
         >
           <Menu.Item
             onSelect={() => void sendToChat()}
@@ -398,7 +405,7 @@ function HistoryRow({
       {s.status === "confirmed" && canUndoSettlement(group.me, s) && (
         <button
           type="button"
-          className="rounded-full border border-sprout-200 px-3 py-1 text-xs font-bold"
+          className="press-pill rounded-full border border-sprout-200 px-3 py-1 text-xs font-bold"
           disabled={undoDisabled}
           onClick={() => {
             onUndo(s.id);
@@ -483,7 +490,7 @@ function SettlementHistory({
           <button
             type="button"
             aria-expanded={showDropped}
-            className="flex items-center gap-1 self-start text-sm font-bold text-ink-muted"
+            className="press-pill flex items-center gap-1 self-start text-sm font-bold text-ink-muted"
             onClick={() => {
               setShowDropped(!showDropped);
             }}
@@ -571,7 +578,7 @@ function TransferTrack({ tone }: { tone: "pay" | "get" | "neutral" }) {
       <span
         className={`flex size-6 items-center justify-center rounded-full border shadow-2xs ${badge}`}
       >
-        <ArrowRight className="size-3.5 transfer-arrow-pulse" />
+        <ArrowRight className="size-3.5" />
       </span>
       <span className="h-0.5 w-2 bg-sprout-200" />
     </span>

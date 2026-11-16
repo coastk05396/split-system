@@ -8,8 +8,8 @@ test.describe("Two-user live update via WebSocket (SPEC §5, Ticket 12)", () => 
   }) => {
     // 1. User A visits root page and signs in
     await pageA.goto("/");
-    await expect(pageA.getByRole("heading", { name: /一筆快分/ })).toBeVisible();
-    await pageA.getByRole("link", { name: "登入開始使用" }).click();
+    await expect(pageA.getByRole("heading", { name: /搶低價機票/ })).toBeVisible();
+    await pageA.getByRole("link", { name: "登入", exact: true }).click();
     await expect(pageA).toHaveURL(/\/sign-in/);
 
     const testFormA = pageA.locator('form[aria-label="測試登入（僅限本機）"]');

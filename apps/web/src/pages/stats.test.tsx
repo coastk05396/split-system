@@ -36,15 +36,16 @@ describe("personal spending stats", () => {
     );
     expect(screen.getByText(/最新參考匯率/)).toBeVisible();
     const categories = screen.getByRole("region", { name: "花在哪裡？" });
-    await user.click(within(categories).getByRole("button", { name: /交通/ }));
+    const foodBtn = within(categories).getByRole("button", { name: /交通/ });
+    expect(foodBtn.className).toContain("stats-cat-btn");
+    await user.click(foodBtn);
     expect(within(categories).getByRole("button", { name: /交通/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(await screen.findByRole("link", { name: /晚餐/ })).toHaveAttribute(
-      "href",
-      "/groups/g1/expenses/e1",
-    );
+    const expenseLink = await screen.findByRole("link", { name: /晚餐/ });
+    expect(expenseLink).toHaveAttribute("href", "/groups/g1/expenses/e1");
+    expect(expenseLink.closest("section")?.className).toContain("collapse-enter");
     expect(queryClient.getQueryData(statsKeys.expenses(me.id, month(0), "交通"))).toBeDefined();
     const bars = screen.getByRole("group", { name: "最近六個月" });
     const previous = within(bars).getAllByRole("button")[4];
@@ -102,6 +103,9 @@ describe("personal spending stats", () => {
     const currentMonthBar = within(bars).getAllByRole("button")[5];
     if (currentMonthBar === undefined) throw new Error("Missing current month");
     expect(within(currentMonthBar).getByText("45萬")).toBeVisible();
+    const barFill = currentMonthBar.querySelector(".stats-bar-enter");
+    expect(barFill?.className).not.toContain("transition-all");
+    expect(barFill?.className).toContain("motion-reduce:transition-none");
 
     // Donut center displays selected category emoji and amount when clicked
     const foodButton = within(categories).getByRole("button", { name: /餐飲/ });
