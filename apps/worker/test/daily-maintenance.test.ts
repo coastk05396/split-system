@@ -115,6 +115,11 @@ it("runScheduled dispatches 08:00 GMT+8 (0 0 * * *) exclusively for flights and 
     await runScheduled(MAINTENANCE_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
     expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(false);
     expect(seenUrls.length).toBeGreaterThan(0);
+
+    seenUrls.length = 0;
+    await runScheduled("", { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
+    expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(true);
+    expect(seenUrls.some((u) => !u.includes("travelpayouts.com"))).toBe(true);
   } finally {
     vi.unstubAllGlobals();
   }

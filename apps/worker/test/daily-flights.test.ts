@@ -4,13 +4,12 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
 import {
-  collectVerifiedDailyFlights,
-  formatDailyFlightsSyncSql,
   listDailyFlights,
   productionFlightSource,
   refreshDailyFlights,
   type FlightSource,
 } from "../src/flights/daily.js";
+import { collectVerifiedDailyFlights, formatDailyFlightsSyncSql } from "../src/flights/pipeline.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
 import type { RateSource } from "../src/rates/rate-source.js";
 import { clock, fakeVerifier } from "./auth-harness.js";
@@ -443,7 +442,7 @@ describe("public flight routes and daily pipeline", () => {
     });
   });
 
-  it("drops Stage 2 fares missing found_at or with malformed found_at timestamps", async () => {
+  it("accepts Stage 2 fares when Travelpayouts v3 omits found_at, while still dropping malformed found_at timestamps", async () => {
     const cronNow = Date.parse("2026-11-15T16:30:00Z");
     const fakeFetch: typeof fetch = (input) => {
       const rawUrl =
@@ -534,7 +533,7 @@ describe("public flight routes and daily pipeline", () => {
     const db = createDb(env.DB);
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
-    expect(items).toHaveLength(0);
+    expect(items.map((x) => `${x.origin}-${x.dest}`)).toEqual(["TSA-HND"]);
   });
 
   it("parses Travelpayouts one-way fares with duration_back: 0 and caps total upstream fetches well under 50 subrequests", async () => {
@@ -749,5 +748,14 @@ describe("public flight routes and daily pipeline", () => {
     const resp = await listDailyFlights(db, cronNow);
     expect(resp.isFallback).toBe(false);
     expect(resp.items.map((i) => i.id)).toEqual(["manual-tpe-oka"]);
+
+    // Verify empty-row DELETE-only SQL and single-quote escaping round-trip cleanly
+    expect(formatDailyFlightsSyncSql([])).toBe("DELETE FROM daily_flights;\n");
+    const [firstRow] = collected.rows;
+    expect(firstRow).toBeDefined();
+    if (firstRow) {
+      const quotedSql = formatDailyFlightsSyncSql([{ ...firstRow, id: "id-with'quote" }]);
+      expect(quotedSql).toContain("'id-with''quote'");
+    }
   });
 });

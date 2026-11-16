@@ -33,7 +33,7 @@ function installTsExtensionHook(): void {
   });
 }
 
-function required(name: string): string {
+function requireEnv(name: string): string {
   const value = env[name];
   if (value === undefined || value === "") {
     console.error(`Set ${name} in the environment.`);
@@ -44,29 +44,28 @@ function required(name: string): string {
 
 async function main(): Promise<void> {
   installTsExtensionHook();
-  const { collectVerifiedDailyFlights, formatDailyFlightsSyncSql, productionFlightSource } =
-    await import("../src/flights/pipeline.ts");
+  const {
+    collectVerifiedDailyFlights,
+    formatDailyFlightsSyncSql,
+    logDailyFlightsSummary,
+    productionFlightSource,
+  } = await import("../src/flights/pipeline.ts");
 
-  const args = new Set(argv.slice(2));
-  const dryRun = args.has("--dry-run") || args.has("--print");
+  const cliArgs = argv.slice(2);
+  const args = new Set(cliArgs);
+  const dryRun = args.has("--dry-run");
   const remote = args.has("--remote");
-  const token = required("TRAVELPAYOUTS_TOKEN");
+  const envFlagIdx = cliArgs.indexOf("--env");
+  const envArg = envFlagIdx >= 0 ? cliArgs[envFlagIdx + 1] : undefined;
+  const remoteEnv = envArg && envArg.length > 0 ? envArg : "production";
+  const token = requireEnv("TRAVELPAYOUTS_TOKEN");
   const now = Date.now();
 
   const collected = await collectVerifiedDailyFlights(
     productionFlightSource({ TRAVELPAYOUTS_TOKEN: token }),
     now,
   );
-  console.info(
-    JSON.stringify({
-      event: "manual_daily_flights_collected",
-      digestDate: collected.digestDate,
-      candidates: collected.candidates,
-      droppedNull: collected.droppedNull,
-      droppedGhost: collected.droppedGhost,
-      persisted: collected.rows.length,
-    }),
-  );
+  logDailyFlightsSummary("manual_daily_flights_collected", collected);
 
   const sql = formatDailyFlightsSyncSql(collected.rows);
   if (dryRun) {
@@ -78,7 +77,7 @@ async function main(): Promise<void> {
   const sqlFile = join(dir, "sync.sql");
   try {
     await writeFile(sqlFile, sql, "utf8");
-    const targetFlags = remote ? ["--remote", "--env", "production"] : ["--local"];
+    const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
     const { stdout, stderr } = await execFileAsync("pnpm", [
       "exec",
       "wrangler",

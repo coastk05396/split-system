@@ -145,8 +145,8 @@ function extractTimePart(iso: string | null | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-function isFreshFoundAt(foundAt: string | null | undefined, referenceMs: number): boolean {
-  if (!foundAt) return false;
+function isAcceptableFoundAt(foundAt: string | null | undefined, referenceMs: number): boolean {
+  if (!foundAt) return true;
   const foundMs = Date.parse(foundAt);
   return !Number.isNaN(foundMs) && referenceMs - foundMs <= MAX_FOUND_AT_AGE_MS;
 }
@@ -238,7 +238,7 @@ export function productionFlightSource(
           if (data === null) continue;
 
           for (const raw of data) {
-            if (raw.found_at && !isFreshFoundAt(raw.found_at, now)) continue;
+            if (!isAcceptableFoundAt(raw.found_at, now)) continue;
             const parsedOrigin = resolveOriginAirport(raw);
             const meta = resolveDestinationAirport(raw);
             if (!parsedOrigin || !meta || !raw.departure_at) continue;
@@ -322,7 +322,7 @@ export function productionFlightSource(
           const retTransfers = candidate.tripType === "ow" ? 0 : (raw.return_transfers ?? 0);
           if (raw.transfers > 0 || retTransfers > 0) return false;
         }
-        return isFreshFoundAt(raw.found_at, referenceMs);
+        return isAcceptableFoundAt(raw.found_at, referenceMs);
       });
       if (matches.length === 0) return null;
 
@@ -363,6 +363,20 @@ export interface CollectedDailyFlights {
   droppedGhost: number;
   rows: DailyFlightRow[];
   items: DailyFlightItem[];
+}
+
+/** Logs uniform summary metrics (no secrets/PII) for scheduled and manual flight syncs. */
+export function logDailyFlightsSummary(event: string, collected: CollectedDailyFlights): void {
+  console.info(
+    JSON.stringify({
+      event,
+      digestDate: collected.digestDate,
+      candidates: collected.candidates,
+      droppedNull: collected.droppedNull,
+      droppedGhost: collected.droppedGhost,
+      persisted: collected.rows.length,
+    }),
+  );
 }
 
 function sqlLiteral(value: string | number | null | undefined): string {

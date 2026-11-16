@@ -80,7 +80,7 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
 /** Daily account cleanup and ECB reference-rate refresh (00:30 Taipei / 16:30 UTC). */
 export const MAINTENANCE_CRON = "30 16 * * *";
 
-/** Daily cheap flight radar scan (08:00 Taipei / 00:00 UTC) so it gets the full subrequest budget. */
+/** Daily Flights scan (08:00 Taipei / 00:00 UTC) so it gets the full subrequest budget. */
 export const FLIGHTS_CRON = "0 0 * * *";
 
 async function scheduledDailyFlights(db: ReturnType<typeof createDb>, env: Bindings, now: number) {

@@ -9,23 +9,17 @@ import type { Db } from "../db/client.js";
 import { dailyFlights } from "../db/schema.js";
 import {
   collectVerifiedDailyFlights,
-  formatDailyFlightsSyncSql,
+  logDailyFlightsSummary,
   productionFlightSource,
   taipeiDate,
-  type CollectedDailyFlights,
-  type DailyFlightRow,
   type FlightCandidate,
   type FlightSource,
   type VerifiedFlightPrice,
 } from "./pipeline.js";
 
 export {
-  collectVerifiedDailyFlights,
-  formatDailyFlightsSyncSql,
   productionFlightSource,
   taipeiDate,
-  type CollectedDailyFlights,
-  type DailyFlightRow,
   type FlightCandidate,
   type FlightSource,
   type VerifiedFlightPrice,
@@ -55,8 +49,8 @@ export async function refreshDailyFlights(
   source: FlightSource,
   now: number,
 ): Promise<DailyFlightItem[]> {
-  const { digestDate, candidates, droppedNull, droppedGhost, rows, items } =
-    await collectVerifiedDailyFlights(source, now);
+  const collected = await collectVerifiedDailyFlights(source, now);
+  const { rows, items } = collected;
 
   if (rows.length > 0) {
     // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
@@ -69,16 +63,7 @@ export async function refreshDailyFlights(
     await db.delete(dailyFlights);
   }
 
-  console.info(
-    JSON.stringify({
-      event: "daily_flights_refresh_summary",
-      digestDate,
-      candidates,
-      droppedNull,
-      droppedGhost,
-      persisted: rows.length,
-    }),
-  );
+  logDailyFlightsSummary("daily_flights_refresh_summary", collected);
 
   return items;
 }
