@@ -309,7 +309,7 @@ CREATE TABLE daily_flights (
 
 每日拆分為兩條獨立 Cron 排程：`30 16 * * *`（台灣時間 `00:30`）依序執行「清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率」，`0 0 * * *`（台灣時間 `08:00`）專責執行「更新每日便宜航班 (`refreshDailyFlights`)」（未指定 Cron 之手動測試則依序執行全部步驟）；另提供本機維運腳本 `apps/worker/scripts/sync-daily-flights.ts` (`pnpm --filter @split/worker sync-flights`) 供開發者隨時手動抓價並寫入本機或遠端 D1。
 
-* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 依五個台灣出發機場與地區配額（共 20 筆候選上限，使探索＋驗證流程總請求數低於 Cloudflare Workers 免費方案單次 50 次子請求限制，並於探索階段跳過已知超過 48 小時之舊報價、同時允許單程票 `duration*` 為 `0`）抓取候選低價票（未設定 `TRAVELPAYOUTS_TOKEN` 或無候選時不寫入假資料至 D1，讓 `GET /flights/daily` 回傳 `isFallback: true` 參考票價並於前端顯示提示）；Stage 2 透過可抽換的 `FlightSource.verifyCandidate` 驗證並比對路線、日期、直飛與新鮮度，過濾「幽靈票」（無符合結果、直飛降為轉機、時效過舊，或驗證價格高於發現價 20% 且高於 NT$800 者予以刪除），並依抵達機場當地時區計算到達時間以標記 `🌙 紅眼`（起降時間於 `00:00–05:59`），依基準票價計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%) 後分塊寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。
+* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 依五個台灣出發機場與地區配額（共 20 筆候選上限，使探索＋驗證流程總請求數低於 Cloudflare Workers 免費方案單次 50 次子請求限制，並允許單程票 `duration*` 為 `0`）抓取候選低價票（未設定 `TRAVELPAYOUTS_TOKEN` 或無候選時不寫入假資料至 D1，讓 `GET /flights/daily` 回傳 `isFallback: true` 參考票價並於前端顯示提示）；探索與 Stage 2 驗證階段對缺少 `found_at` 之列予以保留（`v3/prices_for_dates` 回應不附帶該欄），惟若回應包含 `found_at` 且格式錯誤或超過 48 小時仍予以丟棄；Stage 2 透過可抽換的 `FlightSource.verifyCandidate` 驗證並比對路線、日期與直飛，過濾「幽靈票」（無符合結果、直飛降為轉機、已帶 `found_at` 時效過舊，或驗證價格高於發現價 20% 且高於 NT$800 者予以刪除），並依抵達機場當地時區計算到達時間以標記 `🌙 紅眼`（起降時間於 `00:00–05:59`），依基準票價計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%) 後分塊寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。
 
 * **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
 * **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。

@@ -56,8 +56,19 @@ async function main(): Promise<void> {
   const dryRun = args.has("--dry-run");
   const remote = args.has("--remote");
   const envFlagIdx = cliArgs.indexOf("--env");
-  const envArg = envFlagIdx >= 0 ? cliArgs[envFlagIdx + 1] : undefined;
-  const remoteEnv = envArg && envArg.length > 0 ? envArg : "production";
+  let remoteEnv = "production";
+  if (envFlagIdx >= 0) {
+    if (!remote) {
+      console.error("--env requires --remote.");
+      exit(1);
+    }
+    const envArg = cliArgs[envFlagIdx + 1];
+    if (!envArg || envArg.startsWith("-")) {
+      console.error("Missing environment name after --env (e.g. --env production).");
+      exit(1);
+    }
+    remoteEnv = envArg;
+  }
   const token = requireEnv("TRAVELPAYOUTS_TOKEN");
   const now = Date.now();
 

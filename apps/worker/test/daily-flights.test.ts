@@ -756,6 +756,9 @@ describe("public flight routes and daily pipeline", () => {
     if (firstRow) {
       const quotedSql = formatDailyFlightsSyncSql([{ ...firstRow, id: "id-with'quote" }]);
       expect(quotedSql).toContain("'id-with''quote'");
+      expect(() => formatDailyFlightsSyncSql([{ ...firstRow, priceTwd: Number.NaN }])).toThrow(
+        /Invalid numeric SQL literal/,
+      );
     }
   });
 });

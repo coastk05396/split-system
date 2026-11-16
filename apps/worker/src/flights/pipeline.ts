@@ -381,7 +381,12 @@ export function logDailyFlightsSummary(event: string, collected: CollectedDailyF
 
 function sqlLiteral(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "NULL";
-  if (typeof value === "number") return String(Math.trunc(value));
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new Error(`Invalid numeric SQL literal: ${String(value)}`);
+    }
+    return String(Math.trunc(value));
+  }
   return `'${value.replaceAll("'", "''")}'`;
 }
 
