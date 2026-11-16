@@ -3,12 +3,14 @@ import {
   buildTripComUrl,
   computeArrivalTimeHm,
   computeDealSignal,
+  departureBounds,
   filterDailyFlights,
   getDefaultDailyFlights,
   isGhostFare,
   isRedEyeTime,
   matchTaiwanHoliday,
   sortDailyFlights,
+  withinDepartureWindow,
   type DailyFlightItem,
 } from "./flights.js";
 
@@ -237,5 +239,17 @@ describe("flights domain helpers", () => {
         },
       ).map((x) => x.id),
     ).toEqual(["ci-kix"]);
+  });
+
+  it("keeps the departure window at 14 days to 6 months, with month-end clamping, on curated fares too", () => {
+    expect(departureBounds("2026-11-16")).toEqual({ from: "2026-11-30", to: "2027-05-16" });
+    expect(departureBounds("2026-08-31")).toEqual({ from: "2026-09-14", to: "2027-02-28" });
+
+    const early = withinDepartureWindow(getDefaultDailyFlights("2026-11-16"), "2026-11-16");
+    expect(early.length).toBeGreaterThan(0);
+    expect(early.some((f) => f.outDate === "2027-06-09")).toBe(false);
+    const late = withinDepartureWindow(getDefaultDailyFlights("2027-02-01"), "2027-02-01");
+    expect(late.some((f) => f.outDate === "2027-02-05")).toBe(false);
+    for (const f of [...early, ...late]) expect(f.outDate >= "2026-11-30").toBe(true);
   });
 });

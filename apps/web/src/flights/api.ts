@@ -2,6 +2,7 @@ import {
   type DailyFlightsResponse,
   dailyFlightsResponseSchema,
   getDefaultDailyFlights,
+  withinDepartureWindow,
 } from "@split/shared";
 import { useEffect, useState } from "react";
 import { useDeps } from "../app/AppProviders.js";
@@ -14,7 +15,7 @@ function buildFallbackData(): DailyFlightsData {
   return {
     date,
     updatedAt: now.toISOString(),
-    items: getDefaultDailyFlights(date),
+    items: withinDepartureWindow(getDefaultDailyFlights(date), date),
     isFallback: true,
   };
 }

@@ -1,6 +1,7 @@
 import {
   getDefaultDailyFlights,
   getDestinationMeta,
+  withinDepartureWindow,
   type DailyFlightItem,
   type DailyFlightsResponse,
 } from "@split/shared/flights";
@@ -9,7 +10,6 @@ import type { Db } from "../db/client.js";
 import { dailyFlights } from "../db/schema.js";
 import {
   collectVerifiedDailyFlights,
-  discoveryWindow,
   logDailyFlightsSummary,
   productionFlightSource,
   taipeiDate,
@@ -69,18 +69,12 @@ export async function refreshDailyFlights(
   return items;
 }
 
-/** Public boundary: never serve fares departing under 14 days or over 6 months from today. */
-function withinWindow<T extends { outDate: string }>(items: readonly T[], today: string): T[] {
-  const { from, to } = discoveryWindow(today);
-  return items.filter((item) => item.outDate >= from && item.outDate <= to);
-}
-
 function buildFallbackResponse(now: number): DailyFlightsResponse {
   const today = taipeiDate(now);
   return {
     date: today,
     updatedAt: new Date(now).toISOString(),
-    items: withinWindow(getDefaultDailyFlights(today), today),
+    items: withinDepartureWindow(getDefaultDailyFlights(today), today),
     isFallback: true,
   };
 }
@@ -107,7 +101,7 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .where(eq(dailyFlights.digestDate, latest.digestDate))
     .orderBy(asc(dailyFlights.priceTwd));
 
-  const upcomingRows = withinWindow(rows, today);
+  const upcomingRows = withinDepartureWindow(rows, today);
   if (upcomingRows.length === 0) {
     return buildFallbackResponse(now);
   }

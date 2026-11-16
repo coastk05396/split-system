@@ -1184,6 +1184,26 @@ export function sortDailyFlights(
   });
 }
 
+/** Departure window of the public board: 14 days to 6 months from `todayIso`, inclusive. */
+export function departureBounds(todayIso: string): { from: string; to: string } {
+  const [y, m, day] = todayIso.split("-").map(Number) as [number, number, number];
+  const first = new Date(Date.UTC(y, m - 1 + 6, 1));
+  const lastDay = new Date(
+    Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  first.setUTCDate(Math.min(day, lastDay));
+  return { from: addDays(todayIso, 14), to: first.toISOString().slice(0, 10) };
+}
+
+/** Keeps only fares departing inside the board's window (never under 14 days or over 6 months). */
+export function withinDepartureWindow<T extends { outDate: string }>(
+  items: readonly T[],
+  todayIso: string,
+): T[] {
+  const { from, to } = departureBounds(todayIso);
+  return items.filter((item) => item.outDate >= from && item.outDate <= to);
+}
+
 function addDays(baseIso: string, days: number): string {
   const date = new Date(`${baseIso}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);

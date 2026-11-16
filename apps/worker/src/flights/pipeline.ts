@@ -5,6 +5,7 @@ import {
   FLIGHT_REGIONS,
   FLIGHT_TRIP_TYPES,
   getDestinationMeta,
+  departureBounds,
   hasRedEyeLeg,
   isGhostFare,
   type DailyFlightItem,
@@ -80,8 +81,6 @@ const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
   hkmo: 3,
   longhaul: 3,
 };
-const MIN_LEAD_DAYS = 14;
-const WINDOW_MONTHS = 6;
 const MAX_DATES_PER_ROUTE = 5;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
 const MIN_SIGNAL_CANDIDATES = 3;
@@ -184,12 +183,6 @@ function positiveDuration(minutes: number | null | undefined): number | null {
   return minutes !== null && minutes !== undefined && minutes > 0 ? minutes : null;
 }
 
-function addDaysIso(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 function addMonthsIso(iso: string, months: number): string {
   const [y, m, day] = iso.split("-").map(Number) as [number, number, number];
   const first = new Date(Date.UTC(y, m - 1 + months, 1));
@@ -206,8 +199,7 @@ export function discoveryWindow(digestDate: string): {
   to: string;
   months: string[];
 } {
-  const from = addDaysIso(digestDate, MIN_LEAD_DAYS);
-  const to = addMonthsIso(digestDate, WINDOW_MONTHS);
+  const { from, to } = departureBounds(digestDate);
   const months: string[] = [];
   for (let cursor = from.slice(0, 7); cursor <= to.slice(0, 7);) {
     months.push(cursor);
