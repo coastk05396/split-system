@@ -134,6 +134,10 @@ function isFreshFoundAt(foundAt: string | null | undefined, referenceMs: number)
   return !Number.isNaN(foundMs) && referenceMs - foundMs <= MAX_FOUND_AT_AGE_MS;
 }
 
+function positiveDuration(minutes: number | null | undefined): number | null {
+  return minutes !== null && minutes !== undefined && minutes > 0 ? minutes : null;
+}
+
 function parseAirlinesJson(json: string): string[] {
   try {
     const parsed: unknown = JSON.parse(json);
@@ -257,7 +261,7 @@ export function productionFlightSource(
               inboundDep: extractTimePart(raw.return_at),
               outboundArr: computeArrivalTimeHm(
                 raw.departure_at,
-                raw.duration_to ?? raw.duration,
+                positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
                 meta.airport,
               ),
               inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
@@ -334,7 +338,7 @@ export function productionFlightSource(
         outboundArr:
           computeArrivalTimeHm(
             best.departure_at,
-            best.duration_to ?? best.duration,
+            positiveDuration(best.duration_to) ?? positiveDuration(best.duration),
             candidate.dest,
           ) ??
           candidate.outboundArr ??
