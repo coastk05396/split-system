@@ -28,7 +28,7 @@ function fare(
   };
 }
 
-/** Round trips: Tokyo has 4 fares over two airports (cheapest is a red-eye steal at NRT), KIX 1, ICN 1; one-ways: ICN, BKK. */
+/** Round trips: Tokyo has 4 fares over two airports (cheapest is a red-eye 45% deal at NRT), KIX 1, ICN 1; one-ways: ICN, BKK. */
 const SAMPLE_FLIGHTS: DailyFlightItem[] = [
   fare("nrt-b", {
     dest: "NRT",
@@ -119,6 +119,9 @@ function setup(path = "/flights", cookieUser?: ReturnType<typeof makeUser>) {
   return view;
 }
 
+/** The page-level `N 筆` count (cards carry their own per-city fare pill). */
+const pageCount = () => screen.getByRole("group", { name: /^(排序|Sort)$/ }).previousElementSibling;
+
 const cityHeadings = () => screen.getAllByRole("heading", { level: 2 });
 
 /** The fare rows a card lists once expanded (none while collapsed). */
@@ -128,64 +131,94 @@ function rowsOf(card: HTMLElement): HTMLElement[] {
   return panel === null ? [] : within(panel).getAllByRole("link");
 }
 
+const cityOf = (h: HTMLElement) => h.textContent.match(/東京|大阪|首爾|曼谷|福岡|釜山/)?.[0];
+const cityOrder = () => cityHeadings().map(cityOf);
+const setItems = (api: { dailyFlights?: unknown }, items: DailyFlightItem[]) => {
+  api.dailyFlights = {
+    date: "2026-11-16",
+    updatedAt: "2026-11-16T01:00:00.000Z",
+    items,
+    isFallback: false,
+  };
+};
+
 describe("daily flights page", () => {
-  it("shows one card per city built from its cheapest fare, with no dates, and expands to every fare sorted by price", async () => {
+  it("shows the v3 title block: highlighted 去哪, amber BETA, and the refresh note", async () => {
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    const heading = screen.getByRole("heading", { level: 1, name: "今天想飛去哪？" });
+    expect(heading).toHaveClass("font-black", "whitespace-nowrap");
+    const mark = within(heading).getByText("去哪");
+    expect(mark.className).toContain("linear-gradient(transparent_60%,#d3ebdf_60%)");
+    const row = heading.parentElement as HTMLElement;
+    const beta = within(row).getByText("BETA");
+    expect(beta.className).toMatch(/bg-\[#fef3c7\].*text-\[#92400e\]/);
+    expect(beta.className).toContain("tracking-[0.06em]");
+    expect(beta.className).not.toContain("border");
+    expect(screen.getByText("每天 08:00 更新")).toBeVisible();
+    expect(screen.queryByText(/低價機票/)).toBeNull();
+  });
+
+  it("shows one card per city from its cheapest fare, collapsed with a fare-count pill and no 直飛, and expands to every fare by price", async () => {
     const user = userEvent.setup();
     setup();
-
     await screen.findAllByRole("heading", { level: 2 });
-    const heading = screen.getByRole("heading", { level: 1, name: "今日低價機票" });
-    expect(within(heading.closest("header") as HTMLElement).getByText("BETA")).toBeVisible();
-    expect(screen.getByText("每天 08:00 更新")).toBeVisible();
 
-    // Default 來回 tab: 3 cities (NRT, KIX, ICN) from 5 round-trip fares; 最划算 order
-    expect(cityHeadings().map((h) => h.textContent.match(/東京|大阪|首爾/)?.[0])).toEqual([
-      "東京",
-      "首爾",
-      "大阪",
-    ]);
+    // Default 來回 tab: 3 cities (NRT, KIX, ICN) from 6 round-trip fares; 最划算 order
+    expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
     const nrt = cityHeadings()[0] as HTMLElement;
-    // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, direct, 5,680, 省 45%)
+    // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, 5,680, 省 45%, red-eye)
     expect(nrt).toHaveTextContent("TPE ⇄ NRT");
     expect(nrt).toHaveTextContent("樂桃航空");
     expect(nrt).toHaveTextContent("5,680");
     expect(nrt).toHaveTextContent("省 45%");
-    expect(nrt).toHaveTextContent("紅眼");
-    // No directness and no fare count on the collapsed card
-    expect(nrt).not.toHaveTextContent(/起|成田|直飛|轉機|筆/);
+    const redEye = within(nrt).getByText("紅眼");
+    expect(redEye.className).toContain("bg-[#334155]");
+    // 4 fares pill; no directness while collapsed, no dates
+    const pill = within(nrt).getByText("4 筆");
+    expect(pill.className).toMatch(/bg-\[#eef2f0\].*text-fl-muted/);
+    expect(nrt).not.toHaveTextContent(/直飛|轉|成田/);
     expect(nrt.textContent).not.toMatch(/\d{1,2}\/\d{1,2}/);
     expect(document.querySelectorAll('svg[data-country="JP"]').length).toBe(2);
 
-    // Expand: all 3 NRT fares, price ascending, each linking to the Trip.com redirect
+    // Expand: header line reads 航空公司 · 直飛 · N 筆; all NRT-city fares, price ascending
     const toggle = within(nrt).getByRole("button");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(rowsOf(nrt)).toHaveLength(0);
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(nrt).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
+    // Count is plain text when expanded, not the collapsed grey pill
+    expect(nrt.querySelector('[class*="bg-[#eef2f0]"]')).toBeNull();
+    const card = nrt.closest(".flight-card") as HTMLElement;
+    expect(card.className).toContain("border-[#c4e3d3]");
+    expect(card.className).toContain("overflow-hidden");
     const rows = rowsOf(nrt);
-    expect(rows).toHaveLength(4);
     expect(rows.map((r) => r.getAttribute("href"))).toEqual([
       "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-10&tripType=rt&lang=zh-TW&inDate=2026-12-14",
       "/api/v1/flights/go?origin=TSA&dest=HND&outDate=2027-03-05&tripType=rt&lang=zh-TW&inDate=2027-03-09",
       "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&tripType=rt&lang=zh-TW&inDate=2027-02-07",
       "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&tripType=rt&lang=zh-TW&inDate=2027-01-16",
     ]);
-    expect(rows[0]).toHaveTextContent("12月10日 – 14日");
-    expect(rows[0]).toHaveTextContent("最低價 · 樂桃航空 · 紅眼");
-    expect(rows[0]).toHaveTextContent("5,680");
-    expect(rows[1]).toHaveTextContent("3月5日 – 9日");
-    // The route chip lives on the card header only, never per row; nonstop shows no directness
-    expect(rows.every((r) => !/⇄|→|直飛|省/.test(r.textContent))).toBe(true);
-    expect(rows[0]).not.toHaveTextContent(/轉機|出發/);
-    // Only fares from another origin than the card's (TPE) say where they leave from
-    expect(rows[1]).toHaveTextContent("松山出發 · 中華航空");
-    expect(rows[2]).toHaveTextContent("高雄出發 · 台灣虎航 · 轉機 1 次");
-    expect(rows[3]).toHaveTextContent("1月12日 – 16日");
-    expect(rows[3]).not.toHaveTextContent("出發");
-    expect(rows[0]?.closest("li")).toHaveClass("bg-fl-first");
-    expect(rows[1]?.closest("li")).not.toHaveClass("bg-fl-first");
-    expect(rows.every((r) => !/Trip\.com/i.test(r.textContent))).toBe(true);
-    // 4 fares fit: no 看全部 footer
+    expect(rows[0]).toHaveTextContent("12/10–12/14");
+    expect(rows[0]).toHaveTextContent("桃園出發 · 樂桃航空 · 直飛");
+    expect(rows[0]).toHaveTextContent("紅眼");
+    expect(rows[0]).toHaveTextContent("NT$5,680");
+    expect(rows[1]).toHaveTextContent("03/05–03/09");
+    expect(rows[1]).toHaveTextContent("松山出發 · 中華航空 · 直飛");
+    expect(rows[2]).toHaveTextContent("高雄出發 · 台灣虎航 · 轉 1");
+    expect(rows[3]).toHaveTextContent("01/12–01/16");
+    expect(rows[3]).toHaveTextContent("桃園出發");
+    // Only the red-eye fare carries the red-eye pill; the route chip stays on the card header
+    expect(rows.map((r) => /紅眼/.test(r.textContent))).toEqual([true, false, false, false]);
+    expect(rows.every((r) => !/⇄|→/.test(r.textContent))).toBe(true);
+    // First row is mint, others white, separated by dashed hairlines
+    expect(rows[0]?.closest("li")).toHaveClass("bg-fl-tint", "border-dashed");
+    expect(rows[1]?.closest("li")).toHaveClass("bg-white", "border-dashed");
+    // Footer note; 4 fares fit so there is no 看全部 button
+    expect(
+      screen.getByText("點日期前往 Trip.com · 參考價每日 08:00 更新，以訂票頁為準"),
+    ).toBeVisible();
     expect(screen.queryByRole("button", { name: /看全部/ })).toBeNull();
 
     // Collapse again
@@ -193,35 +226,78 @@ describe("daily flights page", () => {
     expect(rowsOf(nrt)).toHaveLength(0);
   });
 
-  it("has no sort control, counts active filters, and narrows cards and rows by origin", async () => {
+  it("counts fares (not cities), sorts cards by 最划算 or 價格最低, and keeps fares price-ascending inside a card", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
 
-    // One fixed order (cheapest fare first): no sort control anywhere
-    expect(screen.queryByRole("group", { name: "排序" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /最划算|價格最低/ })).toBeNull();
-    expect(screen.queryByText(/降幅/)).toBeNull();
-    expect(screen.getByText("3 個目的地")).toBeVisible();
-    expect(screen.getByText("價格由低到高")).toBeVisible();
-    expect(cityHeadings().map((h) => h.textContent.match(/東京|大阪|首爾/)?.[0])).toEqual([
-      "東京",
-      "首爾",
-      "大阪",
+    // N 筆 counts the fares shown (6 round trips), never the 3 destinations
+    expect(pageCount()).toHaveTextContent(/^6 筆$/);
+    expect(screen.queryByText(/個目的地|價格由低到高/)).toBeNull();
+    const sort = screen.getByRole("group", { name: "排序" });
+    const best = within(sort).getByRole("button", { name: "最划算" });
+    const price = within(sort).getByRole("button", { name: "價格最低" });
+    expect(best).toHaveAttribute("aria-pressed", "true");
+    expect(price).toHaveAttribute("aria-pressed", "false");
+    expect(best.className).toMatch(/border-fl-green.*bg-fl-tint.*font-bold.*text-fl-green/);
+    expect(price.className).toMatch(/border-fl-hair.*bg-white/);
+    expect(best.className).toContain("min-h-9");
+    expect(best.className).toContain("after:-inset-y-1");
+    // 東京 45% > 大阪 21% > 首爾 0%
+    expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
+
+    await user.click(price);
+    expect(price).toHaveAttribute("aria-pressed", "true");
+    expect(best).toHaveAttribute("aria-pressed", "false");
+    // 東京 5,680 < 首爾 6,100 < 大阪 8,900
+    expect(cityOrder()).toEqual(["東京", "首爾", "大阪"]);
+    expect(pageCount()).toHaveTextContent(/^6 筆$/);
+    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
+    expect(
+      rowsOf(cityHeadings()[0] as HTMLElement).map((r) => r.textContent.match(/NT\$[\d,]+/)?.[0]),
+    ).toEqual(["NT$5,680", "NT$6,200", "NT$6,900", "NT$7,200"]);
+
+    await user.click(best);
+    expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
+  });
+
+  it("orders 最划算 by the cheapest fare's discount (ties: cheaper first) and 價格最低 by price (ties: bigger discount)", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    const f = (dest: string, region: DailyFlightItem["region"], priceTwd: number, pct: number) =>
+      fare(`o-${dest}`, { dest, region, priceTwd, discountPct: pct });
+    setItems(api, [
+      f("KIX", "jp", 9000, 40),
+      f("FUK", "jp", 8000, 0),
+      f("BKK", "sea", 7000, 0),
+      f("NRT", "jp", 8000, 40),
+      f("ICN", "kr", 5000, 0),
     ]);
+    await screen.findAllByRole("heading", { level: 2 });
+    expect(cityOrder()).toEqual(["東京", "大阪", "首爾", "曼谷", "福岡"]);
+    await user.click(screen.getByRole("button", { name: "價格最低" }));
+    expect(cityOrder()).toEqual(["首爾", "曼谷", "東京", "福岡", "大阪"]);
+  });
+
+  it("counts active filters, narrows cards and the N 筆 count by origin, and shows live option counts", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
 
     const filterBtn = screen.getByRole("button", { name: /篩選/ });
+    expect(filterBtn.className).toMatch(/min-h-11.*border-\[#a9d6c1\].*text-fl-green/);
     expect(within(filterBtn).queryByText("1")).toBeNull();
     await user.click(filterBtn);
     const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
     expect(within(dialog).queryByRole("group", { name: "排序" })).toBeNull();
-    await user.click(within(dialog).getByRole("button", { name: /高雄\s*2/ }));
+    await user.click(within(dialog).getByRole("button", { name: /高雄 KHH\s*2/ }));
     await user.click(within(dialog).getByRole("button", { name: /查看 2 筆機票/ }));
-    expect(within(screen.getByRole("button", { name: /篩選/ })).getByText("1")).toBeVisible();
+    const badge = within(screen.getByRole("button", { name: /篩選/ })).getByText("1");
+    expect(badge.className).toContain("bg-fl-green");
 
     // KHH: ICN has no KHH fare so it disappears; NRT keeps only its KHH row
     expect(cityHeadings()).toHaveLength(2);
-    expect(screen.getByText("2 個目的地")).toBeVisible();
+    expect(pageCount()).toHaveTextContent(/^2 筆$/);
     expect(screen.queryByText("首爾")).toBeNull();
     const nrt = cityHeadings().find((h) => h.textContent.includes("東京")) as HTMLElement;
     expect(nrt).toHaveTextContent("KHH ⇄ NRT");
@@ -229,132 +305,257 @@ describe("daily flights page", () => {
     const rows = rowsOf(nrt);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute("href", expect.stringContaining("origin=KHH&dest=NRT"));
-
-    // Direct-only now lives in the sheet and counts toward the badge
-    await user.click(screen.getByRole("button", { name: /篩選/ }));
-    const dialog2 = await screen.findByRole("dialog", { name: "篩選條件" });
-    await user.click(within(dialog2).getByRole("button", { name: /只看直飛/ }));
-    expect(within(dialog2).getByRole("button", { name: /查看 1 筆機票/ })).toBeVisible();
   });
 
-  it("switches between 來回 and 單程, groups one-way fares per city, and keeps every region tab reachable", async () => {
+  it("filters stops tri-state (不指定 / 只看直飛 / 需轉機) and counts it as one active filter", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: /篩選/ }));
+    const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
+    const stops = within(dialog).getByRole("group", { name: "直飛 / 轉機" });
+    const [any, direct, connecting] = ["不指定", "只看直飛", "需轉機"].map((name) =>
+      within(stops).getByRole("button", { name: new RegExp(name) }),
+    ) as [HTMLElement, HTMLElement, HTMLElement];
+    expect(any).toHaveAttribute("aria-pressed", "true");
+    // Live counts: 6 round trips, 5 nonstop, 1 with a stop (KHH nrt-c)
+    expect(direct).toHaveTextContent("5");
+    expect(connecting).toHaveTextContent("1");
+
+    await user.click(direct);
+    expect(direct).toHaveAttribute("aria-pressed", "true");
+    expect(any).toHaveAttribute("aria-pressed", "false");
+    expect(within(dialog).getByRole("button", { name: "查看 5 筆機票" })).toBeVisible();
+
+    await user.click(connecting);
+    expect(connecting).toHaveAttribute("aria-pressed", "true");
+    expect(direct).toHaveAttribute("aria-pressed", "false");
+    expect(within(dialog).getByRole("button", { name: "查看 1 筆機票" })).toBeVisible();
+    await user.click(within(dialog).getByRole("button", { name: "查看 1 筆機票" }));
+    expect(pageCount()).toHaveTextContent(/^1 筆$/);
+    expect(within(screen.getByRole("button", { name: /篩選/ })).getByText("1")).toBeVisible();
+    expect(cityHeadings()).toHaveLength(1);
+    expect(cityHeadings()[0]).toHaveTextContent("東京");
+
+    await user.click(screen.getByRole("button", { name: /篩選/ }));
+    const dialog2 = await screen.findByRole("dialog", { name: "篩選條件" });
+    await user.click(within(dialog2).getByRole("button", { name: /不指定/ }));
+    expect(within(dialog2).getByRole("button", { name: "查看 6 筆機票" })).toBeVisible();
+  });
+
+  it("offers budget caps of $5,000 and $10,000, month-only labels, and the 排除紅眼班機 checkbox", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: /篩選/ }));
+    const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
+
+    const budget = within(dialog).getByRole("group", { name: "預算上限" });
+    expect(
+      within(budget)
+        .getAllByRole("button")
+        .map((b) => b.textContent.replace(/\d+$/, "")),
+    ).toEqual(["不限", "$5,000 以下", "$10,000 以下"]);
+    expect(within(dialog).queryByText(/\$8,000|\$12,000|\$20,000/)).toBeNull();
+    await user.click(within(budget).getByRole("button", { name: /\$10,000 以下/ }));
+    expect(within(dialog).getByRole("button", { name: "查看 6 筆機票" })).toBeVisible();
+    await user.click(within(budget).getByRole("button", { name: /\$5,000 以下/ }));
+    expect(within(dialog).getByRole("button", { name: "查看 0 筆機票" })).toBeVisible();
+    await user.click(within(budget).getByRole("button", { name: /不限/ }));
+
+    const months = within(dialog).getByRole("group", { name: "出發月份" });
+    expect(
+      within(months)
+        .getAllByRole("button")
+        .map((b) => b.textContent.replace(/\d+$/, "")),
+    ).toEqual(["全部", "12月", "1月", "2月", "3月"]);
+
+    // Red-eye is a checkbox row; checking it drops the red-eye 45% fare (6 -> 5)
+    const redEye = within(dialog).getByRole("checkbox", { name: "排除紅眼班機" });
+    expect(redEye).not.toBeChecked();
+    await user.click(redEye);
+    expect(redEye).toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "查看 5 筆機票" })).toBeVisible();
+    await user.click(within(dialog).getByRole("button", { name: "重設" }));
+    expect(redEye).not.toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "查看 6 筆機票" })).toBeVisible();
+  });
+
+  it("switches between 來回 and 單程, groups one-way fares per city, and keeps every region tab visible without scrolling", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
 
-    const oneWay = screen.getByRole("button", { name: "單程" });
-    expect(screen.getByRole("button", { name: "來回" })).toHaveAttribute("aria-pressed", "true");
+    const trip = screen.getByRole("group", { name: "行程" });
+    expect(trip.className).toContain("bg-fl-track");
+    expect(trip.className).toContain("p-[3px]");
+    const oneWay = within(trip).getByRole("button", { name: "單程" });
+    const roundTrip = within(trip).getByRole("button", { name: "來回" });
+    expect(roundTrip).toHaveAttribute("aria-pressed", "true");
+    expect(roundTrip.className).toMatch(/bg-white.*font-bold.*shadow-\[0_1px_3px/);
+    expect(oneWay.className).not.toContain("bg-white");
+    // 44px hit areas: 38px thumbs plus a 3px ::after stretch on each side
+    expect(oneWay.className).toContain("min-h-[38px]");
+    expect(oneWay.className).toContain("after:-inset-y-[3px]");
     await user.click(oneWay);
     expect(oneWay).toHaveAttribute("aria-pressed", "true");
     expect(cityHeadings()).toHaveLength(2);
     expect(cityHeadings()[0]).toHaveTextContent("曼谷");
     expect(cityHeadings()[0]).toHaveTextContent("TPE → BKK");
     await user.click(within(cityHeadings()[1] as HTMLElement).getByRole("button"));
-    // One-way rows show the outbound date only; the 1-stop fare says so
-    expect(rowsOf(cityHeadings()[1] as HTMLElement)[0]).toHaveTextContent("12月18日");
-    expect(rowsOf(cityHeadings()[1] as HTMLElement)[0]).toHaveTextContent("轉機 1 次");
-    expect(rowsOf(cityHeadings()[1] as HTMLElement)[0]).not.toHaveTextContent("–");
+    // One-way rows show the outbound date only; the 1-stop fare says 轉 1
+    const row = rowsOf(cityHeadings()[1] as HTMLElement)[0] as HTMLElement;
+    expect(row).toHaveTextContent("12/18");
+    expect(row).not.toHaveTextContent("–");
+    expect(row).toHaveTextContent("桃園出發 · 大韓航空 · 轉 1");
 
-    // All region tabs fit at once: the row never scrolls horizontally (no scrollbar at 360/390px)
+    // All six pill tabs fit at once: the row never scrolls horizontally (no scrollbar at 360/390px)
     const tabs = screen.getByRole("group", { name: "目的地" });
     expect(tabs.className).not.toMatch(/overflow-x-(auto|scroll)/);
     expect(tabs.className).toContain("overflow-hidden");
-    expect(within(tabs).getAllByRole("button")).toHaveLength(6);
+    expect(tabs.className).toContain("flex-nowrap");
+    const buttons = within(tabs).getAllByRole("button");
+    expect(buttons).toHaveLength(6);
     for (const name of ["全部", "日本", "韓國", "東南亞", "港澳", "長程"]) {
       expect(within(tabs).getByRole("button", { name })).toBeVisible();
     }
+    for (const tab of buttons) {
+      expect(tab).toHaveClass("min-w-0", "flex-auto", "whitespace-nowrap", "rounded-full");
+      expect(tab.className).toContain("after:-inset-y-1");
+    }
+    // Active = emerald solid with white bold text; inactive = mint track with slate text
+    expect(within(tabs).getByRole("button", { name: "全部" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(tabs).getByRole("button", { name: "全部" }).className).toMatch(
+      /bg-fl-green.*font-bold.*text-white/,
+    );
+    expect(within(tabs).getByRole("button", { name: "日本" }).className).toMatch(
+      /bg-fl-track.*text-fl-muted/,
+    );
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("whitespace-nowrap");
   });
 
-  it("shows a soft pill from 40%, plain green text for 15-39%, and nothing below 15% (cards only, never rows)", async () => {
-    const user = userEvent.setup();
-    setup();
-    await screen.findAllByRole("heading", { level: 2 });
-
-    // Tokyo 45% is a soft tinted pill (not solid green); Osaka 21% is plain text
-    const pill = screen.getByText("省 45%");
-    expect(pill.className).toContain("bg-fl-tint");
-    expect(pill.className).not.toContain("bg-sprout-600");
-    const quiet = screen.getByText("省 21%");
-    expect(quiet.className).not.toContain("bg-");
-    expect(quiet.className).toContain("text-fl-green");
-    // ICN's cheapest round trip is normal: no badge at all
-    expect(cityHeadings()[1]).toHaveTextContent("首爾");
-    expect(cityHeadings()[1]).not.toHaveTextContent("省");
-
-    // Expanded rows carry price and link only: no discount marker
-    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
-    expect(rowsOf(cityHeadings()[0] as HTMLElement).every((r) => !/省/.test(r.textContent))).toBe(
-      true,
-    );
-  });
-
-  it("draws 45% as a soft pill, 25% and 15% as plain 省 text, and nothing at 14% or 0%", async () => {
+  it.each([
+    [14, null],
+    [15, "text"],
+    [29, "text"],
+    [30, "solid"],
+    [45, "solid"],
+  ] as const)("draws a %i%% discount as %s on the card", async (pct, kind) => {
     const { api } = setup();
-    const deal = (dest: string, region: DailyFlightItem["region"], pct: number, price: number) =>
-      fare(`d-${dest}`, {
-        dest,
-        region,
-        priceTwd: price,
-        discountPct: pct,
-        tag: pct >= 30 ? "steal" : pct >= 15 ? "below_market" : "normal",
-      });
-    api.dailyFlights = {
-      date: "2026-11-16",
-      updatedAt: "2026-11-16T01:00:00.000Z",
-      items: [
-        deal("NRT", "jp", 45, 3000),
-        deal("KIX", "jp", 25, 3100),
-        deal("FUK", "jp", 15, 3200),
-        deal("PUS", "kr", 14, 3250),
-        deal("ICN", "kr", 0, 3300),
-      ],
-      isFallback: false,
-    };
+    setItems(api, [fare("d", { dest: "NRT", priceTwd: 3000, discountPct: pct })]);
     await screen.findAllByRole("heading", { level: 2 });
-    const [tokyo, osaka, fukuoka, busan, seoul] = cityHeadings() as [
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-    ];
-
-    expect(within(tokyo).getByText("省 45%").className).toContain("bg-fl-tint");
-    for (const [card, text] of [
-      [osaka, "省 25%"],
-      [fukuoka, "省 15%"],
-    ] as const) {
-      const plain = within(card).getByText(text);
-      expect(plain.className).toContain("text-fl-green");
-      expect(plain.className).not.toContain("bg-");
+    const card = cityHeadings()[0] as HTMLElement;
+    if (kind === null) {
+      expect(card).not.toHaveTextContent(/省|%/);
+      return;
     }
-    expect(busan).not.toHaveTextContent(/省|↓|%/);
-    expect(seoul).not.toHaveTextContent(/省|↓|%/);
+    const badge = within(card).getByText(`省 ${String(pct)}%`);
+    if (kind === "solid") {
+      expect(badge.className).toMatch(/rounded-full.*bg-fl-green.*font-bold.*text-white/);
+    } else {
+      expect(badge.className).toContain("text-fl-green");
+      expect(badge.className).not.toContain("bg-");
+    }
   });
 
-  it("never mentions 直飛 on cards, and lists 轉機 N 次 only for fares with stops", async () => {
+  it("applies the 15/30 thresholds on expanded rows too, with a smaller badge", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    setItems(
+      api,
+      [45, 30, 29, 15, 14].map((pct, i) =>
+        fare(`r${String(pct)}`, {
+          dest: "ICN",
+          region: "kr",
+          priceTwd: 4000 + i * 100,
+          discountPct: pct,
+        }),
+      ),
+    );
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
+    const rows = rowsOf(cityHeadings()[0] as HTMLElement);
+    const badge = (row: HTMLElement | undefined, pct: number) =>
+      within(row as HTMLElement).queryByText(`省 ${String(pct)}%`);
+    expect(badge(rows[0], 45)?.className).toMatch(/bg-fl-green.*text-\[11px\]/);
+    expect(badge(rows[1], 30)?.className).toContain("bg-fl-green");
+    expect(badge(rows[2], 29)?.className).toMatch(/text-fl-green/);
+    expect(badge(rows[2], 29)?.className).not.toContain("bg-");
+    expect(badge(rows[3], 15)?.className).not.toContain("bg-");
+    expect(rows[4]).not.toHaveTextContent("省");
+  });
+
+  it("draws 直飛 only in the expanded state: 直飛 / 轉 N on rows, never on a collapsed card", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
-    expect(screen.queryByText(/直飛|Nonstop/)).toBeNull();
+    expect(screen.queryByText(/直飛|Nonstop|轉/)).toBeNull();
     for (const card of cityHeadings()) {
       await user.click(within(card).getByRole("button"));
+      expect(card).toHaveTextContent(/ · 直飛 · \d 筆|轉 \d · \d 筆/);
       for (const row of rowsOf(card)) {
-        expect(row).not.toHaveTextContent(/直飛|0 次/);
+        const detail = row.querySelector(".fare-row-detail") as HTMLElement;
+        expect(detail.textContent).toMatch(/出發 · .+ · (直飛|轉 \d)$/);
+        // Origin is always named; dots are decoration only
+        expect(detail.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
       }
     }
-    const stopRows = screen.getAllByRole("link").filter((a) => /轉機/.test(a.textContent));
-    expect(stopRows.map((a) => a.textContent)).toEqual([expect.stringContaining("轉機 1 次")]);
+    const stopRows = screen.getAllByRole("link").filter((a) => /轉/.test(a.textContent));
+    expect(stopRows.map((a) => a.querySelector(".fare-row-detail")?.textContent)).toEqual([
+      "高雄出發 · 台灣虎航 · 轉 1",
+    ]);
+    const stop = within(stopRows[0] as HTMLElement).getByText("轉 1");
+    expect(stop.className).toMatch(/font-bold.*text-\[#92400e\]/);
+    const direct = within(rowsOf(cityHeadings()[0] as HTMLElement)[0] as HTMLElement).getByText(
+      "直飛",
+    );
+    expect(direct.className).toMatch(/font-bold.*text-fl-green/);
+    expect(cityHeadings()[0]).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
+  });
+
+  it("formats fare dates as MM/DD–MM/DD, one-way MM/DD, and same-day MM/DD", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    setItems(api, [
+      fare("a", {
+        dest: "ICN",
+        region: "kr",
+        priceTwd: 4000,
+        outDate: "2026-12-09",
+        inDate: "2026-12-12",
+      }),
+      fare("b", {
+        dest: "ICN",
+        region: "kr",
+        priceTwd: 4100,
+        outDate: "2026-12-28",
+        inDate: "2027-01-03",
+      }),
+      fare("c", {
+        dest: "ICN",
+        region: "kr",
+        priceTwd: 4200,
+        outDate: "2026-12-09",
+        inDate: "2026-12-09",
+      }),
+    ]);
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
+    const dates = rowsOf(cityHeadings()[0] as HTMLElement).map(
+      (r) => r.querySelector(".fare-row-date")?.textContent,
+    );
+    expect(dates).toEqual(["12/09–12/12", "12/28–01/03", "12/09"]);
   });
 
   it("caps an expanded card at 5 fares with a 看全部 N 筆 footer that expands and collapses", async () => {
     const user = userEvent.setup();
     const { api } = setup();
-    api.dailyFlights = {
-      date: "2026-11-16",
-      updatedAt: "2026-11-16T01:00:00.000Z",
-      items: Array.from({ length: 7 }, (_, i) =>
+    setItems(
+      api,
+      Array.from({ length: 7 }, (_, i) =>
         fare(`s-${String(i)}`, {
           dest: "ICN",
           region: "kr",
@@ -363,167 +564,118 @@ describe("daily flights page", () => {
           inDate: `2026-12-${String(14 + i).padStart(2, "0")}`,
         }),
       ),
-      isFallback: false,
-    };
+    );
     await screen.findAllByRole("heading", { level: 2 });
     const card = cityHeadings()[0] as HTMLElement;
     await user.click(within(card).getByRole("button"));
     expect(rowsOf(card)).toHaveLength(5);
+    expect(card).toHaveTextContent("7 筆");
 
-    await user.click(screen.getByRole("button", { name: "看全部 7 筆" }));
+    const more = screen.getByRole("button", { name: "看全部 7 筆" });
+    expect(more.className).toMatch(/border-dashed.*bg-white.*font-bold.*text-fl-green/);
+    await user.click(more);
     expect(rowsOf(card)).toHaveLength(7);
-    expect(rowsOf(card)[6]).toHaveTextContent("12月16日 – 20日");
+    expect(rowsOf(card)[6]).toHaveTextContent("12/16–12/20");
     await user.click(screen.getByRole("button", { name: "收合" }));
     expect(rowsOf(card)).toHaveLength(5);
     expect(screen.getByRole("button", { name: "看全部 7 筆" })).toBeVisible();
   });
 
-  it("orders city cards by their cheapest fare, lowest first, with ties going to the higher discount", async () => {
+  it.each([
+    ["NRT", "jp", "bg-[#fce7f3]", "text-[#9d174d]"],
+    ["ICN", "kr", "bg-[#e0f2fe]", "text-[#075985]"],
+    ["BKK", "sea", "bg-[#ffedd5]", "text-[#9a3412]"],
+    ["HKG", "hkmo", "bg-[#f3e8ff]", "text-[#6b21a8]"],
+    ["LHR", "longhaul", "bg-[#dff3e9]", "text-[#065f46]"],
+  ] as const)("colours the %s route chip by its %s region", async (dest, region, bg, fg) => {
     const { api } = setup();
-    const f = (dest: string, region: DailyFlightItem["region"], priceTwd: number, pct: number) =>
-      fare(`o-${dest}`, {
-        dest,
-        region,
-        priceTwd,
-        discountPct: pct,
-        tag: pct >= 30 ? "steal" : "normal",
-      });
-    api.dailyFlights = {
-      date: "2026-11-16",
-      updatedAt: "2026-11-16T01:00:00.000Z",
-      items: [
-        f("KIX", "jp", 9000, 40),
-        f("FUK", "jp", 8000, 0),
-        f("BKK", "sea", 7000, 0),
-        f("NRT", "jp", 8000, 40),
-        f("ICN", "kr", 5000, 0),
-      ],
-      isFallback: false,
-    };
+    setItems(api, [fare("x", { dest, region, priceTwd: 5000 })]);
     await screen.findAllByRole("heading", { level: 2 });
-    expect(cityHeadings().map((h) => h.textContent.match(/東京|大阪|首爾|曼谷|福岡/)?.[0])).toEqual(
-      ["首爾", "曼谷", "東京", "福岡", "大阪"],
-    );
+    const chip = within(cityHeadings()[0] as HTMLElement).getByText(`TPE ⇄ ${dest}`);
+    expect(chip).toHaveClass(bg, fg, "rounded-full", "font-bold");
   });
 
-  it("draws the pill at exactly 40% and up, and region filters never change which cards get it", async () => {
-    const user = userEvent.setup();
-    const deal = (dest: string, region: DailyFlightItem["region"], pct: number) =>
-      fare(`deal-${dest}`, {
-        dest,
-        region,
-        priceTwd: 3000,
-        discountPct: pct,
-        tag: pct >= 30 ? "steal" : "below_market",
-      });
-    const { api } = setup();
-    api.dailyFlights = {
-      date: "2026-11-16",
-      updatedAt: "2026-11-16T01:00:00.000Z",
-      items: [
-        deal("NRT", "jp", 45),
-        deal("KIX", "jp", 40),
-        deal("FUK", "jp", 39),
-        deal("ICN", "kr", 35),
-        deal("PUS", "kr", 15),
-      ],
-      isFallback: false,
-    };
-    await screen.findAllByRole("heading", { level: 2 });
-
-    const solidCities = () =>
-      cityHeadings()
-        .filter((h) =>
-          [...h.querySelectorAll("span")].some(
-            (n) => /^省 \d+%$/.test(n.textContent) && n.className.includes("bg-fl-tint"),
-          ),
-        )
-        .map((h) => h.textContent.match(/東京|大阪|福岡|首爾|釜山/)?.[0]);
-    expect(solidCities()).toEqual(["東京", "大阪"]);
-    expect(screen.getAllByText(/^省 \d+%$/)).toHaveLength(5);
-
-    const regions = screen.getByRole("group", { name: "目的地" });
-    await user.click(within(regions).getByRole("button", { name: "日本" }));
-    expect(cityHeadings()).toHaveLength(3);
-    expect(solidCities()).toEqual(["東京", "大阪"]);
-    await user.click(within(regions).getByRole("button", { name: "韓國" }));
-    expect(cityHeadings()).toHaveLength(2);
-    expect(solidCities()).toEqual([]);
-  });
-
-  it("renders English labels and redirect links", async () => {
+  it("renders English labels, sort chips and redirect links", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
     await user.click(screen.getByRole("button", { name: "切換為英文" }));
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Today's Deals" })).toBeVisible();
+    const title = await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
     await screen.findAllByRole("heading", { level: 2 });
-    // BETA sits beside the title on its row (never moved to the subtitle line) in English too
-    const title = screen.getByRole("heading", { level: 1, name: "Today's Deals" });
+    expect(within(title).getByText("fly").className).toContain("linear-gradient");
     expect(within(title.parentElement as HTMLElement).getByText("BETA")).toBeVisible();
     expect(screen.getByText("Updated daily at 8 AM")).toBeVisible();
-    expect(screen.queryByRole("group", { name: "Sort" })).toBeNull();
-    expect(screen.queryByText(/Drop|Best value|Lowest price/)).toBeNull();
-    expect(screen.getByText("3 destinations")).toBeVisible();
-    expect(screen.getByText("Price: low to high")).toBeVisible();
+    const sort = screen.getByRole("group", { name: "Sort" });
+    expect(within(sort).getByRole("button", { name: "Best deals" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(sort).getByRole("button", { name: "Lowest price" })).toBeVisible();
+    expect(pageCount()).toHaveTextContent(/^6 fares$/);
     const nrt = cityHeadings()[0] as HTMLElement;
     expect(nrt).toHaveTextContent("Tokyo");
     expect(nrt).not.toHaveTextContent("Narita");
     expect(nrt).toHaveTextContent("Peach");
     expect(nrt).toHaveTextContent("Save 45%");
     expect(nrt).toHaveTextContent("Red-eye");
-    expect(nrt).not.toHaveTextContent(/Nonstop|fares/);
+    expect(nrt).toHaveTextContent("4 fares");
+    expect(nrt).not.toHaveTextContent(/Nonstop/);
     await user.click(within(nrt).getByRole("button"));
+    expect(nrt).toHaveTextContent("Peach · Nonstop · 4 fares");
     expect(rowsOf(nrt)[0]).toHaveAttribute("href", expect.stringContaining("lang=en"));
-    expect(rowsOf(nrt)[0]).toHaveTextContent("Dec 10 – 14");
-    expect(rowsOf(nrt)[0]).toHaveTextContent("Lowest · Peach · Red-eye");
+    expect(rowsOf(nrt)[0]).toHaveTextContent("12/10–12/14");
+    expect(rowsOf(nrt)[0]).toHaveTextContent("From Taoyuan · Peach · Nonstop");
     expect(rowsOf(nrt)[2]).toHaveTextContent("From Kaohsiung · Tigerair Taiwan · 1 stop");
+    expect(
+      screen.getByText(
+        "Tap a date to open Trip.com · Reference prices refresh daily at 08:00; the booking page is final",
+      ),
+    ).toBeVisible();
   });
 
-  it("uses singular English counts: 1 destination, 2 stops", async () => {
+  it("uses singular English counts: 1 fare, 2 stops", async () => {
     const user = userEvent.setup();
     const { api } = setup();
-    api.dailyFlights = {
-      date: "2026-11-16",
-      updatedAt: "2026-11-16T01:00:00.000Z",
-      items: [fare("only", { dest: "ICN", region: "kr", priceTwd: 6000, transfers: 2 })],
-      isFallback: false,
-    };
+    setItems(api, [fare("only", { dest: "ICN", region: "kr", priceTwd: 6000, transfers: 2 })]);
     await screen.findAllByRole("heading", { level: 2 });
     await user.click(screen.getByRole("button", { name: "切換為英文" }));
-    expect(await screen.findByText("1 destination")).toBeVisible();
+    await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
+    expect(pageCount()).toHaveTextContent(/^1 fare$/);
+    expect(cityHeadings()[0]).toHaveTextContent("1 fare");
     expect(cityHeadings()[0]).toHaveTextContent("China Airlines");
     await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
     expect(rowsOf(cityHeadings()[0] as HTMLElement)[0]).toHaveTextContent("2 stops");
-    expect(screen.queryByText(/1 destinations/)).toBeNull();
+    expect(screen.queryByText(/1 fares/)).toBeNull();
   });
 
   it("uses singular English stops: 1 stop across two fares of one destination", async () => {
     const user = userEvent.setup();
     const { api } = setup();
-    api.dailyFlights = {
-      date: "2026-11-16",
-      updatedAt: "2026-11-16T01:00:00.000Z",
-      items: [
-        fare("a", { dest: "ICN", region: "kr", priceTwd: 6000, transfers: 1 }),
-        fare("b", { dest: "ICN", region: "kr", transfers: 1, priceTwd: 9000 }),
-      ],
-      isFallback: false,
-    };
+    setItems(api, [
+      fare("a", { dest: "ICN", region: "kr", priceTwd: 6000, transfers: 1 }),
+      fare("b", { dest: "ICN", region: "kr", transfers: 1, priceTwd: 9000 }),
+    ]);
     await screen.findAllByRole("heading", { level: 2 });
     await user.click(screen.getByRole("button", { name: "切換為英文" }));
-    expect(await screen.findByText("1 destination")).toBeVisible();
+    await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
+    expect(pageCount()).toHaveTextContent(/^2 fares$/);
     await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
     expect(rowsOf(cityHeadings()[0] as HTMLElement)).toHaveLength(2);
     expect(rowsOf(cityHeadings()[0] as HTMLElement)[0]).toHaveTextContent("1 stop");
   });
 
-  it("renders inside AppShell when signed in and supports inline region tabs + empty reset", async () => {
+  it("renders inside AppShell when signed in with the title and note only, and supports inline region tabs + empty reset", async () => {
     const user = userEvent.setup();
     setup("/flights", makeUser("小宇"));
 
-    expect(await screen.findByRole("heading", { level: 1, name: "今日低價機票" })).toBeVisible();
+    const title = await screen.findByRole("heading", { level: 1, name: "今天想飛去哪？" });
+    const header = title.closest("header") as HTMLElement;
+    expect(within(header).getByText("BETA")).toBeVisible();
+    expect(within(header).getByText("每天 08:00 更新")).toBeVisible();
+    // AppShell keeps its own navigation: no logo, language toggle or sign-in in the page header
+    expect(within(header).queryByRole("link")).toBeNull();
+    expect(within(header).queryByRole("button")).toBeNull();
     const bottomNav = screen.getByRole("navigation", { name: "底部導覽" });
     expect(within(bottomNav).getByRole("link", { name: "機票" })).toHaveAttribute(
       "href",
@@ -537,52 +689,62 @@ describe("daily flights page", () => {
     expect(await screen.findByText(/東京/)).toBeVisible();
   });
 
-  it("keeps signed-out PublicHeader free of a redundant flights link and localizes filter drawer Close", async () => {
+  it("lays out the signed-out header as logo + title + BETA, then the note with EN and 登入, and localizes filter sheet Close", async () => {
     const user = userEvent.setup();
     renderApp({ path: "/flights" });
 
     const header = await screen.findByRole("banner");
     expect(within(header).queryByRole("link", { name: /低價機票/ })).toBeNull();
-    // Two tiers: utility bar (mascot, language toggle, 登入) above the title block
-    expect(within(header).getByRole("heading", { level: 1, name: "今日低價機票" })).toBeVisible();
-    expect(within(header).getByRole("link", { name: "小芽" })).toHaveAttribute("href", "/");
+    // Row 1: 40px mascot link (name is its aria-label, not visible text) + title + BETA
+    const title = within(header).getByRole("heading", { level: 1, name: "今天想飛去哪？" });
+    const logo = within(header).getByRole("link", { name: "小芽" });
+    expect(logo).toHaveAttribute("href", "/");
+    expect(logo.querySelector("svg")).toHaveClass("size-10");
     expect(within(header).queryByText("小芽")).toBeNull();
+    expect(within(header).queryByText("LOGO")).toBeNull();
+    expect(within(header).getByText("BETA")).toBeVisible();
+    // Row 2: update note left, EN and 登入 right
+    const note = within(header).getByText("每天 08:00 更新");
     const lang = within(header).getByRole("button", { name: "切換為英文" });
     expect(lang).toHaveTextContent("EN");
-    expect(lang.className).toMatch(/min-h-11/);
+    expect(lang.className).toMatch(/rounded-full.*border-\[1\.5px\].*border-fl-hair.*bg-white/);
+    expect(lang.className).toContain("min-h-10");
+    expect(lang.className).toContain("after:-inset-y-0.5");
     const login = within(header).getByRole("link", { name: "登入" });
     expect(login).toHaveAttribute("href", "/sign-in");
-    expect(login.className).toMatch(/h-11/);
-    expect(
-      lang
-        .closest("nav")
-        ?.compareDocumentPosition(within(header).getByRole("heading", { level: 1 })),
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(within(header).getByText("每天 08:00 更新")).toBeVisible();
+    expect(login.className).toMatch(/rounded-full.*bg-fl-green.*font-bold.*text-white.*shadow-/);
+    expect(login.className).toContain("min-h-10");
+    expect(login.className).toContain("after:-inset-y-0.5");
+    const after = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(title.compareDocumentPosition(note) & after).toBeTruthy();
+    expect(note.compareDocumentPosition(lang) & after).toBeTruthy();
+    expect(lang.compareDocumentPosition(login) & after).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
 
     await user.click(await screen.findByRole("button", { name: /篩選/ }));
     expect(await screen.findByRole("button", { name: "關閉篩選" })).toBeVisible();
   });
 
-  it("never ellipsizes the expanded date or detail lines and keeps the segmented hit areas at 44px", async () => {
+  it("never ellipsizes the expanded date or detail lines and keeps the price column from shrinking", async () => {
     const user = userEvent.setup();
     setup();
 
     const firstCard = (await screen.findAllByRole("heading", { level: 2 }))[0] as HTMLElement;
     await user.click(within(firstCard).getByRole("button"));
     const row = rowsOf(firstCard)[0] as HTMLElement;
-    const [dates, detail] = Array.from(row.querySelectorAll<HTMLElement>("span.block"));
-    for (const line of [dates, detail]) {
-      expect(line).not.toHaveClass("truncate");
-      expect(line).not.toHaveClass("whitespace-nowrap");
+    for (const line of [".fare-row-date", ".fare-row-detail"]) {
+      const el = row.querySelector(line) as HTMLElement;
+      expect(el).not.toHaveClass("truncate");
+      expect(el).not.toHaveClass("whitespace-nowrap");
     }
-    expect(row.querySelector(".font-num")?.parentElement).toHaveClass("shrink-0");
-
-    expect(screen.getByRole("group", { name: "行程" })).toHaveClass("h-[50px]");
+    expect(row.querySelector(".fare-row-detail")).toHaveClass("flex-wrap");
+    const priceColumn = within(row).getByText("NT$").closest("span.flex-col")?.parentElement;
+    expect(priceColumn).toHaveClass("shrink-0");
+    // The 28px circular external-link icon is decoration
+    expect(row.querySelector('span[aria-hidden="true"].size-7')).not.toBeNull();
   });
 
-  it("prevents mobile grid/drawer clipping and shows only the update date in the footer", async () => {
+  it("prevents mobile grid/sheet clipping and shows only the update date in the footer", async () => {
     const user = userEvent.setup();
     setup();
 
@@ -591,28 +753,63 @@ describe("daily flights page", () => {
     const listItem = firstCard.closest("li");
     expect(list).toHaveClass("grid-cols-1", "md:grid-cols-2");
     expect(listItem).toHaveClass("min-w-0");
-    // Lines never wrap: ellipsis fallback on the title and secondary lines
-    expect(firstCard.querySelector(".flight-card-city")?.className).toContain("truncate");
-    expect(within(firstCard).getByText("樂桃航空").className).toContain("truncate");
     // City shrinks/truncates inside the row; the route chip stays intact and wraps instead of collapsing
-    expect(firstCard.querySelector(".flight-card-city")).toHaveClass("min-w-0", "max-w-full");
-    expect(firstCard.querySelector(".flight-card-city")).not.toHaveClass("shrink-0");
+    const city = firstCard.querySelector(".flight-card-city");
+    expect(city?.className).toContain("truncate");
+    expect(city).toHaveClass("min-w-0", "max-w-full");
+    expect(city).not.toHaveClass("shrink-0");
     expect(firstCard.querySelector(".flight-card-route")).toHaveClass("shrink-0");
     expect(firstCard.querySelector(".flight-card-route")).not.toHaveClass("truncate");
     expect(firstCard.querySelector(".flight-card-route")?.parentElement).toHaveClass("flex-wrap");
+    // Airline ellipsizes before it can push the price column; the price column never shrinks
+    expect(within(firstCard).getByText("樂桃航空").className).toContain("truncate");
+    expect(within(firstCard).getByText("NT$").closest("span.flex-col")).toHaveClass("shrink-0");
     // Footer carries only the digest date (no tagline, no disclaimer)
     expect(screen.getByText("11/16 更新")).toBeVisible();
     expect(screen.queryByText(/參考價格為浮動/)).toBeNull();
 
     await user.click(screen.getByRole("button", { name: /篩選/ }));
     const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
+    expect(dialog.className).toMatch(/max-h-\[82dvh\].*rounded-t-\[28px\].*bg-fl-paper/);
+    expect(dialog.querySelector(".h-\\[5px\\].w-11")).not.toBeNull();
+    const closeBtn = within(dialog).getByRole("button", { name: "關閉篩選" });
+    expect(closeBtn).toHaveClass("size-11", "rounded-full", "bg-fl-track");
     const applyBtn = within(dialog).getByRole("button", { name: /查看 \d+ 筆機票/ });
+    expect(applyBtn.className).toMatch(/min-h-\[50px\].*flex-1.*bg-fl-green/);
     const resetBtn = within(dialog).getByRole("button", { name: "重設" });
+    expect(resetBtn.className).toMatch(/min-h-\[50px\].*border-\[#cbd5e1\]/);
     const footer = applyBtn.closest("div");
     const scrollableBody = footer?.previousElementSibling;
     expect(footer).toHaveClass("shrink-0");
+    expect(footer?.className).toContain("env(safe-area-inset-bottom)");
     expect(resetBtn).toBeVisible();
     expect(scrollableBody).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
+
+    // Group order: mock groups first, then the kept 目的地 / 航空公司, then 預算 and the red-eye row
+    const groups = [...(scrollableBody as HTMLElement).querySelectorAll('[role="group"]')];
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual([
+      "出發地",
+      "出發月份",
+      "直飛 / 轉機",
+      "目的地",
+      "航空公司",
+      "預算上限",
+    ]);
+    const origins = within(groups[0] as HTMLElement).getAllByRole("button");
+    expect(origins.map((b) => b.textContent.replace(/\d+$/, ""))).toEqual([
+      "全部",
+      "桃園 TPE",
+      "松山 TSA",
+      "高雄 KHH",
+      "台中 RMQ",
+      "台南 TNN",
+    ]);
+    const chip = within(dialog).getByRole("button", { name: /^桃園 TPE/ });
+    expect(chip.className).toMatch(/min-h-10.*rounded-full.*border-\[1\.5px\]/);
+    expect(chip.className).toContain("px-[15px]");
+    expect(
+      within(groups[0] as HTMLElement).getByRole("button", { name: /^全部/ }).className,
+    ).toMatch(/border-fl-green.*bg-fl-tint.*font-bold.*text-fl-green/);
     expect(within(dialog).getByRole("button", { name: /^東京\s*4$/ })).toBeVisible();
     expect(within(dialog).queryByRole("button", { name: /東京成田|東京羽田|大阪關西/ })).toBeNull();
   });

@@ -1,10 +1,10 @@
 import { t } from "../i18n/messages.js";
 
-/** Thin-outline BETA label beside the Flights title: quiet, no fill or icon. */
+/** Amber BETA pill beside the Flights title. */
 export function FlightBetaBadge({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-sm border border-[#bbd6c6] px-[5px] py-px text-[10px] leading-[14px] font-semibold tracking-[0.08em] text-fl-green uppercase select-none ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full bg-[#fef3c7] px-2 py-0.5 text-[10px] leading-[14px] font-bold tracking-[0.06em] text-[#92400e] select-none ${className}`}
     >
       {t("flights.betaBadge")}
     </span>

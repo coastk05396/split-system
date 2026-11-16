@@ -9,7 +9,6 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
-import { FlightsTitle } from "../flights/FlightsTitle.js";
 import { PublicHeader } from "../flights/PublicHeader.js";
 import { RouteError } from "./RouteError.js";
 import { Loading } from "../groups/ui.js";
@@ -97,7 +96,7 @@ function FlightsRoute() {
   }
   return (
     <div className="flights-paper flex min-h-dvh flex-col">
-      <PublicHeader title={<FlightsTitle />} />
+      <PublicHeader flightsTitle />
       <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-5 pt-2 md:px-10 md:pt-4">
         {content}
       </main>

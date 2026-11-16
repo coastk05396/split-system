@@ -36,7 +36,7 @@ export function LandingPage() {
     directOnly: false,
     holidayOnly: false,
   });
-  // Same city cards, order and badge rule as /flights; only the four cheapest cities fit here
+  // Same city cards and badge rule as /flights, cheapest cities first; only four fit here
   const boardGroups = groupByCity(filtered).slice(0, 4);
 
   return (
@@ -78,7 +78,7 @@ export function LandingPage() {
             >
               <div className="flex items-center gap-2.5">
                 <FlightsIconTile />
-                <FlightsTitle as="h2" size="md" />
+                <FlightsTitle as="h2" size="md" note />
               </div>
 
               <div

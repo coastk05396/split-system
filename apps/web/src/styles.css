@@ -16,17 +16,16 @@
   --color-line: #06c755;
   --color-telegram: #229ed9;
 
-  /* Flights board v2 (warm paper): tokens from .scratch/flights-v2 mocks. */
-  --color-fl-paper: #f5f3ee;
-  --color-fl-ink: #121915;
-  --color-fl-green: #0e5a3a;
-  --color-fl-tint: #e6f1ea;
-  --color-fl-muted: #66706a;
-  --color-fl-hair: #e4e0d6;
-  --color-fl-hair-soft: #f0ede6;
-  --color-fl-sheet: #faf9f5;
-  --color-fl-first: #eef5f0;
-  --color-fl-track: #eae7df;
+  /* Flights board v3 (mint): tokens from .scratch/flights-v3 mocks. */
+  --color-fl-paper: #f3faf6;
+  --color-fl-ink: #0f172a;
+  --color-fl-green: #047857;
+  --color-fl-tint: #ecfdf5;
+  --color-fl-muted: #475569;
+  --color-fl-hair: #dfe9e4;
+  --color-fl-hair-soft: #e6efea;
+  --color-fl-track: #e4efe9;
+  /* Home marquee only (kept from v2); the flights board itself is sans. */
   --font-serif-tc: "Noto Serif TC", "Noto Sans TC", serif;
   --font-num: "Newsreader", "Noto Serif TC", serif;
 

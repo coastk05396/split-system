@@ -1,22 +1,62 @@
 import type { Language } from "@split/shared";
-import type { ReactNode } from "react";
 import { Globe } from "lucide-react";
 import { Link } from "react-router";
 import { rememberLocale } from "../i18n/detect.js";
 import { getLocale, setLocale, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
+import { FlightsTitle, FlightsUpdateNote } from "./FlightsTitle.js";
 
 /**
- * Shared top navigation for public / signed-out views (`/`, `/landing`, `/flights`). Two tiers:
- * a utility bar (mascot left; language toggle and 登入 right), then the optional `title` block.
+ * Shared top navigation for public / signed-out views (`/landing`, `/flights`). By default one
+ * row: mascot left, language toggle and 登入 right. With `flightsTitle` (the /flights board) it
+ * is two rows: mascot + title + BETA, then the refresh note with the language toggle and 登入.
  */
-export function PublicHeader({ title }: { title?: ReactNode }) {
+export function PublicHeader({ flightsTitle = false }: { flightsTitle?: boolean }) {
   const locale = getLocale();
   const nextLocale: Language = locale === "zh-TW" ? "en" : "zh-TW";
 
   function toggleLocale() {
     rememberLocale(nextLocale);
     setLocale(nextLocale);
+  }
+
+  if (flightsTitle) {
+    // The ::after boxes stretch the 40px pills to a 44px tap target without changing their look.
+    const tapTarget =
+      "relative after:absolute after:inset-x-0 after:-inset-y-0.5 after:content-['']";
+    return (
+      <header className="mx-auto flex w-full max-w-6xl flex-col gap-2.5 px-5 pt-5 pb-3 md:px-10">
+        <div className="flex items-center gap-2.5">
+          <Link
+            to="/"
+            aria-label={t("app.name")}
+            className="shrink-0 focus-visible:outline-2 focus-visible:outline-fl-green"
+          >
+            <SproutMascot className="size-10" mood="happy" interactive={false} />
+          </Link>
+          <FlightsTitle />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <FlightsUpdateNote />
+          <nav aria-label={t("app.name")} className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleLocale}
+              aria-label={t("landing.langAria")}
+              className={`press-pill ${tapTarget} inline-flex min-h-10 cursor-pointer items-center rounded-full border-[1.5px] border-fl-hair bg-white px-3.5 text-[13px] font-semibold text-fl-ink focus-visible:outline-2 focus-visible:outline-fl-green`}
+            >
+              {t("landing.langSwitch")}
+            </button>
+            <Link
+              to="/sign-in"
+              className={`press-pill ${tapTarget} inline-flex min-h-10 items-center rounded-full bg-fl-green px-[18px] text-[13px] font-bold text-white shadow-[0_6px_12px_-4px_rgb(4_120_87/0.4)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fl-green`}
+            >
+              {t("landing.headerSignIn")}
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
   }
 
   return (
@@ -28,7 +68,7 @@ export function PublicHeader({ title }: { title?: ReactNode }) {
           className="flex shrink-0 items-center gap-2.5 text-lg font-bold text-slate-900"
         >
           <SproutMascot className="size-8" mood="happy" interactive={false} />
-          {!title && <span>{t("app.name")}</span>}
+          <span>{t("app.name")}</span>
         </Link>
         <nav aria-label={t("app.name")} className="flex shrink-0 items-center gap-1">
           <button
@@ -48,7 +88,6 @@ export function PublicHeader({ title }: { title?: ReactNode }) {
           </Link>
         </nav>
       </div>
-      {title}
     </header>
   );
 }

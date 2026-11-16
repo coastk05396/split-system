@@ -364,6 +364,12 @@ describe("home", () => {
     expect(text[2]).toContain("大阪");
     expect(text[2]).not.toMatch(/省|↓/);
     expect(marquee.textContent).not.toMatch(/沖繩那霸|東京成田|大阪關西|直飛/);
+    // Tiles share the v3 card chips: solid pill from 30%, plain text 15-29%, region-coloured route
+    expect(within(tiles[0] as HTMLElement).getByText("省 55%").className).toContain("bg-fl-green");
+    expect(within(tiles[1] as HTMLElement).getByText("省 15%").className).not.toContain("bg-");
+    expect(within(tiles[0] as HTMLElement).getByText("TPE ⇄ OKA").className).toContain(
+      "bg-[#fce7f3]",
+    );
   });
 
   it("omits fallback/pause clutter and displays the daily 08:00 refresh schedule in fallback and live modes", async () => {

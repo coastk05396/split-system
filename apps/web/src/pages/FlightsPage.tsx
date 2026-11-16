@@ -6,6 +6,7 @@ import {
   FLIGHT_REGIONS,
   type FlightOrigin,
   type FlightRegion,
+  type FlightStopsFilter,
   type FlightTripType,
   getAirlineName,
   getCityName,
@@ -15,11 +16,11 @@ import {
   ORIGIN_META,
 } from "@split/shared";
 import * as Dialog from "@radix-ui/react-dialog";
-import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { ListFilter, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 import { useDailyFlights } from "../flights/api.js";
 import { CityFlightCard } from "../flights/CityFlightCard.js";
-import { groupByCity } from "../flights/groups.js";
+import { type CitySort, groupByCity } from "../flights/groups.js";
 import { FlightsTitle } from "../flights/FlightsTitle.js";
 import { flightsUpdatedNote } from "../flights/ui.js";
 import { Loading } from "../groups/ui.js";
@@ -34,7 +35,18 @@ const REGION_LABELS: Record<FlightRegion, MessageId> = {
   longhaul: "flights.region.longhaul",
 };
 
-const BUDGET_CAPS = [5000, 8000, 12000, 20000] as const;
+const BUDGET_CAPS = [5000, 10000] as const;
+
+const STOPS_OPTIONS: ReadonlyArray<{ value: FlightStopsFilter; label: MessageId }> = [
+  { value: "all", label: "flights.stops.all" },
+  { value: "direct", label: "flights.stops.direct" },
+  { value: "transfer", label: "flights.stops.transfer" },
+];
+
+const SORT_OPTIONS: ReadonlyArray<{ value: CitySort; label: MessageId }> = [
+  { value: "best", label: "flights.sort.best" },
+  { value: "price", label: "flights.sort.price" },
+];
 
 const EN_MONTH_SHORT = [
   "Jan",
@@ -55,8 +67,8 @@ function formatMonthChip(ym: string, lang: Language): string {
   const [year, monthStr] = ym.split("-");
   const monthNum = Number(monthStr);
   if (!year || !Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) return ym;
-  if (lang === "en") return `${EN_MONTH_SHORT[monthNum - 1] ?? monthStr} ${year}`;
-  return `${year}年${monthNum}月`;
+  if (lang === "en") return EN_MONTH_SHORT[monthNum - 1] ?? ym;
+  return `${monthNum}月`;
 }
 
 function collectDestinationOptions(
@@ -106,17 +118,18 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const [tripType, setTripType] = useState<FlightTripType | null>(null);
   const [month, setMonth] = useState<string>("all");
   const [airline, setAirline] = useState<string>("all");
-  const [directOnly, setDirectOnly] = useState(false);
+  const [stops, setStops] = useState<FlightStopsFilter>("all");
   const [maxPriceTwd, setMaxPriceTwd] = useState<number | null>(null);
   const [excludeRedEye, setExcludeRedEye] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sort, setSort] = useState<CitySort>("best");
 
   function resetDrawerFilters() {
     setOrigin("all");
     setDest("all");
     setMonth("all");
     setAirline("all");
-    setDirectOnly(false);
+    setStops("all");
     setMaxPriceTwd(null);
     setExcludeRedEye(false);
   }
@@ -141,13 +154,14 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     tripType: activeTripType,
     month,
     airline,
-    directOnly,
+    directOnly: false,
+    stops,
     holidayOnly: false,
     maxPriceTwd,
     excludeRedEye,
   };
   const filtered = filterDailyFlights(items, currentFilter);
-  const groups = groupByCity(filtered);
+  const groups = groupByCity(filtered, sort);
   const destOptions = collectDestinationOptions(items, region, dest, locale);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
@@ -172,15 +186,15 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     (dest !== "all" ? 1 : 0) +
     (month !== "all" ? 1 : 0) +
     (airline !== "all" ? 1 : 0) +
-    (directOnly ? 1 : 0) +
+    (stops !== "all" ? 1 : 0) +
     (maxPriceTwd !== null ? 1 : 0) +
     (excludeRedEye ? 1 : 0);
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 pb-8">
+    <div className="flex min-w-0 flex-col gap-3 pb-8">
       {!standalone && (
-        <header className="px-1 pt-4">
-          <FlightsTitle />
+        <header className="px-1 pt-4 pb-1">
+          <FlightsTitle note />
         </header>
       )}
 
@@ -188,7 +202,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         data-testid="flights-top-bar"
         role="group"
         aria-label={t("flights.regionLabel")}
-        className="flex flex-nowrap justify-between overflow-hidden border-b border-fl-hair px-1"
+        className="flex flex-nowrap gap-1.5 overflow-hidden py-1"
       >
         <RegionTab
           active={region === "all"}
@@ -215,7 +229,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         <div
           role="group"
           aria-label={t("flights.tripTypeLabel")}
-          className="flex h-[50px] min-w-0 flex-1 items-center rounded-xl bg-fl-track p-[3px]"
+          className="flex min-w-0 flex-1 rounded-full bg-fl-track p-[3px]"
         >
           {(["rt", "ow"] as const).map((type) => (
             <button
@@ -225,10 +239,10 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
               onClick={() => {
                 setTripType(type);
               }}
-              className={`press-pill h-full min-w-0 flex-1 cursor-pointer truncate rounded-[9px] px-3 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
+              className={`press-pill relative min-h-[38px] min-w-0 flex-1 cursor-pointer rounded-full px-3 text-sm whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-[3px] after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
                 activeTripType === type
-                  ? "bg-fl-ink font-semibold text-white"
-                  : "font-medium text-[#5a645e]"
+                  ? "bg-white font-bold text-fl-ink shadow-[0_1px_3px_rgb(16_60_42/0.14)]"
+                  : "font-medium text-fl-muted"
               }`}
             >
               {t(type === "rt" ? "flights.tripType.rt" : "flights.tripType.ow")}
@@ -240,12 +254,12 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
           <Dialog.Trigger asChild>
             <button
               type="button"
-              className="press-pill inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-[#d6d2c7] bg-white px-3.5 text-sm font-semibold text-fl-ink focus-visible:outline-2 focus-visible:outline-fl-green"
+              className="press-pill inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] border-[#a9d6c1] bg-white px-3.5 text-sm font-bold text-fl-green focus-visible:outline-2 focus-visible:outline-fl-green"
             >
-              <SlidersHorizontal aria-hidden="true" className="size-4" />
+              <ListFilter aria-hidden="true" className="size-4" strokeWidth={2} />
               <span>{t("flights.filtersBtn")}</span>
               {activeDrawerCount > 0 && (
-                <span className="inline-flex size-5 items-center justify-center rounded-full bg-fl-green text-[11px] font-bold text-white tabular-nums">
+                <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-fl-green text-[11px] font-bold text-white tabular-nums">
                   {activeDrawerCount}
                 </span>
               )}
@@ -253,10 +267,14 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
           </Dialog.Trigger>
 
           <Dialog.Portal>
-            <Dialog.Overlay className="dialog-overlay fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-[2px]" />
-            <Dialog.Content className="dialog-content dialog-sheet glass-dialog fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-[2rem] border-t border-slate-200 bg-white text-slate-900 shadow-2xl md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-h-[85dvh] md:max-w-lg md:-translate-y-1/2 md:rounded-3xl md:border">
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-5 py-4 md:px-6">
-                <Dialog.Title className="text-lg font-bold text-slate-900">
+            <Dialog.Overlay className="dialog-overlay fixed inset-0 z-40 bg-[rgb(15_23_42/0.45)]" />
+            <Dialog.Content className="dialog-content dialog-sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-[28px] bg-fl-paper text-fl-ink shadow-2xl md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-h-[85dvh] md:max-w-lg md:-translate-y-1/2 md:rounded-3xl">
+              <div
+                aria-hidden="true"
+                className="mx-auto mt-3 h-[5px] w-11 shrink-0 rounded-full bg-[#c9dad1] md:hidden"
+              />
+              <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3 md:px-6 md:pt-5">
+                <Dialog.Title className="text-lg font-black text-fl-ink">
                   {t("flights.filtersTitle")}
                 </Dialog.Title>
                 <Dialog.Description className="sr-only">
@@ -264,13 +282,13 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                 </Dialog.Description>
                 <Dialog.Close
                   aria-label={t("flights.filtersClose")}
-                  className="press-icon rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  className="press-icon flex size-11 cursor-pointer items-center justify-center rounded-full bg-fl-track text-fl-muted focus-visible:outline-2 focus-visible:outline-fl-green"
                 >
-                  <X aria-hidden="true" className="size-4" />
+                  <X aria-hidden="true" className="size-[18px]" strokeWidth={2.2} />
                 </Dialog.Close>
               </div>
 
-              <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 md:px-6">
+              <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-4 py-[18px] md:px-6">
                 <FilterSection label={t("flights.originLabel")}>
                   <FilterChip
                     active={origin === "all"}
@@ -292,34 +310,10 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                           setOrigin(o);
                         }}
                       >
-                        {locale === "en" ? meta.shortEn : meta.shortZhTW}
+                        {`${locale === "en" ? meta.shortEn : meta.shortZhTW} ${o}`}
                       </FilterChip>
                     );
                   })}
-                </FilterSection>
-
-                <FilterSection label={t("flights.destLabel")}>
-                  <FilterChip
-                    active={dest === "all"}
-                    count={countWith({ dest: "all" })}
-                    onClick={() => {
-                      setDest("all");
-                    }}
-                  >
-                    {t("flights.destAll")}
-                  </FilterChip>
-                  {destOptions.map((option) => (
-                    <FilterChip
-                      key={option.code}
-                      active={dest === option.code}
-                      count={countWith({ dest: option.code })}
-                      onClick={() => {
-                        setDest((prev) => (prev === option.code ? "all" : option.code));
-                      }}
-                    >
-                      {option.label}
-                    </FilterChip>
-                  ))}
                 </FilterSection>
 
                 <FilterSection label={t("flights.monthLabel")}>
@@ -342,6 +336,46 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                       }}
                     >
                       {formatMonthChip(ym, locale)}
+                    </FilterChip>
+                  ))}
+                </FilterSection>
+
+                <FilterSection label={t("flights.stopsLabel")}>
+                  {STOPS_OPTIONS.map((option) => (
+                    <FilterChip
+                      key={option.value}
+                      active={stops === option.value}
+                      count={countWith({ stops: option.value })}
+                      onClick={() => {
+                        setStops(option.value);
+                      }}
+                    >
+                      {t(option.label)}
+                    </FilterChip>
+                  ))}
+                </FilterSection>
+
+                {/* Not in the v3 mock; kept so the sheet loses no filter. */}
+                <FilterSection label={t("flights.destLabel")}>
+                  <FilterChip
+                    active={dest === "all"}
+                    count={countWith({ dest: "all" })}
+                    onClick={() => {
+                      setDest("all");
+                    }}
+                  >
+                    {t("flights.destAll")}
+                  </FilterChip>
+                  {destOptions.map((option) => (
+                    <FilterChip
+                      key={option.code}
+                      active={dest === option.code}
+                      count={countWith({ dest: option.code })}
+                      onClick={() => {
+                        setDest((prev) => (prev === option.code ? "all" : option.code));
+                      }}
+                    >
+                      {option.label}
                     </FilterChip>
                   ))}
                 </FilterSection>
@@ -370,18 +404,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                   ))}
                 </FilterSection>
 
-                <FilterSection label={t("flights.stopsLabel")}>
-                  <FilterChip
-                    active={directOnly}
-                    count={countWith({ directOnly: true })}
-                    onClick={() => {
-                      setDirectOnly((prev) => !prev);
-                    }}
-                  >
-                    {t("flights.directOnly")}
-                  </FilterChip>
-                </FilterSection>
-
                 <FilterSection label={t("flights.budgetLabel")}>
                   <FilterChip
                     active={maxPriceTwd === null}
@@ -406,32 +428,31 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                   ))}
                 </FilterSection>
 
-                <FilterSection label={t("flights.extrasLabel")}>
-                  <FilterChip
-                    active={excludeRedEye}
-                    count={countWith({ excludeRedEye: true })}
-                    onClick={() => {
-                      setExcludeRedEye((prev) => !prev);
+                <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-[18px] border-[1.5px] border-[#e3ece7] bg-white px-4 text-sm">
+                  {t("flights.excludeRedEye")}
+                  <input
+                    type="checkbox"
+                    checked={excludeRedEye}
+                    onChange={(event) => {
+                      setExcludeRedEye(event.target.checked);
                     }}
-                  >
-                    {t("flights.excludeRedEye")}
-                  </FilterChip>
-                </FilterSection>
+                    className="size-[22px] shrink-0 cursor-pointer accent-[#047857]"
+                  />
+                </label>
               </div>
 
-              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-100 bg-white px-5 py-3.5 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] md:px-6 md:pb-3.5">
+              <div className="flex shrink-0 items-center gap-2.5 px-4 pt-3 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] md:px-6 md:pb-5">
                 <button
                   type="button"
                   onClick={resetDrawerFilters}
-                  className="press-pill inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  className="press-pill min-h-[50px] shrink-0 cursor-pointer rounded-full border-[1.5px] border-[#cbd5e1] bg-white px-[22px] text-[15px] font-semibold text-fl-ink focus-visible:outline-2 focus-visible:outline-fl-green"
                 >
-                  <RotateCcw aria-hidden="true" className="size-3.5" />
-                  <span>{t("flights.filtersReset")}</span>
+                  {t("flights.filtersReset")}
                 </button>
                 <Dialog.Close asChild>
                   <button
                     type="button"
-                    className="press-pill cursor-pointer rounded-full bg-sprout-500 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-sprout-600 tabular-nums"
+                    className="press-pill min-h-[50px] min-w-0 flex-1 cursor-pointer rounded-full bg-fl-green px-4 text-[15px] font-bold text-white shadow-[0_8px_16px_-6px_rgb(4_120_87/0.45)] tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fl-green"
                   >
                     {t("flights.filtersApplyCount", { count: filtered.length })}
                   </button>
@@ -442,13 +463,31 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </Dialog.Root>
       </div>
 
-      <div className="flex items-baseline justify-between px-1 text-[13px] leading-[18px] text-fl-muted">
-        <span className="tabular-nums">
-          {t(groups.length === 1 ? "flights.destinations.one" : "flights.destinations", {
-            count: groups.length,
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs whitespace-nowrap text-fl-muted tabular-nums">
+          {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
+            count: filtered.length,
           })}
         </span>
-        <span>{t("flights.sortedByPrice")}</span>
+        <div role="group" aria-label={t("flights.sort.label")} className="flex gap-1.5">
+          {SORT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={sort === option.value}
+              onClick={() => {
+                setSort(option.value);
+              }}
+              className={`press-pill relative min-h-9 cursor-pointer rounded-full border-[1.5px] px-3.5 text-[13px] whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
+                sort === option.value
+                  ? "border-fl-green bg-fl-tint font-bold text-fl-green"
+                  : "border-fl-hair bg-white font-medium text-slate-700"
+              }`}
+            >
+              {t(option.label)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -491,27 +530,32 @@ function RegionTab({
   onClick: () => void;
   children: React.ReactNode;
 }) {
+  // All six chips share one row with no scrolling: they size to their text and shrink together.
+  // English labels are wider, so they get a smaller font (12px under 380px) and tighter padding.
+  // The ::after box stretches the 36px pill to a 44px tap target.
+  const size =
+    getLocale() === "en"
+      ? "px-1 text-xs min-[380px]:text-[13px]"
+      : "px-1.5 text-[15px] min-[380px]:px-2";
   return (
     <button
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`press-pill -mb-px min-h-11 min-w-0 cursor-pointer truncate border-b-2 text-[15px] whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
-        active
-          ? "border-fl-green font-semibold text-fl-ink"
-          : "border-transparent font-medium text-fl-muted hover:text-fl-ink"
+      className={`press-pill relative min-w-0 flex-auto cursor-pointer rounded-full py-2 text-center leading-5 whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] ${size} focus-visible:outline-2 focus-visible:outline-fl-green ${
+        active ? "bg-fl-green font-bold text-white" : "bg-fl-track font-medium text-fl-muted"
       }`}
     >
-      {children}
+      <span className="block truncate">{children}</span>
     </button>
   );
 }
 
 function FilterSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-bold tracking-wide text-ink-muted">{label}</span>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label={label}>
+    <div className="flex flex-col gap-[9px]">
+      <span className="text-[13px] font-bold text-slate-700">{label}</span>
+      <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
         {children}
       </div>
     </div>
@@ -534,17 +578,17 @@ function FilterChip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`press-pill inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
+      className={`press-pill inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-[15px] text-sm transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
         active
-          ? "border-sprout-500 bg-sprout-500 text-white shadow-2xs"
-          : "border-slate-200 bg-slate-50/80 text-slate-700 hover:border-sprout-500/40 hover:bg-sprout-50"
+          ? "border-fl-green bg-fl-tint font-bold text-fl-green"
+          : "border-fl-hair bg-white font-medium text-slate-700"
       }`}
     >
       <span>{children}</span>
       {count !== undefined && (
         <span
-          className={`text-[11px] tabular-nums ${
-            active ? "text-white/85" : count === 0 ? "text-slate-300" : "text-slate-400"
+          className={`text-[11px] font-medium tabular-nums ${
+            active ? "text-fl-green/70" : count === 0 ? "text-slate-300" : "text-slate-400"
           }`}
         >
           {count}
