@@ -29,6 +29,9 @@
   --font-serif-tc: "Noto Serif TC", "Noto Sans TC", serif;
   --font-num: "Newsreader", "Noto Serif TC", serif;
 
+  /* Flights board: Noto Sans TC first (loaded in index.html), as in the v3 mocks. */
+  --font-flights: "Noto Sans TC", system-ui, -apple-system, sans-serif;
+
   --font-sans:
     "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
 

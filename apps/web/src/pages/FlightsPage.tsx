@@ -191,7 +191,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     (excludeRedEye ? 1 : 0);
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 pb-8">
+    <div className="font-flights flex min-w-0 flex-col gap-3 pb-8">
       {!standalone && (
         <header className="px-1 pt-4 pb-1">
           <FlightsTitle note />
@@ -268,7 +268,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
 
           <Dialog.Portal>
             <Dialog.Overlay className="dialog-overlay fixed inset-0 z-40 bg-[rgb(15_23_42/0.45)]" />
-            <Dialog.Content className="dialog-content dialog-sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-[28px] bg-fl-paper text-fl-ink shadow-2xl md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-h-[85dvh] md:max-w-lg md:-translate-y-1/2 md:rounded-3xl">
+            <Dialog.Content className="font-flights dialog-content dialog-sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-[28px] bg-fl-paper text-fl-ink shadow-2xl md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-h-[85dvh] md:max-w-lg md:-translate-y-1/2 md:rounded-3xl">
               <div
                 aria-hidden="true"
                 className="mx-auto mt-3 h-[5px] w-11 shrink-0 rounded-full bg-[#c9dad1] md:hidden"
@@ -478,7 +478,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
               onClick={() => {
                 setSort(option.value);
               }}
-              className={`press-pill relative min-h-9 cursor-pointer rounded-full border-[1.5px] px-3.5 text-[13px] whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-1 after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
+              className={`press-pill relative min-h-9 cursor-pointer rounded-full border-[1.5px] px-3.5 text-[13px] whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-[5.5px] after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
                 sort === option.value
                   ? "border-fl-green bg-fl-tint font-bold text-fl-green"
                   : "border-fl-hair bg-white font-medium text-slate-700"

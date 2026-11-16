@@ -242,7 +242,7 @@ describe("daily flights page", () => {
     expect(best.className).toMatch(/border-fl-green.*bg-fl-tint.*font-bold.*text-fl-green/);
     expect(price.className).toMatch(/border-fl-hair.*bg-white/);
     expect(best.className).toContain("min-h-9");
-    expect(best.className).toContain("after:-inset-y-1");
+    expect(best.className).toContain("after:-inset-y-[5.5px]");
     // 東京 45% > 大阪 21% > 首爾 0%
     expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
 
@@ -709,7 +709,7 @@ describe("daily flights page", () => {
     expect(lang).toHaveTextContent("EN");
     expect(lang.className).toMatch(/rounded-full.*border-\[1\.5px\].*border-fl-hair.*bg-white/);
     expect(lang.className).toContain("min-h-10");
-    expect(lang.className).toContain("after:-inset-y-0.5");
+    expect(lang.className).toContain("after:-inset-y-[3.5px]");
     const login = within(header).getByRole("link", { name: "登入" });
     expect(login).toHaveAttribute("href", "/sign-in");
     expect(login.className).toMatch(/rounded-full.*bg-fl-green.*font-bold.*text-white.*shadow-/);

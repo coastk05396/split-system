@@ -21,11 +21,11 @@ export function PublicHeader({ flightsTitle = false }: { flightsTitle?: boolean 
   }
 
   if (flightsTitle) {
-    // The ::after boxes stretch the 40px pills to a 44px tap target without changing their look.
-    const tapTarget =
-      "relative after:absolute after:inset-x-0 after:-inset-y-0.5 after:content-['']";
+    // The ::after boxes stretch the 40px pills to a 44px tap target without changing their look;
+    // they are positioned from the padding box, so the bordered EN pill needs 1.5px more per side.
+    const tapTarget = "relative after:absolute after:inset-x-0 after:content-['']";
     return (
-      <header className="mx-auto flex w-full max-w-6xl flex-col gap-2.5 px-5 pt-5 pb-3 md:px-10">
+      <header className="font-flights mx-auto flex w-full max-w-6xl flex-col gap-2.5 px-5 pt-5 pb-3 md:px-10">
         <div className="flex items-center gap-2.5">
           <Link
             to="/"
@@ -43,13 +43,13 @@ export function PublicHeader({ flightsTitle = false }: { flightsTitle?: boolean 
               type="button"
               onClick={toggleLocale}
               aria-label={t("landing.langAria")}
-              className={`press-pill ${tapTarget} inline-flex min-h-10 cursor-pointer items-center rounded-full border-[1.5px] border-fl-hair bg-white px-3.5 text-[13px] font-semibold text-fl-ink focus-visible:outline-2 focus-visible:outline-fl-green`}
+              className={`press-pill ${tapTarget} after:-inset-y-[3.5px] inline-flex min-h-10 cursor-pointer items-center rounded-full border-[1.5px] border-fl-hair bg-white px-3.5 text-[13px] font-semibold text-fl-ink focus-visible:outline-2 focus-visible:outline-fl-green`}
             >
               {t("landing.langSwitch")}
             </button>
             <Link
               to="/sign-in"
-              className={`press-pill ${tapTarget} inline-flex min-h-10 items-center rounded-full bg-fl-green px-[18px] text-[13px] font-bold text-white shadow-[0_6px_12px_-4px_rgb(4_120_87/0.4)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fl-green`}
+              className={`press-pill ${tapTarget} after:-inset-y-0.5 inline-flex min-h-10 items-center rounded-full bg-fl-green px-[18px] text-[13px] font-bold text-white shadow-[0_6px_12px_-4px_rgb(4_120_87/0.4)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fl-green`}
             >
               {t("landing.headerSignIn")}
             </Link>
