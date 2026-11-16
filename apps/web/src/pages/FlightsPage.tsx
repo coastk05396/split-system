@@ -202,7 +202,7 @@ export function FlightsPage() {
     (excludeRedEye ? 1 : 0);
 
   return (
-    <div className="flex flex-col gap-3 pb-8">
+    <div className="flex min-w-0 flex-col gap-3 pb-8">
       <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="flight-badge-enter flex size-8 shrink-0 items-center justify-center rounded-xl bg-sprout-100 shadow-2xs">
@@ -352,8 +352,8 @@ export function FlightsPage() {
 
           <Dialog.Portal>
             <Dialog.Overlay className="dialog-overlay fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-[2px]" />
-            <Dialog.Content className="dialog-content dialog-sheet glass-dialog fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[2rem] border-t border-slate-200 bg-white text-slate-900 shadow-2xl md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-w-lg md:-translate-y-1/2 md:rounded-3xl md:border">
-              <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-4 md:px-6">
+            <Dialog.Content className="dialog-content dialog-sheet glass-dialog fixed inset-x-0 bottom-0 z-50 flex max-h-[82dvh] flex-col overflow-hidden rounded-t-[2rem] border-t border-slate-200 bg-white text-slate-900 shadow-2xl md:inset-x-4 md:top-1/2 md:bottom-auto md:mx-auto md:max-h-[85dvh] md:max-w-lg md:-translate-y-1/2 md:rounded-3xl md:border">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-5 py-4 md:px-6">
                 <Dialog.Title className="text-lg font-bold text-slate-900">
                   {t("flights.filtersTitle")}
                 </Dialog.Title>
@@ -368,7 +368,7 @@ export function FlightsPage() {
                 </Dialog.Close>
               </div>
 
-              <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 md:px-6">
+              <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4 md:px-6">
                 <FilterSection label={t("flights.originLabel")}>
                   <FilterChip
                     active={origin === "all"}
@@ -517,7 +517,7 @@ export function FlightsPage() {
                 </FilterSection>
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] md:px-6">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-100 bg-white px-5 py-3.5 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] md:px-6 md:pb-3.5">
                 <button
                   type="button"
                   onClick={resetDrawerFilters}
@@ -555,9 +555,9 @@ export function FlightsPage() {
           </button>
         </div>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {sorted.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className="min-w-0">
               <CompactFlightCard item={item} lang={locale} />
             </li>
           ))}
@@ -565,7 +565,7 @@ export function FlightsPage() {
       )}
 
       <p className="text-center text-xs text-slate-400">
-        {data.isFallback ? `${t("flights.fallbackNote")} · ` : ""}
+        {data.isFallback ? t("flights.fallbackNote") : t("flights.refreshSchedule")} ·{" "}
         {t("flights.disclaimer")}
       </p>
     </div>

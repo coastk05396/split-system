@@ -49,17 +49,17 @@ export interface VerifiedFlightPrice {
 }
 
 export interface FlightSource {
-  fetchCandidates(digestDate: string): Promise<FlightCandidate[]>;
+  fetchCandidates(digestDate: string, now?: number): Promise<FlightCandidate[]>;
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
 }
 
-// 5 origins * 2 trip types = 10 discovery calls + <=30 candidate checks = <=40 subrequests (<50 Workers limit).
+// 5 origins * 2 trip types = 10 discovery calls + <=20 candidate checks = <=30 fetches (<50 Workers Free cap with D1/rates).
 const REGION_LIMITS: Readonly<Record<FlightRegion, number>> = {
-  jp: 10,
-  kr: 5,
-  sea: 6,
-  hkmo: 4,
-  longhaul: 5,
+  jp: 7,
+  kr: 3,
+  sea: 4,
+  hkmo: 3,
+  longhaul: 3,
 };
 
 const D1_INSERT_CHUNK_SIZE = 5;
@@ -77,9 +77,9 @@ const travelpayoutsItemSchema = z.object({
   price: z.number().positive(),
   transfers: z.number().int().min(0).optional().default(0),
   return_transfers: z.number().int().min(0).optional().nullable(),
-  duration: z.number().int().positive().optional().nullable(),
-  duration_to: z.number().int().positive().optional().nullable(),
-  duration_back: z.number().int().positive().optional().nullable(),
+  duration: z.number().int().min(0).optional().nullable(),
+  duration_to: z.number().int().min(0).optional().nullable(),
+  duration_back: z.number().int().min(0).optional().nullable(),
   found_at: z.string().optional().nullable(),
 });
 
@@ -126,6 +126,12 @@ function extractTimePart(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const match = iso.match(/T(\d{2}:\d{2})/);
   return match?.[1] ?? null;
+}
+
+function isFreshFoundAt(foundAt: string | null | undefined, referenceMs: number): boolean {
+  if (!foundAt) return false;
+  const foundMs = Date.parse(foundAt);
+  return !Number.isNaN(foundMs) && referenceMs - foundMs <= MAX_FOUND_AT_AGE_MS;
 }
 
 function parseAirlinesJson(json: string): string[] {
@@ -199,7 +205,7 @@ export function productionFlightSource(
   fetchFn: FetchFn = (input, init) => fetch(input, init),
 ): FlightSource {
   return {
-    async fetchCandidates(digestDate) {
+    async fetchCandidates(digestDate, now = Date.now()) {
       const token = env.TRAVELPAYOUTS_TOKEN;
       if (!token) return [];
 
@@ -224,6 +230,7 @@ export function productionFlightSource(
           if (data === null) continue;
 
           for (const raw of data) {
+            if (raw.found_at && !isFreshFoundAt(raw.found_at, now)) continue;
             const parsedOrigin = resolveOriginAirport(raw);
             const meta = resolveDestinationAirport(raw);
             if (!parsedOrigin || !meta || !raw.departure_at) continue;
@@ -307,12 +314,7 @@ export function productionFlightSource(
           const retTransfers = candidate.tripType === "ow" ? 0 : (raw.return_transfers ?? 0);
           if (raw.transfers > 0 || retTransfers > 0) return false;
         }
-        if (!raw.found_at) return false;
-        const foundMs = Date.parse(raw.found_at);
-        if (Number.isNaN(foundMs) || referenceMs - foundMs > MAX_FOUND_AT_AGE_MS) {
-          return false;
-        }
-        return true;
+        return isFreshFoundAt(raw.found_at, referenceMs);
       });
       if (matches.length === 0) return null;
 
@@ -356,9 +358,12 @@ export async function refreshDailyFlights(
   now: number,
 ): Promise<DailyFlightItem[]> {
   const digestDate = taipeiDate(now);
-  const candidates = await source.fetchCandidates(digestDate);
+  const candidates = await source.fetchCandidates(digestDate, now);
   const rows: (typeof dailyFlights.$inferInsert)[] = [];
   const items: DailyFlightItem[] = [];
+
+  let droppedNull = 0;
+  let droppedGhost = 0;
 
   for (const candidate of candidates) {
     const meta = getDestinationMeta(candidate.dest);
@@ -375,7 +380,12 @@ export async function refreshDailyFlights(
 
     if (source.verifyCandidate !== undefined) {
       const verified = await source.verifyCandidate(candidate, now);
-      if (verified === null || isGhostFare(candidate.priceTwd, verified.priceTwd)) {
+      if (verified === null) {
+        droppedNull += 1;
+        continue;
+      }
+      if (isGhostFare(candidate.priceTwd, verified.priceTwd)) {
+        droppedGhost += 1;
         continue;
       }
       if (verified.priceTwd !== null) {
@@ -449,6 +459,17 @@ export async function refreshDailyFlights(
   } else {
     await db.delete(dailyFlights);
   }
+
+  console.info(
+    JSON.stringify({
+      event: "daily_flights_refresh_summary",
+      digestDate,
+      candidates: candidates.length,
+      droppedNull,
+      droppedGhost,
+      persisted: rows.length,
+    }),
+  );
 
   return items;
 }

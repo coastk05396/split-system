@@ -66,10 +66,6 @@ export const en: Record<MessageId, string> = {
   "home.flights.body": "Daily deals from Taiwan, red-eye tagged & verified",
   "home.flightsMarquee.title": "Today's Cheap Flights",
   "home.flightsMarquee.more": "All deals",
-  "home.flightsMarquee.badge": "Live Deals",
-  "home.flightsMarquee.fallbackBadge": "Sample Fares",
-  "home.flightsMarquee.pause": "Pause scrolling",
-  "home.flightsMarquee.resume": "Resume scrolling",
   "home.tab.title": "Quick split",
   "home.tab.body": "Meals, rides: log one right away",
   "home.tab.hint": "Good for: dinners, flatmates, everyday plans",
@@ -605,7 +601,8 @@ export const en: Record<MessageId, string> = {
   "flights.tripDays": "{days}d",
   "flights.tripOneWay": "One-way",
   "flights.bookCta": "View",
-  "flights.fallbackNote": "Showing curated preview deals while live data syncs.",
+  "flights.refreshSchedule": "Refreshes daily at 00:30 (GMT+8)",
+  "flights.fallbackNote": "Showing curated preview deals; daily fares refresh at 00:30 (GMT+8).",
 };
 
 export const enErrors: Record<ErrorCode, string> = {

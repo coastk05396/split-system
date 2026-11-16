@@ -38,9 +38,9 @@ export function LandingPage() {
   return (
     <div className="landing-editorial flex min-h-dvh flex-col">
       <PublicHeader />
-      <main className="flex-1">
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-5 pt-6 pb-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12 md:px-10 md:pt-12 md:pb-20">
-          <div>
+      <main className="min-w-0 flex-1">
+        <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-5 pt-6 pb-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12 md:px-10 md:pt-12 md:pb-20">
+          <div className="min-w-0">
             <h1 className="font-serif text-4xl leading-[1.22] font-semibold tracking-tight text-slate-900 md:text-5xl lg:text-[3.5rem]">
               {t("landing.title")}
             </h1>
@@ -67,10 +67,10 @@ export function LandingPage() {
             </div>
           </div>
 
-          <div className="relative flex flex-col gap-4">
+          <div className="relative flex min-w-0 flex-col gap-4">
             <section
               aria-label={t("landing.liveBoard.title")}
-              className="rounded-[1.75rem] border border-sprout-200/75 bg-white/95 p-5 shadow-lg shadow-slate-900/[0.04] backdrop-blur-sm"
+              className="min-w-0 rounded-[1.75rem] border border-sprout-200/75 bg-white/95 p-5 shadow-lg shadow-slate-900/[0.04] backdrop-blur-sm"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -117,16 +117,20 @@ export function LandingPage() {
                 </p>
               )}
 
-              <ul className="mt-3.5 flex flex-col gap-2" aria-live="polite">
+              <ul className="mt-3.5 flex min-w-0 flex-col gap-2" aria-live="polite">
                 {boardItems.map((item) => (
-                  <li key={item.id}>
+                  <li key={item.id} className="min-w-0">
                     <CompactFlightCard item={item} lang={locale} />
                   </li>
                 ))}
               </ul>
 
-              <div className="mt-4 flex items-center justify-between border-t border-dashed border-slate-200 pt-3">
-                <span className="text-[11px] text-slate-500">{t("flights.disclaimer")}</span>
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-dashed border-slate-200 pt-3">
+                <span className="text-[11px] text-slate-500">
+                  {flights.data.isFallback
+                    ? t("flights.disclaimer")
+                    : `${t("flights.disclaimer")} · ${t("flights.refreshSchedule")}`}
+                </span>
                 <Link
                   to="/flights"
                   className="shrink-0 text-xs font-bold text-sprout-600 hover:text-sprout-800"

@@ -41,6 +41,10 @@ describe("public landing route", () => {
     api.dailyFlights = { ...api.dailyFlights, isFallback: true };
 
     const board = await screen.findByRole("region", { name: "今日浮動特價機票" });
+    const heroSection = board.closest("main")?.querySelector("section");
+    expect(heroSection).toHaveClass("grid-cols-1", "lg:grid-cols-[0.95fr_1.05fr]");
+    expect(board).toHaveClass("min-w-0");
+    expect(board.querySelector("li")).toHaveClass("min-w-0");
     expect(board.querySelectorAll("svg[data-country]").length).toBeGreaterThan(0);
     expect(board.textContent).not.toMatch(/Trip\.com/i);
 
@@ -56,7 +60,9 @@ describe("public landing route", () => {
     ).toBeVisible();
     expect(screen.getByText("Sprout")).toBeVisible();
     expect(
-      await screen.findByText("Showing curated preview deals while live data syncs."),
+      await screen.findByText(
+        "Showing curated preview deals; daily fares refresh at 00:30 (GMT+8).",
+      ),
     ).toBeVisible();
   });
 });

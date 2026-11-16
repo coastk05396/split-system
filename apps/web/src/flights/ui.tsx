@@ -118,7 +118,7 @@ export function CompactFlightCard({ item, lang }: { item: DailyFlightItem; lang:
     <FlightBookAnchor
       item={item}
       lang={lang}
-      className="press-card flight-card flex items-center justify-between gap-3 rounded-2xl border border-slate-200/85 bg-white px-4 py-3.5 shadow-2xs"
+      className="press-card flight-card flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-slate-200/85 bg-white px-4 py-3.5 shadow-2xs"
     >
       <div className="flex min-w-0 items-center gap-3">
         <CountryFlag

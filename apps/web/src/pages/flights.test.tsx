@@ -256,4 +256,33 @@ describe("daily flights page", () => {
     await user.click(await screen.findByRole("button", { name: /篩選/ }));
     expect(await screen.findByRole("button", { name: "關閉篩選" })).toBeVisible();
   });
+
+  it("prevents mobile grid/drawer clipping and always shows the 00:30 daily refresh schedule", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp({ path: "/flights" });
+    api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T01:00:00.000Z",
+      items: SAMPLE_FLIGHTS,
+      isFallback: false,
+    };
+
+    const firstCard = await screen.findByRole("link", { name: /東京成田/ });
+    const list = firstCard.closest("ul");
+    const listItem = firstCard.closest("li");
+    expect(list).toHaveClass("grid-cols-1", "md:grid-cols-2");
+    expect(listItem).toHaveClass("min-w-0");
+    expect(firstCard).toHaveClass("w-full", "min-w-0");
+    expect(screen.getByText(/每日 00:30（台灣時間）更新/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /篩選/ }));
+    const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
+    const applyBtn = within(dialog).getByRole("button", { name: /查看 \d+ 筆機票/ });
+    const resetBtn = within(dialog).getByRole("button", { name: "重設" });
+    const footer = applyBtn.closest("div");
+    const scrollableBody = footer?.previousElementSibling;
+    expect(footer).toHaveClass("shrink-0");
+    expect(resetBtn).toBeVisible();
+    expect(scrollableBody).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
+  });
 });
