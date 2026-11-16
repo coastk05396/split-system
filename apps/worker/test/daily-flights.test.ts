@@ -1,6 +1,6 @@
 import { getDefaultDailyFlights, type DailyFlightsResponse } from "@split/shared";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
 import {
@@ -28,7 +28,150 @@ function setupApp(flightSource?: FlightSource) {
   });
 }
 
+interface FakeFare {
+  dest: string;
+  /** Day of month (1-28) in the queried month. */
+  day: number;
+  price: number;
+  airline?: string;
+}
+
+function addDaysIso(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Fake Travelpayouts `prices_for_dates`: discovery (`departure_at=YYYY-MM`, no destination) returns
+ * `fares(origin, oneWay, month)`; verification (`destination` + full date) re-serves the same fare.
+ */
+function fakeTravelpayouts(fares: (origin: string, oneWay: boolean, month: string) => FakeFare[]) {
+  const discoveries: { origin: string; oneWay: boolean; month: string; unique: string | null }[] =
+    [];
+  let verifyCount = 0;
+  let inFlight = 0;
+  let maxInFlight = 0;
+
+  const toItem = (origin: string, oneWay: boolean, month: string, fare: FakeFare) => {
+    const outDate = `${month}-${String(fare.day).padStart(2, "0")}`;
+    return {
+      origin,
+      destination: fare.dest,
+      airline: fare.airline ?? "IT",
+      departure_at: `${outDate}T10:00:00+08:00`,
+      return_at: oneWay ? null : `${addDaysIso(outDate, 4)}T15:00:00+08:00`,
+      price: fare.price,
+      transfers: 0,
+      return_transfers: 0,
+      duration_to: 180,
+      duration_back: oneWay ? 0 : 180,
+      found_at: "2026-11-15T20:00:00Z",
+    };
+  };
+
+  const fetchFn: typeof fetch = async (input) => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await Promise.resolve();
+    try {
+      const rawUrl =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url = new URL(rawUrl);
+      const origin = url.searchParams.get("origin") ?? "";
+      const oneWay = url.searchParams.get("one_way") === "true";
+      const departure = url.searchParams.get("departure_at") ?? "";
+      const destination = url.searchParams.get("destination");
+      if (destination === null) {
+        discoveries.push({
+          origin,
+          oneWay,
+          month: departure,
+          unique: url.searchParams.get("unique"),
+        });
+        const data = fares(origin, oneWay, departure).map((f) =>
+          toItem(origin, oneWay, departure, f),
+        );
+        return Response.json({ success: true, data });
+      }
+      verifyCount += 1;
+      const month = departure.slice(0, 7);
+      const day = Number(departure.slice(8, 10));
+      const match = fares(origin, oneWay, month).find(
+        (f) => f.dest === destination && f.day === day,
+      );
+      return Response.json({
+        success: true,
+        data: match ? [toItem(origin, oneWay, month, match)] : [],
+      });
+    } finally {
+      inFlight -= 1;
+    }
+  };
+
+  return {
+    fetchFn,
+    discoveries,
+    stats: () => ({ verifyCount, maxInFlight }),
+  };
+}
+
 describe("public flight routes and daily pipeline", () => {
+  // The API clock is the 08:00 Taipei run time the pipeline tests refresh at (window 11-30..05-16)
+  beforeEach(() => {
+    clock.now = Date.parse("2026-11-16T00:00:00Z");
+  });
+
+  it("applies the 14-day to 6-month window to the API response: fallback fares and a cache that rolled past midnight", async () => {
+    const db = createDb(env.DB);
+    const app = setupApp();
+    const get = async (now: number) => {
+      clock.now = now;
+      const res = await app.request("https://split.test/api/v1/flights/daily", {}, env);
+      expect(res.status).toBe(200);
+      return res.json<DailyFlightsResponse>();
+    };
+    const savedNow = clock.now;
+
+    // Curated fallback: the fixed-date seeds outside the window (e.g. CNX 2027-06-09) are dropped
+    const now = Date.parse("2026-11-16T00:00:00Z"); // window 2026-11-30..2027-05-16
+    const fallback = await get(now);
+    expect(fallback.isFallback).toBe(true);
+    expect(fallback.items.length).toBeGreaterThan(0);
+    for (const item of fallback.items) {
+      expect(item.outDate >= "2026-11-30" && item.outDate <= "2027-05-16").toBe(true);
+    }
+
+    // A cached 08:00 digest: the day-14 fare is served, but is gone after the next midnight
+    const day14: FlightSource = {
+      fetchCandidates: (digestDate) =>
+        Promise.resolve(
+          ["2026-11-30", "2026-12-10"].map((outDate, idx) => ({
+            id: `edge-${idx}`,
+            origin: "TPE",
+            dest: "NRT",
+            tripType: "ow" as const,
+            outDate,
+            inDate: null,
+            priceTwd: 5000 + idx,
+            airlines: ["MM"],
+            transfers: 0,
+            returnTransfers: null,
+            outboundDep: "10:00",
+            inboundDep: null,
+            digestDate,
+          })),
+        ),
+      verifyCandidate: (candidate) => Promise.resolve({ priceTwd: candidate.priceTwd }),
+    };
+    await refreshDailyFlights(db, day14, now);
+    expect((await get(now)).items.map((i) => i.outDate)).toEqual(["2026-11-30", "2026-12-10"]);
+    const nextDay = await get(now + 86_400_000);
+    expect(nextDay.items.map((i) => i.outDate)).toEqual(["2026-12-10"]);
+    expect(nextDay.isFallback).toBe(false);
+    clock.now = savedNow;
+  });
+
   it("GET /flights/daily serves curated fallback deals when D1 has no verified digest", async () => {
     const db = createDb(env.DB);
     const seedEnv = { ...env, TRAVELPAYOUTS_TOKEN: "" };
@@ -86,6 +229,137 @@ describe("public flight routes and daily pipeline", () => {
       env,
     );
     expect(badRes.status).toBe(400);
+  });
+
+  it("discovers once per departure month and never serves fares outside 14 days to 6 months, sequentially", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z"); // 08:00 Taipei; window 2026-11-30..2027-05-16
+    const fake = fakeTravelpayouts(() => [
+      { dest: "NRT", day: 5, price: 5000 },
+      { dest: "NRT", day: 20, price: 5100 },
+      { dest: "NRT", day: 25, price: 5200 },
+    ]);
+
+    const db = createDb(env.DB);
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
+
+    const months = ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05"];
+    for (const origin of ["TPE", "TSA", "KHH", "RMQ", "TNN"]) {
+      for (const oneWay of [false, true]) {
+        expect(
+          fake.discoveries
+            .filter((d) => d.origin === origin && d.oneWay === oneWay)
+            .map((d) => d.month),
+        ).toEqual(months);
+      }
+    }
+    expect(fake.discoveries.every((d) => d.unique !== "true")).toBe(true);
+    expect(fake.stats().maxInFlight).toBe(1);
+
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    const body = await res.json<DailyFlightsResponse>();
+    expect(body.isFallback).toBe(false);
+    expect(body.items.length).toBeGreaterThan(0);
+    for (const item of body.items) {
+      expect(item.outDate >= "2026-11-30").toBe(true);
+      expect(item.outDate <= "2027-05-16").toBe(true);
+    }
+  });
+
+  it("fills separate 150 round-trip and 50 one-way quotas across every month with at most 5 dates per route", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
+    const dests = [
+      "NRT",
+      "HND",
+      "KIX",
+      "OKA",
+      "FUK",
+      "CTS",
+      "NGO",
+      "ICN",
+      "PUS",
+      "BKK",
+      "DAD",
+    ].concat(["SIN", "SGN", "KUL", "HKG", "MFM", "LHR", "CDG", "FRA", "LAX", "YVR", "SYD"]);
+    // December is the cheapest month by far: a pure cheapest-first pick would ignore later months.
+    const fake = fakeTravelpayouts((_origin, _oneWay, month) =>
+      dests.flatMap((dest, i) =>
+        [3, 10, 17, 24].map((day) => ({
+          dest,
+          day,
+          price: (month === "2026-12" ? 3000 : 6000 + Number(month.slice(5)) * 100) + i * 50 + day,
+        })),
+      ),
+    );
+
+    const db = createDb(env.DB);
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
+
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    const { items } = await res.json<DailyFlightsResponse>();
+
+    expect(items.filter((i) => i.tripType === "rt")).toHaveLength(150);
+    expect(items.filter((i) => i.tripType === "ow")).toHaveLength(50);
+    expect(fake.stats().verifyCount).toBe(200);
+
+    const perRoute = new Map<string, number>();
+    for (const i of items) {
+      const key = `${i.origin}-${i.dest}-${i.tripType}`;
+      perRoute.set(key, (perRoute.get(key) ?? 0) + 1);
+    }
+    expect(Math.max(...perRoute.values())).toBeLessThanOrEqual(5);
+
+    for (const tripType of ["rt", "ow"] as const) {
+      const outMonths = new Set(
+        items.filter((i) => i.tripType === tripType).map((i) => i.outDate.slice(0, 7)),
+      );
+      expect([...outMonths].sort()).toEqual([
+        "2026-12",
+        "2027-01",
+        "2027-02",
+        "2027-03",
+        "2027-04",
+        "2027-05",
+      ]);
+    }
+  });
+
+  it("scores Deal Signal against the median of the day's candidates per destination and trip type", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
+    const fake = fakeTravelpayouts((origin, oneWay, month) => {
+      if (origin !== "TPE" || month !== "2026-12") return [];
+      const rt = [3000, 4100, 4900, 5000, 5600].map((price, i) => ({
+        dest: "BKK",
+        day: 3 + i * 3,
+        price,
+      }));
+      const ow = [1500, 2500, 2600].map((price, i) => ({ dest: "BKK", day: 4 + i * 3, price }));
+      const thin = [1000, 2000].map((price, i) => ({ dest: "HKG", day: 5 + i * 3, price }));
+      return oneWay ? ow : [...rt, ...thin];
+    });
+
+    const db = createDb(env.DB);
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    const { items } = await res.json<DailyFlightsResponse>();
+    const signal = (dest: string, tripType: string, price: number) => {
+      const item = items.find(
+        (i) => i.dest === dest && i.tripType === tripType && i.priceTwd === price,
+      );
+      return item && { tag: item.tag, discountPct: item.discountPct };
+    };
+
+    // BKK round trip: median 4900
+    expect(signal("BKK", "rt", 3000)).toEqual({ tag: "steal", discountPct: 39 });
+    expect(signal("BKK", "rt", 4100)).toEqual({ tag: "below_market", discountPct: 16 });
+    expect(signal("BKK", "rt", 4900)).toEqual({ tag: "normal", discountPct: 0 });
+    // BKK one way is scored against its own median (2500), not the round-trip one
+    expect(signal("BKK", "ow", 1500)).toEqual({ tag: "steal", discountPct: 40 });
+    expect(signal("BKK", "ow", 2600)).toEqual({ tag: "normal", discountPct: 0 });
+    // HKG has only 2 candidates: too few to compare, so no signal
+    expect(signal("HKG", "rt", 1000)).toEqual({ tag: "normal", discountPct: 0 });
   });
 
   it("drops ghost fares, keeps & tags red-eye flights, and serves persisted D1 deals", async () => {
@@ -171,13 +445,13 @@ describe("public flight routes and daily pipeline", () => {
       id: "valid-redeye-rt",
       isRedEye: true,
       priceTwd: 5400,
-      tag: "steal",
+      tag: "normal", // no Stage 1 pool from a hand-built source, so no Deal Signal
     });
     expect(body.items[1]).toMatchObject({
       id: "valid-normal-rt",
       isRedEye: false,
       priceTwd: 7100,
-      tag: "steal",
+      tag: "normal",
     });
   });
 
@@ -210,6 +484,7 @@ describe("public flight routes and daily pipeline", () => {
     expect(day1.length).toBeGreaterThanOrEqual(20);
     expect(day2.length).toBe(day1.length);
 
+    clock.now += 86_400_000;
     const res = await setupApp(verifiedBatchSource).request(
       "https://split.test/api/v1/flights/daily",
       {},
@@ -217,10 +492,14 @@ describe("public flight routes and daily pipeline", () => {
     );
     const body = await res.json<DailyFlightsResponse>();
     expect(body.isFallback).toBe(false);
-    expect(body.items.length).toBe(day2.length);
+    // The API serves only the window of the day it is read (2026-11-17: 12-01..2027-05-17)
+    const inWindow = day2.filter((i) => i.outDate >= "2026-12-01" && i.outDate <= "2027-05-17");
+    expect(inWindow.length).toBeGreaterThan(0);
+    expect(body.items.length).toBe(inWindow.length);
   });
 
   it("verifies Travelpayouts deals via X-Access-Token, computes destination-tz arrival red-eyes, rejects mismatched directness, and falls back when stale", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
     const seenUrls: URL[] = [];
     const seenAuthHeaders: (string | null)[] = [];
 
@@ -315,11 +594,7 @@ describe("public flight routes and daily pipeline", () => {
 
     const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
     const db = createDb(env.DB);
-    const items = await refreshDailyFlights(
-      db,
-      productionFlightSource(tpEnv, fakeFetch),
-      clock.now,
-    );
+    const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
     expect(seenUrls.length).toBeGreaterThan(0);
     expect(seenUrls.every((u) => !u.searchParams.has("token"))).toBe(true);
@@ -536,7 +811,7 @@ describe("public flight routes and daily pipeline", () => {
     expect(items.map((x) => `${x.origin}-${x.dest}`)).toEqual(["TSA-HND"]);
   });
 
-  it("parses Travelpayouts one-way fares with duration_back: 0 and caps total upstream fetches well under 50 subrequests", async () => {
+  it("parses Travelpayouts one-way fares with duration_back: 0 and keeps total upstream fetches near 260 (discovery + verification)", async () => {
     const cronNow = Date.parse("2026-11-16T03:00:00Z");
     const destinations = [
       "NRT",
@@ -620,10 +895,10 @@ describe("public flight routes and daily pipeline", () => {
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
     expect(items.some((item) => item.tripType === "ow")).toBe(true);
-    // 10 discovery calls + <= 20 verify calls <= 30 external fetches (<50 Workers Free subrequest cap)
-    expect(fetchCount).toBeLessThanOrEqual(30);
+    // 70 discovery calls (5 origins x 2 trip types x 7 calendar months) + <= 200 verify calls
+    expect(fetchCount).toBeLessThanOrEqual(270);
     expect(items.length).toBeGreaterThanOrEqual(15);
-    expect(items.length).toBeLessThanOrEqual(20);
+    expect(items.length).toBeLessThanOrEqual(200);
   });
 
   it("skips discovery items whose found_at is already stale so fresher candidates keep Stage 2 quota", async () => {

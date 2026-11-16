@@ -88,7 +88,7 @@ export interface DestinationMeta {
   countryZhTW: string;
   countryEn: string;
   region: FlightRegion;
-  /** Typical roundtrip market baseline in TWD used to score discounts. */
+  /** Typical roundtrip baseline in TWD; only scores the curated fallback board (live fares use the day's median). */
   baselineTwd: number;
 }
 
@@ -641,6 +641,30 @@ export function getDestinationMeta(airport: string): DestinationMeta | null {
   return DESTINATION_BY_AIRPORT.get(airport.toUpperCase()) ?? null;
 }
 
+/** City-only names for cities whose airport name carries a suffix (`東京成田` -> `東京`). */
+const CITY_NAMES: Readonly<Record<string, { zhTW: string; en: string }>> = {
+  tyo: { zhTW: "東京", en: "Tokyo" },
+  osa: { zhTW: "大阪", en: "Osaka" },
+  spk: { zhTW: "札幌", en: "Sapporo" },
+  oka: { zhTW: "沖繩", en: "Okinawa" },
+  sel: { zhTW: "首爾", en: "Seoul" },
+  bkk: { zhTW: "曼谷", en: "Bangkok" },
+  sha: { zhTW: "上海", en: "Shanghai" },
+  bjs: { zhTW: "北京", en: "Beijing" },
+  lon: { zhTW: "倫敦", en: "London" },
+  par: { zhTW: "巴黎", en: "Paris" },
+  nyc: { zhTW: "紐約", en: "New York" },
+};
+
+/** City-only display name for a destination airport (airports of one city share it). */
+export function getCityName(airport: string, lang: "zh-TW" | "en"): string {
+  const meta = getDestinationMeta(airport);
+  if (meta === null) return airport.toUpperCase();
+  const city = CITY_NAMES[meta.cityCode];
+  const names = city ?? meta;
+  return lang === "en" ? names.en : names.zhTW;
+}
+
 /** Resolves Trip.com city code from an IATA airport code. */
 export function airportCityCode(airport: string): string {
   const upper = airport.toUpperCase();
@@ -1158,6 +1182,26 @@ export function sortDailyFlights(
     }
     return sign * (a.priceTwd - b.priceTwd) || b.discountPct - a.discountPct;
   });
+}
+
+/** Departure window of the public board: 14 days to 6 months from `todayIso`, inclusive. */
+export function departureBounds(todayIso: string): { from: string; to: string } {
+  const [y, m, day] = todayIso.split("-").map(Number) as [number, number, number];
+  const first = new Date(Date.UTC(y, m - 1 + 6, 1));
+  const lastDay = new Date(
+    Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  first.setUTCDate(Math.min(day, lastDay));
+  return { from: addDays(todayIso, 14), to: first.toISOString().slice(0, 10) };
+}
+
+/** Keeps only fares departing inside the board's window (never under 14 days or over 6 months). */
+export function withinDepartureWindow<T extends { outDate: string }>(
+  items: readonly T[],
+  todayIso: string,
+): T[] {
+  const { from, to } = departureBounds(todayIso);
+  return items.filter((item) => item.outDate >= from && item.outDate <= to);
 }
 
 function addDays(baseIso: string, days: number): string {

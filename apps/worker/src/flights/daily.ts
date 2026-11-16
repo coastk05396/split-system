@@ -1,6 +1,7 @@
 import {
   getDefaultDailyFlights,
   getDestinationMeta,
+  withinDepartureWindow,
   type DailyFlightItem,
   type DailyFlightsResponse,
 } from "@split/shared/flights";
@@ -73,7 +74,7 @@ function buildFallbackResponse(now: number): DailyFlightsResponse {
   return {
     date: today,
     updatedAt: new Date(now).toISOString(),
-    items: getDefaultDailyFlights(today),
+    items: withinDepartureWindow(getDefaultDailyFlights(today), today),
     isFallback: true,
   };
 }
@@ -100,7 +101,7 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .where(eq(dailyFlights.digestDate, latest.digestDate))
     .orderBy(asc(dailyFlights.priceTwd));
 
-  const upcomingRows = rows.filter((row) => row.outDate >= today);
+  const upcomingRows = withinDepartureWindow(rows, today);
   if (upcomingRows.length === 0) {
     return buildFallbackResponse(now);
   }
