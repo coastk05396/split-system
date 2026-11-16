@@ -1,12 +1,12 @@
 import { type DailyFlightItem, getAirlineName, type Language } from "@split/shared";
-import { ChevronDown, Moon } from "lucide-react";
+import { ChevronDown, ExternalLink, Moon } from "lucide-react";
 import { useId, useState } from "react";
 import { t } from "../i18n/messages.js";
 import { CountryFlag } from "./CountryFlag.js";
 import type { CityGroup } from "./groups.js";
 import { FlightBookAnchor, flightCityLabel, flightDestinationLabel } from "./ui.js";
 
-const SECONDARY_TEXT = "text-[#5f7068]";
+const SECONDARY_TEXT = "text-slate-700";
 
 function routeText(item: DailyFlightItem): string {
   return `${item.origin} ${item.tripType === "rt" ? "⇄" : "→"} ${item.dest}`;
@@ -31,14 +31,14 @@ function shortDate(iso: string): string {
 const SOLID_BADGE_MIN_PCT = 40;
 const SIGNAL_MIN_PCT = 15;
 const BADGE_TEXT =
-  "mt-1 inline-block text-[11px] leading-4 font-semibold whitespace-nowrap tabular-nums";
+  "mt-1 inline-block text-[13px] leading-4 font-semibold whitespace-nowrap tabular-nums";
 
 function DealBadge({ item }: { item: DailyFlightItem }) {
   const pct = item.discountPct;
   if (pct <= 0) return null;
   if (pct >= SOLID_BADGE_MIN_PCT) {
     return (
-      <span className="mt-1 inline-block rounded-full bg-sprout-600 px-1.5 py-px text-[11px] leading-4 font-semibold whitespace-nowrap text-white tabular-nums">
+      <span className="mt-1 inline-block rounded-full bg-sprout-600 px-2 py-px text-[13px] leading-4 font-semibold whitespace-nowrap text-white tabular-nums">
         {t("flights.deal.save", { pct })}
       </span>
     );
@@ -59,7 +59,7 @@ function DealBadge({ item }: { item: DailyFlightItem }) {
 function Price({ item, small = false }: { item: DailyFlightItem; small?: boolean }) {
   return (
     <span className="flex items-baseline justify-end gap-0.5">
-      <span className="text-[10px] font-semibold text-slate-400">NT$</span>
+      <span className="text-xs font-semibold text-slate-400">NT$</span>
       <span
         className={`${small ? "text-lg" : "text-[26px]"} leading-none font-black tracking-tight text-slate-900 tabular-nums`}
       >
@@ -86,21 +86,24 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
           onClick={() => {
             setOpen((prev) => !prev);
           }}
-          className="press-card flex min-h-[76px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-2xl px-3 py-3 text-left"
+          className="press-card flex min-h-[82px] w-full min-w-0 cursor-pointer items-center gap-2 rounded-2xl px-3 py-3 text-left sm:gap-2.5 sm:px-3.5 sm:py-3.5"
         >
-          <CountryFlag countryCode={dest.countryCode} className="size-8 shrink-0 shadow-2xs" />
+          <CountryFlag
+            countryCode={dest.countryCode}
+            className="size-8 shrink-0 shadow-2xs sm:size-9"
+          />
           <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-              <span className="flight-card-city truncate text-[15px] font-bold text-slate-900">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 overflow-hidden">
+              <span className="flight-card-city truncate text-xl font-bold text-slate-900">
                 {flightCityLabel(cheapest, lang)}
               </span>
-              <span className="flight-card-route shrink-0 rounded-full bg-sprout-50 px-1 py-0.5 text-[10px] font-extrabold tracking-tight whitespace-nowrap text-sprout-700 tabular-nums">
+              <span className="flight-card-route max-w-full truncate rounded-full bg-sprout-50 px-1.5 py-0.5 text-xs font-extrabold tracking-tight whitespace-nowrap text-sprout-700 tabular-nums min-[360px]:px-2 min-[360px]:text-[15px]">
                 {routeText(cheapest)}
               </span>
               {cheapest.isRedEye && <RedEye />}
             </span>
             <span
-              className={`mt-1 flex min-w-0 items-center text-xs whitespace-nowrap ${SECONDARY_TEXT}`}
+              className={`mt-1 flex min-w-0 items-center text-[13px] whitespace-nowrap ${SECONDARY_TEXT}`}
             >
               <span className="min-w-0 truncate">{airlineLabel(cheapest, lang)}</span>
               <span className="shrink-0">
@@ -125,26 +128,28 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
       </h2>
 
       {open && (
-        <ul id={panelId} className="border-t border-slate-100 py-1">
+        <ul id={panelId} className="divide-y divide-slate-100 border-t border-slate-100">
           {group.fares.map((fare, index) => (
             <li key={fare.id} className="min-w-0">
               <FlightBookAnchor
                 item={fare}
                 lang={lang}
-                className={`flex min-h-14 w-full min-w-0 items-center gap-2 px-3 py-2 ${
+                className={`flex min-h-16 w-full min-w-0 items-center gap-2 px-3 py-3 transition-colors hover:bg-slate-50/80 sm:px-3.5 ${
                   index === 0 ? "bg-sprout-50" : ""
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold whitespace-nowrap text-slate-900 tabular-nums">
+                  <span className="block truncate text-[15px] font-semibold whitespace-nowrap text-slate-900 tabular-nums">
                     {fare.inDate === null
                       ? shortDate(fare.outDate)
                       : `${shortDate(fare.outDate)} – ${shortDate(fare.inDate)}`}
                   </span>
                   <span
-                    className={`flex min-w-0 items-center text-xs whitespace-nowrap ${SECONDARY_TEXT}`}
+                    className={`mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] ${SECONDARY_TEXT}`}
                   >
-                    <span className="shrink-0">{`${routeText(fare)} ·\u00A0`}</span>
+                    <span className="shrink-0 rounded-full bg-sprout-50 px-1.5 py-0.5 text-xs font-bold text-sprout-700 tabular-nums">
+                      {routeText(fare)}
+                    </span>
                     <span className="min-w-0 truncate">{airlineLabel(fare, lang)}</span>
                     <span className="shrink-0">
                       {`\u00A0· ${directness(fare)}`}
@@ -156,6 +161,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                   <Price item={fare} small />
                   <DealBadge item={fare} />
                 </span>
+                <ExternalLink aria-hidden="true" className="size-3.5 shrink-0 text-slate-400" />
               </FlightBookAnchor>
             </li>
           ))}

@@ -170,13 +170,14 @@ describe("daily flights page", () => {
       "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&tripType=rt&lang=zh-TW&inDate=2027-01-16",
     ]);
     expect(rows[0]).toHaveTextContent("12/10 – 12/14");
-    expect(rows[0]).toHaveTextContent("TPE ⇄ NRT · 樂桃航空 · 直飛 · 紅眼");
+    expect(rows[0]).toHaveTextContent("TPE ⇄ NRT");
+    expect(rows[0]).toHaveTextContent("樂桃航空 · 直飛 · 紅眼");
     expect(rows[0]).toHaveTextContent("5,680");
     expect(rows[0]).toHaveTextContent("省 45%");
     // Two airports of one city in one card: each row shows its own airport pair
     expect(rows[1]).toHaveTextContent("TSA ⇄ HND");
     expect(rows[2]).toHaveTextContent("KHH ⇄ NRT");
-    expect(rows[2]).toHaveTextContent("1 轉機");
+    expect(rows[2]).toHaveTextContent("1轉");
     expect(rows[0]).toHaveClass("bg-sprout-50");
     expect(rows[1]).not.toHaveClass("bg-sprout-50");
     expect(rows.every((r) => !/Trip\.com/i.test(r.textContent))).toBe(true);
@@ -241,7 +242,7 @@ describe("daily flights page", () => {
     expect(cityHeadings()).toHaveLength(2);
     expect(cityHeadings()[0]).toHaveTextContent("曼谷");
     expect(cityHeadings()[0]).toHaveTextContent("TPE → BKK");
-    expect(cityHeadings()[1]).toHaveTextContent("1 轉機");
+    expect(cityHeadings()[1]).toHaveTextContent("1轉");
 
     const tabs = screen.getByRole("group", { name: "目的地" });
     expect(tabs.className).toContain("overflow-x-auto");
@@ -502,6 +503,8 @@ describe("daily flights page", () => {
     expect(footer).toHaveClass("shrink-0");
     expect(resetBtn).toBeVisible();
     expect(scrollableBody).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
+    expect(within(dialog).getByRole("button", { name: /^東京\s*4$/ })).toBeVisible();
+    expect(within(dialog).queryByRole("button", { name: /東京成田|東京羽田|大阪關西/ })).toBeNull();
   });
 
   it("opens booking links in the external browser when inside LINE", async () => {

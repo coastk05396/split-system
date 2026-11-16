@@ -42,13 +42,32 @@ function addDaysIso(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+interface MonthMatrixCall {
+  origin: string;
+  destination: string;
+  oneWay: boolean;
+  month: string;
+  currency: string | null;
+  showToAffiliates: string | null;
+}
+
 /**
- * Fake Travelpayouts `prices_for_dates`: discovery (`departure_at=YYYY-MM`, no destination) returns
- * `fares(origin, oneWay, month)`; verification (`destination` + full date) re-serves the same fare.
+ * Fake Travelpayouts `prices_for_dates` + `month-matrix`: discovery (`departure_at=YYYY-MM`, no
+ * destination) returns `fares(origin, oneWay, month)`; verification (`destination` + full date)
+ * re-serves the same fare; `month-matrix` returns `monthMatrix(...)` prices when provided.
  */
-function fakeTravelpayouts(fares: (origin: string, oneWay: boolean, month: string) => FakeFare[]) {
+function fakeTravelpayouts(
+  fares: (origin: string, oneWay: boolean, month: string) => FakeFare[],
+  monthMatrix?: (
+    origin: string,
+    destination: string,
+    oneWay: boolean,
+    month: string,
+  ) => { status?: number; prices: number[] } | null,
+) {
   const discoveries: { origin: string; oneWay: boolean; month: string; unique: string | null }[] =
     [];
+  const monthMatrixCalls: MonthMatrixCall[] = [];
   let verifyCount = 0;
   let inFlight = 0;
   let maxInFlight = 0;
@@ -80,6 +99,37 @@ function fakeTravelpayouts(fares: (origin: string, oneWay: boolean, month: strin
       const url = new URL(rawUrl);
       const origin = url.searchParams.get("origin") ?? "";
       const oneWay = url.searchParams.get("one_way") === "true";
+
+      if (url.pathname.includes("month-matrix")) {
+        const destination = url.searchParams.get("destination") ?? "";
+        const month = url.searchParams.get("month") ?? "";
+        monthMatrixCalls.push({
+          origin,
+          destination,
+          oneWay,
+          month,
+          currency: url.searchParams.get("currency"),
+          showToAffiliates: url.searchParams.get("show_to_affiliates"),
+        });
+        const result = monthMatrix
+          ? monthMatrix(origin, destination, oneWay, month)
+          : { prices: [] };
+        if (result === null) {
+          throw new Error("network error");
+        }
+        if (result.status && result.status >= 400) {
+          return new Response("upstream error", { status: result.status });
+        }
+        return Response.json({
+          success: true,
+          data: result.prices.map((value, idx) => ({
+            value,
+            depart_date: `${month.slice(0, 7)}-${String(idx + 1).padStart(2, "0")}`,
+            number_of_changes: 0,
+          })),
+        });
+      }
+
       const departure = url.searchParams.get("departure_at") ?? "";
       const destination = url.searchParams.get("destination");
       if (destination === null) {
@@ -112,6 +162,7 @@ function fakeTravelpayouts(fares: (origin: string, oneWay: boolean, month: strin
   return {
     fetchFn,
     discoveries,
+    monthMatrixCalls,
     stats: () => ({ verifyCount, maxInFlight }),
   };
 }
@@ -360,6 +411,112 @@ describe("public flight routes and daily pipeline", () => {
     expect(signal("BKK", "ow", 2600)).toEqual({ tag: "normal", discountPct: 0 });
     // HKG has only 2 candidates: too few to compare, so no signal
     expect(signal("HKG", "rt", 1000)).toEqual({ tag: "normal", discountPct: 0 });
+  });
+
+  it("uses Travelpayouts month-matrix median as Deal Signal baseline when >= 3 prices are returned, deduplicated per (origin, dest, tripType, month)", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
+    const fake = fakeTravelpayouts(
+      (origin, oneWay, month) => {
+        if (origin !== "TPE" || month !== "2026-12") return [];
+        if (oneWay) {
+          return [{ dest: "NRT", day: 5, price: 2100 }];
+        }
+        return [
+          { dest: "NRT", day: 5, price: 4200 },
+          { dest: "NRT", day: 12, price: 5600 },
+        ];
+      },
+      (origin, destination, oneWay, month) => {
+        if (origin === "TPE" && destination === "NRT" && month === "2026-12-01") {
+          return oneWay
+            ? { prices: [2000, 3000, 4000] } // median 3000
+            : { prices: [4000, 6000, 8000, 10000] }; // median 7000
+        }
+        return { prices: [] };
+      },
+    );
+
+    const db = createDb(env.DB);
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
+
+    // Deduplicated: 2 rt candidates in 2026-12 -> 1 month-matrix call; 1 ow candidate -> 1 call
+    expect(fake.monthMatrixCalls).toEqual([
+      {
+        origin: "TPE",
+        destination: "NRT",
+        oneWay: false,
+        month: "2026-12-01",
+        currency: "twd",
+        showToAffiliates: "true",
+      },
+      {
+        origin: "TPE",
+        destination: "NRT",
+        oneWay: true,
+        month: "2026-12-01",
+        currency: "twd",
+        showToAffiliates: "true",
+      },
+    ]);
+    expect(fake.stats().maxInFlight).toBe(1);
+
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    const { items } = await res.json<DailyFlightsResponse>();
+    const signal = (tripType: string, price: number) => {
+      const item = items.find(
+        (i) => i.dest === "NRT" && i.tripType === tripType && i.priceTwd === price,
+      );
+      return item && { tag: item.tag, discountPct: item.discountPct };
+    };
+
+    // Even though Stage 1 only has 2 rt and 1 ow candidates, month-matrix provides >= 3 prices
+    // 4200 vs 7000 = 40% (steal); 5600 vs 7000 = 20% (below_market); 2100 vs 3000 = 30% (steal)
+    expect(signal("rt", 4200)).toEqual({ tag: "steal", discountPct: 40 });
+    expect(signal("rt", 5600)).toEqual({ tag: "below_market", discountPct: 20 });
+    expect(signal("ow", 2100)).toEqual({ tag: "steal", discountPct: 30 });
+  });
+
+  it("falls back to Stage 1 same-day median when month-matrix fails or returns fewer than 3 prices", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
+    const fake = fakeTravelpayouts(
+      (origin, oneWay, month) => {
+        if (origin !== "TPE" || oneWay || month !== "2026-12") return [];
+        // BKK has 3 Stage 1 candidates (median 5000); KIX has 3 (median 6000); HKG has 2 (< 3)
+        return [
+          { dest: "BKK", day: 3, price: 3000 },
+          { dest: "BKK", day: 6, price: 5000 },
+          { dest: "BKK", day: 9, price: 7000 },
+          { dest: "KIX", day: 4, price: 4200 },
+          { dest: "KIX", day: 8, price: 6000 },
+          { dest: "KIX", day: 12, price: 8000 },
+          { dest: "HKG", day: 5, price: 2000 },
+          { dest: "HKG", day: 10, price: 4000 },
+        ];
+      },
+      (_origin, destination) => {
+        if (destination === "BKK") return { status: 500, prices: [] };
+        if (destination === "KIX") return { prices: [1000, 2000] }; // < 3 items
+        return null; // network error for HKG
+      },
+    );
+
+    const db = createDb(env.DB);
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    const { items } = await res.json<DailyFlightsResponse>();
+    const signal = (dest: string, price: number) => {
+      const item = items.find((i) => i.dest === dest && i.priceTwd === price);
+      return item && { tag: item.tag, discountPct: item.discountPct };
+    };
+
+    // BKK (HTTP 500) falls back to Stage 1 median 5000 -> 3000 is 40% off
+    expect(signal("BKK", 3000)).toEqual({ tag: "steal", discountPct: 40 });
+    // KIX (< 3 month-matrix prices) falls back to Stage 1 median 6000 -> 4200 is 30% off
+    expect(signal("KIX", 4200)).toEqual({ tag: "steal", discountPct: 30 });
+    // HKG (network error + < 3 Stage 1 candidates) has no signal
+    expect(signal("HKG", 2000)).toEqual({ tag: "normal", discountPct: 0 });
   });
 
   it("drops ghost fares, keeps & tags red-eye flights, and serves persisted D1 deals", async () => {
@@ -840,10 +997,13 @@ describe("public flight routes and daily pipeline", () => {
     let fetchCount = 0;
 
     const fakeFetch: typeof fetch = (input) => {
-      fetchCount += 1;
       const rawUrl =
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
+      fetchCount += 1;
+      if (url.pathname.includes("month-matrix")) {
+        return Promise.resolve(Response.json({ success: true, data: [] }));
+      }
       const origin = url.searchParams.get("origin") ?? "TPE";
       const destination = url.searchParams.get("destination");
       const oneWay = url.searchParams.get("one_way") === "true";
@@ -895,8 +1055,8 @@ describe("public flight routes and daily pipeline", () => {
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
     expect(items.some((item) => item.tripType === "ow")).toBe(true);
-    // 70 discovery calls (5 origins x 2 trip types x 7 calendar months) + <= 200 verify calls
-    expect(fetchCount).toBeLessThanOrEqual(270);
+    // 70 discovery calls + <= 200 deduplicated month-matrix calls + <= 200 verify calls
+    expect(fetchCount).toBeLessThanOrEqual(470);
     expect(items.length).toBeGreaterThanOrEqual(15);
     expect(items.length).toBeLessThanOrEqual(200);
   });

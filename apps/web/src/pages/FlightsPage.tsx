@@ -8,7 +8,10 @@ import {
   type FlightRegion,
   type FlightTripType,
   getAirlineName,
+  getCityName,
+  getFlightCityCode,
   type Language,
+  matchesFlightDest,
   ORIGIN_META,
 } from "@split/shared";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -18,7 +21,7 @@ import { useDailyFlights } from "../flights/api.js";
 import { CityFlightCard } from "../flights/CityFlightCard.js";
 import { groupByCity } from "../flights/groups.js";
 import { FlightsIconTile, FlightsTitle } from "../flights/FlightsTitle.js";
-import { flightDestinationLabel, flightsUpdatedNote } from "../flights/ui.js";
+import { flightsUpdatedNote } from "../flights/ui.js";
 import { Loading } from "../groups/ui.js";
 import { getLocale, type MessageId, t } from "../i18n/messages.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
@@ -65,10 +68,10 @@ function collectDestinationOptions(
 ): Array<{ code: string; label: string }> {
   const seen = new Map<string, string>();
   for (const item of items) {
-    const code = item.dest.toUpperCase();
+    const code = getFlightCityCode(item.dest);
     if (seen.has(code)) continue;
     if (region !== "all" && item.region !== region && code !== selectedDest) continue;
-    seen.set(code, flightDestinationLabel(item, lang).city);
+    seen.set(code, getCityName(item.dest, lang));
   }
   return [...seen.entries()].map(([code, label]) => ({ code, label }));
 }
@@ -155,7 +158,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     if (
       dest !== "all" &&
       next !== "all" &&
-      !items.some((item) => item.dest.toUpperCase() === dest && item.region === next)
+      !items.some((item) => matchesFlightDest(item.dest, dest) && item.region === next)
     ) {
       setDest("all");
     }

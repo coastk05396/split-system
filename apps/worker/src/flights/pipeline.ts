@@ -52,7 +52,7 @@ export interface FlightCandidate {
   outboundArr?: string | null;
   inboundArr?: string | null;
   digestDate?: string;
-  /** Median Stage 1 price for this destination and trip type; null/absent means no Deal Signal. */
+  /** Monthly route-median (or Stage 1 fallback) price for this route and trip type; null/absent means no Deal Signal. */
   dealBaselineTwd?: number | null;
 }
 
@@ -130,6 +130,17 @@ type TravelpayoutsItem = z.infer<typeof travelpayoutsItemSchema>;
 const travelpayoutsResponseSchema = z.object({
   success: z.boolean().optional(),
   data: z.array(travelpayoutsItemSchema).optional().default([]),
+});
+
+const monthMatrixItemSchema = z.object({
+  value: z.number().positive(),
+  depart_date: z.string().optional(),
+  number_of_changes: z.number().int().min(0).optional(),
+});
+
+const monthMatrixResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: z.array(monthMatrixItemSchema).optional().default([]),
 });
 
 type FetchFn = (
@@ -252,14 +263,16 @@ function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
   return selected;
 }
 
-async function fetchTravelpayoutsPrices(
+async function fetchTravelpayoutsJson<T>(
   fetchFn: FetchFn,
   token: string,
+  endpoint: string,
   query: Record<string, string>,
+  schema: z.ZodType<T>,
   logContext: { event: string; [key: string]: unknown },
-): Promise<TravelpayoutsItem[] | null> {
+): Promise<T | null> {
   try {
-    const url = new URL("https://api.travelpayouts.com/aviasales/v3/prices_for_dates");
+    const url = new URL(endpoint);
     for (const [k, v] of Object.entries(query)) {
       url.searchParams.set(k, v);
     }
@@ -271,12 +284,45 @@ async function fetchTravelpayoutsPrices(
       console.warn(JSON.stringify({ ...logContext, status: res.status }));
       return null;
     }
-    const body = travelpayoutsResponseSchema.parse(await res.json());
-    return body.data;
+    return schema.parse(await res.json());
   } catch (error) {
     console.warn(JSON.stringify({ ...logContext, error: String(error) }));
     return null;
   }
+}
+
+async function fetchTravelpayoutsPrices(
+  fetchFn: FetchFn,
+  token: string,
+  query: Record<string, string>,
+  logContext: { event: string; [key: string]: unknown },
+): Promise<TravelpayoutsItem[] | null> {
+  const parsed = await fetchTravelpayoutsJson(
+    fetchFn,
+    token,
+    "https://api.travelpayouts.com/aviasales/v3/prices_for_dates",
+    query,
+    travelpayoutsResponseSchema,
+    logContext,
+  );
+  return parsed ? parsed.data : null;
+}
+
+async function fetchMonthMatrixPrices(
+  fetchFn: FetchFn,
+  token: string,
+  query: Record<string, string>,
+  logContext: { event: string; [key: string]: unknown },
+): Promise<number[] | null> {
+  const parsed = await fetchTravelpayoutsJson(
+    fetchFn,
+    token,
+    "https://api.travelpayouts.com/v2/prices/month-matrix",
+    query,
+    monthMatrixResponseSchema,
+    logContext,
+  );
+  return parsed ? parsed.data.map((d) => Math.round(d.value)) : null;
 }
 
 /**
@@ -358,14 +404,56 @@ export function productionFlightSource(
 
       if (collected.length === 0) return [];
 
-      // Deal Signal baseline: median of the whole Stage 1 pool per destination and trip type.
-      const prices = new Map<string, number[]>();
+      // Deal Signal baseline: Travelpayouts month-matrix median per (origin, dest, tripType, month),
+      // falling back to the Stage 1 same-day pool median per destination and trip type.
+      const stage1Prices = new Map<string, number[]>();
       for (const c of collected) {
         const key = `${c.dest}-${c.tripType}`;
-        prices.set(key, [...(prices.get(key) ?? []), c.priceTwd]);
+        stage1Prices.set(key, [...(stage1Prices.get(key) ?? []), c.priceTwd]);
       }
-      return selectBoard(collected).map((c) => {
-        const group = prices.get(`${c.dest}-${c.tripType}`) ?? [];
+
+      const selected = selectBoard(collected);
+      const monthBaselines = new Map<string, number | null>();
+      for (const c of selected) {
+        const month = `${c.outDate.slice(0, 7)}-01`;
+        const matrixKey = `${c.origin}-${c.dest}-${c.tripType}-${month}`;
+        if (monthBaselines.has(matrixKey)) continue;
+
+        const prices = await fetchMonthMatrixPrices(
+          fetchFn,
+          token,
+          {
+            origin: c.origin,
+            destination: c.dest,
+            month,
+            currency: "twd",
+            limit: "100",
+            show_to_affiliates: "true",
+            one_way: c.tripType === "ow" ? "true" : "false",
+          },
+          {
+            event: "travelpayouts_month_matrix_failed",
+            origin: c.origin,
+            dest: c.dest,
+            tripType: c.tripType,
+            month,
+          },
+        );
+        monthBaselines.set(
+          matrixKey,
+          prices !== null && prices.length >= MIN_SIGNAL_CANDIDATES
+            ? median([...prices].sort((a, b) => a - b))
+            : null,
+        );
+      }
+
+      return selected.map((c) => {
+        const matrixKey = `${c.origin}-${c.dest}-${c.tripType}-${c.outDate.slice(0, 7)}-01`;
+        const matrixBaseline = monthBaselines.get(matrixKey) ?? null;
+        if (matrixBaseline !== null) {
+          return { ...c, dealBaselineTwd: matrixBaseline };
+        }
+        const group = stage1Prices.get(`${c.dest}-${c.tripType}`) ?? [];
         return {
           ...c,
           dealBaselineTwd:
