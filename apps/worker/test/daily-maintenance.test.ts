@@ -1,7 +1,12 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
-import { dailyMaintenance } from "../src/maintenance.js";
+import {
+  dailyMaintenance,
+  FLIGHTS_CRON,
+  MAINTENANCE_CRON,
+  runScheduled,
+} from "../src/maintenance.js";
 import type { AccountDeletionOperation } from "../src/ledger-types.js";
 import { bearer, call, clock } from "./auth-harness.js";
 import { groupWith } from "./groups-harness.js";
@@ -85,6 +90,31 @@ it("daily maintenance purges expired sessions and commits pending account cleanu
         .bind(date)
         .first(),
     ).toEqual({ rate_scaled: 1_000_000 });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("runScheduled dispatches 08:00 GMT+8 (0 0 * * *) exclusively for flights and 30 16 * * * for cleanup/rates", async () => {
+  const seenUrls: string[] = [];
+  vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    seenUrls.push(url);
+    return Promise.resolve(
+      url.includes("travelpayouts.com")
+        ? Response.json({ success: true, data: [] })
+        : Response.json({ date: "2026-11-16", rates: { TWD: 32 } }),
+    );
+  });
+  try {
+    await runScheduled(FLIGHTS_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
+    expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(true);
+    expect(seenUrls.some((u) => u.includes("frankfurter") || u.includes("er-api"))).toBe(false);
+
+    seenUrls.length = 0;
+    await runScheduled(MAINTENANCE_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
+    expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(false);
+    expect(seenUrls.length).toBeGreaterThan(0);
   } finally {
     vi.unstubAllGlobals();
   }

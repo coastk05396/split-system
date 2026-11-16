@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
 import {
+  collectVerifiedDailyFlights,
+  formatDailyFlightsSyncSql,
   listDailyFlights,
   productionFlightSource,
   refreshDailyFlights,
@@ -709,5 +711,43 @@ describe("public flight routes and daily pipeline", () => {
 
     expect(verifiedDests).toEqual(["NRT"]);
     expect(items.map((x) => x.dest)).toEqual(["NRT"]);
+  });
+
+  it("collectVerifiedDailyFlights and formatDailyFlightsSyncSql generate valid D1 SQL for manual sync", async () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z"); // 08:00 Taipei
+    const source: FlightSource = {
+      fetchCandidates: () =>
+        Promise.resolve([
+          {
+            id: "manual-tpe-oka",
+            origin: "TPE",
+            dest: "OKA",
+            tripType: "rt",
+            outDate: "2026-12-10",
+            inDate: "2026-12-14",
+            priceTwd: 4590,
+            airlines: ["MM"],
+            transfers: 0,
+            returnTransfers: 0,
+            outboundDep: "09:40",
+            inboundDep: "16:20",
+          },
+        ]),
+    };
+
+    const collected = await collectVerifiedDailyFlights(source, cronNow);
+    expect(collected.items).toHaveLength(1);
+    const sql = formatDailyFlightsSyncSql(collected.rows);
+    expect(sql).toContain("DELETE FROM daily_flights;");
+    expect(sql).toContain("INSERT INTO daily_flights");
+
+    const db = createDb(env.DB);
+    await env.DB.exec("DELETE FROM daily_flights;");
+    for (const stmt of sql.split(";\n").filter((s) => s.trim().length > 0)) {
+      await env.DB.prepare(stmt).run();
+    }
+    const resp = await listDailyFlights(db, cronNow);
+    expect(resp.isFallback).toBe(false);
+    expect(resp.items.map((i) => i.id)).toEqual(["manual-tpe-oka"]);
   });
 });

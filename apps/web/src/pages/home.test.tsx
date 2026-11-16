@@ -319,7 +319,7 @@ describe("home", () => {
     }
   });
 
-  it("omits fallback/pause clutter and displays the daily 00:30 refresh schedule in fallback and live modes", async () => {
+  it("omits fallback/pause clutter and displays the daily 08:00 refresh schedule in fallback and live modes", async () => {
     const { api } = renderApp({
       cookieUser: me,
       seed: (groups) => {
@@ -332,10 +332,10 @@ describe("home", () => {
     expect(within(marquee).queryByText("參考示範")).toBeNull();
     expect(within(marquee).queryByText("即時特價")).toBeNull();
     expect(within(marquee).queryByRole("button", { name: /暫停|繼續/ })).toBeNull();
-    expect(within(marquee).getByText(/每日 00:30（台灣時間）更新/)).toBeVisible();
+    expect(within(marquee).getByText(/每日 08:00（台灣時間）更新/)).toBeVisible();
   });
 
-  it("also displays the daily 00:30 refresh schedule when live flight deals are loaded", async () => {
+  it("also displays the daily 08:00 refresh schedule when live flight deals are loaded", async () => {
     const { api } = renderApp({
       cookieUser: me,
       seed: (groups) => {
@@ -346,6 +346,6 @@ describe("home", () => {
 
     const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
     expect(within(marquee).queryByText("即時特價")).toBeNull();
-    expect(within(marquee).getByText(/每日 00:30（台灣時間）更新/)).toBeVisible();
+    expect(within(marquee).getByText(/每日 08:00（台灣時間）更新/)).toBeVisible();
   });
 });

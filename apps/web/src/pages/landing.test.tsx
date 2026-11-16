@@ -61,7 +61,7 @@ describe("public landing route", () => {
     expect(screen.getByText("Sprout")).toBeVisible();
     expect(
       await screen.findByText(
-        "Showing curated preview deals; daily fares refresh at 00:30 (GMT+8).",
+        "Showing curated preview deals; daily fares refresh at 08:00 (GMT+8).",
       ),
     ).toBeVisible();
   });
