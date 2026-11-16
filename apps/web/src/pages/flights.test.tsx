@@ -503,4 +503,44 @@ describe("daily flights page", () => {
     expect(resetBtn).toBeVisible();
     expect(scrollableBody).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
   });
+
+  it("opens booking links in the external browser when inside LINE", async () => {
+    const user = userEvent.setup();
+    const view = renderApp({
+      path: "/flights",
+      insideLine: { idToken: null },
+    });
+    view.api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T00:00:00.000Z",
+      items: SAMPLE_FLIGHTS,
+      isFallback: false,
+    };
+
+    const tokyoToggle = await screen.findByRole("button", { name: /東京/ });
+    await user.click(tokyoToggle);
+
+    const card = tokyoToggle.closest(".flight-card") as HTMLElement;
+    const [firstLink] = within(card).getAllByRole("link");
+    if (!firstLink) throw new Error("Expected booking link");
+    await user.click(firstLink);
+
+    expect(view.lineExternalOpens).toHaveLength(1);
+    expect(view.lineExternalOpens[0]).toMatch(/^https?:\/\/[^/]+\/api\/v1\/flights\/go\?/);
+  });
+
+  it("uses plain booking anchors outside LINE without calling openExternal", async () => {
+    const user = userEvent.setup();
+    const view = setup();
+
+    const tokyoToggle = await screen.findByRole("button", { name: /東京/ });
+    await user.click(tokyoToggle);
+
+    const card = tokyoToggle.closest(".flight-card") as HTMLElement;
+    const [firstLink] = within(card).getAllByRole("link");
+    if (!firstLink) throw new Error("Expected booking link");
+    await user.click(firstLink);
+
+    expect(view.lineExternalOpens).toEqual([]);
+  });
 });

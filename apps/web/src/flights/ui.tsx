@@ -7,7 +7,8 @@ import {
   ORIGIN_META,
 } from "@split/shared";
 import { ExternalLink } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { useDeps } from "../app/AppProviders.js";
 import { t } from "../i18n/messages.js";
 
 /** Builds our stateless same-origin redirect path to localized booking search results. */
@@ -58,12 +59,28 @@ export function FlightBookAnchor({
   ariaLabel?: string;
   children?: ReactNode;
 }) {
+  const { line } = useDeps();
+  const href = tripGoHref(item, lang);
+
+  function handleClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (!line.isInClient()) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    const target = new URL(href, window.location.origin).toString();
+    void line.openExternal(target).catch(() => {
+      window.open(href, "_blank", "noopener,noreferrer");
+    });
+  }
+
   return (
     <a
-      href={tripGoHref(item, lang)}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={ariaLabel}
+      onClick={handleClick}
       className={className}
     >
       {children ?? (

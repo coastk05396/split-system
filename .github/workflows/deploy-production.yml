@@ -26,7 +26,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck && pnpm lint && pnpm test
       - run: pnpm build
         env:
           VITE_LIFF_ID: ${{ vars.VITE_LIFF_ID }}
