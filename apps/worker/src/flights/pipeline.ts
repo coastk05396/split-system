@@ -2,10 +2,11 @@ import {
   computeArrivalTimeHm,
   computeDealSignal,
   FLIGHT_ORIGINS,
+  FLIGHT_REGIONS,
+  FLIGHT_TRIP_TYPES,
   getDestinationMeta,
   hasRedEyeLeg,
   isGhostFare,
-  ONE_WAY_BASELINE_FACTOR,
   type DailyFlightItem,
   type DealTag,
   type FlightOrigin,
@@ -50,6 +51,8 @@ export interface FlightCandidate {
   outboundArr?: string | null;
   inboundArr?: string | null;
   digestDate?: string;
+  /** Median Stage 1 price for this destination and trip type; null/absent means no Deal Signal. */
+  dealBaselineTwd?: number | null;
 }
 
 export interface VerifiedFlightPrice {
@@ -68,14 +71,40 @@ export interface FlightSource {
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
 }
 
-// 5 origins * 2 trip types = 10 discovery calls + <=20 candidate checks = <=30 fetches (<50 Workers Free cap with D1).
-const REGION_LIMITS: Readonly<Record<FlightRegion, number>> = {
+// ~60-70 discovery calls + <=200 verifications per run, all sequential: needs Workers Paid (ADR 0008).
+const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 150, ow: 50 };
+const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
   jp: 7,
   kr: 3,
   sea: 4,
   hkmo: 3,
   longhaul: 3,
 };
+const MIN_LEAD_DAYS = 14;
+const WINDOW_MONTHS = 6;
+const MAX_DATES_PER_ROUTE = 5;
+/** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
+const MIN_SIGNAL_CANDIDATES = 3;
+const DISCOVERY_LIMIT = "100";
+
+/** Splits `total` across regions by `REGION_WEIGHTS` (largest remainder, ties by region order). */
+function splitQuota(total: number): Record<FlightRegion, number> {
+  const weightSum = FLIGHT_REGIONS.reduce((sum, r) => sum + REGION_WEIGHTS[r], 0);
+  const raw = FLIGHT_REGIONS.map((r) => (total * REGION_WEIGHTS[r]) / weightSum);
+  const quota = Object.fromEntries(
+    FLIGHT_REGIONS.map((r, i) => [r, Math.floor(raw[i] ?? 0)]),
+  ) as Record<FlightRegion, number>;
+  let spare = total - FLIGHT_REGIONS.reduce((sum, r) => sum + quota[r], 0);
+  const byRemainder = FLIGHT_REGIONS.map((r, i) => ({ r, frac: (raw[i] ?? 0) % 1 })).sort(
+    (a, b) => b.frac - a.frac,
+  );
+  for (const { r } of byRemainder) {
+    if (spare <= 0) break;
+    quota[r] += 1;
+    spare -= 1;
+  }
+  return quota;
+}
 
 const MAX_FOUND_AT_AGE_MS = 48 * 3_600_000;
 const TAIPEI_OFFSET_MS = 8 * 3_600_000;
@@ -155,23 +184,74 @@ function positiveDuration(minutes: number | null | undefined): number | null {
   return minutes !== null && minutes !== undefined && minutes > 0 ? minutes : null;
 }
 
-function balanceByRegion(candidates: readonly FlightCandidate[]): FlightCandidate[] {
-  const counts: Record<FlightRegion, number> = {
-    jp: 0,
-    kr: 0,
-    sea: 0,
-    hkmo: 0,
-    longhaul: 0,
-  };
-  const selected: FlightCandidate[] = [];
-  const sorted = [...candidates].sort((a, b) => a.priceTwd - b.priceTwd);
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
-  for (const item of sorted) {
-    const meta = getDestinationMeta(item.dest);
-    if (!meta) continue;
-    if (counts[meta.region] >= REGION_LIMITS[meta.region]) continue;
-    counts[meta.region] += 1;
-    selected.push(item);
+function addMonthsIso(iso: string, months: number): string {
+  const [y, m, day] = iso.split("-").map(Number) as [number, number, number];
+  const first = new Date(Date.UTC(y, m - 1 + months, 1));
+  const lastDay = new Date(
+    Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  first.setUTCDate(Math.min(day, lastDay));
+  return first.toISOString().slice(0, 10);
+}
+
+/** Departure window: 14 days to 6 months from the run date (inclusive), plus its calendar months. */
+function discoveryWindow(digestDate: string): { from: string; to: string; months: string[] } {
+  const from = addDaysIso(digestDate, MIN_LEAD_DAYS);
+  const to = addMonthsIso(digestDate, WINDOW_MONTHS);
+  const months: string[] = [];
+  for (let cursor = from.slice(0, 7); cursor <= to.slice(0, 7);) {
+    months.push(cursor);
+    cursor = addMonthsIso(`${cursor}-01`, 1).slice(0, 7);
+  }
+  return { from, to, months };
+}
+
+function median(sortedAsc: readonly number[]): number {
+  const mid = Math.floor(sortedAsc.length / 2);
+  const hi = sortedAsc[mid] ?? 0;
+  return sortedAsc.length % 2 === 1 ? hi : Math.round(((sortedAsc[mid - 1] ?? hi) + hi) / 2);
+}
+
+/**
+ * Picks the board: per trip type, a regional quota filled cheapest-first but round-robin across
+ * departure months (so every month is represented), with at most 5 dates per route.
+ */
+function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
+  const selected: FlightCandidate[] = [];
+  for (const tripType of FLIGHT_TRIP_TYPES) {
+    const left = splitQuota(TRIP_QUOTAS[tripType]);
+    const perRoute = new Map<string, number>();
+    const byMonth = new Map<string, FlightCandidate[]>();
+    for (const c of pool
+      .filter((x) => x.tripType === tripType)
+      .sort((a, b) => a.priceTwd - b.priceTwd)) {
+      const month = c.outDate.slice(0, 7);
+      byMonth.set(month, [...(byMonth.get(month) ?? []), c]);
+    }
+    const queues = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, q]) => q);
+
+    for (let progressed = true; progressed;) {
+      progressed = false;
+      for (const queue of queues) {
+        for (let c = queue.shift(); c !== undefined; c = queue.shift()) {
+          const region = getDestinationMeta(c.dest)?.region;
+          const route = `${c.origin}-${c.dest}`;
+          if (region === undefined || left[region] <= 0) continue;
+          if ((perRoute.get(route) ?? 0) >= MAX_DATES_PER_ROUTE) continue;
+          left[region] -= 1;
+          perRoute.set(route, (perRoute.get(route) ?? 0) + 1);
+          selected.push(c);
+          progressed = true;
+          break;
+        }
+      }
+    }
   }
   return selected;
 }
@@ -219,64 +299,83 @@ export function productionFlightSource(
 
       const collected: FlightCandidate[] = [];
       const seenKeys = new Set<string>();
+      const window = discoveryWindow(digestDate);
 
+      // Sequential on purpose: one upstream request at a time keeps us far below Travelpayouts' rate limit.
       for (const origin of FLIGHT_ORIGINS) {
         for (const oneWay of [false, true]) {
-          const data = await fetchTravelpayoutsPrices(
-            fetchFn,
-            token,
-            {
-              origin,
-              currency: "twd",
-              unique: "true",
-              sorting: "price",
-              limit: "30",
-              one_way: oneWay ? "true" : "false",
-            },
-            { event: "travelpayouts_fetch_failed", origin, oneWay },
-          );
-          if (data === null) continue;
+          for (const month of window.months) {
+            const data = await fetchTravelpayoutsPrices(
+              fetchFn,
+              token,
+              {
+                origin,
+                currency: "twd",
+                departure_at: month,
+                sorting: "price",
+                limit: DISCOVERY_LIMIT,
+                one_way: oneWay ? "true" : "false",
+              },
+              { event: "travelpayouts_fetch_failed", origin, oneWay, month },
+            );
+            if (data === null) continue;
 
-          for (const raw of data) {
-            if (!isAcceptableFoundAt(raw.found_at, now)) continue;
-            const parsedOrigin = resolveOriginAirport(raw);
-            const meta = resolveDestinationAirport(raw);
-            if (!parsedOrigin || !meta || !raw.departure_at) continue;
+            for (const raw of data) {
+              if (!isAcceptableFoundAt(raw.found_at, now)) continue;
+              const parsedOrigin = resolveOriginAirport(raw);
+              const meta = resolveDestinationAirport(raw);
+              if (!parsedOrigin || !meta || !raw.departure_at) continue;
 
-            const outDate = raw.departure_at.slice(0, 10);
-            const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
-            const tripType: FlightTripType = inDate ? "rt" : "ow";
-            const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
-            if (seenKeys.has(dedupeKey)) continue;
-            seenKeys.add(dedupeKey);
+              const outDate = raw.departure_at.slice(0, 10);
+              if (outDate < window.from || outDate > window.to) continue;
+              const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
+              const tripType: FlightTripType = inDate ? "rt" : "ow";
+              const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
+              if (seenKeys.has(dedupeKey)) continue;
+              seenKeys.add(dedupeKey);
 
-            collected.push({
-              id: `${digestDate}-${dedupeKey.toLowerCase()}`,
-              origin: parsedOrigin,
-              dest: meta.airport,
-              tripType,
-              outDate,
-              inDate,
-              priceTwd: Math.round(raw.price),
-              airlines: [raw.airline.toUpperCase()],
-              transfers: raw.transfers,
-              returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
-              outboundDep: extractTimePart(raw.departure_at),
-              inboundDep: extractTimePart(raw.return_at),
-              outboundArr: computeArrivalTimeHm(
-                raw.departure_at,
-                positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
-                meta.airport,
-              ),
-              inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
-              digestDate,
-            });
+              collected.push({
+                id: `${digestDate}-${dedupeKey.toLowerCase()}`,
+                origin: parsedOrigin,
+                dest: meta.airport,
+                tripType,
+                outDate,
+                inDate,
+                priceTwd: Math.round(raw.price),
+                airlines: [raw.airline.toUpperCase()],
+                transfers: raw.transfers,
+                returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
+                outboundDep: extractTimePart(raw.departure_at),
+                inboundDep: extractTimePart(raw.return_at),
+                outboundArr: computeArrivalTimeHm(
+                  raw.departure_at,
+                  positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
+                  meta.airport,
+                ),
+                inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
+                digestDate,
+              });
+            }
           }
         }
       }
 
       if (collected.length === 0) return [];
-      return balanceByRegion(collected);
+
+      // Deal Signal baseline: median of the whole Stage 1 pool per destination and trip type.
+      const prices = new Map<string, number[]>();
+      for (const c of collected) {
+        const key = `${c.dest}-${c.tripType}`;
+        prices.set(key, [...(prices.get(key) ?? []), c.priceTwd]);
+      }
+      return selectBoard(collected).map((c) => {
+        const group = prices.get(`${c.dest}-${c.tripType}`) ?? [];
+        return {
+          ...c,
+          dealBaselineTwd:
+            group.length >= MIN_SIGNAL_CANDIDATES ? median([...group].sort((a, b) => a - b)) : null,
+        };
+      });
     },
 
     async verifyCandidate(candidate, now = Date.now()) {
@@ -474,11 +573,7 @@ export async function collectVerifiedDailyFlights(
     }
 
     const isRedEye = hasRedEyeLeg([outboundDep, inboundDep, outboundArr, inboundArr]);
-    const baseline =
-      candidate.tripType === "ow"
-        ? Math.round(meta.baselineTwd * ONE_WAY_BASELINE_FACTOR)
-        : meta.baselineTwd;
-    const { discountPct, tag } = computeDealSignal(finalPrice, baseline);
+    const { discountPct, tag } = computeDealSignal(finalPrice, candidate.dealBaselineTwd ?? 0);
 
     rows.push({
       id: candidate.id,

@@ -9,6 +9,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { useAuth } from "../auth/AuthProvider.js";
+import { FlightsTitle } from "../flights/FlightsTitle.js";
 import { PublicHeader } from "../flights/PublicHeader.js";
 import { RouteError } from "./RouteError.js";
 import { Loading } from "../groups/ui.js";
@@ -88,7 +89,7 @@ function FlightsRoute() {
   if (state.status === "loading") return <Splash />;
   const content = (
     <Suspense fallback={<Loading />}>
-      <FlightsPage />
+      <FlightsPage standalone={state.status !== "signedIn"} />
     </Suspense>
   );
   if (state.status === "signedIn") {
@@ -96,13 +97,12 @@ function FlightsRoute() {
   }
   return (
     <div className="landing-editorial flex min-h-dvh flex-col">
-      <PublicHeader />
+      <PublicHeader title={<FlightsTitle compact />} />
       <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-5 pt-2 md:px-10 md:pt-4">
         {content}
       </main>
       <footer className="border-t border-sprout-900/10">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-6 text-xs text-ink-muted md:flex-row md:items-center md:justify-between md:px-10">
-          <span>{t("landing.footer")}</span>
           <span className="flex gap-4">
             <Link to="/terms" className="hover:text-sprout-900">
               {t("signIn.terms")}

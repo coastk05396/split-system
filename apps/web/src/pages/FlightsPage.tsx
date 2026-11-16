@@ -1,30 +1,26 @@
 import {
   type DailyFlightItem,
   type DailyFlightsFilter,
-  defaultSortDirection,
   filterDailyFlights,
   FLIGHT_ORIGINS,
   FLIGHT_REGIONS,
-  FLIGHT_SORT_OPTIONS,
   type FlightOrigin,
   type FlightRegion,
-  type FlightSortBy,
-  type FlightSortDirection,
   type FlightTripType,
   getAirlineName,
   type Language,
   ORIGIN_META,
-  sortDailyFlights,
 } from "@split/shared";
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowDown, ArrowUp, ArrowUpDown, RotateCcw, SlidersHorizontal, X } from "lucide-react";
+import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
 import { useDailyFlights } from "../flights/api.js";
-import { FlightBetaBadge } from "../flights/FlightBetaBadge.js";
-import { CompactFlightCard, flightDestinationLabel } from "../flights/ui.js";
+import { CityFlightCard } from "../flights/CityFlightCard.js";
+import { groupByCity, topDealCities } from "../flights/groups.js";
+import { FlightsIconTile, FlightsTitle } from "../flights/FlightsTitle.js";
+import { flightDestinationLabel, flightsUpdatedNote } from "../flights/ui.js";
 import { Loading } from "../groups/ui.js";
 import { getLocale, type MessageId, t } from "../i18n/messages.js";
-import { CuteTripPlaneIcon } from "./HomeIcons.js";
 import { SelectionPill } from "../shell/SelectionPill.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 
@@ -34,11 +30,6 @@ const REGION_LABELS: Record<FlightRegion, MessageId> = {
   sea: "flights.region.sea",
   hkmo: "flights.region.hkmo",
   longhaul: "flights.region.longhaul",
-};
-
-const SORT_SHORT_LABELS: Record<FlightSortBy, MessageId> = {
-  price: "flights.sort.priceShort",
-  discount: "flights.sort.discountShort",
 };
 
 const BUDGET_CAPS = [5000, 8000, 12000, 20000] as const;
@@ -57,10 +48,6 @@ const EN_MONTH_SHORT = [
   "Nov",
   "Dec",
 ] as const;
-
-function shortDateLabel(isoDate: string): string {
-  return isoDate.length >= 10 ? isoDate.slice(5).replace("-", "/") : isoDate;
-}
 
 function formatMonthChip(ym: string, lang: Language): string {
   const [year, monthStr] = ym.split("-");
@@ -108,20 +95,18 @@ function collectAirlineOptions(
 }
 
 /** Public + authed daily cheap flights radar (SPEC §6). */
-export function FlightsPage() {
+export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const locale = getLocale();
   const query = useDailyFlights();
   const [region, setRegion] = useState<FlightRegion | "all">("all");
   const [origin, setOrigin] = useState<FlightOrigin | "all">("all");
   const [dest, setDest] = useState<string>("all");
-  const [tripType, setTripType] = useState<FlightTripType | "all">("all");
+  const [tripType, setTripType] = useState<FlightTripType | null>(null);
   const [month, setMonth] = useState<string>("all");
   const [airline, setAirline] = useState<string>("all");
   const [directOnly, setDirectOnly] = useState(false);
   const [maxPriceTwd, setMaxPriceTwd] = useState<number | null>(null);
   const [excludeRedEye, setExcludeRedEye] = useState(false);
-  const [sortBy, setSortBy] = useState<FlightSortBy>("price");
-  const [sortDir, setSortDir] = useState<FlightSortDirection>("asc");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   function resetDrawerFilters() {
@@ -136,34 +121,22 @@ export function FlightsPage() {
 
   function resetFilters() {
     setRegion("all");
-    setTripType("all");
+    setTripType(null);
     resetDrawerFilters();
-    setSortBy("price");
-    setSortDir("asc");
-  }
-
-  function toggleTripType(target: FlightTripType) {
-    setTripType((prev) => (prev === target ? "all" : target));
-  }
-
-  function handleSortClick(target: FlightSortBy) {
-    if (sortBy === target) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortBy(target);
-    setSortDir(defaultSortDirection(target));
   }
 
   if (query.isPending) return <Loading />;
 
   const data = query.data;
   const items: readonly DailyFlightItem[] = data.items;
+  // 來回 is the default tab; boards with no round trips open on 單程 instead of an empty list.
+  const activeTripType: FlightTripType =
+    tripType ?? (items.some((item) => item.tripType === "rt") ? "rt" : "ow");
   const currentFilter: DailyFlightsFilter = {
     region,
     origin,
     dest,
-    tripType,
+    tripType: activeTripType,
     month,
     airline,
     directOnly,
@@ -172,7 +145,8 @@ export function FlightsPage() {
     excludeRedEye,
   };
   const filtered = filterDailyFlights(items, currentFilter);
-  const sorted = sortDailyFlights(filtered, sortBy, sortDir);
+  const groups = groupByCity(filtered);
+  const solidBadgeCities = topDealCities(groups);
   const destOptions = collectDestinationOptions(items, region, dest, locale);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
@@ -203,23 +177,12 @@ export function FlightsPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-3 pb-8">
-      <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="flight-badge-enter flex size-8 shrink-0 items-center justify-center rounded-xl bg-sprout-100 shadow-2xs">
-            <CuteTripPlaneIcon aria-hidden="true" className="size-6" />
-          </span>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-            {t("flights.title")}
-          </h1>
-          <FlightBetaBadge />
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-400 tabular-nums">
-          <span>{t("flights.count", { count: sorted.length })}</span>
-          <span aria-hidden="true">·</span>
-          <span>{t("flights.updatedAt", { date: shortDateLabel(data.date) })}</span>
-        </div>
-      </header>
+      {!standalone && (
+        <header className="-mx-3 flex items-center gap-2.5 rounded-3xl bg-linear-to-b from-sprout-50 to-transparent px-3 pt-4 pb-1">
+          <FlightsIconTile />
+          <FlightsTitle />
+        </header>
+      )}
 
       <div
         data-testid="flights-top-bar"
@@ -228,7 +191,7 @@ export function FlightsPage() {
         <div
           role="group"
           aria-label={t("flights.regionLabel")}
-          className="scroll-fade-x flex min-w-0 flex-1 items-center gap-4 overflow-x-auto pr-4"
+          className="scroll-fade-x flex min-w-0 flex-1 items-center gap-5 overflow-x-auto pr-4"
         >
           <RegionTab
             active={region === "all"}
@@ -250,100 +213,39 @@ export function FlightsPage() {
             </RegionTab>
           ))}
         </div>
-
-        <div
-          role="group"
-          aria-label={t("flights.sortLabel")}
-          className="flex shrink-0 items-center gap-2.5 pb-2"
-        >
-          {FLIGHT_SORT_OPTIONS.map((option) => {
-            const active = sortBy === option;
-            const SortIcon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
-            const label = t(SORT_SHORT_LABELS[option]);
-            const dirLabel = t(sortDir === "asc" ? "flights.sortDir.asc" : "flights.sortDir.desc");
-            const ariaLabel = active
-              ? t("flights.sortAriaActive", { label, dir: dirLabel })
-              : t("flights.sortAriaInactive", { label });
-            return (
-              <ToolbarSegment
-                key={option}
-                active={active}
-                ariaLabel={ariaLabel}
-                onClick={() => {
-                  handleSortClick(option);
-                }}
-              >
-                <span>{label}</span>
-                <SortIcon
-                  aria-hidden="true"
-                  className={`size-3 ${active ? "text-sprout-600" : "text-slate-400"}`}
-                />
-              </ToolbarSegment>
-            );
-          })}
-        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          aria-pressed={tripType === "rt"}
-          onClick={() => {
-            toggleTripType("rt");
-          }}
-          className={`press-pill cursor-pointer rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
-            tripType === "rt"
-              ? "border-sprout-500 bg-sprout-500 text-white shadow-2xs"
-              : "border-slate-200 bg-white text-slate-700 hover:border-sprout-500/40 hover:bg-sprout-50"
-          }`}
-        >
-          {t("flights.tripType.rt")}
-        </button>
-
-        <button
-          type="button"
-          aria-pressed={tripType === "ow"}
-          onClick={() => {
-            toggleTripType("ow");
-          }}
-          className={`press-pill cursor-pointer rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
-            tripType === "ow"
-              ? "border-sprout-500 bg-sprout-500 text-white shadow-2xs"
-              : "border-slate-200 bg-white text-slate-700 hover:border-sprout-500/40 hover:bg-sprout-50"
-          }`}
-        >
-          {t("flights.tripType.ow")}
-        </button>
-
-        <button
-          type="button"
-          aria-pressed={directOnly}
-          onClick={() => {
-            setDirectOnly((prev) => !prev);
-          }}
-          className={`press-pill cursor-pointer rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
-            directOnly
-              ? "border-sprout-500 bg-sprout-500 text-white shadow-2xs"
-              : "border-slate-200 bg-white text-slate-700 hover:border-sprout-500/40 hover:bg-sprout-50"
-          }`}
-        >
-          {t("flights.directOnly")}
-        </button>
+      <div className="flex items-center gap-2">
+        <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-full bg-slate-100 p-1">
+          {(["rt", "ow"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              aria-pressed={activeTripType === type}
+              onClick={() => {
+                setTripType(type);
+              }}
+              className={`press-pill min-h-9 flex-1 cursor-pointer rounded-full px-3 text-sm whitespace-nowrap transition-colors ${
+                activeTripType === type
+                  ? "bg-white font-bold text-sprout-700 shadow-sm"
+                  : "font-medium text-slate-500"
+              }`}
+            >
+              {t(type === "rt" ? "flights.tripType.rt" : "flights.tripType.ow")}
+            </button>
+          ))}
+        </div>
 
         <Dialog.Root open={filtersOpen} onOpenChange={setFiltersOpen}>
           <Dialog.Trigger asChild>
             <button
               type="button"
-              className={`press-pill inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
-                activeDrawerCount > 0
-                  ? "border-sprout-500 bg-sprout-50 text-sprout-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              }`}
+              className="press-pill inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-sprout-500 bg-white px-4 text-sm font-bold text-sprout-700"
             >
-              <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+              <SlidersHorizontal aria-hidden="true" className="size-4" />
               <span>{t("flights.filtersBtn")}</span>
               {activeDrawerCount > 0 && (
-                <span className="inline-flex size-4 items-center justify-center rounded-full bg-sprout-500 text-[10px] font-bold text-white tabular-nums">
+                <span className="inline-flex size-5 items-center justify-center rounded-full bg-sprout-500 text-[11px] font-bold text-white tabular-nums">
                   {activeDrawerCount}
                 </span>
               )}
@@ -531,7 +433,7 @@ export function FlightsPage() {
                     type="button"
                     className="press-pill cursor-pointer rounded-full bg-sprout-500 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-sprout-600 tabular-nums"
                   >
-                    {t("flights.filtersApplyCount", { count: sorted.length })}
+                    {t("flights.filtersApplyCount", { count: filtered.length })}
                   </button>
                 </Dialog.Close>
               </div>
@@ -540,7 +442,13 @@ export function FlightsPage() {
         </Dialog.Root>
       </div>
 
-      {sorted.length === 0 ? (
+      <p className="text-xs font-medium text-slate-500 tabular-nums">
+        {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
+          count: filtered.length,
+        })}
+      </p>
+
+      {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-200/80 bg-white px-6 py-10 text-center shadow-2xs">
           <SproutMascot className="size-20" mood="happy" />
           <h2 className="text-lg font-bold text-ink">{t("flights.empty.title")}</h2>
@@ -556,17 +464,20 @@ export function FlightsPage() {
         </div>
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {sorted.map((item) => (
-            <li key={item.id} className="min-w-0">
-              <CompactFlightCard item={item} lang={locale} />
+          {groups.map((group) => (
+            <li key={group.cityKey} className="min-w-0">
+              <CityFlightCard
+                group={group}
+                lang={locale}
+                solidBadge={solidBadgeCities.has(group.cityKey)}
+              />
             </li>
           ))}
         </ul>
       )}
 
       <p className="text-center text-xs text-slate-400">
-        {data.isFallback ? t("flights.fallbackNote") : t("flights.refreshSchedule")} ·{" "}
-        {t("flights.disclaimer")}
+        {flightsUpdatedNote(data.date, data.isFallback)}
       </p>
     </div>
   );
@@ -586,43 +497,17 @@ function RegionTab({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`press-pill relative shrink-0 cursor-pointer pb-2 text-sm font-bold transition-colors ${
-        active ? "text-sprout-700" : "text-slate-500 hover:text-slate-900"
+      className={`press-pill relative min-h-11 shrink-0 cursor-pointer pb-2 text-[15px] font-bold whitespace-nowrap transition-colors ${
+        active ? "text-sprout-700" : "font-medium text-slate-500 hover:text-slate-900"
       }`}
     >
       {children}
       {active && (
         <SelectionPill
           layoutId="flights-region-underline"
-          className="inset-x-0 bottom-0 h-0.5 rounded-full bg-sprout-500"
+          className="inset-x-0 bottom-0 h-[3px] rounded-full bg-sprout-500"
         />
       )}
-    </button>
-  );
-}
-
-function ToolbarSegment({
-  active,
-  ariaLabel,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  ariaLabel: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={ariaLabel}
-      onClick={onClick}
-      className={`press-pill inline-flex cursor-pointer items-center gap-0.5 text-xs font-bold transition-colors ${
-        active ? "text-sprout-700" : "text-slate-400 hover:text-slate-700"
-      }`}
-    >
-      {children}
     </button>
   );
 }

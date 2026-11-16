@@ -33,6 +33,28 @@ describe("public landing route", () => {
     expect(screen.getByText("回小芽一鍵分帳")).toBeVisible();
     expect(screen.queryByRole("heading", { level: 3, name: "每日低價雷達" })).toBeNull();
     expect(document.body.textContent).not.toMatch(/Trip\.com/i);
+
+    // Hero uses the app's sans heading font, and the footer drops the tagline
+    const hero = screen.getByRole("heading", { level: 1 });
+    expect(hero.className).not.toContain("font-serif");
+    expect(hero.className).toContain("font-black");
+    expect(screen.queryByText(/不經手任何款項/)).toBeNull();
+    expect(screen.getByRole("link", { name: "服務條款" })).toBeVisible();
+  });
+
+  it("shows the same city cards as /flights: city-only name, route chip, fare count, solid pill only on the top 3", async () => {
+    const { api } = renderApp({ path: "/landing" });
+    const board = await screen.findByRole("region", { name: "今日浮動特價機票" });
+    const cards = await within(board).findAllByRole("heading", { level: 2 });
+    expect(cards.length).toBeLessThanOrEqual(5); // shared title + at most 4 cards
+    expect(board.textContent).not.toMatch(/東京成田|大阪關西|首爾仁川/);
+    // Same shared title block as /flights, as an h2 under the page's h1
+    expect(within(board).getByRole("heading", { level: 2, name: "今日低價機票" })).toBeVisible();
+    expect(within(board).getByText("每天 08:00 更新")).toBeVisible();
+    expect(board.textContent).toMatch(/筆/);
+    expect(board.textContent).not.toMatch(/•/);
+    expect(board.querySelectorAll(".bg-sprout-600").length).toBeLessThanOrEqual(3);
+    expect(api.dailyFlights).toBeDefined();
   });
 
   it("lets visitors filter live floating deals and toggle to English on the landing page", async () => {

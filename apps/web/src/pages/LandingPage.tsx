@@ -1,10 +1,13 @@
-import { filterDailyFlights, type FlightRegion, sortDailyFlights } from "@split/shared";
+import { filterDailyFlights, type FlightRegion } from "@split/shared";
 import { ArrowRight, PlaneTakeoff, ReceiptText } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { CategoryIcon } from "../expenses/CategoryIcon.js";
 import { useDailyFlights } from "../flights/api.js";
-import { CompactFlightCard, PublicHeader } from "../flights/ui.js";
+import { CityFlightCard } from "../flights/CityFlightCard.js";
+import { FlightsIconTile, FlightsTitle } from "../flights/FlightsTitle.js";
+import { groupByCity, topDealCities } from "../flights/groups.js";
+import { flightsUpdatedNote, PublicHeader } from "../flights/ui.js";
 import { getLocale, type MessageId, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
 
@@ -28,12 +31,14 @@ export function LandingPage() {
   const filtered = filterDailyFlights(items, {
     region,
     origin: "all",
-    tripType: "all",
+    tripType: items.some((item) => item.tripType === "rt") ? "rt" : "ow",
     month: "all",
     directOnly: false,
     holidayOnly: false,
   });
-  const boardItems = sortDailyFlights(filtered, "discount").slice(0, 4);
+  // Same city cards, order and badge rule as /flights; only the four cheapest cities fit here
+  const boardGroups = groupByCity(filtered).slice(0, 4);
+  const solidBadgeCities = topDealCities(boardGroups);
 
   return (
     <div className="landing-editorial flex min-h-dvh flex-col">
@@ -41,7 +46,7 @@ export function LandingPage() {
       <main className="min-w-0 flex-1">
         <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-5 pt-6 pb-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12 md:px-10 md:pt-12 md:pb-20">
           <div className="min-w-0">
-            <h1 className="font-serif text-4xl leading-[1.22] font-semibold tracking-tight text-slate-900 md:text-5xl lg:text-[3.5rem]">
+            <h1 className="text-[27px] leading-[1.25] font-black tracking-tight text-slate-900 sm:text-4xl md:text-5xl lg:text-[3.5rem]">
               {t("landing.title")}
             </h1>
             <div className="mt-6 inline-flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs">
@@ -70,21 +75,11 @@ export function LandingPage() {
           <div className="relative flex min-w-0 flex-col gap-4">
             <section
               aria-label={t("landing.liveBoard.title")}
-              className="min-w-0 rounded-[1.75rem] border border-sprout-200/75 bg-white/95 p-5 shadow-lg shadow-slate-900/[0.04] backdrop-blur-sm"
+              className="-mx-3 min-w-0 rounded-[1.75rem] border border-sprout-200/75 bg-white/95 p-3 sm:mx-0 sm:p-5 shadow-lg shadow-slate-900/[0.04] backdrop-blur-sm"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="size-2.5 animate-pulse rounded-full bg-sprout-500 motion-reduce:animate-none"
-                  />
-                  <h2 className="text-base font-bold text-slate-900">
-                    {t("landing.liveBoard.title")}
-                  </h2>
-                </div>
-                <span className="rounded-full bg-sprout-100 px-2.5 py-0.5 text-[11px] font-bold text-sprout-700">
-                  {t("landing.liveBoard.badge")}
-                </span>
+              <div className="flex items-center gap-2.5">
+                <FlightsIconTile />
+                <FlightsTitle as="h2" />
               </div>
 
               <div
@@ -118,18 +113,20 @@ export function LandingPage() {
               )}
 
               <ul className="mt-3.5 flex min-w-0 flex-col gap-2" aria-live="polite">
-                {boardItems.map((item) => (
-                  <li key={item.id} className="min-w-0">
-                    <CompactFlightCard item={item} lang={locale} />
+                {boardGroups.map((group) => (
+                  <li key={group.cityKey} className="min-w-0">
+                    <CityFlightCard
+                      group={group}
+                      lang={locale}
+                      solidBadge={solidBadgeCities.has(group.cityKey)}
+                    />
                   </li>
                 ))}
               </ul>
 
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-dashed border-slate-200 pt-3">
                 <span className="text-[11px] text-slate-500">
-                  {flights.data.isFallback
-                    ? t("flights.disclaimer")
-                    : `${t("flights.disclaimer")} · ${t("flights.refreshSchedule")}`}
+                  {flightsUpdatedNote(flights.data.date, flights.data.isFallback)}
                 </span>
                 <Link
                   to="/flights"
@@ -167,7 +164,6 @@ export function LandingPage() {
       </main>
       <footer className="border-t border-slate-200/70 bg-white/60">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-7 text-xs text-slate-500 md:flex-row md:items-center md:justify-between md:px-10">
-          <span>{t("landing.footer")}</span>
           <span className="flex gap-4">
             <Link to="/terms" className="hover:text-slate-900">
               {t("signIn.terms")}

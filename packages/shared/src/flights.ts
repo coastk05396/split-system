@@ -88,7 +88,7 @@ export interface DestinationMeta {
   countryZhTW: string;
   countryEn: string;
   region: FlightRegion;
-  /** Typical roundtrip market baseline in TWD used to score discounts. */
+  /** Typical roundtrip baseline in TWD; only scores the curated fallback board (live fares use the day's median). */
   baselineTwd: number;
 }
 
@@ -639,6 +639,30 @@ const AIRPORT_CITY_MAP = new Map<string, string>([
 /** Looks up rich metadata for a destination IATA code, returning null if unknown. */
 export function getDestinationMeta(airport: string): DestinationMeta | null {
   return DESTINATION_BY_AIRPORT.get(airport.toUpperCase()) ?? null;
+}
+
+/** City-only names for cities whose airport name carries a suffix (`東京成田` -> `東京`). */
+const CITY_NAMES: Readonly<Record<string, { zhTW: string; en: string }>> = {
+  tyo: { zhTW: "東京", en: "Tokyo" },
+  osa: { zhTW: "大阪", en: "Osaka" },
+  spk: { zhTW: "札幌", en: "Sapporo" },
+  oka: { zhTW: "沖繩", en: "Okinawa" },
+  sel: { zhTW: "首爾", en: "Seoul" },
+  bkk: { zhTW: "曼谷", en: "Bangkok" },
+  sha: { zhTW: "上海", en: "Shanghai" },
+  bjs: { zhTW: "北京", en: "Beijing" },
+  lon: { zhTW: "倫敦", en: "London" },
+  par: { zhTW: "巴黎", en: "Paris" },
+  nyc: { zhTW: "紐約", en: "New York" },
+};
+
+/** City-only display name for a destination airport (airports of one city share it). */
+export function getCityName(airport: string, lang: "zh-TW" | "en"): string {
+  const meta = getDestinationMeta(airport);
+  if (meta === null) return airport.toUpperCase();
+  const city = CITY_NAMES[meta.cityCode];
+  const names = city ?? meta;
+  return lang === "en" ? names.en : names.zhTW;
 }
 
 /** Resolves Trip.com city code from an IATA airport code. */

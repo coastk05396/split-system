@@ -7,7 +7,7 @@ import { t } from "../i18n/messages.js";
 export function FlightBetaBadge({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full border border-amber-200/90 bg-amber-50 px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wider text-amber-700 uppercase select-none ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full bg-amber-100 px-2 py-1 text-[10px] leading-none font-bold tracking-wider text-amber-800 uppercase select-none ${className}`}
     >
       {t("flights.betaBadge")}
     </span>
