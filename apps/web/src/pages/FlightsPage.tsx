@@ -16,7 +16,7 @@ import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
 import { useDailyFlights } from "../flights/api.js";
 import { CityFlightCard } from "../flights/CityFlightCard.js";
-import { groupByCity, topDealCities } from "../flights/groups.js";
+import { groupByCity } from "../flights/groups.js";
 import { FlightsIconTile, FlightsTitle } from "../flights/FlightsTitle.js";
 import { flightDestinationLabel, flightsUpdatedNote } from "../flights/ui.js";
 import { Loading } from "../groups/ui.js";
@@ -146,7 +146,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   };
   const filtered = filterDailyFlights(items, currentFilter);
   const groups = groupByCity(filtered);
-  const solidBadgeCities = topDealCities(groups);
   const destOptions = collectDestinationOptions(items, region, dest, locale);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
@@ -466,11 +465,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {groups.map((group) => (
             <li key={group.cityKey} className="min-w-0">
-              <CityFlightCard
-                group={group}
-                lang={locale}
-                solidBadge={solidBadgeCities.has(group.cityKey)}
-              />
+              <CityFlightCard group={group} lang={locale} />
             </li>
           ))}
         </ul>

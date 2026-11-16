@@ -4,8 +4,8 @@ import { FlightBetaBadge } from "./FlightBetaBadge.js";
 
 /**
  * The flights board title, shared by /flights (signed in and out) and the landing page: a big
- * one-line title, then a grey refresh note. BETA sits beside the title in zh-TW; in English it
- * moves to the note line so the title never wraps. `compact` is for the crowded public header.
+ * one-line title with a small BETA pill beside it, then a soft grey refresh note.
+ * `compact` shrinks the English title for the crowded public header at 390px.
  */
 export function FlightsTitle({
   as: Heading = "h1",
@@ -14,8 +14,7 @@ export function FlightsTitle({
   as?: "h1" | "h2";
   compact?: boolean;
 }) {
-  const betaBelow = getLocale() === "en";
-  const size = betaBelow ? (compact ? "text-[15px]" : "text-xl") : "text-[22px]";
+  const size = compact && getLocale() === "en" ? "text-base" : "text-[22px]";
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-1.5">
@@ -24,13 +23,10 @@ export function FlightsTitle({
         >
           {t("flights.title")}
         </Heading>
-        {!betaBelow && <FlightBetaBadge />}
+        <FlightBetaBadge />
       </div>
-      <p
-        className={`mt-0.5 flex items-center gap-1.5 leading-tight text-slate-500 ${betaBelow && compact ? "text-[11px]" : "text-[13px]"}`}
-      >
-        {betaBelow && <FlightBetaBadge />}
-        <span className="truncate">{t("flights.subtitle")}</span>
+      <p className="mt-0.5 truncate text-[13px] leading-tight text-slate-500">
+        {t("flights.subtitle")}
       </p>
     </div>
   );

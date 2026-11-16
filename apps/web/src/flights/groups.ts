@@ -33,20 +33,3 @@ export function groupByCity(items: readonly DailyFlightItem[]): CityGroup[] {
       a.cheapest.priceTwd - b.cheapest.priceTwd || b.cheapest.discountPct - a.cheapest.discountPct,
   );
 }
-
-const SOLID_BADGE_COUNT = 3;
-
-/** Cities whose card gets the solid `省 X%` pill: the 3 highest discounts in view (ties: lower price). */
-export function topDealCities(groups: readonly CityGroup[]): Set<string> {
-  return new Set(
-    groups
-      .filter((g) => g.cheapest.tag !== "normal")
-      .sort(
-        (a, b) =>
-          b.cheapest.discountPct - a.cheapest.discountPct ||
-          a.cheapest.priceTwd - b.cheapest.priceTwd,
-      )
-      .slice(0, SOLID_BADGE_COUNT)
-      .map((g) => g.cityKey),
-  );
-}

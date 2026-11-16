@@ -571,6 +571,7 @@ const zhTW = {
   "flights.deal.steal": "超值省 {pct}%",
   "flights.deal.below": "省 {pct}%",
   "flights.deal.save": "省 {pct}%",
+  "flights.deal.below": "省 {pct}%",
   "flights.badge.redEye": "🌙 紅眼",
   "flights.badge.redEyeText": "紅眼",
   "flights.badge.direct": "直飛",

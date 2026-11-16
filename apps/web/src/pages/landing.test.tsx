@@ -42,7 +42,7 @@ describe("public landing route", () => {
     expect(screen.getByRole("link", { name: "服務條款" })).toBeVisible();
   });
 
-  it("shows the same city cards as /flights: city-only name, route chip, fare count, solid pill only on the top 3", async () => {
+  it("shows the same city cards as /flights: city-only name, route chip, fare count, solid pill only from 40%", async () => {
     const { api } = renderApp({ path: "/landing" });
     const board = await screen.findByRole("region", { name: "今日浮動特價機票" });
     const cards = await within(board).findAllByRole("heading", { level: 2 });
@@ -53,7 +53,15 @@ describe("public landing route", () => {
     expect(within(board).getByText("每天 08:00 更新")).toBeVisible();
     expect(board.textContent).toMatch(/筆/);
     expect(board.textContent).not.toMatch(/•/);
-    expect(board.querySelectorAll(".bg-sprout-600").length).toBeLessThanOrEqual(3);
+    // Same threshold as /flights: a solid 省 X% pill only for 40% and up, plain text below
+    const pcts = (nodes: Element[]) =>
+      nodes.map((n) => Number(/\d+/.exec(n.textContent)?.[0] ?? 0));
+    const labels = [...board.querySelectorAll("span")].filter((n) =>
+      /^省 \d+%$/.test(n.textContent),
+    );
+    const solid = labels.filter((n) => n.className.includes("bg-sprout-600"));
+    expect(pcts(solid).every((pct) => pct >= 40)).toBe(true);
+    expect(pcts(labels.filter((n) => !solid.includes(n))).every((pct) => pct < 40)).toBe(true);
     expect(api.dailyFlights).toBeDefined();
   });
 
@@ -77,14 +85,10 @@ describe("public landing route", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Catch cheap flights. Split the trip easily.",
+        name: "Find the flight. Split the trip.",
       }),
     ).toBeVisible();
     expect(screen.getByText("Sprout")).toBeVisible();
-    expect(
-      await screen.findByText(
-        "Showing curated preview deals; daily fares refresh at 08:00 (GMT+8).",
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText("Sample fares. Live deals arrive daily at 8 AM.")).toBeVisible();
   });
 });

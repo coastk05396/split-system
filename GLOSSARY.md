@@ -37,7 +37,7 @@ The curated daily board (`每日航班` / `/flights`) of verified cheap flights 
 _Avoid_: Flight Radar, Price Watch, Trip module
 
 **Deal Signal**:
-How a verified fare compares to the median of that day's candidate fares for the same destination and trip type (no signal when too few candidates exist): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; only the three highest-discount fares in the list the traveler is currently viewing are emphasized, whatever their tier. Shown to users as `最划算` / `Best value`.
+How a verified fare compares to the median of that day's candidate fares for the same destination and trip type (no signal when too few candidates exist): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; on the board only fares discounted 40% or more get the solid emphasis; any smaller positive discount (including `normal`) shows as plain text. Shown to users as `省 X%` / `Save X%`.
 _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price)
 
 **Ghost Fare**:

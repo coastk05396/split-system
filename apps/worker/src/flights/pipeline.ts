@@ -201,7 +201,11 @@ function addMonthsIso(iso: string, months: number): string {
 }
 
 /** Departure window: 14 days to 6 months from the run date (inclusive), plus its calendar months. */
-function discoveryWindow(digestDate: string): { from: string; to: string; months: string[] } {
+export function discoveryWindow(digestDate: string): {
+  from: string;
+  to: string;
+  months: string[];
+} {
   const from = addDaysIso(digestDate, MIN_LEAD_DAYS);
   const to = addMonthsIso(digestDate, WINDOW_MONTHS);
   const months: string[] = [];

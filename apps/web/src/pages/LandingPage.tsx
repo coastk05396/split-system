@@ -6,7 +6,7 @@ import { CategoryIcon } from "../expenses/CategoryIcon.js";
 import { useDailyFlights } from "../flights/api.js";
 import { CityFlightCard } from "../flights/CityFlightCard.js";
 import { FlightsIconTile, FlightsTitle } from "../flights/FlightsTitle.js";
-import { groupByCity, topDealCities } from "../flights/groups.js";
+import { groupByCity } from "../flights/groups.js";
 import { flightsUpdatedNote, PublicHeader } from "../flights/ui.js";
 import { getLocale, type MessageId, t } from "../i18n/messages.js";
 import { SproutMascot } from "../shell/SproutMascot.js";
@@ -38,7 +38,6 @@ export function LandingPage() {
   });
   // Same city cards, order and badge rule as /flights; only the four cheapest cities fit here
   const boardGroups = groupByCity(filtered).slice(0, 4);
-  const solidBadgeCities = topDealCities(boardGroups);
 
   return (
     <div className="landing-editorial flex min-h-dvh flex-col">
@@ -46,7 +45,7 @@ export function LandingPage() {
       <main className="min-w-0 flex-1">
         <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-5 pt-6 pb-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12 md:px-10 md:pt-12 md:pb-20">
           <div className="min-w-0">
-            <h1 className="text-[27px] leading-[1.25] font-black tracking-tight text-slate-900 sm:text-4xl md:text-5xl lg:text-[3.5rem]">
+            <h1 className="text-[27px] leading-[1.25] font-black text-balance tracking-tight text-slate-900 sm:text-4xl md:text-5xl lg:text-[3.5rem]">
               {t("landing.title")}
             </h1>
             <div className="mt-6 inline-flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-2xs">
@@ -115,11 +114,7 @@ export function LandingPage() {
               <ul className="mt-3.5 flex min-w-0 flex-col gap-2" aria-live="polite">
                 {boardGroups.map((group) => (
                   <li key={group.cityKey} className="min-w-0">
-                    <CityFlightCard
-                      group={group}
-                      lang={locale}
-                      solidBadge={solidBadgeCities.has(group.cityKey)}
-                    />
+                    <CityFlightCard group={group} lang={locale} />
                   </li>
                 ))}
               </ul>

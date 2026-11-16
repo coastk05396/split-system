@@ -1,6 +1,6 @@
 import { getDefaultDailyFlights, type DailyFlightsResponse } from "@split/shared";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
 import {
@@ -117,6 +117,61 @@ function fakeTravelpayouts(fares: (origin: string, oneWay: boolean, month: strin
 }
 
 describe("public flight routes and daily pipeline", () => {
+  // The API clock is the 08:00 Taipei run time the pipeline tests refresh at (window 11-30..05-16)
+  beforeEach(() => {
+    clock.now = Date.parse("2026-11-16T00:00:00Z");
+  });
+
+  it("applies the 14-day to 6-month window to the API response: fallback fares and a cache that rolled past midnight", async () => {
+    const db = createDb(env.DB);
+    const app = setupApp();
+    const get = async (now: number) => {
+      clock.now = now;
+      const res = await app.request("https://split.test/api/v1/flights/daily", {}, env);
+      expect(res.status).toBe(200);
+      return res.json<DailyFlightsResponse>();
+    };
+    const savedNow = clock.now;
+
+    // Curated fallback: the fixed-date seeds outside the window (e.g. CNX 2027-06-09) are dropped
+    const now = Date.parse("2026-11-16T00:00:00Z"); // window 2026-11-30..2027-05-16
+    const fallback = await get(now);
+    expect(fallback.isFallback).toBe(true);
+    expect(fallback.items.length).toBeGreaterThan(0);
+    for (const item of fallback.items) {
+      expect(item.outDate >= "2026-11-30" && item.outDate <= "2027-05-16").toBe(true);
+    }
+
+    // A cached 08:00 digest: the day-14 fare is served, but is gone after the next midnight
+    const day14: FlightSource = {
+      fetchCandidates: (digestDate) =>
+        Promise.resolve(
+          ["2026-11-30", "2026-12-10"].map((outDate, idx) => ({
+            id: `edge-${idx}`,
+            origin: "TPE",
+            dest: "NRT",
+            tripType: "ow" as const,
+            outDate,
+            inDate: null,
+            priceTwd: 5000 + idx,
+            airlines: ["MM"],
+            transfers: 0,
+            returnTransfers: null,
+            outboundDep: "10:00",
+            inboundDep: null,
+            digestDate,
+          })),
+        ),
+      verifyCandidate: (candidate) => Promise.resolve({ priceTwd: candidate.priceTwd }),
+    };
+    await refreshDailyFlights(db, day14, now);
+    expect((await get(now)).items.map((i) => i.outDate)).toEqual(["2026-11-30", "2026-12-10"]);
+    const nextDay = await get(now + 86_400_000);
+    expect(nextDay.items.map((i) => i.outDate)).toEqual(["2026-12-10"]);
+    expect(nextDay.isFallback).toBe(false);
+    clock.now = savedNow;
+  });
+
   it("GET /flights/daily serves curated fallback deals when D1 has no verified digest", async () => {
     const db = createDb(env.DB);
     const seedEnv = { ...env, TRAVELPAYOUTS_TOKEN: "" };
@@ -429,6 +484,7 @@ describe("public flight routes and daily pipeline", () => {
     expect(day1.length).toBeGreaterThanOrEqual(20);
     expect(day2.length).toBe(day1.length);
 
+    clock.now += 86_400_000;
     const res = await setupApp(verifiedBatchSource).request(
       "https://split.test/api/v1/flights/daily",
       {},
@@ -436,7 +492,10 @@ describe("public flight routes and daily pipeline", () => {
     );
     const body = await res.json<DailyFlightsResponse>();
     expect(body.isFallback).toBe(false);
-    expect(body.items.length).toBe(day2.length);
+    // The API serves only the window of the day it is read (2026-11-17: 12-01..2027-05-17)
+    const inWindow = day2.filter((i) => i.outDate >= "2026-12-01" && i.outDate <= "2027-05-17");
+    expect(inWindow.length).toBeGreaterThan(0);
+    expect(body.items.length).toBe(inWindow.length);
   });
 
   it("verifies Travelpayouts deals via X-Access-Token, computes destination-tz arrival red-eyes, rejects mismatched directness, and falls back when stale", async () => {

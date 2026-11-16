@@ -16,10 +16,10 @@ export const en: Record<MessageId, string> = {
   "nav.stats": "Stats",
   "nav.settings": "Settings",
 
-  "landing.title": "Catch cheap flights. Split the trip easily.",
-  "landing.step1": "Pick Taiwan flight deals",
-  "landing.step2": "Split expenses in Sprout",
-  "landing.exploreFlights": "Explore all deals",
+  "landing.title": "Find the flight. Split the trip.",
+  "landing.step1": "Find a deal",
+  "landing.step2": "Split the costs",
+  "landing.exploreFlights": "See all deals",
   "landing.headerSignIn": "Sign in",
   "landing.langSwitch": "中文",
   "landing.langAria": "Switch to Traditional Chinese",
@@ -529,7 +529,7 @@ export const en: Record<MessageId, string> = {
   "csv.settlement": "Settlement",
   "csv.pays": "{payer} pays {receiver}",
 
-  "flights.title": "Cheap Flights Today",
+  "flights.title": "Today's Deals",
   "flights.updatedAt": "Updated {date}",
   "flights.updatedSample": "Sample fares · Updated {date}",
   "flights.filtersBtn": "Filters",
@@ -574,13 +574,14 @@ export const en: Record<MessageId, string> = {
   "flights.count.one": "{count} fare",
   "flights.groupCount": "{count} fares",
   "flights.groupCount.one": "{count} fare",
-  "flights.subtitle": "Updated daily at 08:00",
+  "flights.subtitle": "Updated daily at 8 AM",
   "flights.empty.title": "No flight deals match these filters",
   "flights.empty.body": "Try another region or reset your filters.",
   "flights.empty.reset": "Reset filters",
   "flights.deal.steal": "Save {pct}%",
   "flights.deal.below": "-{pct}%",
   "flights.deal.save": "Save {pct}%",
+  "flights.deal.below": "{pct}% below typical",
   "flights.badge.redEye": "🌙 Red-eye",
   "flights.badge.redEyeText": "Red-eye",
   "flights.badge.direct": "Nonstop",
@@ -594,7 +595,7 @@ export const en: Record<MessageId, string> = {
   "flights.tripOneWay": "One-way",
   "flights.bookCta": "View",
   "flights.refreshSchedule": "Refreshes daily at 08:00 (GMT+8)",
-  "flights.fallbackNote": "Showing curated preview deals; daily fares refresh at 08:00 (GMT+8).",
+  "flights.fallbackNote": "Sample fares. Live deals arrive daily at 8 AM.",
 };
 
 export const enErrors: Record<ErrorCode, string> = {

@@ -27,20 +27,31 @@ function shortDate(iso: string): string {
   return iso.slice(5).replace("-", "/");
 }
 
-/** Deal Signal tags show `省 X%`: a solid pill only on the few emphasised cards, plain green text elsewhere. */
-function DealBadge({ item, solid = false }: { item: DailyFlightItem; solid?: boolean }) {
-  if (item.tag === "normal") return null;
-  const text = t("flights.deal.save", { pct: item.discountPct });
-  if (solid) {
+/** Discount display: solid pill from 40%, plain `省 X%` for 15-39%, plain `↓X%` for 1-14%, else nothing. */
+const SOLID_BADGE_MIN_PCT = 40;
+const SIGNAL_MIN_PCT = 15;
+const BADGE_TEXT =
+  "mt-1 inline-block text-[11px] leading-4 font-semibold whitespace-nowrap tabular-nums";
+
+function DealBadge({ item }: { item: DailyFlightItem }) {
+  const pct = item.discountPct;
+  if (pct <= 0) return null;
+  if (pct >= SOLID_BADGE_MIN_PCT) {
     return (
       <span className="mt-1 inline-block rounded-full bg-sprout-600 px-1.5 py-px text-[11px] leading-4 font-semibold whitespace-nowrap text-white tabular-nums">
-        {text}
+        {t("flights.deal.save", { pct })}
       </span>
     );
   }
+  if (pct >= SIGNAL_MIN_PCT) {
+    return (
+      <span className={`${BADGE_TEXT} text-sprout-700`}>{t("flights.deal.save", { pct })}</span>
+    );
+  }
   return (
-    <span className="mt-1 inline-block text-[11px] leading-4 font-semibold whitespace-nowrap text-sprout-700 tabular-nums">
-      {text}
+    <span className={`${BADGE_TEXT} text-sprout-700`}>
+      <span aria-hidden="true">{`↓${String(pct)}%`}</span>
+      <span className="sr-only">{t("flights.deal.below", { pct })}</span>
     </span>
   );
 }
@@ -59,15 +70,7 @@ function Price({ item, small = false }: { item: DailyFlightItem; small?: boolean
 }
 
 /** One destination: collapsed summary of its cheapest fare; tap to list every fare. */
-export function CityFlightCard({
-  group,
-  lang,
-  solidBadge = false,
-}: {
-  group: CityGroup;
-  lang: Language;
-  solidBadge?: boolean;
-}) {
+export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Language }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const { cheapest } = group;
@@ -112,7 +115,7 @@ export function CityFlightCard({
           </span>
           <span className="shrink-0 text-right">
             <Price item={cheapest} />
-            <DealBadge item={cheapest} solid={solidBadge} />
+            <DealBadge item={cheapest} />
           </span>
           <ChevronDown
             aria-hidden="true"
