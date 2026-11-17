@@ -241,6 +241,13 @@ export const dailyFlights = sqliteTable(
   (t) => [index("daily_flights_digest_price_idx").on(t.digestDate, t.priceTwd)],
 );
 
+/** Single row (id 1): the last daily run that discovered fares and completed, even with zero Good Deals. */
+export const dailyFlightsRuns = sqliteTable("daily_flights_runs", {
+  id: integer("id").primaryKey(),
+  digestDate: text("digest_date").notNull(),
+  completedAt: integer("completed_at").notNull(),
+});
+
 /** Month-matrix median baselines per stop class, reused for 3 days by the daily flights sync (NULL: fewer than 3 prices). */
 export const flightBaselines = sqliteTable(
   "flight_baselines",

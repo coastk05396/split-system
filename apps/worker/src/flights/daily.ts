@@ -7,7 +7,7 @@ import {
 } from "@split/shared/flights";
 import { asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { dailyFlights } from "../db/schema.js";
+import { dailyFlights, dailyFlightsRuns } from "../db/schema.js";
 import {
   collectVerifiedDailyFlights,
   logDailyFlightsSummary,
@@ -53,16 +53,23 @@ export async function refreshDailyFlights(
   const collected = await collectVerifiedDailyFlights(source, now);
   const { rows, items } = collected;
 
-  if (rows.length > 0) {
-    // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
-    const insertStmts = [];
-    for (let i = 0; i < rows.length; i += D1_INSERT_CHUNK_SIZE) {
-      insertStmts.push(db.insert(dailyFlights).values(rows.slice(i, i + D1_INSERT_CHUNK_SIZE)));
-    }
-    await db.batch([db.delete(dailyFlights), ...insertStmts]);
-  } else {
-    await db.delete(dailyFlights);
+  // One atomic batch: a failed run throws above and leaves the previous board and marker untouched.
+  // The marker says "completed with zero Good Deals" (empty board); no discovery clears it (fallback).
+  const marker = collected.completed
+    ? db
+        .insert(dailyFlightsRuns)
+        .values({ id: 1, digestDate: collected.digestDate, completedAt: now })
+        .onConflictDoUpdate({
+          target: dailyFlightsRuns.id,
+          set: { digestDate: collected.digestDate, completedAt: now },
+        })
+    : db.delete(dailyFlightsRuns);
+  // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
+  const insertStmts = [];
+  for (let i = 0; i < rows.length; i += D1_INSERT_CHUNK_SIZE) {
+    insertStmts.push(db.insert(dailyFlights).values(rows.slice(i, i + D1_INSERT_CHUNK_SIZE)));
   }
+  await db.batch([db.delete(dailyFlights), marker, ...insertStmts]);
 
   logDailyFlightsSummary("daily_flights_refresh_summary", collected);
 
@@ -92,7 +99,15 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .limit(1);
 
   if (latest === undefined) {
-    return buildFallbackResponse(now);
+    // A completed run with zero Good Deals is an empty board (ADR 0010: never padded); only "no data" falls back.
+    const [run] = await db.select().from(dailyFlightsRuns).limit(1);
+    if (run === undefined) return buildFallbackResponse(now);
+    return {
+      date: run.digestDate,
+      updatedAt: new Date(run.completedAt).toISOString(),
+      items: [],
+      isFallback: false,
+    };
   }
 
   const rows = await db

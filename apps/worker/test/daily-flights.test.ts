@@ -437,6 +437,71 @@ describe("public flight routes and daily pipeline", () => {
       expect(items.map((i) => [i.priceTwd, i.transfers])).toEqual([[7500, 0]]);
     });
 
+    it("drops a connecting candidate whose verification only finds a direct fare", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [
+                { dest: "NRT", day: 5, price: 7000, transfers: 1 }, // 6.7% below 7500: no deal
+                { dest: "NRT", day: 12, price: 5800, transfers: 1 }, // 22.7% below 7500
+              ]
+            : [],
+        () => ({ prices: [9000, 10000, 11000], connecting: [7000, 7500, 8000] }),
+      );
+      // Verification answers with the same fares turned direct (the direct Baseline is 10000).
+      const directOnly: typeof fetch = async (input, init) => {
+        const res = await fake.fetchFn(input, init);
+        const url = new URL(
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        );
+        if (url.pathname.includes("month-matrix") || !url.searchParams.get("destination"))
+          return res;
+        const body = await res.json<{ data: { transfers: number; return_transfers: number }[] }>();
+        return Response.json({
+          success: true,
+          data: body.data.map((f) => ({ ...f, transfers: 0, return_transfers: 0 })),
+        });
+      };
+      const db = createDb(env.DB);
+      const items = await refreshDailyFlights(
+        db,
+        productionFlightSource(tpEnv, directOnly, d1BaselineCache(db)),
+        cronNow,
+      );
+
+      expect(fake.stats().verifyCount).toBe(1);
+      expect(items).toEqual([]);
+    });
+
+    it("drops any source's verified fare whose stop class changed", async () => {
+      const source: FlightSource = {
+        fetchCandidates: () =>
+          Promise.resolve([
+            {
+              id: "class-change",
+              origin: "TPE",
+              dest: "NRT",
+              tripType: "rt",
+              outDate: "2026-12-10",
+              inDate: "2026-12-14",
+              priceTwd: 6000,
+              dealBaselineTwd: 9000,
+              airlines: ["IT"],
+              transfers: 1,
+              returnTransfers: 1,
+              outboundDep: "09:40",
+              inboundDep: "16:20",
+            },
+          ]),
+        verifyCandidate: (c) =>
+          Promise.resolve({ priceTwd: c.priceTwd, transfers: 0, returnTransfers: 0 }),
+      };
+      const collected = await collectVerifiedDailyFlights(source, cronNow);
+
+      expect(collected.items).toEqual([]);
+      expect(collected.droppedNull).toBe(1);
+    });
+
     it("drops a fare with 3 or more stops on either leg and keeps 2 stops", async () => {
       const fake = tpeSupply(
         (month) =>
@@ -494,6 +559,34 @@ describe("public flight routes and daily pipeline", () => {
       const { items } = await boardOf(fake);
 
       expect(items.map((i) => i.priceTwd)).toEqual([8000, 8400, 8800]);
+    });
+
+    it("serves an empty board, not curated fares, after a completed run finds no Good Deal", async () => {
+      const db = createDb(env.DB);
+      await env.DB.prepare("DELETE FROM daily_flights").run();
+      await env.DB.prepare("DELETE FROM daily_flights_runs").run();
+      const app = setupApp();
+      const get = async () =>
+        (
+          await app.request("https://split.test/api/v1/flights/daily", {}, env)
+        ).json<DailyFlightsResponse>();
+
+      expect((await get()).isFallback).toBe(true); // no run ever: curated reference fares
+
+      const quiet = tpeSupply(
+        (month) => (month === DEC ? [{ dest: "NRT", day: 5, price: 9500 }] : []), // 5% below
+        () => ({ prices: [9000, 10000, 11000] }),
+      );
+      expect(await boardOf(quiet)).toMatchObject({ items: [], isFallback: false });
+
+      // A failed run neither wipes nor marks anything.
+      const failing: FlightSource = { fetchCandidates: () => Promise.reject(new Error("boom")) };
+      await expect(refreshDailyFlights(db, failing, cronNow)).rejects.toThrow("boom");
+      expect(await get()).toMatchObject({ items: [], isFallback: false });
+
+      // A run that discovered nothing at all (no token / upstream down) is "unavailable", not "empty".
+      await refreshDailyFlights(db, productionFlightSource({ TRAVELPAYOUTS_TOKEN: "" }), cronNow);
+      expect((await get()).isFallback).toBe(true);
     });
 
     it("shows nothing for a country with only ordinary fares and never pads the board", async () => {
@@ -1126,8 +1219,9 @@ describe("public flight routes and daily pipeline", () => {
       const failing = bkkSupply(() => ({ status: 500, prices: [] }));
       const items = await refreshAt(failing, day0);
       expect(await cachedBaselines()).toEqual([]); // a failed call is never cached
-      // Only 2 Stage 1 candidates and no baseline: no Good Deal, so the board is empty
-      expect(isFallback).toBe(true);
+      // Only 2 Stage 1 candidates and no baseline: no Good Deal, so the board is empty, not curated
+      expect(isFallback).toBe(false);
+      expect(items).toEqual([]);
       expect(items).not.toContainEqual({ price: 4200, tag: "steal", discountPct: 40 });
 
       const recovered = bkkSupply();
@@ -1138,7 +1232,7 @@ describe("public flight routes and daily pipeline", () => {
     it("treats an HTTP 200 success:false answer as a failure: not cached, retried and recovered next run", async () => {
       const bad = bkkSupply(() => ({ success: false, prices: [] }));
       await refreshAt(bad, day0);
-      expect(isFallback).toBe(true);
+      expect(isFallback).toBe(false); // discovered fares, no Baseline: a completed run, empty board
 
       const recovered = bkkSupply(); // median 7000
       const after = await refreshAt(recovered, day0 + DAY_MS);
@@ -1819,7 +1913,12 @@ describe("public flight routes and daily pipeline", () => {
     expect(resp.items.map((i) => i.id)).toEqual(["manual-tpe-oka"]);
 
     // Verify empty-row DELETE-only SQL and single-quote escaping round-trip cleanly
-    expect(formatDailyFlightsSyncSql([])).toBe("DELETE FROM daily_flights;\n");
+    expect(formatDailyFlightsSyncSql([])).toBe(
+      "DELETE FROM daily_flights;\nDELETE FROM daily_flights_runs;\n",
+    );
+    expect(formatDailyFlightsSyncSql([], { digestDate: "2026-11-16", at: 1 })).toContain(
+      "INSERT OR REPLACE INTO daily_flights_runs",
+    );
     const [firstRow] = collected.rows;
     expect(firstRow).toBeDefined();
     if (firstRow) {

@@ -882,6 +882,19 @@ describe("daily flights page", () => {
     expect(screen.getByRole("button", { name: "Show round trips" })).toBeVisible();
   });
 
+  it("renders the empty state and no curated disclosure when the day has no Good Deal", async () => {
+    const view = renderApp({ path: "/flights" });
+    view.api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T01:00:00.000Z",
+      items: [],
+      isFallback: false,
+    };
+
+    expect(await screen.findByText("目前沒有符合條件的低價機票")).toBeVisible();
+    expect(screen.getByText("11/16 更新")).toBeVisible();
+  });
+
   it("shows the generic empty state with a reset when drawer filters remove every fare", async () => {
     const user = userEvent.setup();
     setup();

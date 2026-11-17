@@ -91,6 +91,8 @@ export interface FlightSource {
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
   /** Upstream requests made since the last `fetchCandidates` started, for the run summary. */
   upstreamCalls?(): number;
+  /** Fares discovered before Good Deal selection in the last run; 0 means no upstream data (not "no deals"). */
+  discoveredCandidates?(): number;
 }
 
 // ~70 broad discovery + ~135 per-route queries + baselines for the cheapest candidates + <= 230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0010).
@@ -429,15 +431,18 @@ export function productionFlightSource(
   baselineCache?: BaselineCache,
 ): FlightSource {
   let upstreamCalls = 0;
+  let discovered = 0;
   const fetchFn: FetchFn = (input, init) => {
     upstreamCalls += 1;
     return upstreamFetch(input, init);
   };
   return {
     upstreamCalls: () => upstreamCalls,
+    discoveredCandidates: () => discovered,
 
     async fetchCandidates(digestDate, now = Date.now()) {
       upstreamCalls = 0;
+      discovered = 0;
       const token = env.TRAVELPAYOUTS_TOKEN;
       if (!token) return [];
 
@@ -532,6 +537,7 @@ export function productionFlightSource(
       }
 
       if (collected.length === 0) return [];
+      discovered = collected.length;
 
       // Deal Signal baseline: Travelpayouts month-matrix median per (origin, dest, tripType, month, stop class),
       // falling back to the Stage 1 same-day pool median per destination, trip type and stop class.
@@ -695,7 +701,7 @@ export function productionFlightSource(
       if (data === null || data.length === 0) return null;
 
       const referenceMs = now;
-      const requireDirect = candidate.transfers === 0 && (candidate.returnTransfers ?? 0) === 0;
+      const candidateClass = stopClassOf(candidate.transfers, candidate.returnTransfers);
 
       const matches = data.filter((raw) => {
         const rowOrigin = resolveOriginAirport(raw);
@@ -710,10 +716,9 @@ export function productionFlightSource(
           const retDate = raw.return_at ? raw.return_at.slice(0, 10) : null;
           if (retDate !== candidate.inDate) return false;
         }
-        if (requireDirect) {
-          const retTransfers = candidate.tripType === "ow" ? 0 : (raw.return_transfers ?? 0);
-          if (raw.transfers > 0 || retTransfers > 0) return false;
-        }
+        // The fare is scored against its stop class's Baseline, so the class must not change.
+        const retTransfers = candidate.tripType === "ow" ? 0 : (raw.return_transfers ?? 0);
+        if (stopClassOf(raw.transfers, retTransfers) !== candidateClass) return false;
         return isAcceptableFoundAt(raw.found_at, referenceMs);
       });
       if (matches.length === 0) return null;
@@ -751,6 +756,7 @@ export function productionFlightSource(
 export interface CollectedDailyFlights {
   digestDate: string;
   candidates: number;
+  /** No verified fare, or one whose stop class (direct vs connecting) changed. */
   droppedNull: number;
   droppedGhost: number;
   droppedStops: number;
@@ -758,6 +764,8 @@ export interface CollectedDailyFlights {
   droppedNotDeal: number;
   /** Distinct countries with at least one Good Deal on the board. */
   countriesWithDeal: number;
+  /** The run found upstream fares (even if none was a Good Deal), so an empty board is a real answer. */
+  completed: boolean;
   /** Upstream requests this run used (Workers Paid allows 1,000 subrequests per invocation). */
   upstreamCalls: number;
   rows: DailyFlightRow[];
@@ -794,8 +802,16 @@ function sqlLiteral(value: string | number | null | undefined): string {
 }
 
 /** Formats atomic replace SQL statements for `wrangler d1 execute --file`. */
-export function formatDailyFlightsSyncSql(rows: readonly DailyFlightRow[]): string {
+export function formatDailyFlightsSyncSql(
+  rows: readonly DailyFlightRow[],
+  completedRun?: { digestDate: string; at: number },
+): string {
   const lines = ["DELETE FROM daily_flights;"];
+  lines.push(
+    completedRun
+      ? `INSERT OR REPLACE INTO daily_flights_runs (id, digest_date, completed_at) VALUES (1, ${sqlLiteral(completedRun.digestDate)}, ${sqlLiteral(completedRun.at)});`
+      : "DELETE FROM daily_flights_runs;",
+  );
   for (const row of rows) {
     const values = [
       sqlLiteral(row.id),
@@ -862,6 +878,18 @@ export async function collectVerifiedDailyFlights(
       }
       if (isGhostFare(candidate.priceTwd, verified.priceTwd)) {
         droppedGhost += 1;
+        continue;
+      }
+      // Same guard for any source: a changed stop class would be scored against the wrong Baseline.
+      if (
+        stopClassOf(
+          verified.transfers ?? candidate.transfers,
+          verified.returnTransfers !== undefined
+            ? verified.returnTransfers
+            : candidate.returnTransfers,
+        ) !== stopClassOf(candidate.transfers, candidate.returnTransfers)
+      ) {
+        droppedNull += 1;
         continue;
       }
       if (verified.priceTwd !== null) {
@@ -938,6 +966,7 @@ export async function collectVerifiedDailyFlights(
     droppedStops,
     droppedNotDeal,
     countriesWithDeal: new Set(items.map((i) => getDestinationMeta(i.dest)?.countryCode)).size,
+    completed: (source.discoveredCandidates?.() ?? candidates.length) > 0,
     upstreamCalls: source.upstreamCalls?.() ?? 0,
     rows,
     items,
