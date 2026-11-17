@@ -46,6 +46,14 @@ export const MAX_RETRIES_PER_RUN = 20;
  */
 export const PARSE_STREAK_STOP = 10;
 
+/** After the main loop (if nothing stopped it) one pause, then one more query for each fare still failing transiently. */
+export const SWEEP_PAUSE_MS = 60_000;
+/**
+ * At most this many fares are swept (no in-line retry), so Google requests never exceed
+ * `maxQueries` + `MAX_RETRIES_PER_RUN` + `SWEEP_MAX`.
+ */
+export const SWEEP_MAX = 10;
+
 /** Outcome of each Google query this run (counts only, never URLs or ids). */
 export interface LiveQueries {
   ok: number;
@@ -57,6 +65,9 @@ export interface LiveQueries {
   errorReasons: Record<string, number>;
   /** Queries the adapter re-requested once. */
   retried: number;
+  /** Fares re-queried in the final sweep, and how many of them recovered (counts above already reflect the recovery). */
+  swept: number;
+  sweptRecovered: number;
 }
 
 /** Stop after this many payload-less pages in a row (a single one is ambiguous, not a block). */
@@ -70,6 +81,9 @@ export interface LiveOptions {
   minGapMs?: number;
   maxGapMs?: number;
   random?: () => number;
+  sweepPauseMs?: number;
+  /** Cap on swept fares (default `SWEEP_MAX`; tests lower it). */
+  sweepMax?: number;
 }
 
 const emptyQueries = (): LiveQueries => ({
@@ -80,6 +94,8 @@ const emptyQueries = (): LiveQueries => ({
   blockedReasons: {},
   errorReasons: {},
   retried: 0,
+  swept: 0,
+  sweptRecovered: 0,
 });
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
@@ -105,11 +121,51 @@ export function googleLiveFlightSource(
     minGapMs = 3000,
     maxGapMs = 3000,
     random = Math.random,
+    sweepPauseMs = SWEEP_PAUSE_MS,
+    sweepMax = SWEEP_MAX,
   } = options;
   let live = new Map<string, LiveResult>();
   let stats = { repriced: 0, kept: 0, blocked: 0 };
   let blockedIds = new Set<string>();
   let queries = emptyQueries();
+
+  const gap = () => minGapMs + random() * (maxGapMs - minGapMs);
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const transientError = (r: LiveResult | undefined): r is LiveResult =>
+    r?.reason === "error" && (r.errorReason === "no_payload" || r.errorReason === "server_error");
+
+  /** One more query (no in-line retry) for fares still failing transiently; stops at an explicit block. */
+  async function sweep(queried: readonly FlightCandidate[]): Promise<void> {
+    const todo = queried
+      .filter((c) => transientError(live.get(c.id)))
+      .slice(0, Math.min(sweepMax, SWEEP_MAX));
+    for (const [n, c] of todo.entries()) {
+      await wait(n === 0 ? sweepPauseMs : gap());
+      let result: LiveResult | undefined;
+      try {
+        result = (await lookup([c], { allowRetry: false }))[0];
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "live_price_sweep_failed", error: String(error) }));
+      }
+      queries.swept += 1;
+      if (result?.reason === "blocked") {
+        const why = result.blockedReason ?? "unknown";
+        queries.blockedReasons[why] = (queries.blockedReasons[why] ?? 0) + 1;
+        console.warn(JSON.stringify({ event: "live_price_blocked", reason: why, phase: "sweep" }));
+        return;
+      }
+      if (result && (result.reason === null || result.reason === "no_result")) {
+        const before = live.get(c.id)?.errorReason ?? "unknown";
+        queries.error -= 1;
+        const { [before]: _gone, ...rest } = queries.errorReasons;
+        const left = (queries.errorReasons[before] ?? 1) - 1;
+        queries.errorReasons = left > 0 ? { ...rest, [before]: left } : rest;
+        queries[result.reason ?? "ok"] += 1;
+        queries.sweptRecovered += 1;
+        live.set(c.id, result);
+      }
+    }
+  }
 
   return {
     ...(base.upstreamCalls ? { upstreamCalls: () => base.upstreamCalls?.() ?? 0 } : {}),
@@ -125,11 +181,11 @@ export function googleLiveFlightSource(
       let noPayloadStreak = 0;
       let retriesUsed = 0;
       let parseStreak = 0;
+      let stopped = false;
       const queried = candidates.slice(0, maxQueries);
       for (let i = 0; i < queried.length; i += batchSize) {
         if (i > 0) {
-          const gap = minGapMs + random() * (maxGapMs - minGapMs);
-          await new Promise((resolve) => setTimeout(resolve, gap));
+          await wait(gap());
         }
         const batch = queried.slice(i, i + batchSize);
         const allowRetry = retriesUsed + batch.length <= MAX_RETRIES_PER_RUN;
@@ -193,9 +249,11 @@ export function googleLiveFlightSource(
               queried: i + batch.length,
             }),
           );
+          stopped = true;
           break;
         }
       }
+      if (!stopped) await sweep(queried);
       return candidates;
     },
 

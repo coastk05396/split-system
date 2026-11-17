@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_RETRIES_PER_RUN,
   PARSE_STREAK_STOP,
+  SWEEP_MAX,
+  SWEEP_PAUSE_MS,
   googleLiveFlightSource,
   type LiveItinerary,
   type LiveLookup,
@@ -45,6 +47,7 @@ function sourceOf(candidates: FlightCandidate[], lookup: LiveLookup, opts = {}):
   return googleLiveFlightSource({ fetchCandidates: () => Promise.resolve(candidates) }, lookup, {
     minGapMs: 0,
     maxGapMs: 0,
+    sweepMax: 0, // the sweep has its own describe
     ...opts,
   });
 }
@@ -176,6 +179,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
             Promise.resolve(["a", "b", "c", "d", "e"].map((id) => candidate(id))),
         },
         lookup,
+        { sweepMax: 0 },
       );
       const pending = collectVerifiedDailyFlights(source, now);
       await vi.advanceTimersByTimeAsync(2999);
@@ -194,6 +198,8 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         blockedReasons: { consent: 1 },
         errorReasons: { unknown: 1 },
         retried: 0,
+        swept: 0,
+        sweptRecovered: 0,
       });
       expect(collected.live).toMatchObject({ kept: 5, blocked: 2 });
     } finally {
@@ -229,6 +235,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         const source = googleLiveFlightSource(
           { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
           lookup,
+          { sweepMax: 0 },
         );
         const pending = collectVerifiedDailyFlights(source, now);
         await vi.advanceTimersByTimeAsync(60_000);
@@ -327,6 +334,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         const source = googleLiveFlightSource(
           { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
           lookup,
+          { sweepMax: 0 },
         );
         const pending = collectVerifiedDailyFlights(source, now);
         await vi.advanceTimersByTimeAsync(60_000);
@@ -404,7 +412,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         const source = googleLiveFlightSource(
           { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
           lookup,
-          { maxQueries: 240, ...opts },
+          { maxQueries: 240, sweepMax: 0, ...opts },
         );
         const pending = collectVerifiedDailyFlights(source, now);
         await vi.advanceTimersByTimeAsync(2_000_000);
@@ -468,6 +476,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         const source = googleLiveFlightSource(
           { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
           lookup,
+          { sweepMax: 0 },
         );
         const pending = collectVerifiedDailyFlights(source, now);
         await vi.advanceTimersByTimeAsync(200_000);
@@ -493,6 +502,130 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
     it("a good result resets both counters", async () => {
       const { calls } = await run((n) => (n === 9 || n === 19 ? "ok" : "parse"), 25);
       expect(calls).toBe(25); // 9 + ok + 9 + ok + 5: neither streak ever reaches its limit
+    });
+  });
+
+  describe("final sweep of transient errors", () => {
+    type Outcome = "ok" | "np" | "5xx" | "parse" | "blocked";
+    /** attempts[id] = outcome of its 1st, 2nd, ... query (the last repeats). np/5xx count as already retried. */
+    const sweepRun = async (
+      attempts: Record<string, Outcome[]>,
+      ids: string[],
+      opts: { sweepPauseMs?: number } = {},
+    ) => {
+      vi.useFakeTimers();
+      try {
+        const seen: { id: string; allowRetry: boolean; at: number }[] = [];
+        const lookup: LiveLookup = (batch, { allowRetry }) =>
+          Promise.resolve(
+            batch.map((c) => {
+              const n = seen.filter((x) => x.id === c.id).length;
+              seen.push({ id: c.id, allowRetry, at: Date.now() });
+              const list = attempts[c.id] ?? ["ok"];
+              const kind = list[Math.min(n, list.length - 1)] ?? "ok";
+              if (kind === "ok")
+                return { id: c.id, reason: null, itineraries: [itinerary({ priceTwd: 5000 })] };
+              if (kind === "blocked")
+                return {
+                  id: c.id,
+                  reason: "blocked" as const,
+                  blockedReason: "consent",
+                  itineraries: [],
+                };
+              const errorReason =
+                kind === "np" ? "no_payload" : kind === "5xx" ? "server_error" : "parse";
+              return {
+                id: c.id,
+                reason: "error" as const,
+                errorReason,
+                ...(allowRetry && kind !== "parse" ? { retried: true } : {}),
+                itineraries: [],
+              };
+            }),
+          );
+        const source = googleLiveFlightSource(
+          { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
+          lookup,
+          { ...opts },
+        );
+        const start = Date.now();
+        const pending = collectVerifiedDailyFlights(source, now);
+        await vi.advanceTimersByTimeAsync(2_000_000);
+        return { seen, collected: await pending, start };
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("re-queries a still-failed fare once after a 60 s pause, without in-line retry, and reprices it", async () => {
+      expect(SWEEP_PAUSE_MS).toBe(60_000);
+      const { seen, collected, start } = await sweepRun({ b: ["np", "ok"] }, ["a", "b", "c"]);
+      const second = seen.filter((x) => x.id === "b");
+      expect(second).toHaveLength(2);
+      expect(second[1]?.allowRetry).toBe(false);
+      expect((second[1]?.at ?? 0) - start).toBeGreaterThanOrEqual(SWEEP_PAUSE_MS);
+      expect(collected.items.find((i) => i.id === "b")?.priceTwd).toBe(5000);
+      expect(collected.live?.queries).toMatchObject({
+        swept: 1,
+        sweptRecovered: 1,
+        error: 0,
+        errorReasons: {},
+      });
+    });
+
+    it("a fare that fails again stays an error and keeps its cached price", async () => {
+      const { seen, collected } = await sweepRun({ b: ["np"] }, ["a", "b", "c"]);
+      expect(seen.filter((x) => x.id === "b")).toHaveLength(2);
+      expect(collected.items.find((i) => i.id === "b")?.priceTwd).toBe(6000);
+      expect(collected.live?.queries).toMatchObject({ swept: 1, sweptRecovered: 0, error: 1 });
+    });
+
+    it("sweeps only no_payload and server_error, never parse errors", async () => {
+      const { seen, collected } = await sweepRun(
+        { a: ["parse"], b: ["5xx", "ok"], c: ["np", "ok"] },
+        ["a", "b", "c", "d"],
+      );
+      expect(seen.filter((x) => x.id === "a")).toHaveLength(1);
+      expect(collected.live?.queries).toMatchObject({ swept: 2, sweptRecovered: 2 });
+    });
+
+    it("does not sweep after an explicit block stopped the run", async () => {
+      const { seen } = await sweepRun({ a: ["np"], b: ["blocked"] }, ["a", "b", "c"]);
+      expect(seen.map((x) => x.id)).toEqual(["a", "b"]);
+    });
+
+    it("does not sweep after a failure streak stopped the run", async () => {
+      const { seen } = await sweepRun({ a: ["np"], b: ["np"], c: ["np"] }, ["a", "b", "c", "d"]);
+      expect(seen.map((x) => x.id)).toEqual(["a", "b", "c"]);
+    });
+
+    it("an explicit block during the sweep stops it at once", async () => {
+      const { seen, collected } = await sweepRun(
+        { a: ["np", "blocked"], c: ["np", "ok"], e: ["np", "ok"] },
+        ["a", "b", "c", "d", "e"],
+      );
+      expect(seen.map((x) => x.id)).toEqual(["a", "b", "c", "d", "e", "a"]);
+      expect(collected.live?.queries).toMatchObject({
+        swept: 1,
+        sweptRecovered: 0,
+        blockedReasons: { consent: 1 },
+      });
+    });
+
+    it("sweeps at most SWEEP_MAX fares and keeps total requests within cap + retries + sweep", async () => {
+      expect(SWEEP_MAX).toBe(10);
+      const ids = Array.from({ length: 240 }, (_, k) => String(k));
+      // every third fare fails (never 3 in a row), all of them keep failing
+      const attempts = Object.fromEntries(
+        ids.filter((id) => Number(id) % 3 === 0).map((id) => [id, ["np" as const]]),
+      );
+      const { seen, collected } = await sweepRun(attempts, ids);
+      const sweptQueries = seen.length - 240;
+      expect(sweptQueries).toBe(SWEEP_MAX);
+      const retried = (collected.live?.queries as { retried?: number } | undefined)?.retried ?? 0;
+      expect(retried).toBeLessThanOrEqual(MAX_RETRIES_PER_RUN);
+      // Google requests: one per lookup plus one per in-line retry
+      expect(seen.length + retried).toBeLessThanOrEqual(240 + MAX_RETRIES_PER_RUN + SWEEP_MAX);
     });
   });
 
