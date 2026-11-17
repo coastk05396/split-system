@@ -432,6 +432,35 @@ describe("public flight routes and daily pipeline", () => {
     });
   });
 
+  it("puts Curated Destinations on the board in their Flight Region and still drops unlisted airports", async () => {
+    const fake = fakeTravelpayouts((origin, oneWay, month) =>
+      origin === "TPE" && !oneWay && month === "2026-12"
+        ? ["HIJ", "HKD", "HKT", "BKI", "CTU", "KMG", "TFU"].map((dest, i) => ({
+            dest,
+            day: 5 + i,
+            price: 5000 + i * 100,
+          }))
+        : [],
+    );
+    await refreshDailyFlights(
+      createDb(env.DB),
+      productionFlightSource({ ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" }, fake.fetchFn),
+      Date.parse("2026-11-16T00:00:00Z"),
+    );
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    const { items } = await res.json<DailyFlightsResponse>();
+
+    const regionOf = Object.fromEntries(items.map((i) => [i.dest, i.region]));
+    expect(regionOf).toEqual({
+      HIJ: "jp",
+      HKD: "jp",
+      HKT: "sea",
+      BKI: "sea",
+      CTU: "hkmo",
+      KMG: "hkmo",
+    }); // TFU (Chengdu Tianfu) is not curated: dropped, never an open-world airport
+  });
+
   it("scores Deal Signal against the median of the day's candidates per destination and trip type", async () => {
     const cronNow = Date.parse("2026-11-16T00:00:00Z");
     const fake = fakeTravelpayouts((origin, oneWay, month) => {

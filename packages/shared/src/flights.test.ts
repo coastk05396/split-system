@@ -4,15 +4,21 @@ import {
   computeArrivalTimeHm,
   computeDealSignal,
   departureBounds,
+  DESTINATION_CATALOG,
   filterDailyFlights,
+  FLIGHT_REGIONS,
   getAirlineName,
+  getAirportTimeZone,
+  getCityName,
   getDefaultDailyFlights,
+  getDestinationMeta,
   isGhostFare,
   isRedEyeTime,
   matchTaiwanHoliday,
   sortDailyFlights,
   withinDepartureWindow,
   type DailyFlightItem,
+  type DestinationMeta,
 } from "./flights.js";
 
 describe("flights domain helpers", () => {
@@ -257,5 +263,80 @@ describe("flights domain helpers", () => {
     const late = withinDepartureWindow(getDefaultDailyFlights("2027-02-01"), "2027-02-01");
     expect(late.some((f) => f.outDate === "2027-02-05")).toBe(false);
     for (const f of [...early, ...late]) expect(f.outDate >= "2026-11-30").toBe(true);
+  });
+});
+
+describe("Curated Destination catalog integrity", () => {
+  const regionalIndicatorFlag = (countryCode: string) =>
+    countryCode
+      .split("")
+      .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
+      .join("");
+
+  it("gives every airport unique, complete, localized metadata in a valid region", () => {
+    const seen = new Set<string>();
+    for (const d of DESTINATION_CATALOG) {
+      expect(d.airport, "IATA code").toMatch(/^[A-Z]{3}$/);
+      expect(seen.has(d.airport), `duplicate airport ${d.airport}`).toBe(false);
+      seen.add(d.airport);
+      expect(d.cityCode, `${d.airport} city code`).toMatch(/^[a-z]{3}$/);
+      expect(d.countryCode, `${d.airport} country code`).toMatch(/^[A-Z]{2}$/);
+      expect(d.flag, `${d.airport} flag matches ${d.countryCode}`).toBe(
+        regionalIndicatorFlag(d.countryCode),
+      );
+      for (const name of [d.zhTW, d.en, d.countryZhTW, d.countryEn]) {
+        expect(name.trim(), `${d.airport} names`).not.toBe("");
+      }
+      expect(/[一-鿿]/.test(d.zhTW), `${d.airport} zh-TW name`).toBe(true);
+      expect(/[一-鿿]/.test(d.en), `${d.airport} English name`).toBe(false);
+      expect(FLIGHT_REGIONS).toContain(d.region);
+      expect(d.baselineTwd, `${d.airport} baseline`).toBeGreaterThan(0);
+    }
+  });
+
+  it("resolves a real IANA timezone for every airport", () => {
+    for (const d of DESTINATION_CATALOG) {
+      const zone = getAirportTimeZone(d.airport);
+      expect(
+        () => new Intl.DateTimeFormat("en-GB", { timeZone: zone }),
+        `${d.airport} ${zone}`,
+      ).not.toThrow();
+    }
+    expect(getAirportTimeZone("BKI")).toBe("Asia/Kuching");
+    expect(getAirportTimeZone("HKT")).toBe("Asia/Bangkok");
+    expect(getAirportTimeZone("CTU")).toBe("Asia/Shanghai");
+  });
+
+  it("merges airports of one city under one city code, and never mixes countries or regions in one", () => {
+    const byCity = new Map<string, DestinationMeta[]>();
+    for (const d of DESTINATION_CATALOG) {
+      byCity.set(d.cityCode, [...(byCity.get(d.cityCode) ?? []), d]);
+    }
+    for (const [city, airports] of byCity) {
+      expect(new Set(airports.map((a) => a.countryCode)).size, city).toBe(1);
+      expect(new Set(airports.map((a) => a.region)).size, city).toBe(1);
+    }
+    const sharing = (...codes: string[]) =>
+      new Set(codes.map((c) => getDestinationMeta(c)?.cityCode)).size;
+    expect(sharing("NRT", "HND")).toBe(1);
+    expect(sharing("PVG", "SHA")).toBe(1);
+    expect(sharing("BKK", "DMK")).toBe(1);
+    expect(sharing("ICN", "GMP")).toBe(1);
+    expect(getDestinationMeta("XXX")).toBeNull();
+  });
+
+  it("keeps city names short enough for a phone card", () => {
+    for (const d of DESTINATION_CATALOG) {
+      expect(getCityName(d.airport, "en").length, d.airport).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it("covers Japan regional, Southeast Asia and mainland China Curated Destinations", () => {
+    const region = (code: string) => getDestinationMeta(code)?.region;
+    for (const jp of ["HIJ", "HKD", "UKB", "OKJ", "SDJ", "FUK", "CTS"])
+      expect(region(jp)).toBe("jp");
+    for (const sea of ["HKT", "BKI", "PQC", "HDY"]) expect(region(sea)).toBe("sea");
+    for (const cn of ["CTU", "KMG", "HRB"]) expect(region(cn)).toBe("hkmo");
+    expect(getAirlineName("3U", "zh-TW")).toBe("四川航空");
   });
 });
