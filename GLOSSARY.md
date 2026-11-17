@@ -49,8 +49,8 @@ An airport in the hand-maintained catalog (~80–90 major travel airports across
 _Avoid_: Open airport list, destination whitelist, global airport dump
 
 **Flight Region**:
-One of the five top-level board tabs (`日本`, `韓國`, `東南亞`, `港澳中`, `長程`); finer geographic sub-regions (Europe, North America, Oceania, Middle East & Islands) and individual countries live inside the filter drawer rather than adding more top-level tabs.
-_Avoid_: Continent tab, region pill (when meaning the sub-region filter)
+One of the destination areas in the Daily Flights filter: `日本`, `韓國`, `中港澳`, `東南亞`, `歐洲`, `美加`, `紐澳`, `中東`. Exactly one can be chosen, or none for all; each shows its fare count. There are no top-level tabs, and no separate country or city filter.
+_Avoid_: Continent tab, region pill, sub-region, region tab
 
 **Baseline**:
 The typical price of a Route for one departure month and one stop class (direct or connecting), against which a fare is compared.
