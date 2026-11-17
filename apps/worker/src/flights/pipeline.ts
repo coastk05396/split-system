@@ -312,7 +312,7 @@ function cheapestPerRoute(pool: readonly FlightCandidate[], perRoute: number): F
 
 /**
  * Picks the board (ADR 0010): only Good Deals (a Baseline and a Deal Signal above `normal`), ranked
- * by discount with price breaking ties, at most `MAX_DATES_PER_ROUTE` dates per Route and
+ * by exact discount with price breaking ties, at most `MAX_DATES_PER_ROUTE` dates per Route and
  * `TRIP_QUOTAS` fares per trip type as a ceiling. A quiet day yields a smaller board, never padding.
  */
 function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
@@ -324,8 +324,9 @@ function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
       .map((c) => ({ c, ...computeDealSignal(c.priceTwd, c.dealBaselineTwd ?? 0) }))
       .filter(({ tag }) => tag !== "normal")
       .sort(
+        // Exact ratio price/baseline ascending (cross-multiplied): rounded percents tie too easily.
         (a, b) =>
-          b.discountPct - a.discountPct ||
+          a.c.priceTwd * (b.c.dealBaselineTwd ?? 1) - b.c.priceTwd * (a.c.dealBaselineTwd ?? 1) ||
           a.c.priceTwd - b.c.priceTwd ||
           a.c.outDate.localeCompare(b.c.outDate),
       );

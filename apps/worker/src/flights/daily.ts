@@ -27,6 +27,8 @@ export {
 };
 
 const D1_INSERT_CHUNK_SIZE = 5;
+/** A completed run stays authoritative for 48 hours (one missed daily 08:00 run); after that the data is unavailable. */
+const RUN_FRESH_MS = 48 * 3_600_000;
 
 function parseAirlinesJson(json: string): string[] {
   try {
@@ -98,16 +100,20 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .orderBy(desc(dailyFlights.digestDate), desc(dailyFlights.createdAt))
     .limit(1);
 
+  // A completed run is an empty board, never curated fares, while it is fresh (ADR 0010).
+  const [run] = await db.select().from(dailyFlightsRuns).limit(1);
+  const emptyBoard = (): DailyFlightsResponse | null =>
+    run !== undefined && now - run.completedAt <= RUN_FRESH_MS
+      ? {
+          date: run.digestDate,
+          updatedAt: new Date(run.completedAt).toISOString(),
+          items: [],
+          isFallback: false,
+        }
+      : null;
+
   if (latest === undefined) {
-    // A completed run with zero Good Deals is an empty board (ADR 0010: never padded); only "no data" falls back.
-    const [run] = await db.select().from(dailyFlightsRuns).limit(1);
-    if (run === undefined) return buildFallbackResponse(now);
-    return {
-      date: run.digestDate,
-      updatedAt: new Date(run.completedAt).toISOString(),
-      items: [],
-      isFallback: false,
-    };
+    return emptyBoard() ?? buildFallbackResponse(now);
   }
 
   const rows = await db
@@ -118,7 +124,7 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
 
   const upcomingRows = withinDepartureWindow(rows, today);
   if (upcomingRows.length === 0) {
-    return buildFallbackResponse(now);
+    return emptyBoard() ?? buildFallbackResponse(now);
   }
 
   const items: DailyFlightItem[] = upcomingRows.map((row) => {

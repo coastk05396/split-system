@@ -542,6 +542,24 @@ describe("public flight routes and daily pipeline", () => {
       ]);
     });
 
+    it("ranks by the exact discount, so 29.99% beats three 29.55% fares that round to the same 30%", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [3, 6, 9].map((day) => ({ dest: "NRT", day, price: 7045 })) // 29.55% off 10000
+            : month === "2027-01"
+              ? [{ dest: "NRT", day: 5, price: 14002 }] // 29.99% off 20000
+              : [],
+        (_dest, month) => ({
+          prices: month === "2026-12-01" ? [9000, 10000, 11000] : [19000, 20000, 21000],
+        }),
+      );
+      const { items } = await boardOf(fake);
+
+      expect(items.map((i) => i.priceTwd).sort()).toEqual([14002, 7045, 7045]);
+      expect(new Set(items.map((i) => i.discountPct))).toEqual(new Set([30]));
+    });
+
     it("breaks equal discounts by lower price", async () => {
       const months = ["2026-12", "2027-01", "2027-02", "2027-03"];
       const price = [8000, 9600, 8800, 8400]; // all 20% below their month's Baseline
@@ -583,6 +601,20 @@ describe("public flight routes and daily pipeline", () => {
       const failing: FlightSource = { fetchCandidates: () => Promise.reject(new Error("boom")) };
       await expect(refreshDailyFlights(db, failing, cronNow)).rejects.toThrow("boom");
       expect(await get()).toMatchObject({ items: [], isFallback: false });
+
+      // A completed run whose stored fares have all aged out of the window is still an empty board
+      // while fresh, and falls back once the last run is older than 48 hours.
+      const completed = tpeSupply(
+        (month) => (month === "2026-11" ? [{ dest: "NRT", day: 30, price: 7000 }] : []), // 14 days out
+        () => ({ prices: [9000, 10000, 11000] }),
+      );
+      expect((await boardOf(completed)).items).toHaveLength(1);
+      const outOfWindow = Date.parse("2027-06-01T00:00:00Z");
+      const rows = (at: number) => listDailyFlights(db, at);
+      const justFresh = cronNow + 48 * 3_600_000;
+      expect(await rows(justFresh)).toMatchObject({ items: [], isFallback: false });
+      expect((await rows(justFresh + 1)).isFallback).toBe(true);
+      expect((await rows(outOfWindow)).isFallback).toBe(true);
 
       // A run that discovered nothing at all (no token / upstream down) is "unavailable", not "empty".
       await refreshDailyFlights(db, productionFlightSource({ TRAVELPAYOUTS_TOKEN: "" }), cronNow);
