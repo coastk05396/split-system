@@ -53,7 +53,7 @@ One of the five top-level board tabs (`日本`, `韓國`, `東南亞`, `港澳�
 _Avoid_: Continent tab, region pill (when meaning the sub-region filter)
 
 **Deal Signal**:
-How a verified fare compares to the Travelpayouts monthly route median (`/v2/prices/month-matrix` per origin, destination, trip type, and departure month, when at least 3 prices exist), falling back to the median of that day's Stage 1 candidate fares for the same destination and trip type (no signal when too few candidates exist in both): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a solid pill from 30%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
+How a verified fare compares to the Travelpayouts monthly route median (`/v2/prices/month-matrix` per origin, destination, trip type, and departure month, when at least 3 prices exist), falling back to the median of that day's Stage 1 candidate fares for the same destination and trip type (no signal when too few candidates exist in both): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a solid pill from 50%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
 _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price)
 
 **Ghost Fare**:

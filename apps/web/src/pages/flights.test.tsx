@@ -430,9 +430,9 @@ describe("daily flights page", () => {
   it.each([
     [14, null],
     [15, "text"],
-    [29, "text"],
-    [30, "solid"],
-    [45, "solid"],
+    [49, "text"],
+    [50, "solid"],
+    [70, "solid"],
   ] as const)("draws a %i%% discount as %s on the card", async (pct, kind) => {
     const { api } = setup();
     setItems(api, [fare("d", { dest: "NRT", priceTwd: 3000, discountPct: pct })]);
@@ -445,18 +445,21 @@ describe("daily flights page", () => {
     const badge = within(card).getByText(`省 ${String(pct)}%`);
     if (kind === "solid") {
       expect(badge.className).toMatch(/rounded-full.*bg-fl-green.*font-bold.*text-white/);
-    } else {
+    }
+    expect(badge.className).toContain("text-[11px]"); // smaller than the 26px price
+    if (kind === "text") {
       expect(badge.className).toContain("text-fl-green");
       expect(badge.className).not.toContain("bg-");
     }
+    expect(within(card).getByText("3,000").className).toContain("text-[26px]");
   });
 
-  it("applies the 15/30 thresholds on expanded rows too, with a smaller badge", async () => {
+  it("applies the 15/50 thresholds on expanded rows too, with a smaller badge", async () => {
     const user = userEvent.setup();
     const { api } = setup();
     setItems(
       api,
-      [45, 30, 29, 15, 14].map((pct, i) =>
+      [70, 50, 49, 15, 14].map((pct, i) =>
         fare(`r${String(pct)}`, {
           dest: "ICN",
           region: "kr",
@@ -470,10 +473,10 @@ describe("daily flights page", () => {
     const rows = rowsOf(cityHeadings()[0] as HTMLElement);
     const badge = (row: HTMLElement | undefined, pct: number) =>
       within(row as HTMLElement).queryByText(`省 ${String(pct)}%`);
-    expect(badge(rows[0], 45)?.className).toMatch(/bg-fl-green.*text-\[11px\]/);
-    expect(badge(rows[1], 30)?.className).toContain("bg-fl-green");
-    expect(badge(rows[2], 29)?.className).toMatch(/text-fl-green/);
-    expect(badge(rows[2], 29)?.className).not.toContain("bg-");
+    expect(badge(rows[0], 70)?.className).toMatch(/bg-fl-green.*text-\[11px\]/);
+    expect(badge(rows[1], 50)?.className).toContain("bg-fl-green");
+    expect(badge(rows[2], 49)?.className).toMatch(/text-fl-green/);
+    expect(badge(rows[2], 49)?.className).not.toContain("bg-");
     expect(badge(rows[3], 15)?.className).not.toContain("bg-");
     expect(rows[4]).not.toHaveTextContent("省");
   });
