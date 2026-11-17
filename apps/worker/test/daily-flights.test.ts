@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
+import { d1BaselineCache } from "../src/flights/baseline-cache.js";
 import {
   listDailyFlights,
   productionFlightSource,
@@ -85,7 +86,8 @@ function fakeTravelpayouts(
       return_transfers: 0,
       duration_to: 180,
       duration_back: oneWay ? 0 : 180,
-      found_at: "2026-11-15T20:00:00Z",
+      // 4h before the (controllable) clock, so fares stay fresh when a test advances days.
+      found_at: new Date(clock.now - 4 * 3_600_000).toISOString(),
     };
   };
 
@@ -517,6 +519,80 @@ describe("public flight routes and daily pipeline", () => {
     expect(signal("KIX", 4200)).toEqual({ tag: "steal", discountPct: 30 });
     // HKG (network error + < 3 Stage 1 candidates) has no signal
     expect(signal("HKG", 2000)).toEqual({ tag: "normal", discountPct: 0 });
+  });
+
+  describe("month-matrix baseline cache (3 days, D1)", () => {
+    const DAY_MS = 24 * 3_600_000;
+    const day0 = Date.parse("2026-11-16T00:00:00Z");
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+
+    // D1 persists across tests in this file: start each case with an empty cache.
+    beforeEach(async () => {
+      await env.DB.prepare("DELETE FROM flight_baselines").run();
+    });
+
+    // BKK rt in 2026-12 only; the month-matrix answers `matrix(call)` (default median 7000).
+    function bkkSupply(matrix?: () => { status?: number; prices: number[] } | null) {
+      return fakeTravelpayouts(
+        (origin, oneWay, month) =>
+          origin === "TPE" && !oneWay && month === "2026-12"
+            ? [
+                { dest: "BKK", day: 5, price: 4200 },
+                { dest: "BKK", day: 12, price: 5600 },
+              ]
+            : [],
+        matrix ?? (() => ({ prices: [4000, 7000, 10000] })),
+      );
+    }
+
+    async function refreshAt(fake: ReturnType<typeof bkkSupply>, now: number) {
+      const db = createDb(env.DB);
+      clock.now = now;
+      await refreshDailyFlights(
+        db,
+        productionFlightSource(tpEnv, fake.fetchFn, d1BaselineCache(db)),
+        now,
+      );
+      const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+      const { items } = await res.json<DailyFlightsResponse>();
+      return items.map((i) => ({ price: i.priceTwd, tag: i.tag, discountPct: i.discountPct }));
+    }
+
+    it("reuses a baseline fetched within 3 days with no new upstream call, and scores the same", async () => {
+      const first = bkkSupply();
+      const fresh = await refreshAt(first, day0);
+      expect(first.monthMatrixCalls).toHaveLength(1);
+
+      const second = bkkSupply(() => ({ prices: [1, 2, 3] })); // would change the signal if it were fetched
+      const cached = await refreshAt(second, day0 + 3 * DAY_MS);
+      expect(second.monthMatrixCalls).toHaveLength(0);
+      expect(cached).toEqual(fresh);
+      expect(fresh).toContainEqual({ price: 4200, tag: "steal", discountPct: 40 });
+    });
+
+    it("re-fetches and stores a baseline older than 3 days", async () => {
+      await refreshAt(bkkSupply(), day0);
+
+      const later = bkkSupply(() => ({ prices: [5000, 6000, 7000] })); // median 6000
+      const items = await refreshAt(later, day0 + 3 * DAY_MS + 1);
+      expect(later.monthMatrixCalls).toHaveLength(1);
+      expect(items).toContainEqual({ price: 4200, tag: "steal", discountPct: 30 });
+
+      const reused = bkkSupply();
+      await refreshAt(reused, day0 + 4 * DAY_MS);
+      expect(reused.monthMatrixCalls).toHaveLength(0);
+    });
+
+    it("falls back as before when the baseline fetch fails, and retries it next run", async () => {
+      const failing = bkkSupply(() => ({ status: 500, prices: [] }));
+      const items = await refreshAt(failing, day0);
+      // Only 2 Stage 1 candidates and no baseline: no Deal Signal
+      expect(items.every((i) => i.tag === "normal" && i.discountPct === 0)).toBe(true);
+
+      const recovered = bkkSupply();
+      await refreshAt(recovered, day0 + DAY_MS);
+      expect(recovered.monthMatrixCalls).toHaveLength(1);
+    });
   });
 
   it("drops ghost fares, keeps & tags red-eye flights, and serves persisted D1 deals", async () => {

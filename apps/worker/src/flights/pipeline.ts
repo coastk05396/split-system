@@ -67,6 +67,23 @@ export interface VerifiedFlightPrice {
   inboundArr?: string | null;
 }
 
+/** A month-matrix median (`null`: upstream answered with fewer than 3 prices) for one Route and departure month. */
+export interface BaselineEntry {
+  origin: FlightOrigin;
+  dest: string;
+  tripType: FlightTripType;
+  /** First day of the departure month, `YYYY-MM-01`. */
+  month: string;
+  baselineTwd: number | null;
+}
+
+/** Persists month-matrix baselines between daily runs; failed fetches are never stored. */
+export interface BaselineCache {
+  /** Entries fetched within `BASELINE_CACHE_TTL_MS` of `now`. */
+  load(now: number): Promise<BaselineEntry[]>;
+  save(entries: readonly BaselineEntry[], now: number): Promise<void>;
+}
+
 export interface FlightSource {
   fetchCandidates(digestDate: string, now?: number): Promise<FlightCandidate[]>;
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
@@ -85,6 +102,12 @@ const MAX_DATES_PER_ROUTE = 5;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
 const MIN_SIGNAL_CANDIDATES = 3;
 const DISCOVERY_LIMIT = "100";
+/** A fetched month-matrix baseline is reused for 3 days (ADR 0009) to keep the cron's upstream calls down. */
+export const BASELINE_CACHE_TTL_MS = 3 * 24 * 3_600_000;
+
+function baselineKey(origin: string, dest: string, tripType: FlightTripType, month: string) {
+  return `${origin}-${dest}-${tripType}-${month}`;
+}
 
 /** Splits `total` across regions by `REGION_WEIGHTS` (largest remainder, ties by region order). */
 function splitQuota(total: number): Record<FlightRegion, number> {
@@ -333,6 +356,7 @@ async function fetchMonthMatrixPrices(
 export function productionFlightSource(
   env: { TRAVELPAYOUTS_TOKEN?: string },
   fetchFn: FetchFn = (input, init) => fetch(input, init),
+  baselineCache?: BaselineCache,
 ): FlightSource {
   return {
     async fetchCandidates(digestDate, now = Date.now()) {
@@ -414,9 +438,17 @@ export function productionFlightSource(
 
       const selected = selectBoard(collected);
       const monthBaselines = new Map<string, number | null>();
+      try {
+        for (const e of (await baselineCache?.load(now)) ?? []) {
+          monthBaselines.set(baselineKey(e.origin, e.dest, e.tripType, e.month), e.baselineTwd);
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "baseline_cache_load_failed", error: String(error) }));
+      }
+      const fetchedBaselines: BaselineEntry[] = [];
       for (const c of selected) {
         const month = `${c.outDate.slice(0, 7)}-01`;
-        const matrixKey = `${c.origin}-${c.dest}-${c.tripType}-${month}`;
+        const matrixKey = baselineKey(c.origin, c.dest, c.tripType, month);
         if (monthBaselines.has(matrixKey)) continue;
 
         const prices = await fetchMonthMatrixPrices(
@@ -439,16 +471,32 @@ export function productionFlightSource(
             month,
           },
         );
-        monthBaselines.set(
-          matrixKey,
+        const baselineTwd =
           prices !== null && prices.length >= MIN_SIGNAL_CANDIDATES
             ? median([...prices].sort((a, b) => a - b))
-            : null,
-        );
+            : null;
+        monthBaselines.set(matrixKey, baselineTwd);
+        // A failed fetch (null) is retried next run, never cached as "no signal".
+        if (prices !== null) {
+          fetchedBaselines.push({
+            origin: c.origin,
+            dest: c.dest,
+            tripType: c.tripType,
+            month,
+            baselineTwd,
+          });
+        }
+      }
+      try {
+        if (baselineCache && fetchedBaselines.length > 0) {
+          await baselineCache.save(fetchedBaselines, now);
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "baseline_cache_save_failed", error: String(error) }));
       }
 
       return selected.map((c) => {
-        const matrixKey = `${c.origin}-${c.dest}-${c.tripType}-${c.outDate.slice(0, 7)}-01`;
+        const matrixKey = baselineKey(c.origin, c.dest, c.tripType, `${c.outDate.slice(0, 7)}-01`);
         const matrixBaseline = monthBaselines.get(matrixKey) ?? null;
         if (matrixBaseline !== null) {
           return { ...c, dealBaselineTwd: matrixBaseline };

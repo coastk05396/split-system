@@ -262,6 +262,17 @@ CREATE TABLE daily_flights (
   inbound_dep TEXT,        -- HH:mm or ISO
   created_at INTEGER NOT NULL
 );
+
+-- 14. 月度票價中位數快取（3 天，ADR 0009）
+CREATE TABLE flight_baselines (
+  origin TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  trip_type TEXT NOT NULL, -- 'rt' | 'ow'
+  month TEXT NOT NULL,     -- YYYY-MM-01
+  baseline_twd INTEGER,    -- NULL: 上游不足 3 筆票價
+  fetched_at INTEGER NOT NULL,
+  PRIMARY KEY (origin, destination, trip_type, month)
+);
 ```
 
 ---
@@ -309,7 +320,7 @@ CREATE TABLE daily_flights (
 
 每日拆分為兩條獨立 Cron 排程：`30 16 * * *`（台灣時間 `00:30`）依序執行「清除過期資料 ➔ 結清待處理的帳號清理 ➔ 更新參考匯率」，`0 0 * * *`（台灣時間 `08:00`）專責執行「更新每日便宜航班 (`refreshDailyFlights`)」（未指定 Cron 之手動測試則依序執行全部步驟）；另提供本機維運腳本 `apps/worker/scripts/sync-daily-flights.ts` (`pnpm --filter @split/worker sync-flights`) 供開發者隨時手動抓價並寫入本機或遠端 D1。
 
-* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 依五個台灣出發機場、來回／單程兩種行程，**逐月**（涵蓋出發日 14 天後至 6 個月內的每個日曆月，每個來源每月一次請求，不帶 `unique` 以取得同航線多個日期）抓取候選低價票，並丟棄出發日少於 14 天或超過 6 個月者；看板目標約 200 筆，來回（約 150）與單程（約 50）各有獨立配額，各自再依既有比例（`jp` 7 : `kr` 3 : `sea` 4 : `hkmo` 3 : `longhaul` 3，採最大餘數法分配）分配給五個地區，每個月份輪流挑選最便宜者以涵蓋所有月份，且同一航線（出發機場 × 目的地 × 行程類型）至多 5 個日期；所有上游請求**逐一依序**送出（不並行），每次執行約 70 次探索＋至多 200 次月曆基準（依航線×月份去重並帶 `limit=100` 涵蓋整月）＋至多 200 次驗證（總計至多約 470 次，遠低於 Cloudflare Workers Paid 10,000 次上限，見 ADR 0008），並允許單程票 `duration*` 為 `0`（未設定 `TRAVELPAYOUTS_TOKEN` 或無候選時不寫入假資料至 D1，讓 `GET /flights/daily` 回傳 `isFallback: true` 參考票價並於前端顯示提示）；探索與 Stage 2 驗證階段對缺少 `found_at` 之列予以保留（`v3/prices_for_dates` 回應不附帶該欄），惟若回應包含 `found_at` 且格式錯誤或超過 48 小時仍予以丟棄；Stage 2 透過可抽換的 `FlightSource.verifyCandidate` 驗證並比對路線、日期與直飛，過濾「幽靈票」（無符合結果、直飛降為轉機、已帶 `found_at` 時效過舊，或驗證價格高於發現價 20% 且高於 NT$800 者予以刪除），並依抵達機場當地時區計算到達時間以標記 `isRedEye`（起降時間於 `00:00–05:59`；資料欄位保留，網頁前端不再顯示紅眼標記或提供紅眼篩選），依 Travelpayouts `/v2/prices/month-matrix` **該航線（出發機場 × 目的地 × 行程類型 × 出發月份，依選定看板候選去重逐一依序查詢）之月度票價中位數**（達 3 筆以上正數票價時採用；失敗或不足 3 筆時退回**當日同目的地、同行程類型之 Stage 1 候選票價中位數**，取自配額篩選前的整個候選池；兩者皆少於 3 筆時不提供訊號，折扣為 0 並視為 `normal`）計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%、其餘 `normal`；寫死的目的地基準價與單程係數僅用於精選參考票價 fallback，不再用於實際評分，見 ADR 0007 附錄)後分塊寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。`GET /flights/daily` 於公開邊界再次套用同一個出發窗口（今日起 14 天至 6 個月），無論資料來自 D1 或精選參考票價 fallback，快取票在跨日後若已不足 14 天或超出窗口一律不回傳。
+* **refreshDailyFlights**：自 Travelpayouts (`v3/prices_for_dates`) 依五個台灣出發機場、來回／單程兩種行程，**逐月**（涵蓋出發日 14 天後至 6 個月內的每個日曆月，每個來源每月一次請求，不帶 `unique` 以取得同航線多個日期）抓取候選低價票，並丟棄出發日少於 14 天或超過 6 個月者；看板目標約 200 筆，來回（約 150）與單程（約 50）各有獨立配額，各自再依既有比例（`jp` 7 : `kr` 3 : `sea` 4 : `hkmo` 3 : `longhaul` 3，採最大餘數法分配）分配給五個地區，每個月份輪流挑選最便宜者以涵蓋所有月份，且同一航線（出發機場 × 目的地 × 行程類型）至多 5 個日期；所有上游請求**逐一依序**送出（不並行），每次執行約 70 次探索＋至多 200 次月曆基準（依航線×月份去重並帶 `limit=100` 涵蓋整月）＋至多 200 次驗證（總計至多約 470 次，遠低於 Cloudflare Workers Paid 10,000 次上限，見 ADR 0008），並允許單程票 `duration*` 為 `0`（未設定 `TRAVELPAYOUTS_TOKEN` 或無候選時不寫入假資料至 D1，讓 `GET /flights/daily` 回傳 `isFallback: true` 參考票價並於前端顯示提示）；探索與 Stage 2 驗證階段對缺少 `found_at` 之列予以保留（`v3/prices_for_dates` 回應不附帶該欄），惟若回應包含 `found_at` 且格式錯誤或超過 48 小時仍予以丟棄；Stage 2 透過可抽換的 `FlightSource.verifyCandidate` 驗證並比對路線、日期與直飛，過濾「幽靈票」（無符合結果、直飛降為轉機、已帶 `found_at` 時效過舊，或驗證價格高於發現價 20% 且高於 NT$800 者予以刪除），並依抵達機場當地時區計算到達時間以標記 `isRedEye`（起降時間於 `00:00–05:59`；資料欄位保留，網頁前端不再顯示紅眼標記或提供紅眼篩選），依 Travelpayouts `/v2/prices/month-matrix` **該航線（出發機場 × 目的地 × 行程類型 × 出發月份，依選定看板候選去重逐一依序查詢）之月度票價中位數**（結果以 `flight_baselines` 表在 D1 快取 3 天，3 天內不重複請求上游，過期才重新查詢並覆寫；請求失敗不寫入快取、下次再試；達 3 筆以上正數票價時採用；失敗或不足 3 筆時退回**當日同目的地、同行程類型之 Stage 1 候選票價中位數**，取自配額篩選前的整個候選池；兩者皆少於 3 筆時不提供訊號，折扣為 0 並視為 `normal`）計算折扣比例與 `DealSignal` (`steal` ≥ 30%、`below_market` ≥ 15%、其餘 `normal`；寫死的目的地基準價與單程係數僅用於精選參考票價 fallback，不再用於實際評分，見 ADR 0007 附錄)後分塊寫入 `daily_flights`；任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。`GET /flights/daily` 於公開邊界再次套用同一個出發窗口（今日起 14 天至 6 個月），無論資料來自 D1 或精選參考票價 fallback，快取票在跨日後若已不足 14 天或超出窗口一律不回傳。
 
 * **M-1 過期資料**：清除已過期的登入狀態、過期的連結碼與舊的限流計數。
 * **M-2 舊預留**：超過 24 小時仍為「待處理」的群組預留，只有在群組帳本（權威來源）回覆該使用者不是有效成員時才刪除。
