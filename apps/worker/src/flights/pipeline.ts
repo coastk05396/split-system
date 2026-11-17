@@ -91,9 +91,11 @@ export interface BaselineCache {
 export interface FlightSource {
   fetchCandidates(digestDate: string, now?: number): Promise<FlightCandidate[]>;
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
+  /** Upstream requests made since the last `fetchCandidates` started, for the run summary. */
+  upstreamCalls?(): number;
 }
 
-// ~70 discovery + ~31 targeted long-haul calls + <=230 baselines + <=230 verifications per run (<= ~560 cold, fewer with cached baselines), all sequential: needs Workers Paid (ADR 0008/0009).
+// ~70 broad discovery + ~135 per-route queries + <= 230 baselines + <= 230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0010).
 /** Board size per trip type: 230 fares, round trips dominate and one way stays a small secondary slice. */
 export const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 225, ow: 5 };
 const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
@@ -108,11 +110,47 @@ export const MAX_DATES_PER_ROUTE = 3;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
 const MIN_SIGNAL_CANDIDATES = 3;
 const DISCOVERY_LIMIT = "100";
-/** Main Taipei airport, the origin of the targeted long-haul discovery queries. */
+/** Main Taipei airport, the origin of the per-route long-haul and country-main queries. */
 const TARGETED_ORIGIN: FlightOrigin = "TPE";
 const LONGHAUL_AIRPORTS: readonly string[] = DESTINATION_CATALOG.filter(
   (d) => d.region === "longhaul",
 ).map((d) => d.airport);
+/** The most popular Asian destinations, asked route by route from every main origin so cheap broad results cannot crowd them out. */
+const POPULAR_DESTINATIONS: readonly string[] = [
+  ...["NRT", "HND", "KIX", "FUK", "CTS", "OKA"],
+  ...["ICN", "PUS", "CJU"],
+  ...["BKK", "CNX", "SIN", "KUL", "HAN", "SGN", "DAD", "MNL", "DPS"],
+  ...["HKG", "PVG"],
+];
+
+/** One per-route discovery query: every date in the window for a single origin and destination. */
+interface RouteQuery {
+  origin: FlightOrigin;
+  dest: string;
+}
+
+/**
+ * Per-route discovery (ADR 0010): long-haul airports and one main airport for every country not yet
+ * covered, all from the main Taipei airport, then popular destinations from every main origin.
+ */
+function routeQueries(): RouteQuery[] {
+  const queries: RouteQuery[] = [
+    ...LONGHAUL_AIRPORTS.map((dest) => ({ origin: TARGETED_ORIGIN, dest })),
+    ...POPULAR_DESTINATIONS.map((dest) => ({ origin: TARGETED_ORIGIN, dest })),
+  ];
+  const covered = new Set(queries.map((q) => getDestinationMeta(q.dest)?.countryCode));
+  for (const d of DESTINATION_CATALOG) {
+    if (covered.has(d.countryCode)) continue;
+    covered.add(d.countryCode);
+    queries.push({ origin: TARGETED_ORIGIN, dest: d.airport }); // first catalog airport = the country's main one
+  }
+  for (const origin of FLIGHT_ORIGINS) {
+    if (origin === TARGETED_ORIGIN) continue;
+    queries.push(...POPULAR_DESTINATIONS.map((dest) => ({ origin, dest })));
+  }
+  return queries;
+}
+const ROUTE_QUERIES = routeQueries();
 /** A fetched month-matrix baseline is reused for 3 days (ADR 0009) to keep the cron's upstream calls down. */
 export const BASELINE_CACHE_TTL_MS = 3 * 24 * 3_600_000;
 
@@ -339,6 +377,9 @@ async function fetchTravelpayoutsJson<T>(
   schema: z.ZodType<T>,
   logContext: { event: string; [key: string]: unknown },
 ): Promise<T | null> {
+  // A cleared timer (not `AbortSignal.timeout`) so hundreds of calls per run leave no pending timeouts behind.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 8_000);
   try {
     const url = new URL(endpoint);
     for (const [k, v] of Object.entries(query)) {
@@ -346,7 +387,7 @@ async function fetchTravelpayoutsJson<T>(
     }
     const res = await fetchFn(url.toString(), {
       headers: { "X-Access-Token": token },
-      signal: AbortSignal.timeout(8_000),
+      signal: abort.signal,
     });
     if (!res.ok) {
       console.warn(JSON.stringify({ ...logContext, status: res.status }));
@@ -356,6 +397,8 @@ async function fetchTravelpayoutsJson<T>(
   } catch (error) {
     console.warn(JSON.stringify({ ...logContext, error: String(error) }));
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -410,11 +453,19 @@ async function fetchMonthMatrixPrices(
  */
 export function productionFlightSource(
   env: { TRAVELPAYOUTS_TOKEN?: string },
-  fetchFn: FetchFn = (input, init) => fetch(input, init),
+  upstreamFetch: FetchFn = (input, init) => fetch(input, init),
   baselineCache?: BaselineCache,
 ): FlightSource {
+  let upstreamCalls = 0;
+  const fetchFn: FetchFn = (input, init) => {
+    upstreamCalls += 1;
+    return upstreamFetch(input, init);
+  };
   return {
+    upstreamCalls: () => upstreamCalls,
+
     async fetchCandidates(digestDate, now = Date.now()) {
+      upstreamCalls = 0;
       const token = env.TRAVELPAYOUTS_TOKEN;
       if (!token) return [];
 
@@ -483,22 +534,22 @@ export function productionFlightSource(
         }
       }
 
-      // Cheap short-haul fares fill the per-origin, per-month limit above, so long-haul routes are
-      // asked for explicitly: one round-trip query per curated long-haul airport from the main
-      // Taipei airport, across the whole departure window (ADR 0009).
-      for (const dest of LONGHAUL_AIRPORTS) {
+      // Cheap short-haul fares fill the per-origin, per-month limit above, so long-haul routes, popular
+      // destinations and every country's main airport are asked for explicitly: one round-trip query
+      // per route across the whole departure window (ADR 0009, 0010). A failed query is just skipped.
+      for (const { origin, dest } of ROUTE_QUERIES) {
         const data = await fetchTravelpayoutsPrices(
           fetchFn,
           token,
           {
-            origin: TARGETED_ORIGIN,
+            origin,
             destination: dest,
             currency: "twd",
             sorting: "price",
             limit: DISCOVERY_LIMIT,
             one_way: "false",
           },
-          { event: "travelpayouts_targeted_fetch_failed", origin: TARGETED_ORIGIN, dest },
+          { event: "travelpayouts_targeted_fetch_failed", origin, dest },
         );
         if (data !== null) ingest(data, false);
       }
@@ -683,6 +734,8 @@ export interface CollectedDailyFlights {
   candidates: number;
   droppedNull: number;
   droppedGhost: number;
+  /** Upstream requests this run used (Workers Paid allows 1,000 subrequests per invocation). */
+  upstreamCalls: number;
   rows: DailyFlightRow[];
   items: DailyFlightItem[];
 }
@@ -696,6 +749,7 @@ export function logDailyFlightsSummary(event: string, collected: CollectedDailyF
       candidates: collected.candidates,
       droppedNull: collected.droppedNull,
       droppedGhost: collected.droppedGhost,
+      upstreamCalls: collected.upstreamCalls,
       persisted: collected.rows.length,
     }),
   );
@@ -843,6 +897,7 @@ export async function collectVerifiedDailyFlights(
     candidates: candidates.length,
     droppedNull,
     droppedGhost,
+    upstreamCalls: source.upstreamCalls?.() ?? 0,
     rows,
     items,
   };

@@ -6,7 +6,7 @@ import {
   type DailyFlightsResponse,
 } from "@split/shared";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { createDb } from "../src/db/client.js";
 import { d1BaselineCache } from "../src/flights/baseline-cache.js";
@@ -494,7 +494,8 @@ describe("public flight routes and daily pipeline", () => {
     }); // TFU (Chengdu Tianfu) is not curated: dropped, never an open-world airport
   });
 
-  describe("targeted long-haul discovery and the Long-haul share", () => {
+  // Hundreds of sequential fake upstream calls and D1 writes per run: well past the 5s default.
+  describe("targeted long-haul discovery and the Long-haul share", { timeout: 30_000 }, () => {
     const cronNow = Date.parse("2026-11-16T00:00:00Z");
     const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
     const longhaul = DESTINATION_CATALOG.filter((d) => d.region === "longhaul").map(
@@ -537,14 +538,85 @@ describe("public flight routes and daily pipeline", () => {
       const fake = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
       const items = await run(fake);
 
-      // One round-trip query per curated long-haul airport, all from TPE
-      expect(fake.targetedCalls).toEqual(
+      // One round-trip query per curated long-haul airport from TPE, ahead of the other per-route queries
+      expect(fake.targetedCalls.slice(0, longhaul.length)).toEqual(
         longhaul.map((destination) => ({ origin: "TPE", destination })),
       );
       expect(fake.discoveries.every((d) => d.month !== "")).toBe(true);
       const lh = items.filter((i) => i.region === "longhaul");
       expect(lh.length).toBeGreaterThan(0);
       expect(new Set(lh.map((i) => i.origin))).toEqual(new Set(["TPE"]));
+    });
+
+    describe("per-route discovery of popular destinations and every country", () => {
+      const countries = [...new Set(DESTINATION_CATALOG.map((d) => d.countryCode))];
+      const countryOf = (dest: string) => getDestinationMeta(dest)?.countryCode;
+      // Hanoi fares exist only in the per-route answer: the broad per-origin query never sees them
+      const hanoiOnly = (dest: string) =>
+        dest === "HAN" ? [{ dest, month: "2026-12", day: 8, price: 4000 }] : [];
+
+      it("queries every country at least once per run, popular destinations from every main origin", async () => {
+        const fake = fakeTravelpayouts(() => [], stableMatrix);
+        await run(fake);
+
+        const queried = new Set(fake.targetedCalls.map((c) => countryOf(c.destination)));
+        expect(countries.filter((c) => !queried.has(c))).toEqual([]);
+        for (const origin of ["TPE", "TSA", "KHH", "RMQ", "TNN"]) {
+          expect(fake.targetedCalls).toContainEqual({ origin, destination: "HAN" });
+        }
+        expect(fake.targetedCalls).toContainEqual({ origin: "TPE", destination: "MFM" });
+        // No route is asked twice
+        const keys = fake.targetedCalls.map((c) => `${c.origin}-${c.destination}`);
+        expect(new Set(keys).size).toBe(keys.length);
+      });
+
+      it("finds a popular destination the broad query missed", async () => {
+        const items = await run(
+          fakeTravelpayouts(() => everyDate(["NRT"], 3000), stableMatrix, hanoiOnly),
+        );
+
+        expect(items.some((i) => i.dest === "HAN")).toBe(true);
+      });
+
+      it("skips a failed per-route query without failing the run", async () => {
+        const fake = fakeTravelpayouts(() => [], stableMatrix, hanoiOnly);
+        const failing: typeof fetch = (input, init) => {
+          const url = new URL(
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+          );
+          if (
+            url.searchParams.get("destination") === "HAN" &&
+            !url.searchParams.has("departure_at")
+          ) {
+            return Promise.resolve(new Response("upstream error", { status: 500 }));
+          }
+          return fake.fetchFn(input, init);
+        };
+        const db = createDb(env.DB);
+        const items = await refreshDailyFlights(
+          db,
+          productionFlightSource(tpEnv, failing, d1BaselineCache(db)),
+          cronNow,
+        );
+
+        expect(items).toEqual([]);
+        expect(fake.targetedCalls.some((c) => c.destination === "SGN")).toBe(true); // later queries still ran
+      });
+
+      it("reports the run's upstream call count in the summary log", async () => {
+        const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+        try {
+          const fake = fakeTravelpayouts(() => everyDate(["NRT"], 3000), stableMatrix);
+          await run(fake);
+
+          const summary = info.mock.calls
+            .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
+            .find((l) => l["event"] === "daily_flights_refresh_summary");
+          expect(summary?.["upstreamCalls"]).toBe(fake.stats().callCount);
+        } finally {
+          info.mockRestore();
+        }
+      });
     });
 
     it("gives Long-haul about 35% of the round-trip quota and shares the rest across the other regions", async () => {
@@ -576,16 +648,17 @@ describe("public flight routes and daily pipeline", () => {
       const cold = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
       const board = await run(cold);
 
-      // 70 discovery + 31 targeted + <= 230 baselines + <= 230 verifications
-      expect(cold.targetedCalls).toHaveLength(longhaul.length);
+      // 70 discovery + per-route queries + <= 230 baselines + <= 230 verifications
+      const perRoute = cold.targetedCalls.length;
+      expect(perRoute).toBeGreaterThan(longhaul.length);
       expect(cold.stats().verifyCount).toBe(board.length);
-      expect(cold.stats().callCount).toBeLessThanOrEqual(70 + longhaul.length + 230 + 230);
+      expect(cold.stats().callCount).toBeLessThanOrEqual(70 + perRoute + 230 + 230);
 
       const warm = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
       await run(warm, cronNow + 24 * 3_600_000);
       expect(warm.monthMatrixCalls).toHaveLength(0);
-      expect(warm.stats().callCount).toBeLessThanOrEqual(70 + longhaul.length + 230);
-      expect(warm.stats().callCount).toBeLessThanOrEqual(500);
+      expect(warm.stats().callCount).toBeLessThanOrEqual(70 + perRoute + 230);
+      expect(warm.stats().callCount).toBeLessThanOrEqual(800);
     }, 30_000);
   });
 
@@ -1429,8 +1502,8 @@ describe("public flight routes and daily pipeline", () => {
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
     expect(items.some((item) => item.tripType === "ow")).toBe(true);
-    // 70 discovery calls + <= 230 deduplicated month-matrix calls + <= 230 verify calls
-    expect(fetchCount).toBeLessThanOrEqual(530);
+    // 70 discovery + ~135 per-route calls + <= 230 deduplicated month-matrix calls + <= 230 verify calls
+    expect(fetchCount).toBeLessThanOrEqual(665);
     expect(items.length).toBeGreaterThanOrEqual(15);
     expect(items.length).toBeLessThanOrEqual(230);
   });
