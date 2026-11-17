@@ -172,8 +172,8 @@ describe("daily flights page", () => {
     expect(nrt).toHaveTextContent("樂桃航空");
     expect(nrt).toHaveTextContent("5,680");
     expect(nrt).toHaveTextContent("省 45%");
-    const redEye = within(nrt).getByText("紅眼");
-    expect(redEye.className).toContain("bg-[#334155]");
+    // Red-eye is only a filter; cards never show a badge for it
+    expect(nrt).not.toHaveTextContent("紅眼");
     // 4 fares pill; no directness while collapsed, no dates
     const pill = within(nrt).getByText("4 筆");
     expect(pill.className).toMatch(/bg-\[#eef2f0\].*text-fl-muted/);
@@ -202,15 +202,14 @@ describe("daily flights page", () => {
     ]);
     expect(rows[0]).toHaveTextContent("12/10–12/14");
     expect(rows[0]).toHaveTextContent("桃園出發 · 樂桃航空 · 直飛");
-    expect(rows[0]).toHaveTextContent("紅眼");
     expect(rows[0]).toHaveTextContent("NT$5,680");
     expect(rows[1]).toHaveTextContent("03/05–03/09");
     expect(rows[1]).toHaveTextContent("松山出發 · 中華航空 · 直飛");
     expect(rows[2]).toHaveTextContent("高雄出發 · 台灣虎航 · 轉 1");
     expect(rows[3]).toHaveTextContent("01/12–01/16");
     expect(rows[3]).toHaveTextContent("桃園出發");
-    // Only the red-eye fare carries the red-eye pill; the route chip stays on the card header
-    expect(rows.map((r) => /紅眼/.test(r.textContent))).toEqual([true, false, false, false]);
+    // No fare row carries a red-eye badge, and the route chip stays on the card header
+    expect(rows.some((r) => /紅眼/.test(r.textContent))).toBe(false);
     expect(rows.every((r) => !/⇄|→/.test(r.textContent))).toBe(true);
     // First row is mint, others white, separated by dashed hairlines
     expect(rows[0]?.closest("li")).toHaveClass("bg-fl-tint", "border-dashed");
@@ -618,7 +617,7 @@ describe("daily flights page", () => {
     expect(nrt).not.toHaveTextContent("Narita");
     expect(nrt).toHaveTextContent("Peach");
     expect(nrt).toHaveTextContent("Save 45%");
-    expect(nrt).toHaveTextContent("Red-eye");
+    expect(nrt).not.toHaveTextContent(/Red-eye/);
     expect(nrt).toHaveTextContent("4 fares");
     expect(nrt).not.toHaveTextContent(/Nonstop/);
     await user.click(within(nrt).getByRole("button"));

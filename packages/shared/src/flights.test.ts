@@ -5,6 +5,7 @@ import {
   computeDealSignal,
   departureBounds,
   filterDailyFlights,
+  getAirlineName,
   getDefaultDailyFlights,
   isGhostFare,
   isRedEyeTime,
@@ -15,6 +16,11 @@ import {
 } from "./flights.js";
 
 describe("flights domain helpers", () => {
+  it("names Philippines AirAsia (Z2) in both languages", () => {
+    expect(getAirlineName("Z2", "zh-TW")).toBe("菲律賓亞洲航空");
+    expect(getAirlineName("Z2", "en")).toBe("Philippines AirAsia");
+  });
+
   it("detects red-eye flight times between 00:00 and 05:59", () => {
     expect(isRedEyeTime("00:15")).toBe(true);
     expect(isRedEyeTime("02:45")).toBe(true);
