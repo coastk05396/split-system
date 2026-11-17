@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   dailyMaintenance,
   FLIGHTS_CRON,
@@ -123,4 +123,40 @@ it("runScheduled dispatches 08:00 GMT+8 (0 0 * * *) exclusively for flights and 
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+describe("flights cron as a fallback (ADR 0012)", () => {
+  const hoursAgo = (h: number) => clock.now - h * 3_600_000;
+  async function flightsCronCalls(completedAt: number | null): Promise<number> {
+    await env.DB.prepare("DELETE FROM daily_flights_runs").run();
+    if (completedAt !== null) {
+      await env.DB.prepare(
+        "INSERT INTO daily_flights_runs (id, digest_date, completed_at) VALUES (1, '2026-11-16', ?)",
+      )
+        .bind(completedAt)
+        .run();
+    }
+    let calls = 0;
+    vi.stubGlobal("fetch", () => {
+      calls += 1;
+      return Promise.resolve(Response.json({ success: true, data: [] }));
+    });
+    try {
+      await runScheduled(FLIGHTS_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    return calls;
+  }
+
+  it("skips when a sync completed within 20 hours", async () => {
+    expect(await flightsCronCalls(hoursAgo(1))).toBe(0);
+    expect(await flightsCronCalls(hoursAgo(19.9))).toBe(0);
+  });
+
+  it("syncs when the marker is stale or missing", async () => {
+    expect(await flightsCronCalls(hoursAgo(20))).toBeGreaterThan(0);
+    expect(await flightsCronCalls(hoursAgo(30))).toBeGreaterThan(0);
+    expect(await flightsCronCalls(null)).toBeGreaterThan(0);
+  });
 });
