@@ -120,7 +120,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const [airline, setAirline] = useState<string>("all");
   const [stops, setStops] = useState<FlightStopsFilter>("all");
   const [maxPriceTwd, setMaxPriceTwd] = useState<number | null>(null);
-  const [excludeRedEye, setExcludeRedEye] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sort, setSort] = useState<CitySort>("best");
 
@@ -131,7 +130,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     setAirline("all");
     setStops("all");
     setMaxPriceTwd(null);
-    setExcludeRedEye(false);
   }
 
   function resetFilters() {
@@ -158,7 +156,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     stops,
     holidayOnly: false,
     maxPriceTwd,
-    excludeRedEye,
   };
   const filtered = filterDailyFlights(items, currentFilter);
   const groups = groupByCity(filtered, sort);
@@ -187,8 +184,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     (month !== "all" ? 1 : 0) +
     (airline !== "all" ? 1 : 0) +
     (stops !== "all" ? 1 : 0) +
-    (maxPriceTwd !== null ? 1 : 0) +
-    (excludeRedEye ? 1 : 0);
+    (maxPriceTwd !== null ? 1 : 0);
 
   return (
     <div className="font-flights flex min-w-0 flex-col gap-3 pb-8">
@@ -427,18 +423,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                     </FilterChip>
                   ))}
                 </FilterSection>
-
-                <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-[18px] border-[1.5px] border-[#e3ece7] bg-white px-4 text-sm">
-                  {t("flights.excludeRedEye")}
-                  <input
-                    type="checkbox"
-                    checked={excludeRedEye}
-                    onChange={(event) => {
-                      setExcludeRedEye(event.target.checked);
-                    }}
-                    className="size-[22px] shrink-0 cursor-pointer accent-[#047857]"
-                  />
-                </label>
               </div>
 
               <div className="flex shrink-0 items-center gap-2.5 px-4 pt-3 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] md:px-6 md:pb-5">

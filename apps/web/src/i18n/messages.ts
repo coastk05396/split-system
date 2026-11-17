@@ -538,7 +538,6 @@ const zhTW = {
   "flights.budgetLabel": "預算上限",
   "flights.budgetAll": "不限",
   "flights.budgetUnder": "${amount} 以下",
-  "flights.excludeRedEye": "排除紅眼班機",
   "flights.regionLabel": "目的地",
   "flights.destLabel": "目的地",
   "flights.destAll": "不限目的地",

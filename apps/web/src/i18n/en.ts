@@ -548,7 +548,6 @@ export const en: Record<MessageId, string> = {
   "flights.budgetLabel": "Max budget",
   "flights.budgetAll": "Any price",
   "flights.budgetUnder": "Under ${amount}",
-  "flights.excludeRedEye": "No red-eye",
   "flights.regionLabel": "Region",
   "flights.destLabel": "Destination",
   "flights.destAll": "All destinations",
