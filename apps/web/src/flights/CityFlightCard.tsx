@@ -1,9 +1,4 @@
-import {
-  type DailyFlightItem,
-  type FlightRegion,
-  getAirlineName,
-  type Language,
-} from "@split/shared";
+import { type DailyFlightItem, getAirlineName, type Language } from "@split/shared";
 import { ArrowUpRight, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { t } from "../i18n/messages.js";
@@ -25,15 +20,6 @@ const COLLAPSED_FARES = 5;
 const SOLID_PILL_MIN_PCT = 30;
 const SIGNAL_MIN_PCT = 15;
 
-/** Route chip colours per destination region; long-haul green is also the fallback. */
-const REGION_CHIP: Record<FlightRegion, string> = {
-  jp: "bg-[#fce7f3] text-[#9d174d]",
-  kr: "bg-[#e0f2fe] text-[#075985]",
-  sea: "bg-[#ffedd5] text-[#9a3412]",
-  hkmo: "bg-[#f3e8ff] text-[#6b21a8]",
-  longhaul: "bg-[#dff3e9] text-[#065f46]",
-};
-
 export function routeText(item: DailyFlightItem): string {
   return `${item.origin} ${item.tripType === "rt" ? "⇄" : "→"} ${item.dest}`;
 }
@@ -45,7 +31,7 @@ function airlineLabel(item: DailyFlightItem, lang: Language): string {
 export function RouteChip({ item, className = "" }: { item: DailyFlightItem; className?: string }) {
   return (
     <span
-      className={`flight-card-route shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tracking-[0.04em] whitespace-nowrap tabular-nums ${REGION_CHIP[item.region]} ${className}`}
+      className={`flight-card-route shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tracking-[0.04em] whitespace-nowrap tabular-nums bg-[#ffedd5] text-[#9a3412] ${className}`}
     >
       {routeText(item)}
     </span>
@@ -90,9 +76,9 @@ export function DealBadge({
 const PRICE_STYLE = {
   card: {
     nt: "text-xs text-fl-muted",
-    num: "text-[22px] leading-[26px] font-black tracking-[-0.02em] text-fl-ink",
+    num: "text-[22px] leading-[26px] font-bold tracking-[-0.02em] text-fl-ink",
   },
-  row: { nt: "text-base font-black text-fl-ink", num: "text-base font-black text-fl-ink" },
+  row: { nt: "text-base font-bold text-fl-ink", num: "text-base font-bold text-fl-ink" },
   // Home marquee tile: kept from v2 (serif numerals).
   tile: {
     nt: "text-[11px] font-medium text-fl-muted",
@@ -231,7 +217,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                   className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-fl-ink/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-fl-green"
                 >
                   <span className="flex min-w-0 flex-col gap-[7px]">
-                    <span className="fare-row-date flex flex-wrap items-center gap-x-[7px] gap-y-1 text-[15px] leading-5 font-black text-fl-ink">
+                    <span className="fare-row-date flex flex-wrap items-center gap-x-[7px] gap-y-1 text-[15px] leading-5 font-bold text-fl-ink">
                       <Calendar
                         aria-hidden="true"
                         className="size-[15px] shrink-0 text-[#4f9c7f]"
