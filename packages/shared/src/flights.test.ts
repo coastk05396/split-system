@@ -18,6 +18,8 @@ import {
   sortDailyFlights,
   withinDepartureWindow,
   type DailyFlightItem,
+  LONGHAUL_SUBREGIONS,
+  type DailyFlightsFilter,
   type DestinationMeta,
 } from "./flights.js";
 
@@ -323,6 +325,68 @@ describe("Curated Destination catalog integrity", () => {
     expect(sharing("BKK", "DMK")).toBe(1);
     expect(sharing("ICN", "GMP")).toBe(1);
     expect(getDestinationMeta("XXX")).toBeNull();
+  });
+
+  it("puts every Long-haul airport in exactly one sub-region and no other airport in any", () => {
+    for (const d of DESTINATION_CATALOG) {
+      if (d.region === "longhaul") {
+        expect(LONGHAUL_SUBREGIONS, d.airport).toContain(d.subRegion);
+      } else {
+        expect(d.subRegion, d.airport).toBeUndefined();
+      }
+    }
+    const sub = (a: string) => getDestinationMeta(a)?.subRegion;
+    expect([sub("FCO"), sub("ORD"), sub("PER"), sub("DXB")]).toEqual([
+      "europe",
+      "north_america",
+      "oceania",
+      "middle_east_islands",
+    ]);
+    // Every sub-region has airports
+    for (const sr of LONGHAUL_SUBREGIONS) {
+      expect(
+        DESTINATION_CATALOG.some((d) => d.subRegion === sr),
+        sr,
+      ).toBe(true);
+    }
+  });
+
+  it("filters by Long-haul sub-region and country", () => {
+    const at = (dest: string): DailyFlightItem => ({
+      id: dest,
+      origin: "TPE",
+      dest,
+      region: "longhaul",
+      tripType: "rt",
+      outDate: "2026-12-10",
+      inDate: "2026-12-20",
+      priceTwd: 30000,
+      discountPct: 0,
+      tag: "normal",
+      airlines: ["CI"],
+      transfers: 0,
+      returnTransfers: 0,
+      isRedEye: false,
+      outboundDep: null,
+      inboundDep: null,
+    });
+    const items = ["FCO", "VCE", "ORD", "LAX", "PER"].map(at);
+    const base = {
+      region: "longhaul",
+      origin: "all",
+      tripType: "all",
+      month: "all",
+      directOnly: false,
+      holidayOnly: false,
+    } as const;
+    const dests = (f: Partial<DailyFlightsFilter>) =>
+      filterDailyFlights(items, { ...base, ...f }).map((i) => i.dest);
+    expect(dests({})).toEqual(["FCO", "VCE", "ORD", "LAX", "PER"]);
+    expect(dests({ subRegion: "europe" })).toEqual(["FCO", "VCE"]);
+    expect(dests({ subRegion: "north_america", country: "US" })).toEqual(["ORD", "LAX"]);
+    expect(dests({ country: "IT" })).toEqual(["FCO", "VCE"]);
+    expect(dests({ subRegion: "oceania", country: "US" })).toEqual([]);
+    expect(dests({ subRegion: "all", country: "all" })).toHaveLength(5);
   });
 
   it("keeps city names short enough for a phone card", () => {

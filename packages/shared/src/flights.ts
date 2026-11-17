@@ -7,6 +7,15 @@ export type FlightOrigin = (typeof FLIGHT_ORIGINS)[number];
 export const FLIGHT_REGIONS = ["jp", "kr", "sea", "hkmo", "longhaul"] as const;
 export type FlightRegion = (typeof FLIGHT_REGIONS)[number];
 
+/** Finer geography inside the Long-haul Flight Region; it lives in the filter sheet, not in the tabs. */
+export const LONGHAUL_SUBREGIONS = [
+  "europe",
+  "north_america",
+  "oceania",
+  "middle_east_islands",
+] as const;
+export type LonghaulSubRegion = (typeof LONGHAUL_SUBREGIONS)[number];
+
 export const FLIGHT_TRIP_TYPES = ["rt", "ow"] as const;
 export type FlightTripType = (typeof FLIGHT_TRIP_TYPES)[number];
 
@@ -88,6 +97,8 @@ export interface DestinationMeta {
   countryZhTW: string;
   countryEn: string;
   region: FlightRegion;
+  /** Set on every Long-haul airport (exactly one sub-region), absent elsewhere. */
+  subRegion?: LonghaulSubRegion;
   /** Typical roundtrip baseline in TWD; only scores the curated fallback board (live fares use the day's median). */
   baselineTwd: number;
 }
@@ -780,6 +791,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "英國",
     countryEn: "United Kingdom",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 31000,
   },
   {
@@ -792,6 +804,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "法國",
     countryEn: "France",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 31500,
   },
   {
@@ -804,6 +817,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "德國",
     countryEn: "Germany",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 32000,
   },
   {
@@ -816,6 +830,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "荷蘭",
     countryEn: "Netherlands",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 32500,
   },
   {
@@ -828,6 +843,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "土耳其",
     countryEn: "Turkey",
     region: "longhaul",
+    subRegion: "middle_east_islands",
     baselineTwd: 27000,
   },
   {
@@ -840,6 +856,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "阿聯",
     countryEn: "UAE",
     region: "longhaul",
+    subRegion: "middle_east_islands",
     baselineTwd: 26500,
   },
   {
@@ -852,6 +869,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 30000,
   },
   {
@@ -864,6 +882,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 31000,
   },
   {
@@ -876,6 +895,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 36000,
   },
   {
@@ -888,6 +908,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "加拿大",
     countryEn: "Canada",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 29000,
   },
   {
@@ -900,6 +921,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "澳洲",
     countryEn: "Australia",
     region: "longhaul",
+    subRegion: "oceania",
     baselineTwd: 25500,
   },
   {
@@ -912,6 +934,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "澳洲",
     countryEn: "Australia",
     region: "longhaul",
+    subRegion: "oceania",
     baselineTwd: 25000,
   },
   {
@@ -924,6 +947,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "紐西蘭",
     countryEn: "New Zealand",
     region: "longhaul",
+    subRegion: "oceania",
     baselineTwd: 29500,
   },
   {
@@ -936,6 +960,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "義大利",
     countryEn: "Italy",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 33000,
   },
   {
@@ -948,6 +973,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "西班牙",
     countryEn: "Spain",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 32500,
   },
   {
@@ -960,6 +986,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "捷克",
     countryEn: "Czechia",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 31500,
   },
   {
@@ -972,6 +999,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "德國",
     countryEn: "Germany",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 32500,
   },
   {
@@ -984,6 +1012,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "瑞士",
     countryEn: "Switzerland",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 34000,
   },
   {
@@ -996,6 +1025,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "義大利",
     countryEn: "Italy",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 33500,
   },
   {
@@ -1008,6 +1038,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "義大利",
     countryEn: "Italy",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 32500,
   },
   {
@@ -1020,6 +1051,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "瑞士",
     countryEn: "Switzerland",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 34000,
   },
   {
@@ -1032,6 +1064,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "冰島",
     countryEn: "Iceland",
     region: "longhaul",
+    subRegion: "europe",
     baselineTwd: 36000,
   },
   {
@@ -1044,6 +1077,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 33000,
   },
   {
@@ -1056,6 +1090,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 30500,
   },
   {
@@ -1068,6 +1103,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 30000,
   },
   {
@@ -1080,6 +1116,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 34000,
   },
   {
@@ -1092,6 +1129,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 35500,
   },
   {
@@ -1104,6 +1142,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "美國",
     countryEn: "United States",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 33000,
   },
   {
@@ -1116,6 +1155,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "加拿大",
     countryEn: "Canada",
     region: "longhaul",
+    subRegion: "north_america",
     baselineTwd: 33000,
   },
   {
@@ -1128,6 +1168,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "紐西蘭",
     countryEn: "New Zealand",
     region: "longhaul",
+    subRegion: "oceania",
     baselineTwd: 31000,
   },
   {
@@ -1140,6 +1181,7 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     countryZhTW: "澳洲",
     countryEn: "Australia",
     region: "longhaul",
+    subRegion: "oceania",
     baselineTwd: 24500,
   },
 ];
@@ -1689,6 +1731,10 @@ export function buildTripComUrl(
 
 export interface DailyFlightsFilter {
   region: FlightRegion | "all";
+  /** `"all"` or a Long-haul sub-region. */
+  subRegion?: LonghaulSubRegion | "all";
+  /** `"all"` or an ISO country code of the destination (e.g. `"US"`). */
+  country?: string;
   origin: FlightOrigin | "all";
   /** `"all"` or a destination airport IATA code (e.g. `"NRT"`). */
   dest?: string;
@@ -1730,6 +1776,12 @@ export function filterDailyFlights(
   return items.filter((item) => {
     if (filter.region !== "all" && item.region !== filter.region) return false;
     if (filter.origin !== "all" && item.origin !== filter.origin) return false;
+    if (filter.subRegion !== undefined && filter.subRegion !== "all") {
+      if (getDestinationMeta(item.dest)?.subRegion !== filter.subRegion) return false;
+    }
+    if (filter.country !== undefined && filter.country !== "all") {
+      if (getDestinationMeta(item.dest)?.countryCode !== filter.country) return false;
+    }
     if (normalizedDest !== null && !matchesFlightDest(item.dest, normalizedDest)) return false;
     if (filter.tripType !== "all" && item.tripType !== filter.tripType) return false;
     const maxStops = Math.max(item.transfers, item.returnTransfers ?? 0);

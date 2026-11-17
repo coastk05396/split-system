@@ -682,6 +682,91 @@ describe("daily flights page", () => {
     expect(await screen.findByText(/東京/)).toBeVisible();
   });
 
+  describe("Long-haul sub-region and country filters", () => {
+    const longhaul = (id: string, dest: string, priceTwd: number) =>
+      fare(id, { dest, region: "longhaul", priceTwd, airlines: ["BR"] });
+    const LONGHAUL_FLIGHTS = [
+      longhaul("fco", "FCO", 30000),
+      longhaul("vce", "VCE", 31000),
+      longhaul("cdg", "CDG", 32000),
+      longhaul("lax", "LAX", 28000),
+      longhaul("ord", "ORD", 29000),
+      longhaul("per", "PER", 20000),
+      longhaul("dxb", "DXB", 25000),
+    ];
+
+    async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole("button", { name: /^篩選/ }));
+      return screen.findByRole("dialog", { name: "篩選條件" });
+    }
+
+    async function openLonghaul() {
+      const user = userEvent.setup();
+      const { api } = setup();
+      setItems(api, [...SAMPLE_FLIGHTS, ...LONGHAUL_FLIGHTS]);
+      await screen.findAllByRole("heading", { level: 2 });
+      const dialog = await openFilters(user);
+      expect(within(dialog).queryByText("長程地區")).toBeNull();
+      await user.click(within(dialog).getByRole("button", { name: /Close|關閉/ }));
+      await user.click(
+        within(screen.getByRole("group", { name: "目的地" })).getByRole("button", { name: "長程" }),
+      );
+      return { user, dialog: await openFilters(user) };
+    }
+
+    it("shows the group only for the Long-haul tab", async () => {
+      const { dialog } = await openLonghaul();
+      expect(within(dialog).getByText("長程地區")).toBeVisible();
+      expect(within(dialog).getByText("國家")).toBeVisible();
+    });
+
+    it("narrows cards by sub-region then country, counts them as active filters, and clears them on reset", async () => {
+      const { user, dialog } = await openLonghaul();
+
+      await user.click(within(dialog).getByRole("button", { name: /^歐洲/ }));
+      // Countries narrow to the sub-region: Italy and France, not the US or Australia
+      expect(within(dialog).getByRole("button", { name: /^義大利/ })).toBeVisible();
+      expect(within(dialog).getByRole("button", { name: /^法國/ })).toBeVisible();
+      expect(within(dialog).queryByRole("button", { name: /^美國/ })).toBeNull();
+      await user.click(within(dialog).getByRole("button", { name: /^義大利/ }));
+      await user.click(within(dialog).getByRole("button", { name: /查看 2 筆機票/ }));
+
+      // FCO + VCE: two cities, with the filter badge counting both new filters
+      expect(cityHeadings()).toHaveLength(2);
+      expect(pageCount()).toHaveTextContent(/^2 筆$/);
+      expect(within(screen.getByRole("button", { name: /^篩選/ })).getByText("2")).toBeVisible();
+
+      const again = await openFilters(user);
+      await user.click(within(again).getByRole("button", { name: /重設/ }));
+      await user.click(within(again).getByRole("button", { name: /查看 7 筆機票/ }));
+      expect(cityHeadings()).toHaveLength(7);
+      expect(within(screen.getByRole("button", { name: /^篩選/ })).queryByText("2")).toBeNull();
+    });
+
+    it("clears a country that the new sub-region does not contain", async () => {
+      const { user, dialog } = await openLonghaul();
+      await user.click(within(dialog).getByRole("button", { name: /^美國/ }));
+      await user.click(within(dialog).getByRole("button", { name: /^大洋洲/ }));
+
+      expect(within(dialog).getByRole("button", { name: /^澳洲/ })).toBeVisible();
+      expect(within(dialog).queryByRole("button", { name: /^美國/ })).toBeNull();
+      await user.click(within(dialog).getByRole("button", { name: /查看 1 筆機票/ }));
+      expect(cityHeadings()).toHaveLength(1);
+      expect(cityHeadings()[0]).toHaveTextContent("伯斯");
+    });
+
+    it("drops the filters when leaving the Long-haul tab", async () => {
+      const { user, dialog } = await openLonghaul();
+      await user.click(within(dialog).getByRole("button", { name: /^歐洲/ }));
+      await user.click(within(dialog).getByRole("button", { name: /Close|關閉/ }));
+      await user.click(
+        within(screen.getByRole("group", { name: "目的地" })).getByRole("button", { name: "全部" }),
+      );
+      expect(within(screen.getByRole("button", { name: /^篩選/ })).queryByText("1")).toBeNull();
+      expect(cityHeadings().length).toBeGreaterThan(7);
+    });
+  });
+
   it("explains an empty one-way view and offers a way back to round trips", async () => {
     const user = userEvent.setup();
     setup();

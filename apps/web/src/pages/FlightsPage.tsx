@@ -10,8 +10,11 @@ import {
   type FlightTripType,
   getAirlineName,
   getCityName,
+  getDestinationMeta,
   getFlightCityCode,
   type Language,
+  LONGHAUL_SUBREGIONS,
+  type LonghaulSubRegion,
   matchesFlightDest,
   ORIGIN_META,
 } from "@split/shared";
@@ -33,6 +36,13 @@ const REGION_LABELS: Record<FlightRegion, MessageId> = {
   sea: "flights.region.sea",
   hkmo: "flights.region.hkmo",
   longhaul: "flights.region.longhaul",
+};
+
+const SUBREGION_LABELS: Record<LonghaulSubRegion, MessageId> = {
+  europe: "flights.subRegion.europe",
+  north_america: "flights.subRegion.north_america",
+  oceania: "flights.subRegion.oceania",
+  middle_east_islands: "flights.subRegion.middle_east_islands",
 };
 
 const BUDGET_CAPS = [5000, 10000] as const;
@@ -87,6 +97,22 @@ function collectDestinationOptions(
   return [...seen.entries()].map(([code, label]) => ({ code, label }));
 }
 
+/** Long-haul countries on the board (inside the chosen sub-region), as `[ISO code, local name]`. */
+function collectCountryOptions(
+  items: readonly DailyFlightItem[],
+  subRegion: LonghaulSubRegion | "all",
+  lang: Language,
+): Array<{ code: string; label: string }> {
+  const seen = new Map<string, string>();
+  for (const item of items) {
+    const meta = getDestinationMeta(item.dest);
+    if (meta?.region !== "longhaul" || seen.has(meta.countryCode)) continue;
+    if (subRegion !== "all" && meta.subRegion !== subRegion) continue;
+    seen.set(meta.countryCode, lang === "en" ? meta.countryEn : meta.countryZhTW);
+  }
+  return [...seen.entries()].map(([code, label]) => ({ code, label }));
+}
+
 function collectMonthOptions(items: readonly DailyFlightItem[]): string[] {
   const months = new Set<string>();
   for (const item of items) {
@@ -115,6 +141,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const [region, setRegion] = useState<FlightRegion | "all">("all");
   const [origin, setOrigin] = useState<FlightOrigin | "all">("all");
   const [dest, setDest] = useState<string>("all");
+  const [subRegion, setSubRegion] = useState<LonghaulSubRegion | "all">("all");
+  const [country, setCountry] = useState<string>("all");
   const [tripType, setTripType] = useState<FlightTripType | null>(null);
   const [month, setMonth] = useState<string>("all");
   const [airline, setAirline] = useState<string>("all");
@@ -126,6 +154,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   function resetDrawerFilters() {
     setOrigin("all");
     setDest("all");
+    setSubRegion("all");
+    setCountry("all");
     setMonth("all");
     setAirline("all");
     setStops("all");
@@ -147,6 +177,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     tripType ?? (items.some((item) => item.tripType === "rt") ? "rt" : "ow");
   const currentFilter: DailyFlightsFilter = {
     region,
+    subRegion,
+    country,
     origin,
     dest,
     tripType: activeTripType,
@@ -159,12 +191,46 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   };
   const filtered = filterDailyFlights(items, currentFilter);
   const groups = groupByCity(filtered, sort);
-  const destOptions = collectDestinationOptions(items, region, dest, locale);
+  const longhaulOpen = region === "longhaul";
+  /** Fares inside a Long-haul sub-region and country, ignoring every other filter. */
+  const inLonghaulScope = (list: readonly DailyFlightItem[], sub: string, ctry: string) =>
+    filterDailyFlights(list, {
+      region,
+      subRegion: sub as LonghaulSubRegion | "all",
+      country: ctry,
+      origin: "all",
+      tripType: "all",
+      month: "all",
+      directOnly: false,
+      holidayOnly: false,
+    });
+  const destOptions = collectDestinationOptions(
+    longhaulOpen ? inLonghaulScope(items, subRegion, country) : items,
+    region,
+    dest,
+    locale,
+  );
+  const subRegionOptions = LONGHAUL_SUBREGIONS.filter((sr) =>
+    items.some((item) => getDestinationMeta(item.dest)?.subRegion === sr),
+  );
+  const countryOptions = collectCountryOptions(items, subRegion, locale);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
 
+  /** Narrows the Long-haul scope; a country or destination outside it is cleared. */
+  function narrowLonghaul(nextSub: LonghaulSubRegion | "all", nextCountry: string) {
+    const scoped = inLonghaulScope(items, nextSub, nextCountry);
+    setSubRegion(nextSub);
+    setCountry(nextCountry !== "all" && scoped.length === 0 ? "all" : nextCountry);
+    if (dest !== "all" && !scoped.some((i) => matchesFlightDest(i.dest, dest))) setDest("all");
+  }
+
   function selectRegion(next: FlightRegion | "all") {
     setRegion(next);
+    if (next !== "longhaul") {
+      setSubRegion("all");
+      setCountry("all");
+    }
     if (
       dest !== "all" &&
       next !== "all" &&
@@ -185,6 +251,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const activeDrawerCount =
     (origin !== "all" ? 1 : 0) +
     (dest !== "all" ? 1 : 0) +
+    (subRegion !== "all" ? 1 : 0) +
+    (country !== "all" ? 1 : 0) +
     (month !== "all" ? 1 : 0) +
     (airline !== "all" ? 1 : 0) +
     (stops !== "all" ? 1 : 0) +
@@ -354,6 +422,61 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                     </FilterChip>
                   ))}
                 </FilterSection>
+
+                {longhaulOpen && (
+                  <>
+                    <FilterSection label={t("flights.subRegionLabel")}>
+                      <FilterChip
+                        active={subRegion === "all"}
+                        count={countWith({ subRegion: "all" })}
+                        onClick={() => {
+                          narrowLonghaul("all", country);
+                        }}
+                      >
+                        {t("flights.subRegionAll")}
+                      </FilterChip>
+                      {subRegionOptions.map((sr) => (
+                        <FilterChip
+                          key={sr}
+                          active={subRegion === sr}
+                          count={countWith({ subRegion: sr })}
+                          onClick={() => {
+                            narrowLonghaul(subRegion === sr ? "all" : sr, country);
+                          }}
+                        >
+                          {t(SUBREGION_LABELS[sr])}
+                        </FilterChip>
+                      ))}
+                    </FilterSection>
+
+                    <FilterSection label={t("flights.countryLabel")}>
+                      <FilterChip
+                        active={country === "all"}
+                        count={countWith({ country: "all" })}
+                        onClick={() => {
+                          narrowLonghaul(subRegion, "all");
+                        }}
+                      >
+                        {t("flights.countryAll")}
+                      </FilterChip>
+                      {countryOptions.map((option) => (
+                        <FilterChip
+                          key={option.code}
+                          active={country === option.code}
+                          count={countWith({ country: option.code })}
+                          onClick={() => {
+                            narrowLonghaul(
+                              subRegion,
+                              country === option.code ? "all" : option.code,
+                            );
+                          }}
+                        >
+                          {option.label}
+                        </FilterChip>
+                      ))}
+                    </FilterSection>
+                  </>
+                )}
 
                 {/* Not in the v3 mock; kept so the sheet loses no filter. */}
                 <FilterSection label={t("flights.destLabel")}>
