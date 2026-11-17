@@ -435,11 +435,13 @@ describe("public flight routes and daily pipeline", () => {
   it("puts Curated Destinations on the board in their Flight Region and still drops unlisted airports", async () => {
     const fake = fakeTravelpayouts((origin, oneWay, month) =>
       origin === "TPE" && !oneWay && month === "2026-12"
-        ? ["HIJ", "HKD", "HKT", "BKI", "CTU", "KMG", "TFU"].map((dest, i) => ({
-            dest,
-            day: 5 + i,
-            price: 5000 + i * 100,
-          }))
+        ? ["HIJ", "HKD", "HKT", "BKI", "CTU", "KMG", "FCO", "KEF", "ORD", "HNL", "PER", "TFU"].map(
+            (dest, i) => ({
+              dest,
+              day: 5 + i,
+              price: 5000 + i * 100,
+            }),
+          )
         : [],
     );
     await refreshDailyFlights(
@@ -458,6 +460,11 @@ describe("public flight routes and daily pipeline", () => {
       BKI: "sea",
       CTU: "hkmo",
       KMG: "hkmo",
+      FCO: "longhaul",
+      KEF: "longhaul",
+      ORD: "longhaul",
+      HNL: "longhaul",
+      PER: "longhaul",
     }); // TFU (Chengdu Tianfu) is not curated: dropped, never an open-world airport
   });
 

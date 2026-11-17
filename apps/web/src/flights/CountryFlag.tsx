@@ -88,6 +88,40 @@ function renderFlagBody(code: string): ReactNode {
       ]);
     case "FR":
       return vBands(["#0055A4", "#FFFFFF", "#EF4135"]);
+    case "IT":
+      return vBands(["#009246", "#FFFFFF", "#CE2B37"]);
+    case "ES":
+      return hBands([
+        { h: 8, fill: "#AA151B" },
+        { h: 16, fill: "#F1BF00" },
+        { h: 8, fill: "#AA151B" },
+      ]);
+    case "CZ":
+      return (
+        <>
+          <rect width={32} height={16} fill="#FFFFFF" />
+          <rect y={16} width={32} height={16} fill="#D7141A" />
+          <path d="M0,0 L16,16 L0,32 Z" fill="#11457E" />
+        </>
+      );
+    case "CH":
+      return (
+        <>
+          <rect width={32} height={32} fill="#DA291C" />
+          <rect x={13} y={7} width={6} height={18} fill="#FFFFFF" />
+          <rect x={7} y={13} width={18} height={6} fill="#FFFFFF" />
+        </>
+      );
+    case "IS":
+      return (
+        <>
+          <rect width={32} height={32} fill="#02529C" />
+          <rect x={8} width={6} height={32} fill="#FFFFFF" />
+          <rect y={13} width={32} height={6} fill="#FFFFFF" />
+          <rect x={9.5} width={3} height={32} fill="#DC1E35" />
+          <rect y={14.5} width={32} height={3} fill="#DC1E35" />
+        </>
+      );
     case "CA":
       return (
         <>

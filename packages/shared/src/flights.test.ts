@@ -339,4 +339,44 @@ describe("Curated Destination catalog integrity", () => {
     for (const cn of ["CTU", "KMG", "HRB"]) expect(region(cn)).toBe("hkmo");
     expect(getAirlineName("3U", "zh-TW")).toBe("四川航空");
   });
+
+  it("covers Europe, North America and Oceania under Long-haul with correct country, flag and timezone", () => {
+    const expected: Record<string, [string, string, string]> = {
+      FCO: ["IT", "🇮🇹", "Europe/Rome"],
+      MAD: ["ES", "🇪🇸", "Europe/Madrid"],
+      PRG: ["CZ", "🇨🇿", "Europe/Prague"],
+      MUC: ["DE", "🇩🇪", "Europe/Berlin"],
+      ZRH: ["CH", "🇨🇭", "Europe/Zurich"],
+      VCE: ["IT", "🇮🇹", "Europe/Rome"],
+      BGY: ["IT", "🇮🇹", "Europe/Rome"],
+      GVA: ["CH", "🇨🇭", "Europe/Zurich"],
+      KEF: ["IS", "🇮🇸", "Atlantic/Reykjavik"],
+      LAX: ["US", "🇺🇸", "America/Los_Angeles"],
+      ORD: ["US", "🇺🇸", "America/Chicago"],
+      SEA: ["US", "🇺🇸", "America/Los_Angeles"],
+      HNL: ["US", "🇺🇸", "Pacific/Honolulu"],
+      DFW: ["US", "🇺🇸", "America/Chicago"],
+      IAD: ["US", "🇺🇸", "America/New_York"],
+      PHX: ["US", "🇺🇸", "America/Phoenix"],
+      YUL: ["CA", "🇨🇦", "America/Toronto"],
+      CHC: ["NZ", "🇳🇿", "Pacific/Auckland"],
+      PER: ["AU", "🇦🇺", "Australia/Perth"],
+    };
+    for (const [airport, [country, flag, zone]] of Object.entries(expected)) {
+      const meta = getDestinationMeta(airport);
+      expect(meta?.region, airport).toBe("longhaul");
+      expect([meta?.countryCode, meta?.flag, getAirportTimeZone(airport)], airport).toEqual([
+        country,
+        flag,
+        zone,
+      ]);
+    }
+    // Multi-airport cities render as one City Card name
+    expect(getCityName("BGY", "en")).toBe("Milan");
+    expect(getCityName("IAD", "zh-TW")).toBe("華盛頓");
+    // Existing Long-haul destinations are unchanged
+    expect(getDestinationMeta("LHR")).toMatchObject({ cityCode: "lon", baselineTwd: 31000 });
+    expect(getDestinationMeta("SYD")).toMatchObject({ zhTW: "雪梨", baselineTwd: 25500 });
+    expect(getAirlineName("BA", "zh-TW")).toBe("英國航空");
+  });
 });
