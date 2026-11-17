@@ -66,6 +66,8 @@ export interface VerifiedFlightPrice {
   inboundDep?: string | null;
   outboundArr?: string | null;
   inboundArr?: string | null;
+  /** A Live Price for a matching itinerary: a higher price reprices instead of being a Ghost Fare (ADR 0012). */
+  live?: true;
 }
 
 /** A month-matrix median (`null`: upstream answered with fewer than 3 prices) for one Route, departure month and stop class. */
@@ -93,6 +95,8 @@ export interface FlightSource {
   upstreamCalls?(): number;
   /** Fares discovered before Good Deal selection in the last run; 0 means no upstream data (not "no deals"). */
   discoveredCandidates?(): number;
+  /** Live Price outcomes of the last run (`repriced` counts every matched fare, dropped ones included). */
+  liveStats?(): { repriced: number; kept: number; blocked: number };
 }
 
 // ~70 broad discovery + ~135 per-route queries + baselines for the cheapest candidates + <= 230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0010).
@@ -104,6 +108,8 @@ export const MAX_DATES_PER_ROUTE = 3;
 export const BASELINE_CANDIDATES_PER_ROUTE = 6;
 /** The candidate count shrinks so a run's estimated upstream calls stay under this (Workers Paid allows 1,000). */
 export const MAX_DAILY_UPSTREAM_CALLS = 800;
+/** GitHub Actions has no subrequest limit, so its runs may spend more upstream calls (ADR 0012). */
+export const ACTIONS_UPSTREAM_CALLS = 1500;
 /** Verification makes one call per board fare, so the whole ceiling is reserved for it. */
 const MAX_VERIFICATIONS = TRIP_QUOTAS.rt + TRIP_QUOTAS.ow;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
@@ -164,7 +170,7 @@ function baselineKey(
 }
 
 /** A fare with a connection on either leg is compared with connecting prices only. */
-function stopClassOf(transfers: number, returnTransfers: number | null): FlightStopClass {
+export function stopClassOf(transfers: number, returnTransfers: number | null): FlightStopClass {
   return transfers === 0 && (returnTransfers ?? 0) === 0 ? "direct" : "connecting";
 }
 
@@ -430,6 +436,7 @@ export function productionFlightSource(
   env: { TRAVELPAYOUTS_TOKEN?: string },
   upstreamFetch: FetchFn = (input, init) => fetch(input, init),
   baselineCache?: BaselineCache,
+  maxUpstreamCalls: number = MAX_DAILY_UPSTREAM_CALLS,
 ): FlightSource {
   let upstreamCalls = 0;
   let discovered = 0;
@@ -581,7 +588,7 @@ export function productionFlightSource(
             )
             .map((c) => `${routeKey(c)}-${monthOf(c)}`),
         ).size;
-      const baselineBudget = MAX_DAILY_UPSTREAM_CALLS - upstreamCalls - MAX_VERIFICATIONS;
+      const baselineBudget = maxUpstreamCalls - upstreamCalls - MAX_VERIFICATIONS;
       let perRoute = BASELINE_CANDIDATES_PER_ROUTE;
       let shortlist = cheapestPerRoute(collected, perRoute);
       while (perRoute > 1 && uncachedCalls(shortlist) > baselineBudget) {
@@ -769,6 +776,8 @@ export interface CollectedDailyFlights {
   completed: boolean;
   /** Upstream requests this run used (Workers Paid allows 1,000 subrequests per invocation). */
   upstreamCalls: number;
+  /** Present for Live Price runs: matched fares kept (`repriced`) or dropped under 15%, fares left on the cached price (`kept`), and those skipped after a block (`blocked`). */
+  live?: { repriced: number; kept: number; dropped: number; blocked: number };
   rows: DailyFlightRow[];
   items: DailyFlightItem[];
 }
@@ -787,6 +796,7 @@ export function logDailyFlightsSummary(event: string, collected: CollectedDailyF
       countriesWithDeal: collected.countriesWithDeal,
       upstreamCalls: collected.upstreamCalls,
       persisted: collected.rows.length,
+      ...(collected.live ? { live: collected.live } : {}),
     }),
   );
 }
@@ -857,6 +867,7 @@ export async function collectVerifiedDailyFlights(
   let droppedGhost = 0;
   let droppedStops = 0;
   let droppedNotDeal = 0;
+  let droppedLive = 0;
 
   for (const candidate of candidates) {
     const meta = getDestinationMeta(candidate.dest);
@@ -870,6 +881,7 @@ export async function collectVerifiedDailyFlights(
     let inboundDep = candidate.inboundDep;
     let outboundArr = candidate.outboundArr ?? null;
     let inboundArr = candidate.inboundArr ?? null;
+    let livePriced = false;
 
     if (source.verifyCandidate !== undefined) {
       const verified = await source.verifyCandidate(candidate, now);
@@ -877,7 +889,8 @@ export async function collectVerifiedDailyFlights(
         droppedNull += 1;
         continue;
       }
-      if (isGhostFare(candidate.priceTwd, verified.priceTwd)) {
+      livePriced = verified.live === true;
+      if (!livePriced && isGhostFare(candidate.priceTwd, verified.priceTwd)) {
         droppedGhost += 1;
         continue;
       }
@@ -915,6 +928,7 @@ export async function collectVerifiedDailyFlights(
     const { discountPct, tag } = computeDealSignal(finalPrice, candidate.dealBaselineTwd ?? 0);
     if (tag === "normal") {
       droppedNotDeal += 1;
+      if (livePriced) droppedLive += 1;
       continue;
     }
     const isRedEye = hasRedEyeLeg([outboundDep, inboundDep, outboundArr, inboundArr]);
@@ -959,6 +973,7 @@ export async function collectVerifiedDailyFlights(
     });
   }
 
+  const liveStats = source.liveStats?.();
   return {
     digestDate,
     candidates: candidates.length,
@@ -969,6 +984,16 @@ export async function collectVerifiedDailyFlights(
     countriesWithDeal: new Set(items.map((i) => getDestinationMeta(i.dest)?.countryCode)).size,
     completed: (source.discoveredCandidates?.() ?? candidates.length) > 0,
     upstreamCalls: source.upstreamCalls?.() ?? 0,
+    ...(liveStats
+      ? {
+          live: {
+            repriced: liveStats.repriced - droppedLive,
+            kept: liveStats.kept,
+            dropped: droppedLive,
+            blocked: liveStats.blocked,
+          },
+        }
+      : {}),
     rows,
     items,
   };

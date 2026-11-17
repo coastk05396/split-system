@@ -19,6 +19,7 @@ import {
 import {
   collectVerifiedDailyFlights,
   formatDailyFlightsSyncSql,
+  ACTIONS_UPSTREAM_CALLS,
   BASELINE_CANDIDATES_PER_ROUTE,
   MAX_DAILY_UPSTREAM_CALLS,
   MAX_DATES_PER_ROUTE,
@@ -703,6 +704,36 @@ describe("public flight routes and daily pipeline", () => {
       expect(perDest("NRT")).toBe(5 * MAX_DATES_PER_ROUTE); // deepest discounts survive
       expect(perDest("PVG")).toBeLessThan(perDest("NRT")); // the dearest are cut first
     });
+  });
+
+  it("an Actions-sized ceiling keeps 6 Baseline candidates per Route where the Worker ceiling shrinks them", async () => {
+    const dests = [
+      ...["NRT", "HND", "KIX", "FUK", "CTS", "OKA", "ICN", "PUS", "CJU", "BKK"],
+      ...["CNX", "SIN", "KUL", "HAN", "SGN", "DAD", "MNL", "DPS", "HKG", "PVG"],
+    ];
+    const months = ["2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05"];
+    const supply = () =>
+      fakeTravelpayouts(
+        (origin, oneWay, month) =>
+          oneWay || !months.includes(month) || !["TPE", "TSA", "KHH", "RMQ", "TNN"].includes(origin)
+            ? []
+            : dests.map((dest, i) => ({ dest, day: 3, price: 3000 + i * 300 })),
+        () => ({ prices: [10000, 12000, 14000] }),
+      );
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    const baselineCalls = async (ceiling: number) => {
+      const fake = supply();
+      await collectVerifiedDailyFlights(
+        productionFlightSource(tpEnv, fake.fetchFn, undefined, ceiling),
+        Date.parse("2026-11-16T00:00:00Z"),
+      );
+      return fake.monthMatrixCalls.length;
+    };
+
+    expect(ACTIONS_UPSTREAM_CALLS).toBe(1500);
+    expect(await baselineCalls(ACTIONS_UPSTREAM_CALLS)).toBeGreaterThan(
+      await baselineCalls(MAX_DAILY_UPSTREAM_CALLS),
+    );
   });
 
   describe("board size ceiling and Route cap", { timeout: 30_000 }, () => {

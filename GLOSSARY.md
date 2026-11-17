@@ -64,8 +64,12 @@ _Avoid_: Cheap fare (cheap is an absolute price, a Good Deal is relative to the 
 How far a verified fare sits below its Baseline: domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a solid pill from 50%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
 _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price)
 
+**Live Price**:
+The current fare for the same itinerary read from Google Flights during Stage 2 verification (`即時價`). It replaces the cached price only for a matching Route, dates, trip type, stop class and airline set; with no match the cached price stays. It is still not the booking-page price.
+_Avoid_: Real price, Actual price (neither Google nor Travelpayouts is the checkout price)
+
 **Ghost Fare**:
-A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by Stage 2 verification (`FlightSource.verifyCandidate`) when no matching fresh itinerary exists or the re-checked price rises by more than 20% AND NT$800 above discovery; always dropped before display.
+A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by Stage 2 verification (`FlightSource.verifyCandidate`). With the Travelpayouts-only verifier it is dropped when no matching fresh itinerary exists or the re-checked price rises by more than 20% AND NT$800; with Live Price verification a missing or higher Live Price is not a Ghost Fare (the fare is kept or repriced).
 _Avoid_: Phantom ticket, cache hit
 
 **User**:

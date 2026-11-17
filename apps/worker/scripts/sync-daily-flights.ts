@@ -3,6 +3,7 @@
  *
  *   TRAVELPAYOUTS_TOKEN=... pnpm --filter @split/worker sync-flights -- --remote
  *   TRAVELPAYOUTS_TOKEN=... pnpm --filter @split/worker sync-flights -- --dry-run
+ *   ... sync-flights -- --verify=google --profile=actions --dry-run   (Live Price, 1,500-call budget; needs Python deps)
  *
  * Defaults to local D1 (`--local`) unless `--remote` is passed. Never commit the token.
  */
@@ -49,7 +50,11 @@ async function main(): Promise<void> {
     formatDailyFlightsSyncSql,
     logDailyFlightsSummary,
     productionFlightSource,
+    ACTIONS_UPSTREAM_CALLS,
+    MAX_DAILY_UPSTREAM_CALLS,
   } = await import("../src/flights/pipeline.ts");
+  const { googleLiveFlightSource } = await import("../src/flights/live-price.ts");
+  const { pythonLiveLookup } = await import("./google-live-price/lookup.ts");
 
   const cliArgs = argv.slice(2);
   const args = new Set(cliArgs);
@@ -69,13 +74,31 @@ async function main(): Promise<void> {
     }
     remoteEnv = envArg;
   }
+  const flagValue = (name: string, allowed: readonly string[], fallback: string): string => {
+    const value = cliArgs.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+    if (value === undefined) return fallback;
+    if (!allowed.includes(value)) {
+      console.error(`--${name} must be one of: ${allowed.join(", ")}.`);
+      exit(1);
+    }
+    return value;
+  };
+  const verify = flagValue("verify", ["google", "travelpayouts"], "travelpayouts");
+  const profile = flagValue("profile", ["local", "actions"], "local");
   const token = requireEnv("TRAVELPAYOUTS_TOKEN");
   const now = Date.now();
 
-  const collected = await collectVerifiedDailyFlights(
-    productionFlightSource({ TRAVELPAYOUTS_TOKEN: token }),
-    now,
+  const base = productionFlightSource(
+    { TRAVELPAYOUTS_TOKEN: token },
+    undefined,
+    undefined,
+    profile === "actions" ? ACTIONS_UPSTREAM_CALLS : MAX_DAILY_UPSTREAM_CALLS,
   );
+  const source =
+    verify === "google"
+      ? googleLiveFlightSource(base, pythonLiveLookup(env["GOOGLE_LIVE_PYTHON"] ?? "python3"))
+      : base;
+  const collected = await collectVerifiedDailyFlights(source, now);
   logDailyFlightsSummary("manual_daily_flights_collected", collected);
 
   const sql = formatDailyFlightsSyncSql(
@@ -83,7 +106,10 @@ async function main(): Promise<void> {
     collected.completed ? { digestDate: collected.digestDate, at: now } : undefined,
   );
   if (dryRun) {
-    console.log(sql);
+    // `--sql-file=` keeps the SQL apart from the log lines (the Actions dry run uploads it).
+    const sqlOut = cliArgs.find((a) => a.startsWith("--sql-file="))?.slice("--sql-file=".length);
+    if (sqlOut) await writeFile(sqlOut, sql, "utf8");
+    else console.log(sql);
     return;
   }
 

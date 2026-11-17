@@ -169,6 +169,7 @@ describe("daily flights page", () => {
     expect(beta.className).toContain("tracking-[0.06em]");
     expect(beta.className).not.toContain("border");
     expect(screen.getByText("每天 08:00 更新")).toBeVisible();
+    expect(screen.getByText("價格僅供參考，實際以訂票頁為準")).toBeVisible();
     expect(screen.queryByText(/低價機票/)).toBeNull();
   });
 
@@ -588,6 +589,9 @@ describe("daily flights page", () => {
     expect(within(title).getByText("fly").className).toContain("linear-gradient");
     expect(within(title.parentElement as HTMLElement).getByText("BETA")).toBeVisible();
     expect(screen.getByText("Updated daily at 8 AM")).toBeVisible();
+    expect(
+      screen.getByText("Prices are for reference; the booking page shows the final price"),
+    ).toBeVisible();
     expect(screen.queryByRole("group", { name: "Sort" })).toBeNull();
     expect(pageCount()).toHaveTextContent(/^6 fares$/);
     const nrt = cityHeadings()[0] as HTMLElement;
