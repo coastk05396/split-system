@@ -58,6 +58,14 @@ describe("flights domain helpers", () => {
     expect(computeDealSignal(11000, 10000)).toEqual({ discountPct: 0, tag: "normal" });
   });
 
+  it("decides the Good Deal gate and the steal tier from the unrounded discount", () => {
+    expect(computeDealSignal(8500, 10000)).toEqual({ discountPct: 15, tag: "below_market" });
+    expect(computeDealSignal(8501, 10000).tag).toBe("normal"); // 14.99% never passes as 15%
+    expect(computeDealSignal(7000, 10000).tag).toBe("steal");
+    expect(computeDealSignal(7001, 10000).tag).toBe("below_market"); // 29.99% is not a steal
+    expect(computeDealSignal(7040, 10000)).toEqual({ discountPct: 30, tag: "below_market" });
+  });
+
   it("matches overlapping 2026 and 2027 Taiwan public holidays", () => {
     expect(matchTaiwanHoliday("2026-09-25", "2026-09-29")?.id).toBe("mid-autumn-2026");
     expect(matchTaiwanHoliday("2026-10-08", "2026-10-12")?.id).toBe("national-day-2026");

@@ -1710,7 +1710,13 @@ export function computeDealSignal(
     return { discountPct: 0, tag: "normal" };
   }
   const discountPct = Math.min(99, Math.max(0, Math.round((1 - priceTwd / baselineTwd) * 100)));
-  const tag: DealTag = discountPct >= 30 ? "steal" : discountPct >= 15 ? "below_market" : "normal";
+  // Tiers use the unrounded discount (integer math): 14.99% must not pass the 15% Good Deal gate.
+  const tag: DealTag =
+    priceTwd * 100 <= baselineTwd * 70
+      ? "steal"
+      : priceTwd * 100 <= baselineTwd * 85
+        ? "below_market"
+        : "normal";
   return { discountPct, tag };
 }
 
