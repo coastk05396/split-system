@@ -106,7 +106,10 @@ async function main(): Promise<void> {
     collected.completed ? { digestDate: collected.digestDate, at: now } : undefined,
   );
   if (dryRun) {
-    console.log(sql);
+    // `--sql-file=` keeps the SQL apart from the log lines (the Actions dry run uploads it).
+    const sqlOut = cliArgs.find((a) => a.startsWith("--sql-file="))?.slice("--sql-file=".length);
+    if (sqlOut) await writeFile(sqlOut, sql, "utf8");
+    else console.log(sql);
     return;
   }
 
