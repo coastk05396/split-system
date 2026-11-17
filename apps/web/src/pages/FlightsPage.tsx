@@ -178,6 +178,10 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     return filterDailyFlights(items, { ...currentFilter, ...patch }).length;
   }
 
+  // One-way fares are a small slice of the board: say so, and offer round trips, instead of a blank list.
+  const oneWayEmpty =
+    filtered.length === 0 && activeTripType === "ow" && countWith({ tripType: "rt" }) > 0;
+
   const activeDrawerCount =
     (origin !== "all" ? 1 : 0) +
     (dest !== "all" ? 1 : 0) +
@@ -477,15 +481,25 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-200/80 bg-white px-6 py-10 text-center shadow-2xs">
           <SproutMascot className="size-20" mood="happy" />
-          <h2 className="text-lg font-bold text-ink">{t("flights.empty.title")}</h2>
-          <p className="max-w-sm text-sm text-ink-muted">{t("flights.empty.body")}</p>
+          <h2 className="text-lg font-bold text-ink">
+            {t(oneWayEmpty ? "flights.emptyOneWay.title" : "flights.empty.title")}
+          </h2>
+          <p className="max-w-sm text-sm text-ink-muted">
+            {t(oneWayEmpty ? "flights.emptyOneWay.body" : "flights.empty.body")}
+          </p>
           <button
             type="button"
-            onClick={resetFilters}
-            className="press-pill mt-1 inline-flex cursor-pointer items-center gap-2 rounded-full bg-sprout-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sprout-600"
+            onClick={
+              oneWayEmpty
+                ? () => {
+                    setTripType("rt");
+                  }
+                : resetFilters
+            }
+            className="press-pill mt-1 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-sprout-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sprout-600"
           >
             <RotateCcw aria-hidden="true" className="size-4" />
-            {t("flights.empty.reset")}
+            {t(oneWayEmpty ? "flights.emptyOneWay.switch" : "flights.empty.reset")}
           </button>
         </div>
       ) : (

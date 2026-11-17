@@ -682,6 +682,67 @@ describe("daily flights page", () => {
     expect(await screen.findByText(/東京/)).toBeVisible();
   });
 
+  it("explains an empty one-way view and offers a way back to round trips", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    const trip = screen.getByRole("group", { name: "行程" });
+    await user.click(within(trip).getByRole("button", { name: "單程" }));
+    await user.click(
+      within(screen.getByRole("group", { name: "目的地" })).getByRole("button", { name: "日本" }),
+    );
+
+    // Japan has round trips on the board but no one-way fares
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "這個地區目前沒有單程票" }),
+    ).toBeVisible();
+    expect(screen.getByText("單程票只有少數幾筆，改看來回票或換個地區試試。")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "重設篩選" })).toBeNull();
+    expect(pageCount()).toHaveTextContent(/^0 筆$/);
+
+    await user.click(screen.getByRole("button", { name: "改看來回" }));
+    expect(within(trip).getByRole("button", { name: "來回" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(await screen.findByRole("heading", { level: 2, name: /東京/ })).toBeVisible();
+    expect(screen.queryByText("這個地區目前沒有單程票")).toBeNull();
+  });
+
+  it("shows the one-way empty state in English", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: "切換為英文" }));
+    await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
+    await user.click(
+      within(screen.getByRole("group", { name: "Trip" })).getByRole("button", { name: "One-way" }),
+    );
+    await user.click(
+      within(screen.getByRole("group", { name: "Region" })).getByRole("button", { name: "Japan" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "No one-way fares here right now" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Show round trips" })).toBeVisible();
+  });
+
+  it("shows the generic empty state with a reset when drawer filters remove every fare", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: /篩選/ }));
+    const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
+    await user.click(within(dialog).getByRole("button", { name: /台南 TNN\s*0/ }));
+    await user.click(within(dialog).getByRole("button", { name: /查看 0 筆機票/ }));
+
+    expect(await screen.findByText("目前沒有符合條件的低價機票")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "重設篩選" }));
+    expect(await screen.findByRole("heading", { level: 2, name: /東京/ })).toBeVisible();
+    expect(within(screen.getByRole("button", { name: /篩選/ })).queryByText("1")).toBeNull();
+  });
+
   it("lays out the signed-out header as logo + title + BETA, then the note with EN and 登入, and localizes filter sheet Close", async () => {
     const user = userEvent.setup();
     renderApp({ path: "/flights" });

@@ -582,6 +582,10 @@ export const en: Record<MessageId, string> = {
   "flights.empty.title": "No flight deals match these filters",
   "flights.empty.body": "Try another region or reset your filters.",
   "flights.empty.reset": "Reset filters",
+  "flights.emptyOneWay.title": "No one-way fares here right now",
+  "flights.emptyOneWay.body":
+    "Only a handful of one-way fares make the board. Try round trip or another region.",
+  "flights.emptyOneWay.switch": "Show round trips",
   "flights.deal.steal": "Save {pct}%",
   "flights.deal.save": "Save {pct}%",
   "flights.badge.direct": "Nonstop",
