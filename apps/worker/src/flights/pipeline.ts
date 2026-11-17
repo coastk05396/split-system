@@ -108,6 +108,8 @@ export const MAX_DATES_PER_ROUTE = 3;
 export const BASELINE_CANDIDATES_PER_ROUTE = 6;
 /** The candidate count shrinks so a run's estimated upstream calls stay under this (Workers Paid allows 1,000). */
 export const MAX_DAILY_UPSTREAM_CALLS = 800;
+/** GitHub Actions has no subrequest limit, so its runs may spend more upstream calls (ADR 0012). */
+export const ACTIONS_UPSTREAM_CALLS = 1500;
 /** Verification makes one call per board fare, so the whole ceiling is reserved for it. */
 const MAX_VERIFICATIONS = TRIP_QUOTAS.rt + TRIP_QUOTAS.ow;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
@@ -434,6 +436,7 @@ export function productionFlightSource(
   env: { TRAVELPAYOUTS_TOKEN?: string },
   upstreamFetch: FetchFn = (input, init) => fetch(input, init),
   baselineCache?: BaselineCache,
+  maxUpstreamCalls: number = MAX_DAILY_UPSTREAM_CALLS,
 ): FlightSource {
   let upstreamCalls = 0;
   let discovered = 0;
@@ -585,7 +588,7 @@ export function productionFlightSource(
             )
             .map((c) => `${routeKey(c)}-${monthOf(c)}`),
         ).size;
-      const baselineBudget = MAX_DAILY_UPSTREAM_CALLS - upstreamCalls - MAX_VERIFICATIONS;
+      const baselineBudget = maxUpstreamCalls - upstreamCalls - MAX_VERIFICATIONS;
       let perRoute = BASELINE_CANDIDATES_PER_ROUTE;
       let shortlist = cheapestPerRoute(collected, perRoute);
       while (perRoute > 1 && uncachedCalls(shortlist) > baselineBudget) {
