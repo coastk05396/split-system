@@ -174,7 +174,7 @@ describe("daily flights page", () => {
     expect(nrt).toHaveTextContent("省 45%");
     // 4 fares pill; no directness while collapsed, no dates
     const pill = within(nrt).getByText("4 筆");
-    expect(pill.className).toMatch(/bg-\[#eef2f0\].*text-fl-muted/);
+    expect(pill.className).toMatch(/bg-\[#f1eeea\].*text-fl-sub/);
     expect(nrt).not.toHaveTextContent(/直飛|轉|成田/);
     expect(nrt.textContent).not.toMatch(/\d{1,2}\/\d{1,2}/);
     expect(document.querySelectorAll('svg[data-country="JP"]').length).toBe(2);
@@ -187,7 +187,7 @@ describe("daily flights page", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(nrt).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
     // Count is plain text when expanded, not the collapsed grey pill
-    expect(nrt.querySelector('[class*="bg-[#eef2f0]"]')).toBeNull();
+    expect(nrt.querySelector('[class*="bg-[#f1eeea]"]')).toBeNull();
     const card = nrt.closest(".flight-card") as HTMLElement;
     expect(card.className).toContain("border-[#c4e3d3]");
     expect(card.className).toContain("overflow-hidden");
