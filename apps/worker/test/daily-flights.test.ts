@@ -621,6 +621,22 @@ describe("public flight routes and daily pipeline", () => {
       expect((await get()).isFallback).toBe(true);
     });
 
+    it("serves stored fares for 48 hours after the run, then counts them as unavailable", async () => {
+      const db = createDb(env.DB);
+      const fake = tpeSupply(
+        (month) => (month === DEC ? [{ dest: "NRT", day: 20, price: 7000 }] : []), // stays in the window
+        () => ({ prices: [9000, 10000, 11000] }),
+      );
+      expect((await boardOf(fake)).items).toHaveLength(1);
+
+      const at48h = cronNow + 48 * 3_600_000;
+      expect(await listDailyFlights(db, at48h)).toMatchObject({ isFallback: false });
+      expect((await listDailyFlights(db, at48h)).items).toHaveLength(1);
+      const stale = await listDailyFlights(db, at48h + 1);
+      expect(stale.isFallback).toBe(true);
+      expect(stale.items.length).toBeGreaterThanOrEqual(15); // curated, not yesterday's fares
+    });
+
     it("shows nothing for a country with only ordinary fares and never pads the board", async () => {
       const fake = tpeSupply(
         (month) =>

@@ -27,7 +27,7 @@ export {
 };
 
 const D1_INSERT_CHUNK_SIZE = 5;
-/** A completed run stays authoritative for 48 hours (one missed daily 08:00 run); after that the data is unavailable. */
+/** A run (and its stored fares) stays authoritative for 48 hours (one missed daily 08:00 run); after that the data is unavailable. */
 const RUN_FRESH_MS = 48 * 3_600_000;
 
 function parseAirlinesJson(json: string): string[] {
@@ -100,10 +100,13 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .orderBy(desc(dailyFlights.digestDate), desc(dailyFlights.createdAt))
     .limit(1);
 
+  // One freshness rule for stored fares and the run marker (both are written together, so the
+  // manual sync path is covered too): older than RUN_FRESH_MS means unavailable, never carried over.
+  const isFresh = (writtenAt: number): boolean => now - writtenAt <= RUN_FRESH_MS;
   // A completed run is an empty board, never curated fares, while it is fresh (ADR 0010).
   const [run] = await db.select().from(dailyFlightsRuns).limit(1);
   const emptyBoard = (): DailyFlightsResponse | null =>
-    run !== undefined && now - run.completedAt <= RUN_FRESH_MS
+    run !== undefined && isFresh(run.completedAt)
       ? {
           date: run.digestDate,
           updatedAt: new Date(run.completedAt).toISOString(),
@@ -115,6 +118,7 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
   if (latest === undefined) {
     return emptyBoard() ?? buildFallbackResponse(now);
   }
+  if (!isFresh(latest.createdAt)) return buildFallbackResponse(now);
 
   const rows = await db
     .select()
