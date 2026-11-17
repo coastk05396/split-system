@@ -18,6 +18,13 @@ def single_flight(dep=(9, 30)):
     return f
 
 
+def no_legs(price):
+    """A priced entry whose flight-leg list is empty."""
+    e = entry(price)
+    e[0][2] = []
+    return e
+
+
 def entry(price, airline="Hong Kong Express", dep=(9, 30)):
     flight = [None] * 23
     flight[0], flight[1], flight[2] = "one-way", [airline], [single_flight(dep)]
@@ -69,6 +76,17 @@ class BothGroups(unittest.TestCase):
         for payload3 in (None, [None], [], "group"):
             self.assertEqual(read_page(page([] if payload3 == "group" else None, payload3=payload3)), ("no_result", [], None), payload3)
         self.assertEqual(read_page(page(None, best=[])), ("no_result", [], None))
+
+
+class MalformedEntries(unittest.TestCase):
+    def test_priced_entry_with_empty_legs_is_skipped_and_the_valid_fare_survives(self):
+        reason, items, _ = read_page(page([no_legs(3000), entry(5000)], best=[no_legs(2000)]))
+        self.assertIsNone(reason)
+        self.assertEqual([i["priceTwd"] for i in items], [5000])
+
+    def test_page_where_every_priced_entry_is_malformed_raises_so_it_is_reported_as_error(self):
+        with self.assertRaises(ValueError):
+            read_page(page([no_legs(3000)]))
 
 
 class ReadPage(unittest.TestCase):

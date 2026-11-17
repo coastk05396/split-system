@@ -78,7 +78,7 @@ def group(payload: Any, index: int) -> list[Any]:
         return []
 
 
-def parse_tolerant(html: str) -> tuple[list[Any], dict[str, str]]:
+def parse_tolerant(html: str) -> list[dict[str, Any]]:
     """Like fast_flights.parser.parse, but one malformed itinerary (e.g. no price) is skipped
     instead of crashing the page (fast-flights 3.1.0 raises IndexError on `k[1][0][1]`)."""
     script = LexborHTMLParser(html).css_first(r"script.ds\:1")
@@ -92,8 +92,7 @@ def parse_tolerant(html: str) -> tuple[list[Any], dict[str, str]]:
     # Google splits results in "best flights" (payload[2][0]: where the low-cost carriers sit) and
     # "other flights" (payload[3][0]); fast-flights only reads the latter. Either may be missing.
     entries = group(payload, 2) + group(payload, 3)
-    found: list[Any] = []
-    codes: dict[str, str] = {}
+    found: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
     priced = 0
     for entry in entries:
@@ -104,19 +103,21 @@ def parse_tolerant(html: str) -> tuple[list[Any], dict[str, str]]:
         single[3] = [[entry]]
         try:
             one = parse_js("data:" + json.dumps(single) + ",")
-        except (IndexError, TypeError, KeyError, ValueError):
-            continue
-        # Google lists airline names; the board stores IATA codes, so map through the page metadata.
-        codes.update({a.name: a.code for a in one.metadata.airlines})
-        for f in one:
-            key = (f.price, tuple(f.airlines), f.flights[0].departure.time, f.flights[-1].arrival.time, len(f.flights))
+            # Google lists airline names; the board stores IATA codes, so map through the page metadata.
+            codes = {a.name: a.code for a in one.metadata.airlines}
+            built = [itinerary(f, codes) for f in one]
+        except (IndexError, TypeError, KeyError, ValueError, AttributeError):
+            continue  # one malformed entry (e.g. no flight legs) never costs the page's valid fares
+        for it in built:
+            key = (it["priceTwd"], tuple(it["airlines"]), it["outboundDep"], it["outboundArr"], it["transfers"])
             if key not in seen:
                 seen.add(key)
-                found.append(f)
+                found.append(it)
+    # Priced fares we cannot read at all mean a parse failure ("error"), not an honest "no result".
     if priced and not found:
         raise ValueError("no itinerary could be parsed")
-    found.sort(key=lambda f: f.price)
-    return found, codes
+    found.sort(key=lambda it: it["priceTwd"])
+    return found
 
 
 def read_page(
@@ -141,12 +142,12 @@ def read_page(
     if blocked:
         return "blocked", [], blocked
     try:
-        flights, codes = parse_tolerant(html)
+        flights = parse_tolerant(html)
     except FlightsNotFound:
         return "no_result", [], None
     if not flights:
         return "no_result", [], None
-    return None, [itinerary(f, codes) for f in flights[:MAX_ITINERARIES]], None
+    return None, flights[:MAX_ITINERARIES], None
 
 
 def itinerary(f: Any, codes: dict[str, str]) -> dict[str, Any]:
