@@ -35,6 +35,8 @@ export interface LiveQueries {
   error: number;
   blocked: number;
   blockedReasons: Record<string, number>;
+  /** Why queries failed: `server_error`, `no_payload`, `parse`, `exception:<Type>` or `unknown`. */
+  errorReasons: Record<string, number>;
 }
 
 /** Stop after this many payload-less pages in a row (a single one is ambiguous, not a block). */
@@ -56,6 +58,7 @@ const emptyQueries = (): LiveQueries => ({
   error: 0,
   blocked: 0,
   blockedReasons: {},
+  errorReasons: {},
 });
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
@@ -118,6 +121,10 @@ export function googleLiveFlightSource(
           live.set(r.id, r);
           const key = r.reason ?? "ok";
           queries[key] += 1;
+          if (r.reason === "error") {
+            const why = r.errorReason ?? "unknown";
+            queries.errorReasons[why] = (queries.errorReasons[why] ?? 0) + 1;
+          }
           if (r.reason === "blocked") {
             const why = r.blockedReason ?? "unknown";
             queries.blockedReasons[why] = (queries.blockedReasons[why] ?? 0) + 1;

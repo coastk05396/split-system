@@ -126,8 +126,8 @@ class Status(unittest.TestCase):
         self.assertEqual(read_page("", 403), ("blocked", [], "http"))
 
     def test_confirmed_5xx_is_an_error_not_a_block(self):
-        self.assertEqual(read_page("<html>Bad Gateway</html>", 502), ("error", [], None))
-        self.assertEqual(read_page("", 503), ("error", [], None))
+        self.assertEqual(read_page("<html>Bad Gateway</html>", 502), ("error", [], "server_error"))
+        self.assertEqual(read_page("", 503), ("error", [], "server_error"))
 
     def test_payload_less_page_is_an_error_tagged_no_payload_not_a_block(self):
         self.assertEqual(read_page("<html>hi</html>", 200), ("error", [], "no_payload"))
@@ -183,6 +183,27 @@ class MainLoop(unittest.TestCase):
         self.assertEqual([r["reason"] for r in results], ["error", None])
         self.assertEqual(results[0]["errorReason"], "no_payload")
         self.assertEqual(fetched, 2)
+
+    def test_every_error_result_carries_its_category(self):
+        broken = page([no_legs(3000)])
+        pages = [(503, "down"), (200, "<html>odd</html>"), (200, broken)]
+        results, _, _ = run_main([cand(1), cand(2), cand(3)], pages)
+        self.assertEqual([r["errorReason"] for r in results], ["server_error", "no_payload", "parse"])
+
+    def test_an_unexpected_exception_is_tagged_with_its_type_only(self):
+        def boom(_q):
+            raise RuntimeError("secret detail https://example.test/?tfs=abc")
+
+        out = io.StringIO()
+        with mock.patch.object(adapter, "fetch_page", boom), mock.patch.object(
+            adapter.time, "sleep", lambda _s: None
+        ), mock.patch("sys.stdin", io.StringIO(json.dumps([cand(1)]))), mock.patch("sys.stdout", out), mock.patch(
+            "sys.stderr", io.StringIO()
+        ) as err:
+            adapter.main()
+        result = json.loads(out.getvalue())[0]
+        self.assertEqual((result["reason"], result["errorReason"]), ("error", "exception:RuntimeError"))
+        self.assertNotIn("secret", out.getvalue() + err.getvalue())
 
     def test_a_5xx_or_error_does_not_stop_the_run(self):
         pages = [(503, "down"), (200, page([entry(1000)]))]

@@ -59,6 +59,10 @@ def block_reason(html: str, status: int | None = None) -> str | None:
     return None if "ds:1" in html else "no_payload"
 
 
+class ParseError(ValueError):
+    """The page has priced fares but none could be read."""
+
+
 def exception_block_reason(e: Exception) -> str | None:
     return "http" if HTTP_BLOCK.search(str(e)) else None
 
@@ -115,7 +119,7 @@ def parse_tolerant(html: str) -> list[dict[str, Any]]:
                 found.append(it)
     # Priced fares we cannot read at all mean a parse failure ("error"), not an honest "no result".
     if priced and not found:
-        raise ValueError("no itinerary could be parsed")
+        raise ParseError("no itinerary could be parsed")
     found.sort(key=lambda it: it["priceTwd"])
     return found
 
@@ -135,7 +139,7 @@ def read_page(
         return "blocked", [], "http"
     blocked = block_reason(html, status)
     if blocked == "server_error":
-        return "error", [], None  # a confirmed 5xx is transient, not a block
+        return "error", [], "server_error"  # a confirmed 5xx is transient, not a block
     if blocked == "no_payload":
         # One payload-less page is ambiguous; the caller stops after 3 in a row.
         return "error", [], "no_payload"
@@ -180,12 +184,14 @@ def query_one(c: dict[str, Any]) -> dict[str, Any]:
             result["blockedReason" if reason == "blocked" else "errorReason"] = detail
     except Exception as e:  # noqa: BLE001 - report, never crash the run
         blocked = exception_block_reason(e)
-        result["reason"] = "blocked" if blocked else "error"
         if blocked:
-            result["blockedReason"] = blocked
+            result["reason"], result["blockedReason"] = "blocked", blocked
         else:
-            # Only the exception type is reported: messages may echo request details.
-            print(f"adapter error for {c['id']}: {type(e).__name__}", file=sys.stderr)
+            result["reason"] = "error"
+            # Category only (the type name): messages may echo request details.
+            result["errorReason"] = "parse" if isinstance(e, ParseError) else f"exception:{type(e).__name__}"
+    if result["reason"] == "error":
+        print(f"adapter error for {c['id']}: {result['errorReason']}", file=sys.stderr)
     return result
 
 

@@ -190,6 +190,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         error: 1,
         blocked: 1,
         blockedReasons: { consent: 1 },
+        errorReasons: { unknown: 1 },
       });
       expect(collected.live).toMatchObject({ kept: 5, blocked: 2 });
     } finally {
@@ -257,6 +258,44 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
     it("still stops at once on an explicit block", async () => {
       const { queried } = await run(["ok", "blocked"]);
       expect(queried).toEqual(["a", "b"]);
+    });
+  });
+
+  it("tallies the error category of each failed query, counts only", async () => {
+    const reasons = [
+      "server_error",
+      "no_payload",
+      "parse",
+      "exception:RuntimeError",
+      undefined,
+      "server_error",
+    ];
+    const lookup: LiveLookup = (batch) =>
+      Promise.resolve(
+        batch.map((c) => ({
+          id: c.id,
+          reason: "error" as const,
+          errorReason: reasons[Number(c.id)],
+          itineraries: [],
+        })),
+      );
+    const collected = await collectVerifiedDailyFlights(
+      sourceOf(
+        ["0", "1", "2", "3", "4", "5"].map((id) => candidate(id)),
+        lookup,
+        { batchSize: 1, maxQueries: 6 },
+      ),
+      now,
+    );
+    expect(collected.live?.queries).toMatchObject({
+      error: 6,
+      errorReasons: {
+        server_error: 2,
+        no_payload: 1,
+        parse: 1,
+        "exception:RuntimeError": 1,
+        unknown: 1,
+      },
     });
   });
 
