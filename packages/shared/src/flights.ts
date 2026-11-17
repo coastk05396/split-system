@@ -19,6 +19,10 @@ export type LonghaulSubRegion = (typeof LONGHAUL_SUBREGIONS)[number];
 export const FLIGHT_TRIP_TYPES = ["rt", "ow"] as const;
 export type FlightTripType = (typeof FLIGHT_TRIP_TYPES)[number];
 
+/** Baselines compare like with like: direct fares with direct prices, connecting with connecting. */
+export const FLIGHT_STOP_CLASSES = ["direct", "connecting"] as const;
+export type FlightStopClass = (typeof FLIGHT_STOP_CLASSES)[number];
+
 export const DEAL_TAGS = ["steal", "below_market", "normal"] as const;
 export type DealTag = (typeof DEAL_TAGS)[number];
 

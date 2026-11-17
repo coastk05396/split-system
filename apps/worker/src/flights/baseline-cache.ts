@@ -3,8 +3,8 @@ import type { Db } from "../db/client.js";
 import { flightBaselines } from "../db/schema.js";
 import { BASELINE_CACHE_TTL_MS, type BaselineCache } from "./pipeline.js";
 
-// D1 allows at most 100 bound parameters per query (6 columns * 15 rows = 90).
-const UPSERT_CHUNK_SIZE = 15;
+// D1 allows at most 100 bound parameters per query (7 columns * 14 rows = 98).
+const UPSERT_CHUNK_SIZE = 14;
 
 /** D1-backed `BaselineCache`: fresh rows are served for `BASELINE_CACHE_TTL_MS`, older rows are pruned on save. */
 export function d1BaselineCache(db: Db): BaselineCache {
@@ -19,6 +19,7 @@ export function d1BaselineCache(db: Db): BaselineCache {
         dest: r.destination,
         tripType: r.tripType,
         month: r.month,
+        stopClass: r.stopClass,
         baselineTwd: r.baselineTwd,
       }));
     },
@@ -35,6 +36,7 @@ export function d1BaselineCache(db: Db): BaselineCache {
                 destination: e.dest,
                 tripType: e.tripType,
                 month: e.month,
+                stopClass: e.stopClass,
                 baselineTwd: e.baselineTwd,
                 fetchedAt: now,
               })),
@@ -45,6 +47,7 @@ export function d1BaselineCache(db: Db): BaselineCache {
                 flightBaselines.destination,
                 flightBaselines.tripType,
                 flightBaselines.month,
+                flightBaselines.stopClass,
               ],
               set: {
                 baselineTwd: sql`excluded.baseline_twd`,

@@ -4,6 +4,7 @@ import {
   DESTINATION_CATALOG,
   FLIGHT_ORIGINS,
   FLIGHT_REGIONS,
+  FLIGHT_STOP_CLASSES,
   FLIGHT_TRIP_TYPES,
   getDestinationMeta,
   departureBounds,
@@ -13,6 +14,7 @@ import {
   type DealTag,
   type FlightOrigin,
   type FlightRegion,
+  type FlightStopClass,
   type FlightTripType,
 } from "@split/shared/flights";
 import { z } from "zod";
@@ -68,13 +70,14 @@ export interface VerifiedFlightPrice {
   inboundArr?: string | null;
 }
 
-/** A month-matrix median (`null`: upstream answered with fewer than 3 prices) for one Route and departure month. */
+/** A month-matrix median (`null`: upstream answered with fewer than 3 prices) for one Route, departure month and stop class. */
 export interface BaselineEntry {
   origin: FlightOrigin;
   dest: string;
   tripType: FlightTripType;
   /** First day of the departure month, `YYYY-MM-01`. */
   month: string;
+  stopClass: FlightStopClass;
   baselineTwd: number | null;
 }
 
@@ -113,8 +116,19 @@ const LONGHAUL_AIRPORTS: readonly string[] = DESTINATION_CATALOG.filter(
 /** A fetched month-matrix baseline is reused for 3 days (ADR 0009) to keep the cron's upstream calls down. */
 export const BASELINE_CACHE_TTL_MS = 3 * 24 * 3_600_000;
 
-function baselineKey(origin: string, dest: string, tripType: FlightTripType, month: string) {
-  return `${origin}-${dest}-${tripType}-${month}`;
+function baselineKey(
+  origin: string,
+  dest: string,
+  tripType: FlightTripType,
+  month: string,
+  stopClass: FlightStopClass,
+) {
+  return `${origin}-${dest}-${tripType}-${month}-${stopClass}`;
+}
+
+/** A fare with a connection on either leg is compared with connecting prices only. */
+function stopClassOf(transfers: number, returnTransfers: number | null): FlightStopClass {
+  return transfers === 0 && (returnTransfers ?? 0) === 0 ? "direct" : "connecting";
 }
 
 /** Splits `total` across regions by `REGION_WEIGHTS` (largest remainder, ties by region order). */
@@ -362,12 +376,13 @@ async function fetchTravelpayoutsPrices(
   return parsed ? parsed.data : null;
 }
 
+/** Month-matrix prices with their number of changes; `null` when the call failed. */
 async function fetchMonthMatrixPrices(
   fetchFn: FetchFn,
   token: string,
   query: Record<string, string>,
   logContext: { event: string; [key: string]: unknown },
-): Promise<number[] | null> {
+): Promise<{ price: number; changes: number }[] | null> {
   const parsed = await fetchTravelpayoutsJson(
     fetchFn,
     token,
@@ -382,7 +397,10 @@ async function fetchMonthMatrixPrices(
     console.warn(JSON.stringify({ ...logContext, error: "success_false" }));
     return null;
   }
-  return parsed.data.map((d) => Math.round(d.value));
+  return parsed.data.map((d) => ({
+    price: Math.round(d.value),
+    changes: d.number_of_changes ?? 0,
+  }));
 }
 
 /**
@@ -487,11 +505,11 @@ export function productionFlightSource(
 
       if (collected.length === 0) return [];
 
-      // Deal Signal baseline: Travelpayouts month-matrix median per (origin, dest, tripType, month),
-      // falling back to the Stage 1 same-day pool median per destination and trip type.
+      // Deal Signal baseline: Travelpayouts month-matrix median per (origin, dest, tripType, month, stop class),
+      // falling back to the Stage 1 same-day pool median per destination, trip type and stop class.
       const stage1Prices = new Map<string, number[]>();
       for (const c of collected) {
-        const key = `${c.dest}-${c.tripType}`;
+        const key = `${c.dest}-${c.tripType}-${stopClassOf(c.transfers, c.returnTransfers)}`;
         stage1Prices.set(key, [...(stage1Prices.get(key) ?? []), c.priceTwd]);
       }
 
@@ -499,7 +517,10 @@ export function productionFlightSource(
       const monthBaselines = new Map<string, number | null>();
       try {
         for (const e of (await baselineCache?.load(now)) ?? []) {
-          monthBaselines.set(baselineKey(e.origin, e.dest, e.tripType, e.month), e.baselineTwd);
+          monthBaselines.set(
+            baselineKey(e.origin, e.dest, e.tripType, e.month, e.stopClass),
+            e.baselineTwd,
+          );
         }
       } catch (error) {
         console.warn(JSON.stringify({ event: "baseline_cache_load_failed", error: String(error) }));
@@ -507,8 +528,10 @@ export function productionFlightSource(
       const fetchedBaselines: BaselineEntry[] = [];
       for (const c of selected) {
         const month = `${c.outDate.slice(0, 7)}-01`;
-        const matrixKey = baselineKey(c.origin, c.dest, c.tripType, month);
-        if (monthBaselines.has(matrixKey)) continue;
+        const stopClass = stopClassOf(c.transfers, c.returnTransfers);
+        if (monthBaselines.has(baselineKey(c.origin, c.dest, c.tripType, month, stopClass))) {
+          continue;
+        }
 
         const prices = await fetchMonthMatrixPrices(
           fetchFn,
@@ -530,20 +553,26 @@ export function productionFlightSource(
             month,
           },
         );
-        const baselineTwd =
-          prices !== null && prices.length >= MIN_SIGNAL_CANDIDATES
-            ? median([...prices].sort((a, b) => a - b))
-            : null;
-        monthBaselines.set(matrixKey, baselineTwd);
-        // A failed fetch (null) is retried next run, never cached as "no signal".
-        if (prices !== null) {
-          fetchedBaselines.push({
-            origin: c.origin,
-            dest: c.dest,
-            tripType: c.tripType,
-            month,
-            baselineTwd,
-          });
+        // One answer carries both stop classes; each needs 3+ prices of its own for a Baseline.
+        for (const cls of FLIGHT_STOP_CLASSES) {
+          const classPrices = (prices ?? [])
+            .filter((p) => (p.changes === 0) === (cls === "direct"))
+            .map((p) => p.price)
+            .sort((a, b) => a - b);
+          const baselineTwd =
+            classPrices.length >= MIN_SIGNAL_CANDIDATES ? median(classPrices) : null;
+          monthBaselines.set(baselineKey(c.origin, c.dest, c.tripType, month, cls), baselineTwd);
+          // A failed fetch (null) is retried next run, never cached as "no signal".
+          if (prices !== null) {
+            fetchedBaselines.push({
+              origin: c.origin,
+              dest: c.dest,
+              tripType: c.tripType,
+              month,
+              stopClass: cls,
+              baselineTwd,
+            });
+          }
         }
       }
       try {
@@ -555,12 +584,15 @@ export function productionFlightSource(
       }
 
       return selected.map((c) => {
-        const matrixKey = baselineKey(c.origin, c.dest, c.tripType, `${c.outDate.slice(0, 7)}-01`);
-        const matrixBaseline = monthBaselines.get(matrixKey) ?? null;
+        const stopClass = stopClassOf(c.transfers, c.returnTransfers);
+        const matrixBaseline =
+          monthBaselines.get(
+            baselineKey(c.origin, c.dest, c.tripType, `${c.outDate.slice(0, 7)}-01`, stopClass),
+          ) ?? null;
         if (matrixBaseline !== null) {
           return { ...c, dealBaselineTwd: matrixBaseline };
         }
-        const group = stage1Prices.get(`${c.dest}-${c.tripType}`) ?? [];
+        const group = stage1Prices.get(`${c.dest}-${c.tripType}-${stopClass}`) ?? [];
         return {
           ...c,
           dealBaselineTwd:

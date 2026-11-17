@@ -46,6 +46,16 @@ interface FakeFare {
   day: number;
   price: number;
   airline?: string;
+  /** Stops on each leg; default 0 (direct). */
+  transfers?: number;
+}
+
+/** A month-matrix answer: `prices` are direct (0 changes), `connecting` ones have 1 change. */
+interface MatrixAnswer {
+  status?: number;
+  success?: boolean;
+  prices: number[];
+  connecting?: number[];
 }
 
 function addDaysIso(date: string, days: number): string {
@@ -75,7 +85,7 @@ function fakeTravelpayouts(
     destination: string,
     oneWay: boolean,
     month: string,
-  ) => { status?: number; success?: boolean; prices: number[] } | null,
+  ) => MatrixAnswer | null,
   targeted?: (destination: string) => (FakeFare & { month: string })[],
 ) {
   const discoveries: { origin: string; oneWay: boolean; month: string; unique: string | null }[] =
@@ -96,8 +106,8 @@ function fakeTravelpayouts(
       departure_at: `${outDate}T10:00:00+08:00`,
       return_at: oneWay ? null : `${addDaysIso(outDate, 4)}T15:00:00+08:00`,
       price: fare.price,
-      transfers: 0,
-      return_transfers: 0,
+      transfers: fare.transfers ?? 0,
+      return_transfers: fare.transfers ?? 0,
       duration_to: 180,
       duration_back: oneWay ? 0 : 180,
       // 4h before the (controllable) clock, so fares stay fresh when a test advances days.
@@ -139,10 +149,13 @@ function fakeTravelpayouts(
         }
         return Response.json({
           success: result.success ?? true,
-          data: result.prices.map((value, idx) => ({
+          data: [
+            ...result.prices.map((value) => ({ value, changes: 0 })),
+            ...(result.connecting ?? []).map((value) => ({ value, changes: 1 })),
+          ].map(({ value, changes }, idx) => ({
             value,
             depart_date: `${month.slice(0, 7)}-${String(idx + 1).padStart(2, "0")}`,
-            number_of_changes: 0,
+            number_of_changes: changes,
           })),
         });
       }
@@ -730,9 +743,7 @@ describe("public flight routes and daily pipeline", () => {
     });
 
     // BKK rt in 2026-12 only; the month-matrix answers `matrix(call)` (default median 7000).
-    function bkkSupply(
-      matrix?: () => { status?: number; success?: boolean; prices: number[] } | null,
-    ) {
+    function bkkSupply(matrix?: () => MatrixAnswer | null) {
       return fakeTravelpayouts(
         (origin, oneWay, month) =>
           origin === "TPE" && !oneWay && month === "2026-12"
@@ -757,6 +768,81 @@ describe("public flight routes and daily pipeline", () => {
       const { items } = await res.json<DailyFlightsResponse>();
       return items.map((i) => ({ price: i.priceTwd, tag: i.tag, discountPct: i.discountPct }));
     }
+
+    async function cachedBaselines() {
+      const { results } = await env.DB.prepare(
+        "SELECT origin, destination, trip_type, month, stop_class, baseline_twd FROM flight_baselines ORDER BY stop_class",
+      ).all();
+      return results;
+    }
+
+    // BKK rt in 2026-12: one direct fare (5000) and one connecting fare (4000), one upstream answer.
+    function stopClassSupply(answer: MatrixAnswer) {
+      return fakeTravelpayouts(
+        (origin, oneWay, month) =>
+          origin === "TPE" && !oneWay && month === "2026-12"
+            ? [
+                { dest: "BKK", day: 5, price: 5000 },
+                { dest: "BKK", day: 12, price: 4000, transfers: 1 },
+              ]
+            : [],
+        () => answer,
+      );
+    }
+
+    it("scores a direct fare against the direct Baseline and a connecting fare against the connecting one", async () => {
+      // direct median 8000, connecting median 5000; all six prices together would give 6000
+      const fake = stopClassSupply({ prices: [6000, 8000, 10000], connecting: [4000, 5000, 6000] });
+      const items = await refreshAt(fake, day0);
+
+      expect(fake.monthMatrixCalls).toHaveLength(1); // one answer serves both stop classes
+      expect(items).toContainEqual({ price: 5000, tag: "steal", discountPct: 38 });
+      expect(items).toContainEqual({ price: 4000, tag: "below_market", discountPct: 20 });
+    });
+
+    it("keeps both stop classes for one Route and month for 3 days without overwriting each other", async () => {
+      const first = stopClassSupply({
+        prices: [6000, 8000, 10000],
+        connecting: [4000, 5000, 6000],
+      });
+      const fresh = await refreshAt(first, day0);
+      expect(await cachedBaselines()).toEqual([
+        {
+          origin: "TPE",
+          destination: "BKK",
+          trip_type: "rt",
+          month: "2026-12-01",
+          stop_class: "connecting",
+          baseline_twd: 5000,
+        },
+        {
+          origin: "TPE",
+          destination: "BKK",
+          trip_type: "rt",
+          month: "2026-12-01",
+          stop_class: "direct",
+          baseline_twd: 8000,
+        },
+      ]);
+
+      const second = stopClassSupply({ prices: [1, 2, 3], connecting: [1, 2, 3] });
+      const cached = await refreshAt(second, day0 + 3 * DAY_MS);
+      expect(second.monthMatrixCalls).toHaveLength(0);
+      expect(cached).toEqual(fresh);
+    });
+
+    it("gives a stop class with fewer than 3 prices no Baseline, without touching the other class", async () => {
+      const fake = stopClassSupply({ prices: [6000, 8000, 10000], connecting: [4000, 5000] });
+      const items = await refreshAt(fake, day0);
+
+      expect(items).toContainEqual({ price: 5000, tag: "steal", discountPct: 38 });
+      // one connecting candidate only: too few for the Stage 1 fallback as well
+      expect(items).toContainEqual({ price: 4000, tag: "normal", discountPct: 0 });
+      expect((await cachedBaselines()).map((r) => [r["stop_class"], r["baseline_twd"]])).toEqual([
+        ["connecting", null],
+        ["direct", 8000],
+      ]);
+    });
 
     it("reuses a baseline fetched within 3 days with no new upstream call, and scores the same", async () => {
       const first = bkkSupply();
@@ -786,6 +872,7 @@ describe("public flight routes and daily pipeline", () => {
     it("falls back as before when the baseline fetch fails, and retries it next run", async () => {
       const failing = bkkSupply(() => ({ status: 500, prices: [] }));
       const items = await refreshAt(failing, day0);
+      expect(await cachedBaselines()).toEqual([]); // a failed call is never cached
       // Only 2 Stage 1 candidates and no baseline: no Deal Signal
       expect(items.every((i) => i.tag === "normal" && i.discountPct === 0)).toBe(true);
 
