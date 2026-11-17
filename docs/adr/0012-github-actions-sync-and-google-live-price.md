@@ -8,7 +8,7 @@ Stage 2 re-asked Travelpayouts, the same cache that produced the candidate, so a
 
 ## Decision
 
-1. **Actions run the sync**: a scheduled and manually dispatchable workflow runs the existing collect-and-sync script and writes D1 with one atomic SQL batch. Schedule is 07:00 Taipei (23:00 UTC) to finish before the "updated 08:00" promise.
+1. **Actions run the sync**: a scheduled and manually dispatchable workflow runs the existing collect-and-sync script and writes D1 with one atomic SQL batch. Schedule is 06:00 Taipei (22:00 UTC) to finish before the "updated 08:00" promise.
 2. **Manual runs**: the workflow has a dry-run (default) and a write mode; the local `sync-flights` script stays and gains a verification-source option.
 3. **Google Flights is the Stage 2 source**: a small Python adapter (`fast-flights`) takes candidate JSON and returns a Live Price per candidate. The TypeScript pipeline stays the owner of scoring.
 4. **Live Price replaces the cached price only for a matching itinerary** (same Route, dates, trip type, stop class, airline set). The Deal Signal is recomputed and the fare is dropped if it falls under 15%.
@@ -38,9 +38,9 @@ Stage 2 re-asked Travelpayouts, the same cache that produced the candidate, so a
 The workflow is `.github/workflows/sync-flights.yml` and uses the `production` GitHub environment, as the deploy workflow does.
 
 - **Secrets** (repository or `production` environment): `TRAVELPAYOUTS_TOKEN`, `CLOUDFLARE_API_TOKEN` (D1 edit only), `CLOUDFLARE_ACCOUNT_ID`. They are passed only as step `env`, never echoed or written to files. Rotate the Travelpayouts token before first use.
-- **Schedule**: 23:00 UTC writes production D1 (`wrangler d1 execute DB --remote --env production`, one atomic SQL file, the same path as `sync-flights --remote`).
+- **Schedule**: 22:00 UTC writes production D1 (`wrangler d1 execute DB --remote --env production`, one atomic SQL file, the same path as `sync-flights --remote`).
 - **Manual run**: Actions, "Sync flights", Run workflow; `dry-run` (default) uploads `sync-flights-sql` as an artifact and writes nothing, `write` updates D1 and the run marker.
 - **Local**: `pnpm --filter @split/worker sync-flights -- --verify=google --profile=actions --dry-run` needs `pip install -r apps/worker/scripts/google-live-price/requirements.txt` (`GOOGLE_LIVE_PYTHON` selects the interpreter). Without flags it still verifies with Travelpayouts and the Worker budget.
 - **Failures**: a thrown error fails the run and shows in GitHub's failed-run notifications; Google problems never fail it (cached prices stay). The summary log line (`live`: repriced, kept, dropped, blocked) shows Google's hit rate.
 - **Known limit**: Google is queried for the outbound leg and the round-trip total, so the return leg's stop count comes from the cached fare.
-- **Overlap with the Worker fallback**: the job timeout is 40 minutes (estimated run 20 to 25) so a run started at 23:00 UTC ends before the Worker cron at 00:00 UTC, which only reads the completed-run marker and would otherwise start a competing D1 write. GitHub can delay scheduled starts; a start delayed past roughly 23:20 UTC could still overlap, and the Worker would then also sync (the last atomic write wins, both boards are valid). We accept this rather than add a lock.
+- **Overlap with the Worker fallback**: the job timeout is 40 minutes (estimated run 20 to 25) so a run that starts at 22:00 UTC ends well before the Worker cron at 00:00 UTC, which only reads the completed-run marker and would otherwise start a competing D1 write. GitHub can delay scheduled starts; the job still finishes before 00:00 UTC if it starts by 23:20 UTC, so a delay of up to about 80 minutes is tolerated. A longer delay could overlap and the Worker would then also sync (the last atomic write wins, both boards are valid). We accept this rather than add a lock.
