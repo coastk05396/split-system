@@ -19,12 +19,22 @@ import {
 import {
   collectVerifiedDailyFlights,
   formatDailyFlightsSyncSql,
+  BASELINE_CANDIDATES_PER_ROUTE,
+  MAX_DAILY_UPSTREAM_CALLS,
   MAX_DATES_PER_ROUTE,
   TRIP_QUOTAS,
 } from "../src/flights/pipeline.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
 import type { RateSource } from "../src/rates/rate-source.js";
 import { clock, fakeVerifier } from "./auth-harness.js";
+
+/** Raw-fetch fake month-matrix answer: a direct Baseline (median 32000) far above any test fare. */
+function matrixResponse(): Response {
+  return Response.json({
+    success: true,
+    data: [30000, 32000, 34000].map((value) => ({ value, number_of_changes: 0 })),
+  });
+}
 
 const noopRateSource: RateSource = {
   fetchRate: () => Promise.reject(new Error("unused in daily-flights tests")),
@@ -46,8 +56,9 @@ interface FakeFare {
   day: number;
   price: number;
   airline?: string;
-  /** Stops on each leg; default 0 (direct). */
+  /** Stops on the outbound leg (and the return leg unless `returnTransfers` is set); default 0 (direct). */
   transfers?: number;
+  returnTransfers?: number;
 }
 
 /** A month-matrix answer: `prices` are direct (0 changes), `connecting` ones have 1 change. */
@@ -107,7 +118,7 @@ function fakeTravelpayouts(
       return_at: oneWay ? null : `${addDaysIso(outDate, 4)}T15:00:00+08:00`,
       price: fare.price,
       transfers: fare.transfers ?? 0,
-      return_transfers: fare.transfers ?? 0,
+      return_transfers: fare.returnTransfers ?? fare.transfers ?? 0,
       duration_to: 180,
       duration_back: oneWay ? 0 : 180,
       // 4h before the (controllable) clock, so fares stay fresh when a test advances days.
@@ -242,6 +253,7 @@ describe("public flight routes and daily pipeline", () => {
             outDate,
             inDate: null,
             priceTwd: 5000 + idx,
+            dealBaselineTwd: 10000,
             airlines: ["MM"],
             transfers: 0,
             returnTransfers: null,
@@ -321,11 +333,14 @@ describe("public flight routes and daily pipeline", () => {
 
   it("discovers once per departure month and never serves fares outside 14 days to 6 months, sequentially", async () => {
     const cronNow = Date.parse("2026-11-16T00:00:00Z"); // 08:00 Taipei; window 2026-11-30..2027-05-16
-    const fake = fakeTravelpayouts(() => [
-      { dest: "NRT", day: 5, price: 5000 },
-      { dest: "NRT", day: 20, price: 5100 },
-      { dest: "NRT", day: 25, price: 5200 },
-    ]);
+    const fake = fakeTravelpayouts(
+      () => [
+        { dest: "NRT", day: 5, price: 5000 },
+        { dest: "NRT", day: 20, price: 5100 },
+        { dest: "NRT", day: 25, price: 5200 },
+      ],
+      () => ({ prices: [8000, 9000, 10000] }),
+    );
 
     const db = createDb(env.DB);
     const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
@@ -354,10 +369,205 @@ describe("public flight routes and daily pipeline", () => {
     }
   });
 
-  describe("board size and Route cap", () => {
+  describe("deal-first selection (ADR 0010)", { timeout: 30_000 }, () => {
     const cronNow = Date.parse("2026-11-16T00:00:00Z");
     const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
-    // 28 airports, every region with more route supply than its share of the quota.
+    const DEC = "2026-12";
+
+    beforeEach(async () => {
+      await env.DB.prepare("DELETE FROM flight_baselines").run();
+    });
+
+    // Round-trip fares from TPE in the given months only (`fares(month)`), matrix per call.
+    function tpeSupply(
+      fares: (month: string) => FakeFare[],
+      matrix: (destination: string, month: string) => MatrixAnswer,
+    ) {
+      return fakeTravelpayouts(
+        (origin, oneWay, month) => (origin === "TPE" && !oneWay ? fares(month) : []),
+        (_origin, destination, _oneWay, month) => matrix(destination, month),
+      );
+    }
+
+    async function boardOf(fake: ReturnType<typeof fakeTravelpayouts>) {
+      const db = createDb(env.DB);
+      await refreshDailyFlights(
+        db,
+        productionFlightSource(tpEnv, fake.fetchFn, d1BaselineCache(db)),
+        cronNow,
+      );
+      const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+      return res.json<DailyFlightsResponse>();
+    }
+
+    it("keeps only fares at least 15% below their Baseline, and drops a fare with no Baseline", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [
+                { dest: "NRT", day: 5, price: 7000 }, // 30% below 10000
+                { dest: "NRT", day: 12, price: 8800 }, // 12% below: not a Good Deal
+                { dest: "KIX", day: 6, price: 5000 }, // no Baseline from either source
+              ]
+            : [],
+        (dest) => (dest === "NRT" ? { prices: [8000, 10000, 12000] } : { prices: [] }),
+      );
+      const board = await boardOf(fake);
+
+      expect(board.isFallback).toBe(false);
+      expect(board.items.map((i) => [i.dest, i.priceTwd, i.discountPct])).toEqual([
+        ["NRT", 7000, 30],
+      ]);
+      expect(fake.stats().verifyCount).toBe(1); // dropped fares are never verified
+    });
+
+    it("scores a connecting fare against the connecting Baseline, not the cheaper direct mix", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [
+                { dest: "NRT", day: 5, price: 7500 }, // direct: 25% below 10000
+                { dest: "NRT", day: 12, price: 7000, transfers: 1 }, // connecting: 6.7% below 7500
+              ]
+            : [],
+        () => ({ prices: [9000, 10000, 11000], connecting: [7000, 7500, 8000] }),
+      );
+      const { items } = await boardOf(fake);
+
+      expect(items.map((i) => [i.priceTwd, i.transfers])).toEqual([[7500, 0]]);
+    });
+
+    it("drops a fare with 3 or more stops on either leg and keeps 2 stops", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [
+                { dest: "NRT", day: 5, price: 4000, transfers: 3 }, // outbound and return
+                { dest: "NRT", day: 8, price: 4100, returnTransfers: 3 }, // return leg only
+                { dest: "NRT", day: 12, price: 4200, transfers: 2 },
+                { dest: "NRT", day: 15, price: 4300 },
+              ]
+            : [],
+        () => ({ prices: [9000, 10000, 11000], connecting: [9000, 10000, 11000] }),
+      );
+      const { items } = await boardOf(fake);
+
+      expect(items.map((i) => i.priceTwd)).toEqual([4200, 4300]);
+      expect(fake.stats().verifyCount).toBe(2);
+    });
+
+    it("keeps a Route's 3 best-discount dates, not its 3 cheapest", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [5, 12, 19].map((day) => ({ dest: "NRT", day, price: 4000 })) // cheapest, 20% off 5000
+            : month === "2027-01"
+              ? [5, 12, 19].map((day) => ({ dest: "NRT", day, price: 4500 })) // 70% off 15000
+              : [],
+        (_dest, month) => ({
+          prices: month === "2026-12-01" ? [4000, 5000, 6000] : [14000, 15000, 16000],
+        }),
+      );
+      const { items } = await boardOf(fake);
+
+      expect(items.map((i) => [i.outDate.slice(0, 7), i.discountPct])).toEqual([
+        ["2027-01", 70],
+        ["2027-01", 70],
+        ["2027-01", 70],
+      ]);
+    });
+
+    it("breaks equal discounts by lower price", async () => {
+      const months = ["2026-12", "2027-01", "2027-02", "2027-03"];
+      const price = [8000, 9600, 8800, 8400]; // all 20% below their month's Baseline
+      const baseline = [10000, 12000, 11000, 10500];
+      const fake = tpeSupply(
+        (month) => {
+          const i = months.indexOf(month);
+          return i < 0 ? [] : [{ dest: "NRT", day: 5, price: price[i] ?? 0 }];
+        },
+        (_dest, month) => {
+          const b = baseline[months.indexOf(month.slice(0, 7))] ?? 0;
+          return { prices: [b - 1000, b, b + 1000] };
+        },
+      );
+      const { items } = await boardOf(fake);
+
+      expect(items.map((i) => i.priceTwd)).toEqual([8000, 8400, 8800]);
+    });
+
+    it("shows nothing for a country with only ordinary fares and never pads the board", async () => {
+      const fake = tpeSupply(
+        (month) =>
+          month === DEC
+            ? [
+                { dest: "NRT", day: 5, price: 6000 },
+                { dest: "NRT", day: 12, price: 6500 },
+                ...[3, 6, 9, 12, 15].map((day) => ({ dest: "BKK", day, price: 4800 + day })),
+              ]
+            : [],
+        (dest) => ({ prices: dest === "NRT" ? [9000, 10000, 11000] : [4000, 5000, 6000] }),
+      );
+      const { items, isFallback } = await boardOf(fake);
+
+      expect(isFallback).toBe(false);
+      expect(new Set(items.map((i) => i.dest))).toEqual(new Set(["NRT"]));
+      expect(items).toHaveLength(2); // far below the 230 ceiling
+    });
+
+    it("fetches Baselines for the cheapest 6 candidates per Route when the call estimate is low", async () => {
+      expect(BASELINE_CANDIDATES_PER_ROUTE).toBe(6);
+      expect(MAX_DAILY_UPSTREAM_CALLS).toBe(800);
+      const months = ["2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05"];
+      const fake = tpeSupply(
+        (month) =>
+          months.includes(month)
+            ? ["NRT", "ICN"].map((dest, i) => ({ dest, day: 3, price: 3000 + i * 100 }))
+            : [],
+        () => ({ prices: [20000, 30000, 40000] }),
+      );
+      await boardOf(fake);
+
+      // 2 Routes x 6 dates, each in its own month: 12 calls, none dropped by a smaller shortlist
+      expect(fake.monthMatrixCalls).toHaveLength(12);
+    });
+
+    it("shrinks the candidate count when the estimated upstream calls would pass 800, and keeps 230 as a ceiling ranked by discount", async () => {
+      const dests = [
+        ...["NRT", "HND", "KIX", "FUK", "CTS", "OKA", "ICN", "PUS", "CJU", "BKK"],
+        ...["CNX", "SIN", "KUL", "HAN", "SGN", "DAD", "MNL", "DPS", "HKG", "PVG"],
+      ];
+      const months = ["2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05"];
+      // Every origin x destination Route has one fare per month: 100 Routes x 6 months = 600 baseline
+      // calls at 6 candidates per Route, far past the budget; dearer destinations get smaller discounts.
+      const fake = fakeTravelpayouts(
+        (origin, oneWay, month) =>
+          oneWay || !months.includes(month) || !["TPE", "TSA", "KHH", "RMQ", "TNN"].includes(origin)
+            ? []
+            : dests.map((dest, i) => ({
+                dest,
+                day: 3,
+                price: 3000 + i * 300 + months.indexOf(month),
+              })),
+        () => ({ prices: [10000, 12000, 14000] }),
+      );
+      const { items } = await boardOf(fake);
+      const { callCount } = fake.stats();
+
+      expect(callCount).toBeLessThanOrEqual(MAX_DAILY_UPSTREAM_CALLS);
+      expect(fake.monthMatrixCalls.length).toBeLessThan(600);
+      expect(fake.monthMatrixCalls.length).toBeGreaterThan(0);
+      expect(items).toHaveLength(TRIP_QUOTAS.rt); // 100 Routes x 3 dates: cut to the ceiling
+      const perDest = (dest: string) => items.filter((i) => i.dest === dest).length;
+      expect(perDest("NRT")).toBe(5 * MAX_DATES_PER_ROUTE); // deepest discounts survive
+      expect(perDest("PVG")).toBeLessThan(perDest("NRT")); // the dearest are cut first
+    });
+  });
+
+  describe("board size ceiling and Route cap", { timeout: 30_000 }, () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    // 28 airports: 140 Routes of 3 Good Deals each, well past the ceiling.
     const dests = [
       ...["NRT", "HND", "KIX", "OKA", "FUK", "CTS", "NGO"],
       ...["ICN", "GMP", "PUS", "CJU", "TAE"],
@@ -368,15 +578,17 @@ describe("public flight routes and daily pipeline", () => {
 
     function bigSupply(destList: readonly string[]) {
       // December is the cheapest month by far: a pure cheapest-first pick would ignore later months.
-      return fakeTravelpayouts((_origin, _oneWay, month) =>
-        destList.flatMap((dest, i) =>
-          [3, 10, 17, 24].map((day) => ({
-            dest,
-            day,
-            price:
-              (month === "2026-12" ? 3000 : 6000 + Number(month.slice(5)) * 100) + i * 50 + day,
-          })),
-        ),
+      return fakeTravelpayouts(
+        (_origin, _oneWay, month) =>
+          destList.flatMap((dest, i) =>
+            [3, 10, 17, 24].map((day) => ({
+              dest,
+              day,
+              price:
+                (month === "2026-12" ? 3000 : 6000 + Number(month.slice(5)) * 100) + i * 50 + day,
+            })),
+          ),
+        () => ({ prices: [20000, 30000, 40000] }),
       );
     }
 
@@ -399,7 +611,7 @@ describe("public flight routes and daily pipeline", () => {
       return perRoute;
     }
 
-    it("fills 225 round-trip and 5 one-way fares across every month with at most 3 dates per route", async () => {
+    it("caps the board at 225 round-trip and 5 one-way fares with at most 3 dates per route", async () => {
       expect(TRIP_QUOTAS).toEqual({ rt: 225, ow: 5 });
       expect(MAX_DATES_PER_ROUTE).toBe(3);
 
@@ -411,7 +623,7 @@ describe("public flight routes and daily pipeline", () => {
       expect(items.filter((i) => i.tripType === "ow")).toHaveLength(5);
       expect(fake.stats().verifyCount).toBe(230);
 
-      // Hong Kong and Seoul no longer flood the board: at most 3 dates per route per origin
+      // At most 3 dates per route per origin, so Hong Kong and Seoul cannot flood the board
       const perRoute = datesPerRoute(items);
       expect(Math.max(...perRoute.values())).toBe(MAX_DATES_PER_ROUTE);
       for (const dest of ["HKG", "ICN"]) {
@@ -419,56 +631,42 @@ describe("public flight routes and daily pipeline", () => {
           items.filter((i) => i.dest === dest && i.tripType === "rt").length,
         ).toBeLessThanOrEqual(5 * MAX_DATES_PER_ROUTE);
       }
-
-      const rtMonths = new Set(
-        items.filter((i) => i.tripType === "rt").map((i) => i.outDate.slice(0, 7)),
-      );
-      expect([...rtMonths].sort()).toEqual([
-        "2026-12",
-        "2027-01",
-        "2027-02",
-        "2027-03",
-        "2027-04",
-        "2027-05",
-      ]);
-      // Five one-way fares fall in five different months
-      expect(
-        new Set(items.filter((i) => i.tripType === "ow").map((i) => i.outDate.slice(0, 7))).size,
-      ).toBe(5);
     });
 
-    it("never exceeds a trip type's quota or a route's 3 dates when supply is thin", async () => {
-      // 4 airports x 5 origins x 3 dates = 60 rt fares at most, far below the 225 quota
+    it("never exceeds a route's 3 dates, and stays below the ceiling when Good Deals are thin", async () => {
+      // 4 airports x 5 origins x 3 dates = 60 rt fares at most, far below the 225 ceiling
       const items = await boardFor(bigSupply(["NRT", "ICN", "BKK", "HKG"]));
 
       expect(items.filter((i) => i.tripType === "rt")).toHaveLength(60);
       expect(items.filter((i) => i.tripType === "ow")).toHaveLength(5);
       expect(Math.max(...datesPerRoute(items).values())).toBe(MAX_DATES_PER_ROUTE);
     });
-
-    it("lets regions with plenty of supply take quota another region cannot fill", async () => {
-      // Korea and Hong Kong/Macau/China have only 2 airports each: below their share of 225
-      const thinKrHk = dests.filter(
-        (d) => !["GMP", "PUS", "CJU", "TAE", "SHA", "PVG", "PEK"].includes(d),
-      );
-      const items = await boardFor(bigSupply(thinKrHk));
-
-      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(225);
-      expect(Math.max(...datesPerRoute(items).values())).toBe(MAX_DATES_PER_ROUTE);
-    });
   });
 
   it("puts Curated Destinations on the board in their Flight Region and still drops unlisted airports", async () => {
-    const fake = fakeTravelpayouts((origin, oneWay, month) =>
-      origin === "TPE" && !oneWay && month === "2026-12"
-        ? ["HIJ", "HKD", "HKT", "BKI", "CTU", "KMG", "FCO", "KEF", "ORD", "HNL", "PER", "TFU"].map(
-            (dest, i) => ({
+    const fake = fakeTravelpayouts(
+      (origin, oneWay, month) =>
+        origin === "TPE" && !oneWay && month === "2026-12"
+          ? [
+              "HIJ",
+              "HKD",
+              "HKT",
+              "BKI",
+              "CTU",
+              "KMG",
+              "FCO",
+              "KEF",
+              "ORD",
+              "HNL",
+              "PER",
+              "TFU",
+            ].map((dest, i) => ({
               dest,
               day: 5 + i,
               price: 5000 + i * 100,
-            }),
-          )
-        : [],
+            }))
+          : [],
+      () => ({ prices: [20000, 30000, 40000] }),
     );
     await refreshDailyFlights(
       createDb(env.DB),
@@ -495,13 +693,10 @@ describe("public flight routes and daily pipeline", () => {
   });
 
   // Hundreds of sequential fake upstream calls and D1 writes per run: well past the 5s default.
-  describe("targeted long-haul discovery and the Long-haul share", { timeout: 30_000 }, () => {
+  describe("per-route discovery feeds the deal-first board", { timeout: 30_000 }, () => {
     const cronNow = Date.parse("2026-11-16T00:00:00Z");
     const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
     const longhaul = DESTINATION_CATALOG.filter((d) => d.region === "longhaul").map(
-      (d) => d.airport,
-    );
-    const shorthaul = DESTINATION_CATALOG.filter((d) => d.region !== "longhaul").map(
       (d) => d.airport,
     );
     const everyDate = (dests: readonly string[], price: number) =>
@@ -516,7 +711,7 @@ describe("public flight routes and daily pipeline", () => {
         day: 8,
         price: 25000 + longhaul.indexOf(dest) * 100 + m,
       }));
-    const stableMatrix = () => ({ prices: [20000, 30000, 40000] });
+    const stableMatrix = () => ({ prices: [40000, 50000, 60000] });
 
     beforeEach(async () => {
       await env.DB.prepare("DELETE FROM flight_baselines").run();
@@ -535,7 +730,7 @@ describe("public flight routes and daily pipeline", () => {
     }
 
     it("selects long-haul fares from targeted Taipei queries even when every generic result is short-haul", async () => {
-      const fake = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
+      const fake = fakeTravelpayouts(() => everyDate(["NRT", "KIX"], 3000), stableMatrix, targeted);
       const items = await run(fake);
 
       // One round-trip query per curated long-haul airport from TPE, ahead of the other per-route queries
@@ -613,52 +808,39 @@ describe("public flight routes and daily pipeline", () => {
             .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
             .find((l) => l["event"] === "daily_flights_refresh_summary");
           expect(summary?.["upstreamCalls"]).toBe(fake.stats().callCount);
+          expect(summary?.["countriesWithDeal"]).toBe(1); // NRT fares only: Japan
         } finally {
           info.mockRestore();
         }
       });
     });
 
-    it("gives Long-haul about 35% of the round-trip quota and shares the rest across the other regions", async () => {
-      const items = await run(
-        fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted),
-      );
+    it("shows a smaller board, never padding, when only one region has Good Deals", async () => {
+      const jp = ["NRT", "HND", "KIX"];
+      const items = await run(fakeTravelpayouts(() => everyDate(jp, 3000), stableMatrix));
 
-      const rt = items.filter((i) => i.tripType === "rt");
-      expect(rt).toHaveLength(225);
-      const share = (region: string) => rt.filter((i) => i.region === region).length / 225;
-      expect(share("longhaul")).toBeGreaterThan(0.33);
-      expect(share("longhaul")).toBeLessThan(0.37);
-      for (const region of ["jp", "kr", "sea", "hkmo"]) {
-        expect(share(region), region).toBeGreaterThan(0.08);
-      }
-      expect(items.filter((i) => i.tripType === "ow")).toHaveLength(5);
-    });
-
-    it("keeps totals when regions have no supply", async () => {
-      // Only Japan generic supply, no Long-haul targeted supply: Korea/SEA/HK-China/Long-haul are empty
-      const jpOnly = shorthaul.filter((a) => getDestinationMeta(a)?.region === "jp");
-      const items = await run(fakeTravelpayouts(() => everyDate(jpOnly, 3000), stableMatrix));
-
-      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(225);
+      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(45); // 3 airports x 5 origins x 3 dates
+      expect(items.filter((i) => i.tripType === "ow")).toHaveLength(TRIP_QUOTAS.ow);
       expect(items.every((i) => i.region === "jp")).toBe(true);
     });
 
     it("stays within the upstream call budget, and cached baselines cut it further", async () => {
-      const cold = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
+      const supply = () => everyDate(["NRT", "ICN", "BKK", "HKG"], 3000);
+      const cold = fakeTravelpayouts(supply, stableMatrix);
       const board = await run(cold);
 
-      // 70 discovery + per-route queries + <= 230 baselines + <= 230 verifications
+      // 70 discovery + per-route queries + baselines + one verification per board fare
       const perRoute = cold.targetedCalls.length;
       expect(perRoute).toBeGreaterThan(longhaul.length);
       expect(cold.stats().verifyCount).toBe(board.length);
-      expect(cold.stats().callCount).toBeLessThanOrEqual(70 + perRoute + 230 + 230);
+      expect(cold.stats().callCount).toBeLessThanOrEqual(MAX_DAILY_UPSTREAM_CALLS);
 
-      const warm = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
+      const warm = fakeTravelpayouts(supply, stableMatrix);
       await run(warm, cronNow + 24 * 3_600_000);
       expect(warm.monthMatrixCalls).toHaveLength(0);
-      expect(warm.stats().callCount).toBeLessThanOrEqual(70 + perRoute + 230);
-      expect(warm.stats().callCount).toBeLessThanOrEqual(800);
+      expect(warm.stats().callCount).toBeLessThanOrEqual(
+        cold.stats().callCount - cold.monthMatrixCalls.length,
+      );
     }, 30_000);
   });
 
@@ -688,15 +870,16 @@ describe("public flight routes and daily pipeline", () => {
       return item && { tag: item.tag, discountPct: item.discountPct };
     };
 
-    // BKK round trip: median 4900
+    // BKK round trip: median 4900; fares under 15% off are not on the board
     expect(signal("BKK", "rt", 3000)).toEqual({ tag: "steal", discountPct: 39 });
     expect(signal("BKK", "rt", 4100)).toEqual({ tag: "below_market", discountPct: 16 });
-    expect(signal("BKK", "rt", 4900)).toEqual({ tag: "normal", discountPct: 0 });
+    expect(signal("BKK", "rt", 4900)).toBeUndefined();
+    expect(signal("BKK", "rt", 5600)).toBeUndefined();
     // BKK one way is scored against its own median (2500), not the round-trip one
     expect(signal("BKK", "ow", 1500)).toEqual({ tag: "steal", discountPct: 40 });
-    expect(signal("BKK", "ow", 2600)).toEqual({ tag: "normal", discountPct: 0 });
-    // HKG has only 2 candidates: too few to compare, so no signal
-    expect(signal("HKG", "rt", 1000)).toEqual({ tag: "normal", discountPct: 0 });
+    expect(signal("BKK", "ow", 2600)).toBeUndefined();
+    // HKG has only 2 candidates: too few to compare, so no Baseline and no place on the board
+    expect(signal("HKG", "rt", 1000)).toBeUndefined();
   });
 
   it("uses Travelpayouts month-matrix median as Deal Signal baseline when >= 3 prices are returned, deduplicated per (origin, dest, tripType, month)", async () => {
@@ -727,24 +910,17 @@ describe("public flight routes and daily pipeline", () => {
     await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
 
     // Deduplicated: 2 rt candidates in 2026-12 -> 1 month-matrix call; 1 ow candidate -> 1 call
-    expect(fake.monthMatrixCalls).toEqual([
-      {
+    expect(fake.monthMatrixCalls).toHaveLength(2);
+    for (const oneWay of [false, true]) {
+      expect(fake.monthMatrixCalls).toContainEqual({
         origin: "TPE",
         destination: "NRT",
-        oneWay: false,
+        oneWay,
         month: "2026-12-01",
         currency: "twd",
         showToAffiliates: "true",
-      },
-      {
-        origin: "TPE",
-        destination: "NRT",
-        oneWay: true,
-        month: "2026-12-01",
-        currency: "twd",
-        showToAffiliates: "true",
-      },
-    ]);
+      });
+    }
     expect(fake.stats().maxInFlight).toBe(1);
 
     const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
@@ -801,8 +977,8 @@ describe("public flight routes and daily pipeline", () => {
     expect(signal("BKK", 3000)).toEqual({ tag: "steal", discountPct: 40 });
     // KIX (< 3 month-matrix prices) falls back to Stage 1 median 6000 -> 4200 is 30% off
     expect(signal("KIX", 4200)).toEqual({ tag: "steal", discountPct: 30 });
-    // HKG (network error + < 3 Stage 1 candidates) has no signal
-    expect(signal("HKG", 2000)).toEqual({ tag: "normal", discountPct: 0 });
+    // HKG (network error + < 3 Stage 1 candidates) has no Baseline, so it is off the board
+    expect(signal("HKG", 2000)).toBeUndefined();
   });
 
   describe("month-matrix baseline cache (3 days, D1)", () => {
@@ -829,6 +1005,9 @@ describe("public flight routes and daily pipeline", () => {
       );
     }
 
+    // Whether the last `refreshAt` left an empty board, so the API served the curated fallback.
+    let isFallback = false;
+
     async function refreshAt(fake: ReturnType<typeof bkkSupply>, now: number) {
       const db = createDb(env.DB);
       clock.now = now;
@@ -838,8 +1017,9 @@ describe("public flight routes and daily pipeline", () => {
         now,
       );
       const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
-      const { items } = await res.json<DailyFlightsResponse>();
-      return items.map((i) => ({ price: i.priceTwd, tag: i.tag, discountPct: i.discountPct }));
+      const body = await res.json<DailyFlightsResponse>();
+      isFallback = body.isFallback;
+      return body.items.map((i) => ({ price: i.priceTwd, tag: i.tag, discountPct: i.discountPct }));
     }
 
     async function cachedBaselines() {
@@ -909,8 +1089,8 @@ describe("public flight routes and daily pipeline", () => {
       const items = await refreshAt(fake, day0);
 
       expect(items).toContainEqual({ price: 5000, tag: "steal", discountPct: 38 });
-      // one connecting candidate only: too few for the Stage 1 fallback as well
-      expect(items).toContainEqual({ price: 4000, tag: "normal", discountPct: 0 });
+      // one connecting candidate only: too few for the Stage 1 fallback as well, so it is off the board
+      expect(items.map((i) => i.price)).toEqual([5000]);
       expect((await cachedBaselines()).map((r) => [r["stop_class"], r["baseline_twd"]])).toEqual([
         ["connecting", null],
         ["direct", 8000],
@@ -946,8 +1126,9 @@ describe("public flight routes and daily pipeline", () => {
       const failing = bkkSupply(() => ({ status: 500, prices: [] }));
       const items = await refreshAt(failing, day0);
       expect(await cachedBaselines()).toEqual([]); // a failed call is never cached
-      // Only 2 Stage 1 candidates and no baseline: no Deal Signal
-      expect(items.every((i) => i.tag === "normal" && i.discountPct === 0)).toBe(true);
+      // Only 2 Stage 1 candidates and no baseline: no Good Deal, so the board is empty
+      expect(isFallback).toBe(true);
+      expect(items).not.toContainEqual({ price: 4200, tag: "steal", discountPct: 40 });
 
       const recovered = bkkSupply();
       await refreshAt(recovered, day0 + DAY_MS);
@@ -956,8 +1137,8 @@ describe("public flight routes and daily pipeline", () => {
 
     it("treats an HTTP 200 success:false answer as a failure: not cached, retried and recovered next run", async () => {
       const bad = bkkSupply(() => ({ success: false, prices: [] }));
-      const items = await refreshAt(bad, day0);
-      expect(items.every((i) => i.tag === "normal" && i.discountPct === 0)).toBe(true);
+      await refreshAt(bad, day0);
+      expect(isFallback).toBe(true);
 
       const recovered = bkkSupply(); // median 7000
       const after = await refreshAt(recovered, day0 + DAY_MS);
@@ -978,6 +1159,7 @@ describe("public flight routes and daily pipeline", () => {
             outDate: "2026-12-10",
             inDate: "2026-12-15",
             priceTwd: 6800,
+            dealBaselineTwd: 12000,
             airlines: ["JX"],
             transfers: 0,
             returnTransfers: 0,
@@ -992,6 +1174,7 @@ describe("public flight routes and daily pipeline", () => {
             outDate: "2026-12-12",
             inDate: "2026-12-16",
             priceTwd: 5400,
+            dealBaselineTwd: 9000,
             airlines: ["IT"],
             transfers: 0,
             returnTransfers: 0,
@@ -1049,13 +1232,13 @@ describe("public flight routes and daily pipeline", () => {
       id: "valid-redeye-rt",
       isRedEye: true,
       priceTwd: 5400,
-      tag: "normal", // no Stage 1 pool from a hand-built source, so no Deal Signal
+      tag: "steal", // 40% below its 9000 Baseline
     });
     expect(body.items[1]).toMatchObject({
       id: "valid-normal-rt",
       isRedEye: false,
-      priceTwd: 7100,
-      tag: "normal",
+      priceTwd: 7100, // verified price: 41% below its 12000 Baseline
+      tag: "steal",
     });
   });
 
@@ -1072,6 +1255,7 @@ describe("public flight routes and daily pipeline", () => {
             outDate: item.outDate,
             inDate: item.inDate,
             priceTwd: item.priceTwd,
+            dealBaselineTwd: item.priceTwd * 2,
             airlines: item.airlines,
             transfers: item.transfers,
             returnTransfers: item.returnTransfers,
@@ -1112,6 +1296,7 @@ describe("public flight routes and daily pipeline", () => {
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
       seenUrls.push(url);
+      if (url.pathname.includes("month-matrix")) return Promise.resolve(matrixResponse());
       const tokenHeader =
         init?.headers instanceof Headers
           ? init.headers.get("X-Access-Token")
@@ -1223,6 +1408,7 @@ describe("public flight routes and daily pipeline", () => {
       const rawUrl =
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
+      if (url.pathname.includes("month-matrix")) return Promise.resolve(matrixResponse());
       const origin = url.searchParams.get("origin");
       const destination = url.searchParams.get("destination");
 
@@ -1327,6 +1513,7 @@ describe("public flight routes and daily pipeline", () => {
       const rawUrl =
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
+      if (url.pathname.includes("month-matrix")) return Promise.resolve(matrixResponse());
       const destination = url.searchParams.get("destination");
       const origin = url.searchParams.get("origin");
       if (destination === "HND") {
@@ -1448,9 +1635,7 @@ describe("public flight routes and daily pipeline", () => {
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
       fetchCount += 1;
-      if (url.pathname.includes("month-matrix")) {
-        return Promise.resolve(Response.json({ success: true, data: [] }));
-      }
+      if (url.pathname.includes("month-matrix")) return Promise.resolve(matrixResponse());
       const origin = url.searchParams.get("origin") ?? "TPE";
       const destination = url.searchParams.get("destination");
       const oneWay = url.searchParams.get("one_way") === "true";
@@ -1502,8 +1687,8 @@ describe("public flight routes and daily pipeline", () => {
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
     expect(items.some((item) => item.tripType === "ow")).toBe(true);
-    // 70 discovery + ~135 per-route calls + <= 230 deduplicated month-matrix calls + <= 230 verify calls
-    expect(fetchCount).toBeLessThanOrEqual(665);
+    // 70 discovery + ~135 per-route calls + baselines + verifications, under the ~800 budget
+    expect(fetchCount).toBeLessThanOrEqual(MAX_DAILY_UPSTREAM_CALLS);
     expect(items.length).toBeGreaterThanOrEqual(15);
     expect(items.length).toBeLessThanOrEqual(230);
   });
@@ -1514,6 +1699,7 @@ describe("public flight routes and daily pipeline", () => {
       const rawUrl =
         typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const url = new URL(rawUrl);
+      if (url.pathname.includes("month-matrix")) return Promise.resolve(matrixResponse());
       const origin = url.searchParams.get("origin");
       const destination = url.searchParams.get("destination");
 
@@ -1607,6 +1793,7 @@ describe("public flight routes and daily pipeline", () => {
             outDate: "2026-12-10",
             inDate: "2026-12-14",
             priceTwd: 4590,
+            dealBaselineTwd: 9000,
             airlines: ["MM"],
             transfers: 0,
             returnTransfers: 0,
