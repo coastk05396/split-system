@@ -580,6 +580,7 @@ export const en: Record<MessageId, string> = {
   "flights.count.one": "{count} fare",
   "flights.rowsNote":
     "Tap a date to open Trip.com · Reference prices refresh daily at 08:00; the booking page is final",
+  "flights.priceNote": "Prices are for reference; the booking page shows the final price",
   "flights.fromOrigin": "From {city}",
   "flights.subtitle": "Updated daily at 8 AM",
   "flights.empty.title": "No flight deals match these filters",

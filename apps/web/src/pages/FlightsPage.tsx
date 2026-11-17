@@ -437,6 +437,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
       <p className="text-center text-xs text-fl-muted">
         {flightsUpdatedNote(data.date, data.isFallback)}
       </p>
+      <p className="-mt-3 text-center text-xs text-fl-muted">{t("flights.priceNote")}</p>
     </div>
   );
 }

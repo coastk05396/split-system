@@ -569,6 +569,7 @@ const zhTW = {
   "flights.count": "{count} 筆",
   "flights.count.one": "{count} 筆",
   "flights.rowsNote": "點日期前往 Trip.com · 參考價每日 08:00 更新，以訂票頁為準",
+  "flights.priceNote": "價格僅供參考，實際以訂票頁為準",
   "flights.fromOrigin": "{city}出發",
   "flights.subtitle": "每天 08:00 更新",
   "flights.empty.title": "目前沒有符合條件的低價機票",
