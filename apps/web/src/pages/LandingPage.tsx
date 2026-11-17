@@ -97,7 +97,7 @@ export function LandingPage() {
                     className={`press-pill cursor-pointer rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
                       region === pill.value
                         ? "border-sprout-500 bg-sprout-500 text-white"
-                        : "border-slate-200 bg-slate-50 text-slate-700 hover:border-sprout-500/40 hover:bg-sprout-50"
+                        : "border-slate-200 bg-slate-50 text-fl-sub hover:border-sprout-500/40 hover:bg-sprout-50"
                     }`}
                   >
                     {t(pill.label)}
@@ -120,7 +120,7 @@ export function LandingPage() {
               </ul>
 
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-dashed border-slate-200 pt-3">
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-fl-muted">
                   {flightsUpdatedNote(flights.data.date, flights.data.isFallback)}
                 </span>
                 <Link

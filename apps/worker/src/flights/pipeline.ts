@@ -1,6 +1,7 @@
 import {
   computeArrivalTimeHm,
   computeDealSignal,
+  DESTINATION_CATALOG,
   FLIGHT_ORIGINS,
   FLIGHT_REGIONS,
   FLIGHT_TRIP_TYPES,
@@ -67,24 +68,54 @@ export interface VerifiedFlightPrice {
   inboundArr?: string | null;
 }
 
+/** A month-matrix median (`null`: upstream answered with fewer than 3 prices) for one Route and departure month. */
+export interface BaselineEntry {
+  origin: FlightOrigin;
+  dest: string;
+  tripType: FlightTripType;
+  /** First day of the departure month, `YYYY-MM-01`. */
+  month: string;
+  baselineTwd: number | null;
+}
+
+/** Persists month-matrix baselines between daily runs; failed fetches are never stored. */
+export interface BaselineCache {
+  /** Entries fetched within `BASELINE_CACHE_TTL_MS` of `now`. */
+  load(now: number): Promise<BaselineEntry[]>;
+  save(entries: readonly BaselineEntry[], now: number): Promise<void>;
+}
+
 export interface FlightSource {
   fetchCandidates(digestDate: string, now?: number): Promise<FlightCandidate[]>;
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
 }
 
-// ~60-70 discovery calls + <=200 verifications per run, all sequential: needs Workers Paid (ADR 0008).
-const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 150, ow: 50 };
+// ~70 discovery + ~31 targeted long-haul calls + <=230 baselines + <=230 verifications per run (<= ~560 cold, fewer with cached baselines), all sequential: needs Workers Paid (ADR 0008/0009).
+/** Board size per trip type: 230 fares, round trips dominate and one way stays a small secondary slice. */
+export const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 225, ow: 5 };
 const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
   jp: 7,
   kr: 3,
   sea: 4,
   hkmo: 3,
-  longhaul: 3,
+  longhaul: 9, // 9 / 26: about 35% of each trip type's quota (ADR 0009)
 };
-const MAX_DATES_PER_ROUTE = 5;
+/** A Route (origin airport × destination airport × trip type) carries at most this many dates on the board. */
+export const MAX_DATES_PER_ROUTE = 3;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
 const MIN_SIGNAL_CANDIDATES = 3;
 const DISCOVERY_LIMIT = "100";
+/** Main Taipei airport, the origin of the targeted long-haul discovery queries. */
+const TARGETED_ORIGIN: FlightOrigin = "TPE";
+const LONGHAUL_AIRPORTS: readonly string[] = DESTINATION_CATALOG.filter(
+  (d) => d.region === "longhaul",
+).map((d) => d.airport);
+/** A fetched month-matrix baseline is reused for 3 days (ADR 0009) to keep the cron's upstream calls down. */
+export const BASELINE_CACHE_TTL_MS = 3 * 24 * 3_600_000;
+
+function baselineKey(origin: string, dest: string, tripType: FlightTripType, month: string) {
+  return `${origin}-${dest}-${tripType}-${month}`;
+}
 
 /** Splits `total` across regions by `REGION_WEIGHTS` (largest remainder, ties by region order). */
 function splitQuota(total: number): Record<FlightRegion, number> {
@@ -227,7 +258,9 @@ function median(sortedAsc: readonly number[]): number {
 
 /**
  * Picks the board: per trip type, a regional quota filled cheapest-first but round-robin across
- * departure months (so every month is represented), with at most 5 dates per route.
+ * departure months (so every month is represented), with at most `MAX_DATES_PER_ROUTE` dates per
+ * route. Quota a region cannot fill for lack of supply is then filled by the other regions, so the
+ * board still reaches its size.
  */
 function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
   const selected: FlightCandidate[] = [];
@@ -243,22 +276,43 @@ function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
     }
     const queues = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, q]) => q);
 
-    for (let progressed = true; progressed;) {
-      progressed = false;
-      for (const queue of queues) {
-        for (let c = queue.shift(); c !== undefined; c = queue.shift()) {
-          const region = getDestinationMeta(c.dest)?.region;
+    // Round-robin over months; `open` says whether a candidate's region may still take a fare.
+    const fill = (open: (region: FlightRegion) => boolean, onPick: (r: FlightRegion) => void) => {
+      for (let progressed = true; progressed;) {
+        progressed = false;
+        for (const queue of queues) {
+          const at = queue.findIndex((c) => {
+            const region = getDestinationMeta(c.dest)?.region;
+            return (
+              region !== undefined &&
+              open(region) &&
+              (perRoute.get(`${c.origin}-${c.dest}`) ?? 0) < MAX_DATES_PER_ROUTE
+            );
+          });
+          const c = at < 0 ? undefined : queue.splice(at, 1)[0];
+          const region = c && getDestinationMeta(c.dest)?.region;
+          if (c === undefined || region === undefined) continue;
+          onPick(region);
           const route = `${c.origin}-${c.dest}`;
-          if (region === undefined || left[region] <= 0) continue;
-          if ((perRoute.get(route) ?? 0) >= MAX_DATES_PER_ROUTE) continue;
-          left[region] -= 1;
           perRoute.set(route, (perRoute.get(route) ?? 0) + 1);
           selected.push(c);
           progressed = true;
-          break;
         }
       }
-    }
+    };
+    fill(
+      (region) => left[region] > 0,
+      (region) => {
+        left[region] -= 1;
+      },
+    );
+    let spare = FLIGHT_REGIONS.reduce((sum, r) => sum + left[r], 0);
+    fill(
+      () => spare > 0,
+      () => {
+        spare -= 1;
+      },
+    );
   }
   return selected;
 }
@@ -322,7 +376,13 @@ async function fetchMonthMatrixPrices(
     monthMatrixResponseSchema,
     logContext,
   );
-  return parsed ? parsed.data.map((d) => Math.round(d.value)) : null;
+  if (parsed === null) return null;
+  // HTTP 200 with `success: false` is an upstream failure, not "no prices": null so it is retried, never cached.
+  if (parsed.success === false) {
+    console.warn(JSON.stringify({ ...logContext, error: "success_false" }));
+    return null;
+  }
+  return parsed.data.map((d) => Math.round(d.value));
 }
 
 /**
@@ -333,6 +393,7 @@ async function fetchMonthMatrixPrices(
 export function productionFlightSource(
   env: { TRAVELPAYOUTS_TOKEN?: string },
   fetchFn: FetchFn = (input, init) => fetch(input, init),
+  baselineCache?: BaselineCache,
 ): FlightSource {
   return {
     async fetchCandidates(digestDate, now = Date.now()) {
@@ -342,6 +403,45 @@ export function productionFlightSource(
       const collected: FlightCandidate[] = [];
       const seenKeys = new Set<string>();
       const window = discoveryWindow(digestDate);
+
+      const ingest = (data: readonly TravelpayoutsItem[], oneWay: boolean) => {
+        for (const raw of data) {
+          if (!isAcceptableFoundAt(raw.found_at, now)) continue;
+          const parsedOrigin = resolveOriginAirport(raw);
+          const meta = resolveDestinationAirport(raw);
+          if (!parsedOrigin || !meta || !raw.departure_at) continue;
+
+          const outDate = raw.departure_at.slice(0, 10);
+          if (outDate < window.from || outDate > window.to) continue;
+          const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
+          const tripType: FlightTripType = inDate ? "rt" : "ow";
+          const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
+          if (seenKeys.has(dedupeKey)) continue;
+          seenKeys.add(dedupeKey);
+
+          collected.push({
+            id: `${digestDate}-${dedupeKey.toLowerCase()}`,
+            origin: parsedOrigin,
+            dest: meta.airport,
+            tripType,
+            outDate,
+            inDate,
+            priceTwd: Math.round(raw.price),
+            airlines: [raw.airline.toUpperCase()],
+            transfers: raw.transfers,
+            returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
+            outboundDep: extractTimePart(raw.departure_at),
+            inboundDep: extractTimePart(raw.return_at),
+            outboundArr: computeArrivalTimeHm(
+              raw.departure_at,
+              positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
+              meta.airport,
+            ),
+            inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
+            digestDate,
+          });
+        }
+      };
 
       // Sequential on purpose: one upstream request at a time keeps us far below Travelpayouts' rate limit.
       for (const origin of FLIGHT_ORIGINS) {
@@ -360,46 +460,29 @@ export function productionFlightSource(
               },
               { event: "travelpayouts_fetch_failed", origin, oneWay, month },
             );
-            if (data === null) continue;
-
-            for (const raw of data) {
-              if (!isAcceptableFoundAt(raw.found_at, now)) continue;
-              const parsedOrigin = resolveOriginAirport(raw);
-              const meta = resolveDestinationAirport(raw);
-              if (!parsedOrigin || !meta || !raw.departure_at) continue;
-
-              const outDate = raw.departure_at.slice(0, 10);
-              if (outDate < window.from || outDate > window.to) continue;
-              const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
-              const tripType: FlightTripType = inDate ? "rt" : "ow";
-              const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
-              if (seenKeys.has(dedupeKey)) continue;
-              seenKeys.add(dedupeKey);
-
-              collected.push({
-                id: `${digestDate}-${dedupeKey.toLowerCase()}`,
-                origin: parsedOrigin,
-                dest: meta.airport,
-                tripType,
-                outDate,
-                inDate,
-                priceTwd: Math.round(raw.price),
-                airlines: [raw.airline.toUpperCase()],
-                transfers: raw.transfers,
-                returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
-                outboundDep: extractTimePart(raw.departure_at),
-                inboundDep: extractTimePart(raw.return_at),
-                outboundArr: computeArrivalTimeHm(
-                  raw.departure_at,
-                  positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
-                  meta.airport,
-                ),
-                inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
-                digestDate,
-              });
-            }
+            if (data !== null) ingest(data, oneWay);
           }
         }
+      }
+
+      // Cheap short-haul fares fill the per-origin, per-month limit above, so long-haul routes are
+      // asked for explicitly: one round-trip query per curated long-haul airport from the main
+      // Taipei airport, across the whole departure window (ADR 0009).
+      for (const dest of LONGHAUL_AIRPORTS) {
+        const data = await fetchTravelpayoutsPrices(
+          fetchFn,
+          token,
+          {
+            origin: TARGETED_ORIGIN,
+            destination: dest,
+            currency: "twd",
+            sorting: "price",
+            limit: DISCOVERY_LIMIT,
+            one_way: "false",
+          },
+          { event: "travelpayouts_targeted_fetch_failed", origin: TARGETED_ORIGIN, dest },
+        );
+        if (data !== null) ingest(data, false);
       }
 
       if (collected.length === 0) return [];
@@ -414,9 +497,17 @@ export function productionFlightSource(
 
       const selected = selectBoard(collected);
       const monthBaselines = new Map<string, number | null>();
+      try {
+        for (const e of (await baselineCache?.load(now)) ?? []) {
+          monthBaselines.set(baselineKey(e.origin, e.dest, e.tripType, e.month), e.baselineTwd);
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "baseline_cache_load_failed", error: String(error) }));
+      }
+      const fetchedBaselines: BaselineEntry[] = [];
       for (const c of selected) {
         const month = `${c.outDate.slice(0, 7)}-01`;
-        const matrixKey = `${c.origin}-${c.dest}-${c.tripType}-${month}`;
+        const matrixKey = baselineKey(c.origin, c.dest, c.tripType, month);
         if (monthBaselines.has(matrixKey)) continue;
 
         const prices = await fetchMonthMatrixPrices(
@@ -439,16 +530,32 @@ export function productionFlightSource(
             month,
           },
         );
-        monthBaselines.set(
-          matrixKey,
+        const baselineTwd =
           prices !== null && prices.length >= MIN_SIGNAL_CANDIDATES
             ? median([...prices].sort((a, b) => a - b))
-            : null,
-        );
+            : null;
+        monthBaselines.set(matrixKey, baselineTwd);
+        // A failed fetch (null) is retried next run, never cached as "no signal".
+        if (prices !== null) {
+          fetchedBaselines.push({
+            origin: c.origin,
+            dest: c.dest,
+            tripType: c.tripType,
+            month,
+            baselineTwd,
+          });
+        }
+      }
+      try {
+        if (baselineCache && fetchedBaselines.length > 0) {
+          await baselineCache.save(fetchedBaselines, now);
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({ event: "baseline_cache_save_failed", error: String(error) }));
       }
 
       return selected.map((c) => {
-        const matrixKey = `${c.origin}-${c.dest}-${c.tripType}-${c.outDate.slice(0, 7)}-01`;
+        const matrixKey = baselineKey(c.origin, c.dest, c.tripType, `${c.outDate.slice(0, 7)}-01`);
         const matrixBaseline = monthBaselines.get(matrixKey) ?? null;
         if (matrixBaseline !== null) {
           return { ...c, dealBaselineTwd: matrixBaseline };

@@ -229,14 +229,21 @@ describe("Google errand", () => {
     "the hook settles a restored automatic arrival at %s",
     async (path) => {
       const { googleRedirects } = renderApp({ path, google: "holds" });
-      await waitFor(() => {
-        expect(googleRedirects).toHaveLength(1);
-      });
+      // The page is lazy-loaded: its first import can exceed the 1s default when `pnpm -r test` is busy.
+      await waitFor(
+        () => {
+          expect(googleRedirects).toHaveLength(1);
+        },
+        { timeout: 5_000 },
+      );
       expect(screen.getByRole("status")).toHaveTextContent("前往 Google…");
       fireEvent(window, new PageTransitionEvent("pageshow", { persisted: true }));
-      expect(await screen.findByRole("button", { name: "使用 Google 登入" })).toBeEnabled();
+      expect(
+        await screen.findByRole("button", { name: "使用 Google 登入" }, { timeout: 5_000 }),
+      ).toBeEnabled();
       expect(googleRedirects).toHaveLength(1);
     },
+    15_000,
   );
 
   it("the hook resets a button's spinner on a back-forward-cache restore", async () => {

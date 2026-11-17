@@ -16,8 +16,8 @@ import {
 /** Expanded cards list this many fares (cheapest first); the rest sit behind `看全部 N 筆`. */
 const COLLAPSED_FARES = 5;
 
-/** Discount display: solid pill from 30%, plain `省 X%` for 15-29%, nothing below 15%. */
-const SOLID_PILL_MIN_PCT = 30;
+/** Discount display: solid pill from 50%, plain `省 X%` for 15-49%, nothing below 15%. */
+const SOLID_PILL_MIN_PCT = 50;
 const SIGNAL_MIN_PCT = 15;
 
 export function routeText(item: DailyFlightItem): string {
@@ -39,7 +39,7 @@ export function RouteChip({ item, className = "" }: { item: DailyFlightItem; cla
 }
 
 const DEAL_SIZE = {
-  card: { solid: "px-2.5 py-[3px] text-xs", text: "text-xs" },
+  card: { solid: "px-2 py-0.5 text-[11px]", text: "text-[11px]" },
   row: { solid: "px-[9px] py-px text-[11px]", text: "text-[11px]" },
 } as const;
 
@@ -76,7 +76,7 @@ export function DealBadge({
 const PRICE_STYLE = {
   card: {
     nt: "text-xs text-fl-muted",
-    num: "text-[22px] leading-[26px] font-bold tracking-[-0.02em] text-fl-ink",
+    num: "text-[26px] leading-[30px] font-bold tracking-[-0.02em] text-fl-ink",
   },
   row: { nt: "text-base font-bold text-fl-ink", num: "text-base font-bold text-fl-ink" },
   // Home marquee tile: kept from v2 (serif numerals).
@@ -106,7 +106,7 @@ export function Price({
 
 function Dot() {
   return (
-    <span aria-hidden="true" className="text-[#94a3b8]">
+    <span aria-hidden="true" className="text-[#a8a29e]">
       {" · "}
     </span>
   );
@@ -171,7 +171,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
               <RouteChip item={cheapest} />
             </span>
             {open ? (
-              <span className="min-w-0 text-[13px] leading-[18px] text-[#56655f]">
+              <span className="min-w-0 text-[13px] leading-[18px] text-fl-sub">
                 {airlineLabel(cheapest, lang)}
                 <Dot />
                 <span className="whitespace-nowrap">{stopsText(cheapest)}</span>
@@ -179,10 +179,11 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                 <span className="whitespace-nowrap">{fareCountText(fares.length)}</span>
               </span>
             ) : (
-              <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] whitespace-nowrap text-[#334155]">
-                <span className="min-w-0 truncate font-medium">{airlineLabel(cheapest, lang)}</span>
-                <Dot />
-                <span className="shrink-0 rounded-full bg-[#eef2f0] px-2 py-px text-[11px] font-semibold text-fl-muted">
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-[18px] text-fl-sub">
+                <span className="max-w-full min-w-0 truncate font-medium">
+                  {airlineLabel(cheapest, lang)}
+                </span>
+                <span className="shrink-0 rounded-full bg-[#f1eeea] px-2 py-px text-[11px] font-semibold text-fl-sub">
                   {fareCountText(fares.length)}
                 </span>
               </span>
@@ -227,7 +228,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                         {formatFareDates(fare.outDate, fare.inDate)}
                       </span>
                     </span>
-                    <span className="fare-row-detail flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-[18px] text-fl-muted">
+                    <span className="fare-row-detail flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-[18px] text-fl-sub">
                       {rowDetail(fare, lang).map((part, i) => (
                         <Fragment key={i}>
                           {i > 0 && <Dot />}

@@ -174,7 +174,7 @@ describe("daily flights page", () => {
     expect(nrt).toHaveTextContent("省 45%");
     // 4 fares pill; no directness while collapsed, no dates
     const pill = within(nrt).getByText("4 筆");
-    expect(pill.className).toMatch(/bg-\[#eef2f0\].*text-fl-muted/);
+    expect(pill.className).toMatch(/bg-\[#f1eeea\].*text-fl-sub/);
     expect(nrt).not.toHaveTextContent(/直飛|轉|成田/);
     expect(nrt.textContent).not.toMatch(/\d{1,2}\/\d{1,2}/);
     expect(document.querySelectorAll('svg[data-country="JP"]').length).toBe(2);
@@ -187,7 +187,7 @@ describe("daily flights page", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(nrt).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
     // Count is plain text when expanded, not the collapsed grey pill
-    expect(nrt.querySelector('[class*="bg-[#eef2f0]"]')).toBeNull();
+    expect(nrt.querySelector('[class*="bg-[#f1eeea]"]')).toBeNull();
     const card = nrt.closest(".flight-card") as HTMLElement;
     expect(card.className).toContain("border-[#c4e3d3]");
     expect(card.className).toContain("overflow-hidden");
@@ -430,9 +430,9 @@ describe("daily flights page", () => {
   it.each([
     [14, null],
     [15, "text"],
-    [29, "text"],
-    [30, "solid"],
-    [45, "solid"],
+    [49, "text"],
+    [50, "solid"],
+    [70, "solid"],
   ] as const)("draws a %i%% discount as %s on the card", async (pct, kind) => {
     const { api } = setup();
     setItems(api, [fare("d", { dest: "NRT", priceTwd: 3000, discountPct: pct })]);
@@ -445,18 +445,21 @@ describe("daily flights page", () => {
     const badge = within(card).getByText(`省 ${String(pct)}%`);
     if (kind === "solid") {
       expect(badge.className).toMatch(/rounded-full.*bg-fl-green.*font-bold.*text-white/);
-    } else {
+    }
+    expect(badge.className).toContain("text-[11px]"); // smaller than the 26px price
+    if (kind === "text") {
       expect(badge.className).toContain("text-fl-green");
       expect(badge.className).not.toContain("bg-");
     }
+    expect(within(card).getByText("3,000").className).toContain("text-[26px]");
   });
 
-  it("applies the 15/30 thresholds on expanded rows too, with a smaller badge", async () => {
+  it("applies the 15/50 thresholds on expanded rows too, with a smaller badge", async () => {
     const user = userEvent.setup();
     const { api } = setup();
     setItems(
       api,
-      [45, 30, 29, 15, 14].map((pct, i) =>
+      [70, 50, 49, 15, 14].map((pct, i) =>
         fare(`r${String(pct)}`, {
           dest: "ICN",
           region: "kr",
@@ -470,10 +473,10 @@ describe("daily flights page", () => {
     const rows = rowsOf(cityHeadings()[0] as HTMLElement);
     const badge = (row: HTMLElement | undefined, pct: number) =>
       within(row as HTMLElement).queryByText(`省 ${String(pct)}%`);
-    expect(badge(rows[0], 45)?.className).toMatch(/bg-fl-green.*text-\[11px\]/);
-    expect(badge(rows[1], 30)?.className).toContain("bg-fl-green");
-    expect(badge(rows[2], 29)?.className).toMatch(/text-fl-green/);
-    expect(badge(rows[2], 29)?.className).not.toContain("bg-");
+    expect(badge(rows[0], 70)?.className).toMatch(/bg-fl-green.*text-\[11px\]/);
+    expect(badge(rows[1], 50)?.className).toContain("bg-fl-green");
+    expect(badge(rows[2], 49)?.className).toMatch(/text-fl-green/);
+    expect(badge(rows[2], 49)?.className).not.toContain("bg-");
     expect(badge(rows[3], 15)?.className).not.toContain("bg-");
     expect(rows[4]).not.toHaveTextContent("省");
   });
@@ -680,6 +683,165 @@ describe("daily flights page", () => {
     expect(await screen.findByText("目前沒有符合條件的低價機票")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "重設篩選" }));
     expect(await screen.findByText(/東京/)).toBeVisible();
+  });
+
+  describe("Long-haul sub-region and country filters", () => {
+    const longhaul = (id: string, dest: string, priceTwd: number) =>
+      fare(id, { dest, region: "longhaul", priceTwd, airlines: ["BR"] });
+    const LONGHAUL_FLIGHTS = [
+      longhaul("fco", "FCO", 30000),
+      longhaul("vce", "VCE", 31000),
+      longhaul("cdg", "CDG", 32000),
+      longhaul("lax", "LAX", 28000),
+      longhaul("ord", "ORD", 29000),
+      longhaul("per", "PER", 20000),
+      longhaul("dxb", "DXB", 25000),
+    ];
+
+    async function openFilters(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole("button", { name: /^篩選/ }));
+      return screen.findByRole("dialog", { name: "篩選條件" });
+    }
+
+    async function openLonghaul() {
+      const user = userEvent.setup();
+      const { api } = setup();
+      setItems(api, [...SAMPLE_FLIGHTS, ...LONGHAUL_FLIGHTS]);
+      await screen.findAllByRole("heading", { level: 2 });
+      const dialog = await openFilters(user);
+      expect(within(dialog).queryByText("長程地區")).toBeNull();
+      await user.click(within(dialog).getByRole("button", { name: /Close|關閉/ }));
+      await user.click(
+        within(screen.getByRole("group", { name: "目的地" })).getByRole("button", { name: "長程" }),
+      );
+      return { user, dialog: await openFilters(user) };
+    }
+
+    it("shows the group only for the Long-haul tab", async () => {
+      const { dialog } = await openLonghaul();
+      expect(within(dialog).getByText("長程地區")).toBeVisible();
+      expect(within(dialog).getByText("國家")).toBeVisible();
+    });
+
+    it("narrows cards by sub-region then country, counts them as active filters, and clears them on reset", async () => {
+      const { user, dialog } = await openLonghaul();
+
+      await user.click(within(dialog).getByRole("button", { name: /^歐洲/ }));
+      // Countries narrow to the sub-region: Italy and France, not the US or Australia
+      expect(within(dialog).getByRole("button", { name: /^義大利/ })).toBeVisible();
+      expect(within(dialog).getByRole("button", { name: /^法國/ })).toBeVisible();
+      expect(within(dialog).queryByRole("button", { name: /^美國/ })).toBeNull();
+      await user.click(within(dialog).getByRole("button", { name: /^義大利/ }));
+      await user.click(within(dialog).getByRole("button", { name: /查看 2 筆機票/ }));
+
+      // FCO + VCE: two cities, with the filter badge counting both new filters
+      expect(cityHeadings()).toHaveLength(2);
+      expect(pageCount()).toHaveTextContent(/^2 筆$/);
+      expect(within(screen.getByRole("button", { name: /^篩選/ })).getByText("2")).toBeVisible();
+
+      const again = await openFilters(user);
+      await user.click(within(again).getByRole("button", { name: /重設/ }));
+      await user.click(within(again).getByRole("button", { name: /查看 7 筆機票/ }));
+      expect(cityHeadings()).toHaveLength(7);
+      expect(within(screen.getByRole("button", { name: /^篩選/ })).queryByText("2")).toBeNull();
+    });
+
+    it("clears a country that the new sub-region does not contain", async () => {
+      const { user, dialog } = await openLonghaul();
+      await user.click(within(dialog).getByRole("button", { name: /^美國/ }));
+      await user.click(within(dialog).getByRole("button", { name: /^大洋洲/ }));
+
+      expect(within(dialog).getByRole("button", { name: /^澳洲/ })).toBeVisible();
+      expect(within(dialog).queryByRole("button", { name: /^美國/ })).toBeNull();
+      await user.click(within(dialog).getByRole("button", { name: /查看 1 筆機票/ }));
+      expect(cityHeadings()).toHaveLength(1);
+      expect(cityHeadings()[0]).toHaveTextContent("伯斯");
+    });
+
+    it("counts a sub-region chip the way clicking it will filter, even with a country already chosen", async () => {
+      const { user, dialog } = await openLonghaul();
+      await user.click(within(dialog).getByRole("button", { name: /^美國/ }));
+      const europe = within(dialog).getByRole("button", { name: /^歐洲/ });
+      const shown = Number(/(\d+)\s*$/.exec(europe.textContent)?.[1]);
+      expect(shown).toBeGreaterThan(0); // clicking Europe clears the US, so it is not 0
+      await user.click(europe);
+      await user.click(
+        within(dialog).getByRole("button", { name: new RegExp(`查看 ${String(shown)} 筆機票`) }),
+      );
+      expect(cityHeadings().length).toBeGreaterThan(0);
+    });
+
+    it("drops the filters when leaving the Long-haul tab", async () => {
+      const { user, dialog } = await openLonghaul();
+      await user.click(within(dialog).getByRole("button", { name: /^歐洲/ }));
+      await user.click(within(dialog).getByRole("button", { name: /Close|關閉/ }));
+      await user.click(
+        within(screen.getByRole("group", { name: "目的地" })).getByRole("button", { name: "全部" }),
+      );
+      expect(within(screen.getByRole("button", { name: /^篩選/ })).queryByText("1")).toBeNull();
+      expect(cityHeadings().length).toBeGreaterThan(7);
+    });
+  });
+
+  it("explains an empty one-way view and offers a way back to round trips", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    const trip = screen.getByRole("group", { name: "行程" });
+    await user.click(within(trip).getByRole("button", { name: "單程" }));
+    await user.click(
+      within(screen.getByRole("group", { name: "目的地" })).getByRole("button", { name: "日本" }),
+    );
+
+    // Japan has round trips on the board but no one-way fares
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "這個地區目前沒有單程票" }),
+    ).toBeVisible();
+    expect(screen.getByText("單程票只有少數幾筆，改看來回票或換個地區試試。")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "重設篩選" })).toBeNull();
+    expect(pageCount()).toHaveTextContent(/^0 筆$/);
+
+    await user.click(screen.getByRole("button", { name: "改看來回" }));
+    expect(within(trip).getByRole("button", { name: "來回" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(await screen.findByRole("heading", { level: 2, name: /東京/ })).toBeVisible();
+    expect(screen.queryByText("這個地區目前沒有單程票")).toBeNull();
+  });
+
+  it("shows the one-way empty state in English", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: "切換為英文" }));
+    await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
+    await user.click(
+      within(screen.getByRole("group", { name: "Trip" })).getByRole("button", { name: "One-way" }),
+    );
+    await user.click(
+      within(screen.getByRole("group", { name: "Region" })).getByRole("button", { name: "Japan" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "No one-way fares here right now" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Show round trips" })).toBeVisible();
+  });
+
+  it("shows the generic empty state with a reset when drawer filters remove every fare", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: /篩選/ }));
+    const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
+    await user.click(within(dialog).getByRole("button", { name: /台南 TNN\s*0/ }));
+    await user.click(within(dialog).getByRole("button", { name: /查看 0 筆機票/ }));
+
+    expect(await screen.findByText("目前沒有符合條件的低價機票")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "重設篩選" }));
+    expect(await screen.findByRole("heading", { level: 2, name: /東京/ })).toBeVisible();
+    expect(within(screen.getByRole("button", { name: /篩選/ })).queryByText("1")).toBeNull();
   });
 
   it("lays out the signed-out header as logo + title + BETA, then the note with EN and 登入, and localizes filter sheet Close", async () => {

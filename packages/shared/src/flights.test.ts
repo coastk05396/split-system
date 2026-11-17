@@ -4,21 +4,29 @@ import {
   computeArrivalTimeHm,
   computeDealSignal,
   departureBounds,
+  DESTINATION_CATALOG,
   filterDailyFlights,
+  FLIGHT_REGIONS,
   getAirlineName,
+  getAirportTimeZone,
+  getCityName,
   getDefaultDailyFlights,
+  getDestinationMeta,
   isGhostFare,
   isRedEyeTime,
   matchTaiwanHoliday,
   sortDailyFlights,
   withinDepartureWindow,
   type DailyFlightItem,
+  LONGHAUL_SUBREGIONS,
+  type DailyFlightsFilter,
+  type DestinationMeta,
 } from "./flights.js";
 
 describe("flights domain helpers", () => {
-  it("names Philippines AirAsia (Z2) in both languages", () => {
+  it("names Philippines AirAsia (Z2) in both languages, with a short English label that fits the card", () => {
     expect(getAirlineName("Z2", "zh-TW")).toBe("菲律賓亞洲航空");
-    expect(getAirlineName("Z2", "en")).toBe("Philippines AirAsia");
+    expect(getAirlineName("Z2", "en")).toBe("AirAsia PH");
   });
 
   it("detects red-eye flight times between 00:00 and 05:59", () => {
@@ -257,5 +265,182 @@ describe("flights domain helpers", () => {
     const late = withinDepartureWindow(getDefaultDailyFlights("2027-02-01"), "2027-02-01");
     expect(late.some((f) => f.outDate === "2027-02-05")).toBe(false);
     for (const f of [...early, ...late]) expect(f.outDate >= "2026-11-30").toBe(true);
+  });
+});
+
+describe("Curated Destination catalog integrity", () => {
+  const regionalIndicatorFlag = (countryCode: string) =>
+    countryCode
+      .split("")
+      .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
+      .join("");
+
+  it("gives every airport unique, complete, localized metadata in a valid region", () => {
+    const seen = new Set<string>();
+    for (const d of DESTINATION_CATALOG) {
+      expect(d.airport, "IATA code").toMatch(/^[A-Z]{3}$/);
+      expect(seen.has(d.airport), `duplicate airport ${d.airport}`).toBe(false);
+      seen.add(d.airport);
+      expect(d.cityCode, `${d.airport} city code`).toMatch(/^[a-z]{3}$/);
+      expect(d.countryCode, `${d.airport} country code`).toMatch(/^[A-Z]{2}$/);
+      expect(d.flag, `${d.airport} flag matches ${d.countryCode}`).toBe(
+        regionalIndicatorFlag(d.countryCode),
+      );
+      for (const name of [d.zhTW, d.en, d.countryZhTW, d.countryEn]) {
+        expect(name.trim(), `${d.airport} names`).not.toBe("");
+      }
+      expect(/[一-鿿]/.test(d.zhTW), `${d.airport} zh-TW name`).toBe(true);
+      expect(/[一-鿿]/.test(d.en), `${d.airport} English name`).toBe(false);
+      expect(FLIGHT_REGIONS).toContain(d.region);
+      expect(d.baselineTwd, `${d.airport} baseline`).toBeGreaterThan(0);
+    }
+  });
+
+  it("resolves a real IANA timezone for every airport", () => {
+    for (const d of DESTINATION_CATALOG) {
+      const zone = getAirportTimeZone(d.airport);
+      expect(
+        () => new Intl.DateTimeFormat("en-GB", { timeZone: zone }),
+        `${d.airport} ${zone}`,
+      ).not.toThrow();
+    }
+    expect(getAirportTimeZone("BKI")).toBe("Asia/Kuching");
+    expect(getAirportTimeZone("HKT")).toBe("Asia/Bangkok");
+    expect(getAirportTimeZone("CTU")).toBe("Asia/Shanghai");
+  });
+
+  it("merges airports of one city under one city code, and never mixes countries or regions in one", () => {
+    const byCity = new Map<string, DestinationMeta[]>();
+    for (const d of DESTINATION_CATALOG) {
+      byCity.set(d.cityCode, [...(byCity.get(d.cityCode) ?? []), d]);
+    }
+    for (const [city, airports] of byCity) {
+      expect(new Set(airports.map((a) => a.countryCode)).size, city).toBe(1);
+      expect(new Set(airports.map((a) => a.region)).size, city).toBe(1);
+    }
+    const sharing = (...codes: string[]) =>
+      new Set(codes.map((c) => getDestinationMeta(c)?.cityCode)).size;
+    expect(sharing("NRT", "HND")).toBe(1);
+    expect(sharing("PVG", "SHA")).toBe(1);
+    expect(sharing("BKK", "DMK")).toBe(1);
+    expect(sharing("ICN", "GMP")).toBe(1);
+    expect(getDestinationMeta("XXX")).toBeNull();
+  });
+
+  it("puts every Long-haul airport in exactly one sub-region and no other airport in any", () => {
+    for (const d of DESTINATION_CATALOG) {
+      if (d.region === "longhaul") {
+        expect(LONGHAUL_SUBREGIONS, d.airport).toContain(d.subRegion);
+      } else {
+        expect(d.subRegion, d.airport).toBeUndefined();
+      }
+    }
+    const sub = (a: string) => getDestinationMeta(a)?.subRegion;
+    expect([sub("FCO"), sub("ORD"), sub("PER"), sub("DXB")]).toEqual([
+      "europe",
+      "north_america",
+      "oceania",
+      "middle_east_islands",
+    ]);
+    // Every sub-region has airports
+    for (const sr of LONGHAUL_SUBREGIONS) {
+      expect(
+        DESTINATION_CATALOG.some((d) => d.subRegion === sr),
+        sr,
+      ).toBe(true);
+    }
+  });
+
+  it("filters by Long-haul sub-region and country", () => {
+    const at = (dest: string): DailyFlightItem => ({
+      id: dest,
+      origin: "TPE",
+      dest,
+      region: "longhaul",
+      tripType: "rt",
+      outDate: "2026-12-10",
+      inDate: "2026-12-20",
+      priceTwd: 30000,
+      discountPct: 0,
+      tag: "normal",
+      airlines: ["CI"],
+      transfers: 0,
+      returnTransfers: 0,
+      isRedEye: false,
+      outboundDep: null,
+      inboundDep: null,
+    });
+    const items = ["FCO", "VCE", "ORD", "LAX", "PER"].map(at);
+    const base = {
+      region: "longhaul",
+      origin: "all",
+      tripType: "all",
+      month: "all",
+      directOnly: false,
+      holidayOnly: false,
+    } as const;
+    const dests = (f: Partial<DailyFlightsFilter>) =>
+      filterDailyFlights(items, { ...base, ...f }).map((i) => i.dest);
+    expect(dests({})).toEqual(["FCO", "VCE", "ORD", "LAX", "PER"]);
+    expect(dests({ subRegion: "europe" })).toEqual(["FCO", "VCE"]);
+    expect(dests({ subRegion: "north_america", country: "US" })).toEqual(["ORD", "LAX"]);
+    expect(dests({ country: "IT" })).toEqual(["FCO", "VCE"]);
+    expect(dests({ subRegion: "oceania", country: "US" })).toEqual([]);
+    expect(dests({ subRegion: "all", country: "all" })).toHaveLength(5);
+  });
+
+  it("keeps city names short enough for a phone card", () => {
+    for (const d of DESTINATION_CATALOG) {
+      expect(getCityName(d.airport, "en").length, d.airport).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it("covers Japan regional, Southeast Asia and mainland China Curated Destinations", () => {
+    const region = (code: string) => getDestinationMeta(code)?.region;
+    for (const jp of ["HIJ", "HKD", "UKB", "OKJ", "SDJ", "FUK", "CTS"])
+      expect(region(jp)).toBe("jp");
+    for (const sea of ["HKT", "BKI", "PQC", "HDY"]) expect(region(sea)).toBe("sea");
+    for (const cn of ["CTU", "KMG", "HRB"]) expect(region(cn)).toBe("hkmo");
+    expect(getAirlineName("3U", "zh-TW")).toBe("四川航空");
+  });
+
+  it("covers Europe, North America and Oceania under Long-haul with correct country, flag and timezone", () => {
+    const expected: Record<string, [string, string, string]> = {
+      FCO: ["IT", "🇮🇹", "Europe/Rome"],
+      MAD: ["ES", "🇪🇸", "Europe/Madrid"],
+      PRG: ["CZ", "🇨🇿", "Europe/Prague"],
+      MUC: ["DE", "🇩🇪", "Europe/Berlin"],
+      ZRH: ["CH", "🇨🇭", "Europe/Zurich"],
+      VCE: ["IT", "🇮🇹", "Europe/Rome"],
+      BGY: ["IT", "🇮🇹", "Europe/Rome"],
+      GVA: ["CH", "🇨🇭", "Europe/Zurich"],
+      KEF: ["IS", "🇮🇸", "Atlantic/Reykjavik"],
+      LAX: ["US", "🇺🇸", "America/Los_Angeles"],
+      ORD: ["US", "🇺🇸", "America/Chicago"],
+      SEA: ["US", "🇺🇸", "America/Los_Angeles"],
+      HNL: ["US", "🇺🇸", "Pacific/Honolulu"],
+      DFW: ["US", "🇺🇸", "America/Chicago"],
+      IAD: ["US", "🇺🇸", "America/New_York"],
+      PHX: ["US", "🇺🇸", "America/Phoenix"],
+      YUL: ["CA", "🇨🇦", "America/Toronto"],
+      CHC: ["NZ", "🇳🇿", "Pacific/Auckland"],
+      PER: ["AU", "🇦🇺", "Australia/Perth"],
+    };
+    for (const [airport, [country, flag, zone]] of Object.entries(expected)) {
+      const meta = getDestinationMeta(airport);
+      expect(meta?.region, airport).toBe("longhaul");
+      expect([meta?.countryCode, meta?.flag, getAirportTimeZone(airport)], airport).toEqual([
+        country,
+        flag,
+        zone,
+      ]);
+    }
+    // Multi-airport cities render as one City Card name
+    expect(getCityName("BGY", "en")).toBe("Milan");
+    expect(getCityName("IAD", "zh-TW")).toBe("華盛頓");
+    // Existing Long-haul destinations are unchanged
+    expect(getDestinationMeta("LHR")).toMatchObject({ cityCode: "lon", baselineTwd: 31000 });
+    expect(getDestinationMeta("SYD")).toMatchObject({ zhTW: "雪梨", baselineTwd: 25500 });
+    expect(getAirlineName("BA", "zh-TW")).toBe("英國航空");
   });
 });

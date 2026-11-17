@@ -10,8 +10,11 @@ import {
   type FlightTripType,
   getAirlineName,
   getCityName,
+  getDestinationMeta,
   getFlightCityCode,
   type Language,
+  LONGHAUL_SUBREGIONS,
+  type LonghaulSubRegion,
   matchesFlightDest,
   ORIGIN_META,
 } from "@split/shared";
@@ -33,6 +36,13 @@ const REGION_LABELS: Record<FlightRegion, MessageId> = {
   sea: "flights.region.sea",
   hkmo: "flights.region.hkmo",
   longhaul: "flights.region.longhaul",
+};
+
+const SUBREGION_LABELS: Record<LonghaulSubRegion, MessageId> = {
+  europe: "flights.subRegion.europe",
+  north_america: "flights.subRegion.north_america",
+  oceania: "flights.subRegion.oceania",
+  middle_east_islands: "flights.subRegion.middle_east_islands",
 };
 
 const BUDGET_CAPS = [5000, 10000] as const;
@@ -87,6 +97,22 @@ function collectDestinationOptions(
   return [...seen.entries()].map(([code, label]) => ({ code, label }));
 }
 
+/** Long-haul countries on the board (inside the chosen sub-region), as `[ISO code, local name]`. */
+function collectCountryOptions(
+  items: readonly DailyFlightItem[],
+  subRegion: LonghaulSubRegion | "all",
+  lang: Language,
+): Array<{ code: string; label: string }> {
+  const seen = new Map<string, string>();
+  for (const item of items) {
+    const meta = getDestinationMeta(item.dest);
+    if (meta?.region !== "longhaul" || seen.has(meta.countryCode)) continue;
+    if (subRegion !== "all" && meta.subRegion !== subRegion) continue;
+    seen.set(meta.countryCode, lang === "en" ? meta.countryEn : meta.countryZhTW);
+  }
+  return [...seen.entries()].map(([code, label]) => ({ code, label }));
+}
+
 function collectMonthOptions(items: readonly DailyFlightItem[]): string[] {
   const months = new Set<string>();
   for (const item of items) {
@@ -115,6 +141,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const [region, setRegion] = useState<FlightRegion | "all">("all");
   const [origin, setOrigin] = useState<FlightOrigin | "all">("all");
   const [dest, setDest] = useState<string>("all");
+  const [subRegion, setSubRegion] = useState<LonghaulSubRegion | "all">("all");
+  const [country, setCountry] = useState<string>("all");
   const [tripType, setTripType] = useState<FlightTripType | null>(null);
   const [month, setMonth] = useState<string>("all");
   const [airline, setAirline] = useState<string>("all");
@@ -126,6 +154,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   function resetDrawerFilters() {
     setOrigin("all");
     setDest("all");
+    setSubRegion("all");
+    setCountry("all");
     setMonth("all");
     setAirline("all");
     setStops("all");
@@ -147,6 +177,8 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     tripType ?? (items.some((item) => item.tripType === "rt") ? "rt" : "ow");
   const currentFilter: DailyFlightsFilter = {
     region,
+    subRegion,
+    country,
     origin,
     dest,
     tripType: activeTripType,
@@ -159,12 +191,55 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   };
   const filtered = filterDailyFlights(items, currentFilter);
   const groups = groupByCity(filtered, sort);
-  const destOptions = collectDestinationOptions(items, region, dest, locale);
+  const longhaulOpen = region === "longhaul";
+  /** Fares inside a Long-haul sub-region and country, ignoring every other filter. */
+  const inLonghaulScope = (list: readonly DailyFlightItem[], sub: string, ctry: string) =>
+    filterDailyFlights(list, {
+      region,
+      subRegion: sub as LonghaulSubRegion | "all",
+      country: ctry,
+      origin: "all",
+      tripType: "all",
+      month: "all",
+      directOnly: false,
+      holidayOnly: false,
+    });
+  const destOptions = collectDestinationOptions(
+    longhaulOpen ? inLonghaulScope(items, subRegion, country) : items,
+    region,
+    dest,
+    locale,
+  );
+  const subRegionOptions = LONGHAUL_SUBREGIONS.filter((sr) =>
+    items.some((item) => getDestinationMeta(item.dest)?.subRegion === sr),
+  );
+  const countryOptions = collectCountryOptions(items, subRegion, locale);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
 
+  /** The Long-haul scope after a click: a country or destination outside it is cleared. */
+  function narrowedLonghaul(nextSub: LonghaulSubRegion | "all", nextCountry: string) {
+    const scoped = inLonghaulScope(items, nextSub, nextCountry);
+    return {
+      subRegion: nextSub,
+      country: nextCountry !== "all" && scoped.length === 0 ? "all" : nextCountry,
+      dest: dest !== "all" && !scoped.some((i) => matchesFlightDest(i.dest, dest)) ? "all" : dest,
+    };
+  }
+
+  function narrowLonghaul(nextSub: LonghaulSubRegion | "all", nextCountry: string) {
+    const next = narrowedLonghaul(nextSub, nextCountry);
+    setSubRegion(next.subRegion);
+    setCountry(next.country);
+    setDest(next.dest);
+  }
+
   function selectRegion(next: FlightRegion | "all") {
     setRegion(next);
+    if (next !== "longhaul") {
+      setSubRegion("all");
+      setCountry("all");
+    }
     if (
       dest !== "all" &&
       next !== "all" &&
@@ -178,9 +253,15 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     return filterDailyFlights(items, { ...currentFilter, ...patch }).length;
   }
 
+  // One-way fares are a small slice of the board: say so, and offer round trips, instead of a blank list.
+  const oneWayEmpty =
+    filtered.length === 0 && activeTripType === "ow" && countWith({ tripType: "rt" }) > 0;
+
   const activeDrawerCount =
     (origin !== "all" ? 1 : 0) +
     (dest !== "all" ? 1 : 0) +
+    (subRegion !== "all" ? 1 : 0) +
+    (country !== "all" ? 1 : 0) +
     (month !== "all" ? 1 : 0) +
     (airline !== "all" ? 1 : 0) +
     (stops !== "all" ? 1 : 0) +
@@ -351,6 +432,68 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                   ))}
                 </FilterSection>
 
+                {longhaulOpen && (
+                  <>
+                    <FilterSection label={t("flights.subRegionLabel")}>
+                      <FilterChip
+                        active={subRegion === "all"}
+                        count={countWith(narrowedLonghaul("all", country))}
+                        onClick={() => {
+                          narrowLonghaul("all", country);
+                        }}
+                      >
+                        {t("flights.subRegionAll")}
+                      </FilterChip>
+                      {subRegionOptions.map((sr) => (
+                        <FilterChip
+                          key={sr}
+                          active={subRegion === sr}
+                          count={countWith(
+                            narrowedLonghaul(subRegion === sr ? "all" : sr, country),
+                          )}
+                          onClick={() => {
+                            narrowLonghaul(subRegion === sr ? "all" : sr, country);
+                          }}
+                        >
+                          {t(SUBREGION_LABELS[sr])}
+                        </FilterChip>
+                      ))}
+                    </FilterSection>
+
+                    <FilterSection label={t("flights.countryLabel")}>
+                      <FilterChip
+                        active={country === "all"}
+                        count={countWith(narrowedLonghaul(subRegion, "all"))}
+                        onClick={() => {
+                          narrowLonghaul(subRegion, "all");
+                        }}
+                      >
+                        {t("flights.countryAll")}
+                      </FilterChip>
+                      {countryOptions.map((option) => (
+                        <FilterChip
+                          key={option.code}
+                          active={country === option.code}
+                          count={countWith(
+                            narrowedLonghaul(
+                              subRegion,
+                              country === option.code ? "all" : option.code,
+                            ),
+                          )}
+                          onClick={() => {
+                            narrowLonghaul(
+                              subRegion,
+                              country === option.code ? "all" : option.code,
+                            );
+                          }}
+                        >
+                          {option.label}
+                        </FilterChip>
+                      ))}
+                    </FilterSection>
+                  </>
+                )}
+
                 {/* Not in the v3 mock; kept so the sheet loses no filter. */}
                 <FilterSection label={t("flights.destLabel")}>
                   <FilterChip
@@ -465,7 +608,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
               className={`press-pill relative min-h-9 cursor-pointer rounded-full border-[1.5px] px-3.5 text-[13px] whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-[5.5px] after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
                 sort === option.value
                   ? "border-fl-green bg-fl-tint font-bold text-fl-green"
-                  : "border-fl-hair bg-white font-medium text-slate-700"
+                  : "border-fl-hair bg-white font-medium text-fl-sub"
               }`}
             >
               {t(option.label)}
@@ -477,15 +620,25 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-200/80 bg-white px-6 py-10 text-center shadow-2xs">
           <SproutMascot className="size-20" mood="happy" />
-          <h2 className="text-lg font-bold text-ink">{t("flights.empty.title")}</h2>
-          <p className="max-w-sm text-sm text-ink-muted">{t("flights.empty.body")}</p>
+          <h2 className="text-lg font-bold text-ink">
+            {t(oneWayEmpty ? "flights.emptyOneWay.title" : "flights.empty.title")}
+          </h2>
+          <p className="max-w-sm text-sm text-ink-muted">
+            {t(oneWayEmpty ? "flights.emptyOneWay.body" : "flights.empty.body")}
+          </p>
           <button
             type="button"
-            onClick={resetFilters}
-            className="press-pill mt-1 inline-flex cursor-pointer items-center gap-2 rounded-full bg-sprout-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sprout-600"
+            onClick={
+              oneWayEmpty
+                ? () => {
+                    setTripType("rt");
+                  }
+                : resetFilters
+            }
+            className="press-pill mt-1 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-sprout-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sprout-600"
           >
             <RotateCcw aria-hidden="true" className="size-4" />
-            {t("flights.empty.reset")}
+            {t(oneWayEmpty ? "flights.emptyOneWay.switch" : "flights.empty.reset")}
           </button>
         </div>
       ) : (
@@ -498,7 +651,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </ul>
       )}
 
-      <p className="text-center text-xs text-slate-400">
+      <p className="text-center text-xs text-fl-muted">
         {flightsUpdatedNote(data.date, data.isFallback)}
       </p>
     </div>
@@ -538,7 +691,7 @@ function RegionTab({
 function FilterSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-[9px]">
-      <span className="text-[13px] font-bold text-slate-700">{label}</span>
+      <span className="text-[13px] font-bold text-fl-sub">{label}</span>
       <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
         {children}
       </div>
@@ -565,14 +718,14 @@ function FilterChip({
       className={`press-pill inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-[15px] text-sm transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
         active
           ? "border-fl-green bg-fl-tint font-bold text-fl-green"
-          : "border-fl-hair bg-white font-medium text-slate-700"
+          : "border-fl-hair bg-white font-medium text-fl-sub"
       }`}
     >
       <span>{children}</span>
       {count !== undefined && (
         <span
           className={`text-[11px] font-medium tabular-nums ${
-            active ? "text-fl-green/70" : count === 0 ? "text-slate-300" : "text-slate-400"
+            active ? "text-fl-green" : "text-fl-muted"
           }`}
         >
           {count}
