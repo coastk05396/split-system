@@ -191,6 +191,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         blocked: 1,
         blockedReasons: { consent: 1 },
         errorReasons: { unknown: 1 },
+        retried: 0,
       });
       expect(collected.live).toMatchObject({ kept: 5, blocked: 2 });
     } finally {
@@ -216,7 +217,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
                   : kind === "blocked"
                     ? ("blocked" as const)
                     : null,
-              ...(kind === "np" ? { errorReason: "no_payload" } : {}),
+              ...(kind === "np" ? { errorReason: "no_payload", retried: true } : {}),
               ...(kind === "blocked" ? { blockedReason: "consent" } : {}),
               itineraries: [],
             })),
@@ -296,6 +297,66 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         "exception:RuntimeError": 1,
         unknown: 1,
       },
+    });
+  });
+
+  describe("retried payload-less pages", () => {
+    const outcome = (kind: "np" | "ok" | "np-retried" | "ok-retried") => {
+      const retried = kind.endsWith("retried");
+      return {
+        reason: kind.startsWith("np") ? ("error" as const) : null,
+        ...(kind.startsWith("np") ? { errorReason: "no_payload" } : {}),
+        ...(retried ? { retried: true as const } : {}),
+      };
+    };
+    const run = async (kinds: ("np" | "ok" | "np-retried" | "ok-retried")[]) => {
+      vi.useFakeTimers();
+      try {
+        const queried: string[] = [];
+        const lookup: LiveLookup = (batch) => {
+          const kind = kinds[queried.length] ?? "ok";
+          queried.push(...batch.map((c) => c.id));
+          return Promise.resolve(
+            batch.map((c) => ({ id: c.id, itineraries: [], ...outcome(kind) })),
+          );
+        };
+        const ids = ["a", "b", "c", "d", "e", "f"];
+        const source = googleLiveFlightSource(
+          { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
+          lookup,
+        );
+        const pending = collectVerifiedDailyFlights(source, now);
+        await vi.advanceTimersByTimeAsync(60_000);
+        return { queried, collected: await pending };
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("counts a no_payload that was not retried as a streak of 0 (adapter always retries it first)", async () => {
+      const { queried } = await run(["np", "np", "np"]);
+      expect(queried).toHaveLength(6);
+    });
+
+    it("stops after 3 consecutive results that are still payload-less after their retry", async () => {
+      const { queried } = await run(["np-retried", "np-retried", "np-retried"]);
+      expect(queried).toEqual(["a", "b", "c"]);
+    });
+
+    it("a recovered retry resets the streak", async () => {
+      const { queried } = await run([
+        "np-retried",
+        "np-retried",
+        "ok-retried",
+        "np-retried",
+        "np-retried",
+      ]);
+      expect(queried).toHaveLength(6);
+    });
+
+    it("tallies how many queries were retried", async () => {
+      const { collected } = await run(["ok", "ok-retried", "np-retried", "ok"]);
+      expect(collected.live?.queries).toMatchObject({ retried: 2, error: 1 });
     });
   });
 

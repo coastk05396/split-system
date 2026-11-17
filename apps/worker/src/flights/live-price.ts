@@ -22,6 +22,8 @@ export interface LiveResult {
   blockedReason?: string | undefined;
   /** `no_payload`: an error page without Google's results payload (ambiguous, not yet a block). */
   errorReason?: string | undefined;
+  /** The adapter re-requested this query once after a payload-less page or 5xx. */
+  retried?: boolean | undefined;
   itineraries: LiveItinerary[];
 }
 
@@ -37,6 +39,8 @@ export interface LiveQueries {
   blockedReasons: Record<string, number>;
   /** Why queries failed: `server_error`, `no_payload`, `parse`, `exception:<Type>` or `unknown`. */
   errorReasons: Record<string, number>;
+  /** Queries the adapter re-requested once. */
+  retried: number;
 }
 
 /** Stop after this many payload-less pages in a row (a single one is ambiguous, not a block). */
@@ -59,6 +63,7 @@ const emptyQueries = (): LiveQueries => ({
   blocked: 0,
   blockedReasons: {},
   errorReasons: {},
+  retried: 0,
 });
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
@@ -121,6 +126,7 @@ export function googleLiveFlightSource(
           live.set(r.id, r);
           const key = r.reason ?? "ok";
           queries[key] += 1;
+          if (r.retried) queries.retried += 1;
           if (r.reason === "error") {
             const why = r.errorReason ?? "unknown";
             queries.errorReasons[why] = (queries.errorReasons[why] ?? 0) + 1;
@@ -132,7 +138,8 @@ export function googleLiveFlightSource(
             stopReason = why;
           }
           // Only a page with a payload (results or genuinely none) resets the streak.
-          if (r.errorReason === "no_payload") noPayloadStreak += 1;
+          // Only a page still payload-less after its own retry counts toward the streak.
+          if (r.errorReason === "no_payload" && r.retried) noPayloadStreak += 1;
           else if (r.reason === null || r.reason === "no_result") noPayloadStreak = 0;
         }
         // An explicit block also leaves its own batch unresolved; a payload-less streak only the rest.

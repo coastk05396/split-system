@@ -146,7 +146,10 @@ def run_main(candidates, pages):
 
     def fake_fetch(_q):
         fetched.append(1)
-        return pages[len(fetched) - 1]
+        nxt = pages[len(fetched) - 1]
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
 
     sleeps = []
     out = io.StringIO()
@@ -178,15 +181,15 @@ class MainLoop(unittest.TestCase):
         self.assertEqual(sleeps, [3.0])
 
     def test_a_payload_less_page_is_tagged_and_does_not_stop_the_run(self):
-        pages = [(200, "<html>odd</html>"), (200, page([entry(1000)]))]
+        pages = [(200, "<html>odd</html>"), (200, "<html>odd</html>"), (200, page([entry(1000)]))]
         results, _, fetched = run_main([cand(1), cand(2)], pages)
         self.assertEqual([r["reason"] for r in results], ["error", None])
         self.assertEqual(results[0]["errorReason"], "no_payload")
-        self.assertEqual(fetched, 2)
+        self.assertEqual(fetched, 3)
 
     def test_every_error_result_carries_its_category(self):
         broken = page([no_legs(3000)])
-        pages = [(503, "down"), (200, "<html>odd</html>"), (200, broken)]
+        pages = [(503, "down"), (503, "down"), (200, "<html>odd</html>"), (200, "<html>odd</html>"), (200, broken)]
         results, _, _ = run_main([cand(1), cand(2), cand(3)], pages)
         self.assertEqual([r["errorReason"] for r in results], ["server_error", "no_payload", "parse"])
 
@@ -206,10 +209,55 @@ class MainLoop(unittest.TestCase):
         self.assertNotIn("secret", out.getvalue() + err.getvalue())
 
     def test_a_5xx_or_error_does_not_stop_the_run(self):
-        pages = [(503, "down"), (200, page([entry(1000)]))]
+        pages = [(503, "down"), (503, "down"), (200, page([entry(1000)]))]
         results, _, fetched = run_main([cand(1), cand(2)], pages)
         self.assertEqual([r["reason"] for r in results], ["error", None])
-        self.assertEqual(fetched, 2)
+        self.assertEqual(fetched, 3)
+
+
+VERIFYING = "<html><title>Verifying...</title>Verifying your request... Please wait</html>"
+GOOD = page([entry(1000)])
+
+
+class RetryOnce(unittest.TestCase):
+    def test_pause_is_ten_seconds(self):
+        self.assertEqual(adapter.RETRY_PAUSE_SECONDS, 10)
+
+    def test_a_payload_less_page_is_re_requested_once_after_10_seconds_and_can_recover(self):
+        results, sleeps, fetched = run_main([cand(1)], [(200, VERIFYING), (200, GOOD)])
+        self.assertEqual((results[0]["reason"], results[0]["retried"]), (None, True))
+        self.assertEqual(results[0]["itineraries"][0]["priceTwd"], 1000)
+        self.assertEqual((sleeps, fetched), ([10], 2))
+
+    def test_a_5xx_is_retried_too(self):
+        results, sleeps, fetched = run_main([cand(1)], [(503, "down"), (200, GOOD)])
+        self.assertEqual((results[0]["reason"], sleeps, fetched), (None, [10], 2))
+
+    def test_still_payload_less_after_the_retry_stays_an_error_and_is_not_retried_again(self):
+        results, sleeps, fetched = run_main([cand(1)], [(200, VERIFYING), (200, VERIFYING), (200, GOOD)])
+        self.assertEqual(
+            (results[0]["reason"], results[0]["errorReason"], results[0]["retried"]),
+            ("error", "no_payload", True),
+        )
+        self.assertEqual((sleeps, fetched), ([10], 2))
+
+    def test_a_block_marker_on_the_retry_is_blocked_and_not_retried_again(self):
+        consent = "<form action='https://consent.google.com/save'></form>"
+        results, sleeps, fetched = run_main([cand(1)], [(200, VERIFYING), (200, consent), (200, GOOD)])
+        self.assertEqual((results[0]["reason"], results[0]["blockedReason"]), ("blocked", "consent"))
+        self.assertEqual((sleeps, fetched), ([10], 2))
+
+    def test_a_blocked_first_page_is_never_retried(self):
+        for first in [(429, "Too Many Requests"), (200, "<a href='/sorry/x'>"), (403, "")]:
+            results, sleeps, fetched = run_main([cand(1)], [first, (200, GOOD)])
+            self.assertEqual((results[0]["reason"], sleeps, fetched), ("blocked", [], 1), first)
+            self.assertNotIn("retried", results[0])
+
+    def test_parse_and_exception_errors_are_not_retried(self):
+        for page_or_exc, why in [((200, page([no_legs(3000)])), "parse"), (RuntimeError("x"), "exception:RuntimeError")]:
+            results, sleeps, fetched = run_main([cand(1)], [page_or_exc, (200, GOOD)])
+            self.assertEqual((results[0]["errorReason"], sleeps, fetched), (why, [], 1))
+            self.assertNotIn("retried", results[0])
 
 
 class ExceptionSignals(unittest.TestCase):
