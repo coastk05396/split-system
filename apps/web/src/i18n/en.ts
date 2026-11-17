@@ -578,9 +578,6 @@ export const en: Record<MessageId, string> = {
   "flights.showLess": "Show less",
   "flights.count": "{count} fares",
   "flights.count.one": "{count} fare",
-  "flights.sort.label": "Sort",
-  "flights.sort.best": "Best deals",
-  "flights.sort.price": "Lowest price",
   "flights.rowsNote":
     "Tap a date to open Trip.com · Reference prices refresh daily at 08:00; the booking page is final",
   "flights.fromOrigin": "From {city}",

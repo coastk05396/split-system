@@ -120,7 +120,7 @@ function setup(path = "/flights", cookieUser?: ReturnType<typeof makeUser>) {
 }
 
 /** The page-level `N 筆` count (cards carry their own per-city fare pill). */
-const pageCount = () => screen.getByRole("group", { name: /^(排序|Sort)$/ }).previousElementSibling;
+const pageCount = () => screen.getByTestId("flights-count");
 
 const cityHeadings = () => screen.getAllByRole("heading", { level: 2 });
 
@@ -177,8 +177,8 @@ describe("daily flights page", () => {
     setup();
     await screen.findAllByRole("heading", { level: 2 });
 
-    // Default 來回 tab: 3 cities (NRT, KIX, ICN) from 6 round-trip fares; 最划算 order
-    expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
+    // Default 來回 tab: 3 cities (NRT, KIX, ICN) from 6 round-trip fares, cheapest first
+    expect(cityOrder()).toEqual(["東京", "首爾", "大阪"]);
     const nrt = cityHeadings()[0] as HTMLElement;
     // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, 5,680, 省 45%)
     expect(nrt).toHaveTextContent("TPE ⇄ NRT");
@@ -235,7 +235,7 @@ describe("daily flights page", () => {
     expect(rowsOf(nrt)).toHaveLength(0);
   });
 
-  it("counts fares (not cities), sorts cards by 最划算 or 價格最低, and keeps fares price-ascending inside a card", async () => {
+  it("counts fares (not cities), has no sort control, lists cards cheapest first, and keeps fares price-ascending inside a card", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
@@ -243,35 +243,18 @@ describe("daily flights page", () => {
     // N 筆 counts the fares shown (6 round trips), never the 3 destinations
     expect(pageCount()).toHaveTextContent(/^6 筆$/);
     expect(screen.queryByText(/個目的地|價格由低到高/)).toBeNull();
-    const sort = screen.getByRole("group", { name: "排序" });
-    const best = within(sort).getByRole("button", { name: "最划算" });
-    const price = within(sort).getByRole("button", { name: "價格最低" });
-    expect(best).toHaveAttribute("aria-pressed", "true");
-    expect(price).toHaveAttribute("aria-pressed", "false");
-    expect(best.className).toMatch(/border-fl-green.*bg-fl-tint.*font-bold.*text-fl-green/);
-    expect(price.className).toMatch(/border-fl-hair.*bg-white/);
-    expect(best.className).toContain("min-h-9");
-    expect(best.className).toContain("after:-inset-y-[5.5px]");
-    // 東京 45% > 大阪 21% > 首爾 0%
-    expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
-
-    await user.click(price);
-    expect(price).toHaveAttribute("aria-pressed", "true");
-    expect(best).toHaveAttribute("aria-pressed", "false");
-    // 東京 5,680 < 首爾 6,100 < 大阪 8,900
+    expect(screen.queryByRole("group", { name: "排序" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /最划算|價格最低/ })).toBeNull();
+    // 東京 5,680 < 首爾 6,100 < 大阪 8,900, even though 大阪 has a deeper discount than 首爾
     expect(cityOrder()).toEqual(["東京", "首爾", "大阪"]);
-    expect(pageCount()).toHaveTextContent(/^6 筆$/);
+
     await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
     expect(
       rowsOf(cityHeadings()[0] as HTMLElement).map((r) => r.textContent.match(/NT\$[\d,]+/)?.[0]),
     ).toEqual(["NT$5,680", "NT$6,200", "NT$6,900", "NT$7,200"]);
-
-    await user.click(best);
-    expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
   });
 
-  it("orders 最划算 by the cheapest fare's discount (ties: cheaper first) and 價格最低 by price (ties: bigger discount)", async () => {
-    const user = userEvent.setup();
+  it("orders cards by the cheapest fare's price, bigger discount first on equal prices", async () => {
     const { api } = setup();
     const f = (dest: string, region: DailyFlightItem["region"], priceTwd: number, pct: number) =>
       fare(`o-${dest}`, { dest, region, priceTwd, discountPct: pct });
@@ -283,9 +266,19 @@ describe("daily flights page", () => {
       f("ICN", "kr", 5000, 0),
     ]);
     await screen.findAllByRole("heading", { level: 2 });
-    expect(cityOrder()).toEqual(["東京", "大阪", "首爾", "曼谷", "福岡"]);
-    await user.click(screen.getByRole("button", { name: "價格最低" }));
     expect(cityOrder()).toEqual(["首爾", "曼谷", "東京", "福岡", "大阪"]);
+  });
+
+  it("leads a card with its cheapest fare, with that fare's own discount", async () => {
+    const { api } = setup();
+    setItems(api, [
+      fare("pricey", { dest: "NRT", priceTwd: 9000, discountPct: 60 }),
+      fare("cheap", { dest: "HND", priceTwd: 6000, discountPct: 20 }),
+    ]);
+    const card = (await screen.findAllByRole("heading", { level: 2 }))[0] as HTMLElement;
+    expect(card).toHaveTextContent("6,000");
+    expect(card).toHaveTextContent("省 20%");
+    expect(card).not.toHaveTextContent("省 60%");
   });
 
   it("counts active filters, narrows cards and the N 筆 count by origin, and shows live option counts", async () => {
@@ -584,7 +577,7 @@ describe("daily flights page", () => {
     },
   );
 
-  it("renders English labels, sort chips and redirect links", async () => {
+  it("renders English labels and redirect links", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
@@ -595,12 +588,7 @@ describe("daily flights page", () => {
     expect(within(title).getByText("fly").className).toContain("linear-gradient");
     expect(within(title.parentElement as HTMLElement).getByText("BETA")).toBeVisible();
     expect(screen.getByText("Updated daily at 8 AM")).toBeVisible();
-    const sort = screen.getByRole("group", { name: "Sort" });
-    expect(within(sort).getByRole("button", { name: "Best deals" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(sort).getByRole("button", { name: "Lowest price" })).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Sort" })).toBeNull();
     expect(pageCount()).toHaveTextContent(/^6 fares$/);
     const nrt = cityHeadings()[0] as HTMLElement;
     expect(nrt).toHaveTextContent("Tokyo");

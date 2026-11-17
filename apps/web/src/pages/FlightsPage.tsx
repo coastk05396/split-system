@@ -16,7 +16,7 @@ import { useState } from "react";
 import { useDailyFlights } from "../flights/api.js";
 import { type FlightArea, FLIGHT_AREAS, flightAreaOf } from "../flights/areas.js";
 import { CityFlightCard } from "../flights/CityFlightCard.js";
-import { type CitySort, groupByCity } from "../flights/groups.js";
+import { groupByCity } from "../flights/groups.js";
 import { FlightsTitle } from "../flights/FlightsTitle.js";
 import { flightsUpdatedNote } from "../flights/ui.js";
 import { Loading } from "../groups/ui.js";
@@ -40,11 +40,6 @@ const STOPS_OPTIONS: ReadonlyArray<{ value: FlightStopsFilter; label: MessageId 
   { value: "all", label: "flights.stops.all" },
   { value: "direct", label: "flights.stops.direct" },
   { value: "transfer", label: "flights.stops.transfer" },
-];
-
-const SORT_OPTIONS: ReadonlyArray<{ value: CitySort; label: MessageId }> = [
-  { value: "best", label: "flights.sort.best" },
-  { value: "price", label: "flights.sort.price" },
 ];
 
 const EN_MONTH_SHORT = [
@@ -103,7 +98,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const [stops, setStops] = useState<FlightStopsFilter>("all");
   const [maxPriceTwd, setMaxPriceTwd] = useState<number | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sort, setSort] = useState<CitySort>("best");
 
   function resetDrawerFilters() {
     setOrigin("all");
@@ -144,7 +138,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   }
 
   const filtered = visibleWith({});
-  const groups = groupByCity(filtered, sort);
+  const groups = groupByCity(filtered);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
 
@@ -397,32 +391,14 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </Dialog.Root>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs whitespace-nowrap text-fl-muted tabular-nums">
-          {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
-            count: filtered.length,
-          })}
-        </span>
-        <div role="group" aria-label={t("flights.sort.label")} className="flex gap-1.5">
-          {SORT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={sort === option.value}
-              onClick={() => {
-                setSort(option.value);
-              }}
-              className={`press-pill relative min-h-9 cursor-pointer rounded-full border-[1.5px] px-3.5 text-[13px] whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-[5.5px] after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
-                sort === option.value
-                  ? "border-fl-green bg-fl-tint font-bold text-fl-green"
-                  : "border-fl-hair bg-white font-medium text-fl-sub"
-              }`}
-            >
-              {t(option.label)}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p
+        data-testid="flights-count"
+        className="text-xs whitespace-nowrap text-fl-muted tabular-nums"
+      >
+        {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
+          count: filtered.length,
+        })}
+      </p>
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-200/80 bg-white px-6 py-10 text-center shadow-2xs">
