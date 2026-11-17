@@ -56,10 +56,6 @@ _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus
 A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by Stage 2 verification (`FlightSource.verifyCandidate`) when no matching fresh itinerary exists or the re-checked price rises by more than 20% AND NT$800 above discovery; always dropped before display.
 _Avoid_: Phantom ticket, cache hit
 
-**Red-eye Flight**:
-A flight (`紅眼班機`) whose outbound or inbound departure or arrival falls between `00:00` and `05:59`; kept in Daily Flights and flagged in the data (`isRedEye`) so travelers can exclude it with the `排除紅眼班機` filter; cards and fare rows show no red-eye badge.
-_Avoid_: Overnight flight (when meaning the UI badge)
-
 **User**:
 One real person, who may sign in through more than one Identity.
 _Avoid_: Account, member (when meaning the person outside a Group)
