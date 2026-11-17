@@ -1,5 +1,7 @@
 import {
+  DESTINATION_CATALOG,
   getDefaultDailyFlights,
+  getDestinationMeta,
   type DailyFlightItem,
   type DailyFlightsResponse,
 } from "@split/shared";
@@ -74,10 +76,13 @@ function fakeTravelpayouts(
     oneWay: boolean,
     month: string,
   ) => { status?: number; prices: number[] } | null,
+  targeted?: (destination: string) => (FakeFare & { month: string })[],
 ) {
   const discoveries: { origin: string; oneWay: boolean; month: string; unique: string | null }[] =
     [];
   const monthMatrixCalls: MonthMatrixCall[] = [];
+  const targetedCalls: { origin: string; destination: string }[] = [];
+  let callCount = 0;
   let verifyCount = 0;
   let inFlight = 0;
   let maxInFlight = 0;
@@ -101,6 +106,7 @@ function fakeTravelpayouts(
   };
 
   const fetchFn: typeof fetch = async (input) => {
+    callCount += 1;
     inFlight += 1;
     maxInFlight = Math.max(maxInFlight, inFlight);
     await Promise.resolve();
@@ -155,12 +161,18 @@ function fakeTravelpayouts(
         );
         return Response.json({ success: true, data });
       }
+      if (departure === "") {
+        // Targeted discovery (origin + destination, no date): every date in the window
+        targetedCalls.push({ origin, destination });
+        const data = (targeted?.(destination) ?? []).map((f) => toItem(origin, false, f.month, f));
+        return Response.json({ success: true, data });
+      }
       verifyCount += 1;
       const month = departure.slice(0, 7);
       const day = Number(departure.slice(8, 10));
-      const match = fares(origin, oneWay, month).find(
-        (f) => f.dest === destination && f.day === day,
-      );
+      const match =
+        fares(origin, oneWay, month).find((f) => f.dest === destination && f.day === day) ??
+        targeted?.(destination).find((f) => f.month === month && f.day === day);
       return Response.json({
         success: true,
         data: match ? [toItem(origin, oneWay, month, match)] : [],
@@ -174,7 +186,8 @@ function fakeTravelpayouts(
     fetchFn,
     discoveries,
     monthMatrixCalls,
-    stats: () => ({ verifyCount, maxInFlight }),
+    targetedCalls,
+    stats: () => ({ verifyCount, maxInFlight, callCount }),
   };
 }
 
@@ -466,6 +479,101 @@ describe("public flight routes and daily pipeline", () => {
       HNL: "longhaul",
       PER: "longhaul",
     }); // TFU (Chengdu Tianfu) is not curated: dropped, never an open-world airport
+  });
+
+  describe("targeted long-haul discovery and the Long-haul share", () => {
+    const cronNow = Date.parse("2026-11-16T00:00:00Z");
+    const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
+    const longhaul = DESTINATION_CATALOG.filter((d) => d.region === "longhaul").map(
+      (d) => d.airport,
+    );
+    const shorthaul = DESTINATION_CATALOG.filter((d) => d.region !== "longhaul").map(
+      (d) => d.airport,
+    );
+    const everyDate = (dests: readonly string[], price: number) =>
+      dests.flatMap((dest, i) =>
+        [3, 10, 17, 24].map((day) => ({ dest, day, price: price + i * 10 + day })),
+      );
+    // Long-haul fares for five months from TPE, far dearer than any short-haul fare
+    const targeted = (dest: string) =>
+      ["2026-12", "2027-01", "2027-02", "2027-03", "2027-04"].map((month, m) => ({
+        dest,
+        month,
+        day: 8,
+        price: 25000 + longhaul.indexOf(dest) * 100 + m,
+      }));
+    const stableMatrix = () => ({ prices: [20000, 30000, 40000] });
+
+    beforeEach(async () => {
+      await env.DB.prepare("DELETE FROM flight_baselines").run();
+    });
+
+    async function run(fake: ReturnType<typeof fakeTravelpayouts>, now = cronNow) {
+      const db = createDb(env.DB);
+      clock.now = now;
+      await refreshDailyFlights(
+        db,
+        productionFlightSource(tpEnv, fake.fetchFn, d1BaselineCache(db)),
+        now,
+      );
+      const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+      return (await res.json<DailyFlightsResponse>()).items;
+    }
+
+    it("selects long-haul fares from targeted Taipei queries even when every generic result is short-haul", async () => {
+      const fake = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
+      const items = await run(fake);
+
+      // One round-trip query per curated long-haul airport, all from TPE
+      expect(fake.targetedCalls).toEqual(
+        longhaul.map((destination) => ({ origin: "TPE", destination })),
+      );
+      expect(fake.discoveries.every((d) => d.month !== "")).toBe(true);
+      const lh = items.filter((i) => i.region === "longhaul");
+      expect(lh.length).toBeGreaterThan(0);
+      expect(new Set(lh.map((i) => i.origin))).toEqual(new Set(["TPE"]));
+    });
+
+    it("gives Long-haul about 35% of the round-trip quota and shares the rest across the other regions", async () => {
+      const items = await run(
+        fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted),
+      );
+
+      const rt = items.filter((i) => i.tripType === "rt");
+      expect(rt).toHaveLength(225);
+      const share = (region: string) => rt.filter((i) => i.region === region).length / 225;
+      expect(share("longhaul")).toBeGreaterThan(0.33);
+      expect(share("longhaul")).toBeLessThan(0.37);
+      for (const region of ["jp", "kr", "sea", "hkmo"]) {
+        expect(share(region), region).toBeGreaterThan(0.08);
+      }
+      expect(items.filter((i) => i.tripType === "ow")).toHaveLength(5);
+    });
+
+    it("keeps totals when regions have no supply", async () => {
+      // Only Japan generic supply, no Long-haul targeted supply: Korea/SEA/HK-China/Long-haul are empty
+      const jpOnly = shorthaul.filter((a) => getDestinationMeta(a)?.region === "jp");
+      const items = await run(fakeTravelpayouts(() => everyDate(jpOnly, 3000), stableMatrix));
+
+      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(225);
+      expect(items.every((i) => i.region === "jp")).toBe(true);
+    });
+
+    it("stays within the upstream call budget, and cached baselines cut it further", async () => {
+      const cold = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
+      const board = await run(cold);
+
+      // 70 discovery + 31 targeted + <= 230 baselines + <= 230 verifications
+      expect(cold.targetedCalls).toHaveLength(longhaul.length);
+      expect(cold.stats().verifyCount).toBe(board.length);
+      expect(cold.stats().callCount).toBeLessThanOrEqual(70 + longhaul.length + 230 + 230);
+
+      const warm = fakeTravelpayouts(() => everyDate(shorthaul, 3000), stableMatrix, targeted);
+      await run(warm, cronNow + 24 * 3_600_000);
+      expect(warm.monthMatrixCalls).toHaveLength(0);
+      expect(warm.stats().callCount).toBeLessThanOrEqual(70 + longhaul.length + 230);
+      expect(warm.stats().callCount).toBeLessThanOrEqual(500);
+    }, 30_000);
   });
 
   it("scores Deal Signal against the median of the day's candidates per destination and trip type", async () => {

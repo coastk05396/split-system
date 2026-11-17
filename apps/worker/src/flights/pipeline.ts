@@ -1,6 +1,7 @@
 import {
   computeArrivalTimeHm,
   computeDealSignal,
+  DESTINATION_CATALOG,
   FLIGHT_ORIGINS,
   FLIGHT_REGIONS,
   FLIGHT_TRIP_TYPES,
@@ -89,7 +90,7 @@ export interface FlightSource {
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
 }
 
-// ~70 discovery calls + <=230 baselines + <=230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0009).
+// ~70 discovery + ~31 targeted long-haul calls + <=230 baselines + <=230 verifications per run (<= ~560 cold, fewer with cached baselines), all sequential: needs Workers Paid (ADR 0008/0009).
 /** Board size per trip type: 230 fares, round trips dominate and one way stays a small secondary slice. */
 export const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 225, ow: 5 };
 const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
@@ -97,13 +98,18 @@ const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
   kr: 3,
   sea: 4,
   hkmo: 3,
-  longhaul: 3,
+  longhaul: 9, // 9 / 26: about 35% of each trip type's quota (ADR 0009)
 };
 /** A Route (origin airport × destination airport × trip type) carries at most this many dates on the board. */
 export const MAX_DATES_PER_ROUTE = 3;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
 const MIN_SIGNAL_CANDIDATES = 3;
 const DISCOVERY_LIMIT = "100";
+/** Main Taipei airport, the origin of the targeted long-haul discovery queries. */
+const TARGETED_ORIGIN: FlightOrigin = "TPE";
+const LONGHAUL_AIRPORTS: readonly string[] = DESTINATION_CATALOG.filter(
+  (d) => d.region === "longhaul",
+).map((d) => d.airport);
 /** A fetched month-matrix baseline is reused for 3 days (ADR 0009) to keep the cron's upstream calls down. */
 export const BASELINE_CACHE_TTL_MS = 3 * 24 * 3_600_000;
 
@@ -392,6 +398,45 @@ export function productionFlightSource(
       const seenKeys = new Set<string>();
       const window = discoveryWindow(digestDate);
 
+      const ingest = (data: readonly TravelpayoutsItem[], oneWay: boolean) => {
+        for (const raw of data) {
+          if (!isAcceptableFoundAt(raw.found_at, now)) continue;
+          const parsedOrigin = resolveOriginAirport(raw);
+          const meta = resolveDestinationAirport(raw);
+          if (!parsedOrigin || !meta || !raw.departure_at) continue;
+
+          const outDate = raw.departure_at.slice(0, 10);
+          if (outDate < window.from || outDate > window.to) continue;
+          const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
+          const tripType: FlightTripType = inDate ? "rt" : "ow";
+          const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
+          if (seenKeys.has(dedupeKey)) continue;
+          seenKeys.add(dedupeKey);
+
+          collected.push({
+            id: `${digestDate}-${dedupeKey.toLowerCase()}`,
+            origin: parsedOrigin,
+            dest: meta.airport,
+            tripType,
+            outDate,
+            inDate,
+            priceTwd: Math.round(raw.price),
+            airlines: [raw.airline.toUpperCase()],
+            transfers: raw.transfers,
+            returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
+            outboundDep: extractTimePart(raw.departure_at),
+            inboundDep: extractTimePart(raw.return_at),
+            outboundArr: computeArrivalTimeHm(
+              raw.departure_at,
+              positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
+              meta.airport,
+            ),
+            inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
+            digestDate,
+          });
+        }
+      };
+
       // Sequential on purpose: one upstream request at a time keeps us far below Travelpayouts' rate limit.
       for (const origin of FLIGHT_ORIGINS) {
         for (const oneWay of [false, true]) {
@@ -409,46 +454,29 @@ export function productionFlightSource(
               },
               { event: "travelpayouts_fetch_failed", origin, oneWay, month },
             );
-            if (data === null) continue;
-
-            for (const raw of data) {
-              if (!isAcceptableFoundAt(raw.found_at, now)) continue;
-              const parsedOrigin = resolveOriginAirport(raw);
-              const meta = resolveDestinationAirport(raw);
-              if (!parsedOrigin || !meta || !raw.departure_at) continue;
-
-              const outDate = raw.departure_at.slice(0, 10);
-              if (outDate < window.from || outDate > window.to) continue;
-              const inDate = !oneWay && raw.return_at ? raw.return_at.slice(0, 10) : null;
-              const tripType: FlightTripType = inDate ? "rt" : "ow";
-              const dedupeKey = `${parsedOrigin}-${meta.airport}-${tripType}-${outDate}`;
-              if (seenKeys.has(dedupeKey)) continue;
-              seenKeys.add(dedupeKey);
-
-              collected.push({
-                id: `${digestDate}-${dedupeKey.toLowerCase()}`,
-                origin: parsedOrigin,
-                dest: meta.airport,
-                tripType,
-                outDate,
-                inDate,
-                priceTwd: Math.round(raw.price),
-                airlines: [raw.airline.toUpperCase()],
-                transfers: raw.transfers,
-                returnTransfers: tripType === "rt" ? (raw.return_transfers ?? 0) : null,
-                outboundDep: extractTimePart(raw.departure_at),
-                inboundDep: extractTimePart(raw.return_at),
-                outboundArr: computeArrivalTimeHm(
-                  raw.departure_at,
-                  positiveDuration(raw.duration_to) ?? positiveDuration(raw.duration),
-                  meta.airport,
-                ),
-                inboundArr: computeArrivalTimeHm(raw.return_at, raw.duration_back, parsedOrigin),
-                digestDate,
-              });
-            }
+            if (data !== null) ingest(data, oneWay);
           }
         }
+      }
+
+      // Cheap short-haul fares fill the per-origin, per-month limit above, so long-haul routes are
+      // asked for explicitly: one round-trip query per curated long-haul airport from the main
+      // Taipei airport, across the whole departure window (ADR 0009).
+      for (const dest of LONGHAUL_AIRPORTS) {
+        const data = await fetchTravelpayoutsPrices(
+          fetchFn,
+          token,
+          {
+            origin: TARGETED_ORIGIN,
+            destination: dest,
+            currency: "twd",
+            sorting: "price",
+            limit: DISCOVERY_LIMIT,
+            one_way: "false",
+          },
+          { event: "travelpayouts_targeted_fetch_failed", origin: TARGETED_ORIGIN, dest },
+        );
+        if (data !== null) ingest(data, false);
       }
 
       if (collected.length === 0) return [];
