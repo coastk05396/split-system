@@ -89,8 +89,9 @@ export interface FlightSource {
   verifyCandidate?(candidate: FlightCandidate, now?: number): Promise<VerifiedFlightPrice | null>;
 }
 
-// ~60-70 discovery calls + <=200 verifications per run, all sequential: needs Workers Paid (ADR 0008).
-const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 150, ow: 50 };
+// ~70 discovery calls + <=230 baselines + <=230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0009).
+/** Board size per trip type: 230 fares, round trips dominate and one way stays a small secondary slice. */
+export const TRIP_QUOTAS: Readonly<Record<FlightTripType, number>> = { rt: 225, ow: 5 };
 const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
   jp: 7,
   kr: 3,
@@ -98,7 +99,8 @@ const REGION_WEIGHTS: Readonly<Record<FlightRegion, number>> = {
   hkmo: 3,
   longhaul: 3,
 };
-const MAX_DATES_PER_ROUTE = 5;
+/** A Route (origin airport × destination airport × trip type) carries at most this many dates on the board. */
+export const MAX_DATES_PER_ROUTE = 3;
 /** Below this many Stage 1 candidates for a destination and trip type, there is no Deal Signal. */
 const MIN_SIGNAL_CANDIDATES = 3;
 const DISCOVERY_LIMIT = "100";
@@ -250,7 +252,9 @@ function median(sortedAsc: readonly number[]): number {
 
 /**
  * Picks the board: per trip type, a regional quota filled cheapest-first but round-robin across
- * departure months (so every month is represented), with at most 5 dates per route.
+ * departure months (so every month is represented), with at most `MAX_DATES_PER_ROUTE` dates per
+ * route. Quota a region cannot fill for lack of supply is then filled by the other regions, so the
+ * board still reaches its size.
  */
 function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
   const selected: FlightCandidate[] = [];
@@ -266,22 +270,43 @@ function selectBoard(pool: readonly FlightCandidate[]): FlightCandidate[] {
     }
     const queues = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, q]) => q);
 
-    for (let progressed = true; progressed;) {
-      progressed = false;
-      for (const queue of queues) {
-        for (let c = queue.shift(); c !== undefined; c = queue.shift()) {
-          const region = getDestinationMeta(c.dest)?.region;
+    // Round-robin over months; `open` says whether a candidate's region may still take a fare.
+    const fill = (open: (region: FlightRegion) => boolean, onPick: (r: FlightRegion) => void) => {
+      for (let progressed = true; progressed;) {
+        progressed = false;
+        for (const queue of queues) {
+          const at = queue.findIndex((c) => {
+            const region = getDestinationMeta(c.dest)?.region;
+            return (
+              region !== undefined &&
+              open(region) &&
+              (perRoute.get(`${c.origin}-${c.dest}`) ?? 0) < MAX_DATES_PER_ROUTE
+            );
+          });
+          const c = at < 0 ? undefined : queue.splice(at, 1)[0];
+          const region = c && getDestinationMeta(c.dest)?.region;
+          if (c === undefined || region === undefined) continue;
+          onPick(region);
           const route = `${c.origin}-${c.dest}`;
-          if (region === undefined || left[region] <= 0) continue;
-          if ((perRoute.get(route) ?? 0) >= MAX_DATES_PER_ROUTE) continue;
-          left[region] -= 1;
           perRoute.set(route, (perRoute.get(route) ?? 0) + 1);
           selected.push(c);
           progressed = true;
-          break;
         }
       }
-    }
+    };
+    fill(
+      (region) => left[region] > 0,
+      (region) => {
+        left[region] -= 1;
+      },
+    );
+    let spare = FLIGHT_REGIONS.reduce((sum, r) => sum + left[r], 0);
+    fill(
+      () => spare > 0,
+      () => {
+        spare -= 1;
+      },
+    );
   }
   return selected;
 }

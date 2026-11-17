@@ -1,4 +1,8 @@
-import { getDefaultDailyFlights, type DailyFlightsResponse } from "@split/shared";
+import {
+  getDefaultDailyFlights,
+  type DailyFlightItem,
+  type DailyFlightsResponse,
+} from "@split/shared";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
@@ -10,7 +14,12 @@ import {
   refreshDailyFlights,
   type FlightSource,
 } from "../src/flights/daily.js";
-import { collectVerifiedDailyFlights, formatDailyFlightsSyncSql } from "../src/flights/pipeline.js";
+import {
+  collectVerifiedDailyFlights,
+  formatDailyFlightsSyncSql,
+  MAX_DATES_PER_ROUTE,
+  TRIP_QUOTAS,
+} from "../src/flights/pipeline.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
 import type { RateSource } from "../src/rates/rate-source.js";
 import { clock, fakeVerifier } from "./auth-harness.js";
@@ -319,55 +328,76 @@ describe("public flight routes and daily pipeline", () => {
     }
   });
 
-  it("fills separate 150 round-trip and 50 one-way quotas across every month with at most 5 dates per route", async () => {
+  describe("board size and Route cap", () => {
     const cronNow = Date.parse("2026-11-16T00:00:00Z");
-    const dests = [
-      "NRT",
-      "HND",
-      "KIX",
-      "OKA",
-      "FUK",
-      "CTS",
-      "NGO",
-      "ICN",
-      "PUS",
-      "BKK",
-      "DAD",
-    ].concat(["SIN", "SGN", "KUL", "HKG", "MFM", "LHR", "CDG", "FRA", "LAX", "YVR", "SYD"]);
-    // December is the cheapest month by far: a pure cheapest-first pick would ignore later months.
-    const fake = fakeTravelpayouts((_origin, _oneWay, month) =>
-      dests.flatMap((dest, i) =>
-        [3, 10, 17, 24].map((day) => ({
-          dest,
-          day,
-          price: (month === "2026-12" ? 3000 : 6000 + Number(month.slice(5)) * 100) + i * 50 + day,
-        })),
-      ),
-    );
-
-    const db = createDb(env.DB);
     const tpEnv = { ...env, TRAVELPAYOUTS_TOKEN: "tp-secret-token" };
-    await refreshDailyFlights(db, productionFlightSource(tpEnv, fake.fetchFn), cronNow);
+    // 28 airports, every region with more route supply than its share of the quota.
+    const dests = [
+      ...["NRT", "HND", "KIX", "OKA", "FUK", "CTS", "NGO"],
+      ...["ICN", "GMP", "PUS", "CJU", "TAE"],
+      ...["BKK", "DMK", "DAD", "SIN", "SGN", "KUL"],
+      ...["HKG", "MFM", "PVG", "SHA", "PEK"],
+      ...["LHR", "CDG", "FRA", "LAX", "YVR", "SYD"],
+    ];
 
-    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
-    const { items } = await res.json<DailyFlightsResponse>();
-
-    expect(items.filter((i) => i.tripType === "rt")).toHaveLength(150);
-    expect(items.filter((i) => i.tripType === "ow")).toHaveLength(50);
-    expect(fake.stats().verifyCount).toBe(200);
-
-    const perRoute = new Map<string, number>();
-    for (const i of items) {
-      const key = `${i.origin}-${i.dest}-${i.tripType}`;
-      perRoute.set(key, (perRoute.get(key) ?? 0) + 1);
-    }
-    expect(Math.max(...perRoute.values())).toBeLessThanOrEqual(5);
-
-    for (const tripType of ["rt", "ow"] as const) {
-      const outMonths = new Set(
-        items.filter((i) => i.tripType === tripType).map((i) => i.outDate.slice(0, 7)),
+    function bigSupply(destList: readonly string[]) {
+      // December is the cheapest month by far: a pure cheapest-first pick would ignore later months.
+      return fakeTravelpayouts((_origin, _oneWay, month) =>
+        destList.flatMap((dest, i) =>
+          [3, 10, 17, 24].map((day) => ({
+            dest,
+            day,
+            price:
+              (month === "2026-12" ? 3000 : 6000 + Number(month.slice(5)) * 100) + i * 50 + day,
+          })),
+        ),
       );
-      expect([...outMonths].sort()).toEqual([
+    }
+
+    async function boardFor(fake: ReturnType<typeof bigSupply>) {
+      await refreshDailyFlights(
+        createDb(env.DB),
+        productionFlightSource(tpEnv, fake.fetchFn),
+        cronNow,
+      );
+      const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+      return (await res.json<DailyFlightsResponse>()).items;
+    }
+
+    function datesPerRoute(items: readonly DailyFlightItem[]) {
+      const perRoute = new Map<string, number>();
+      for (const i of items) {
+        const key = `${i.origin}-${i.dest}-${i.tripType}`;
+        perRoute.set(key, (perRoute.get(key) ?? 0) + 1);
+      }
+      return perRoute;
+    }
+
+    it("fills 225 round-trip and 5 one-way fares across every month with at most 3 dates per route", async () => {
+      expect(TRIP_QUOTAS).toEqual({ rt: 225, ow: 5 });
+      expect(MAX_DATES_PER_ROUTE).toBe(3);
+
+      const fake = bigSupply(dests);
+      const items = await boardFor(fake);
+
+      expect(items).toHaveLength(230);
+      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(225);
+      expect(items.filter((i) => i.tripType === "ow")).toHaveLength(5);
+      expect(fake.stats().verifyCount).toBe(230);
+
+      // Hong Kong and Seoul no longer flood the board: at most 3 dates per route per origin
+      const perRoute = datesPerRoute(items);
+      expect(Math.max(...perRoute.values())).toBe(MAX_DATES_PER_ROUTE);
+      for (const dest of ["HKG", "ICN"]) {
+        expect(
+          items.filter((i) => i.dest === dest && i.tripType === "rt").length,
+        ).toBeLessThanOrEqual(5 * MAX_DATES_PER_ROUTE);
+      }
+
+      const rtMonths = new Set(
+        items.filter((i) => i.tripType === "rt").map((i) => i.outDate.slice(0, 7)),
+      );
+      expect([...rtMonths].sort()).toEqual([
         "2026-12",
         "2027-01",
         "2027-02",
@@ -375,7 +405,31 @@ describe("public flight routes and daily pipeline", () => {
         "2027-04",
         "2027-05",
       ]);
-    }
+      // Five one-way fares fall in five different months
+      expect(
+        new Set(items.filter((i) => i.tripType === "ow").map((i) => i.outDate.slice(0, 7))).size,
+      ).toBe(5);
+    });
+
+    it("never exceeds a trip type's quota or a route's 3 dates when supply is thin", async () => {
+      // 4 airports x 5 origins x 3 dates = 60 rt fares at most, far below the 225 quota
+      const items = await boardFor(bigSupply(["NRT", "ICN", "BKK", "HKG"]));
+
+      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(60);
+      expect(items.filter((i) => i.tripType === "ow")).toHaveLength(5);
+      expect(Math.max(...datesPerRoute(items).values())).toBe(MAX_DATES_PER_ROUTE);
+    });
+
+    it("lets regions with plenty of supply take quota another region cannot fill", async () => {
+      // Korea and Hong Kong/Macau/China have only 2 airports each: below their share of 225
+      const thinKrHk = dests.filter(
+        (d) => !["GMP", "PUS", "CJU", "TAE", "SHA", "PVG", "PEK"].includes(d),
+      );
+      const items = await boardFor(bigSupply(thinKrHk));
+
+      expect(items.filter((i) => i.tripType === "rt")).toHaveLength(225);
+      expect(Math.max(...datesPerRoute(items).values())).toBe(MAX_DATES_PER_ROUTE);
+    });
   });
 
   it("scores Deal Signal against the median of the day's candidates per destination and trip type", async () => {
@@ -1044,7 +1098,7 @@ describe("public flight routes and daily pipeline", () => {
     expect(items.map((x) => `${x.origin}-${x.dest}`)).toEqual(["TSA-HND"]);
   });
 
-  it("parses Travelpayouts one-way fares with duration_back: 0 and keeps total upstream fetches near 260 (discovery + verification)", async () => {
+  it("parses Travelpayouts one-way fares with duration_back: 0 and keeps total upstream fetches within the budget (discovery + baselines + verification)", async () => {
     const cronNow = Date.parse("2026-11-16T03:00:00Z");
     const destinations = [
       "NRT",
@@ -1131,10 +1185,10 @@ describe("public flight routes and daily pipeline", () => {
     const items = await refreshDailyFlights(db, productionFlightSource(tpEnv, fakeFetch), cronNow);
 
     expect(items.some((item) => item.tripType === "ow")).toBe(true);
-    // 70 discovery calls + <= 200 deduplicated month-matrix calls + <= 200 verify calls
-    expect(fetchCount).toBeLessThanOrEqual(470);
+    // 70 discovery calls + <= 230 deduplicated month-matrix calls + <= 230 verify calls
+    expect(fetchCount).toBeLessThanOrEqual(530);
     expect(items.length).toBeGreaterThanOrEqual(15);
-    expect(items.length).toBeLessThanOrEqual(200);
+    expect(items.length).toBeLessThanOrEqual(230);
   });
 
   it("skips discovery items whose found_at is already stale so fresher candidates keep Stage 2 quota", async () => {
