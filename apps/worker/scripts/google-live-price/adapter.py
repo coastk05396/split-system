@@ -154,6 +154,8 @@ def read_page(
         flights = parse_tolerant(html)
     except FlightsNotFound:
         return "no_result", [], None
+    except (ValueError, IndexError, TypeError) as e:
+        raise ParseError("could not parse results payload") from e
     if not flights:
         return "no_result", [], None
     return None, flights[:MAX_ITINERARIES], None

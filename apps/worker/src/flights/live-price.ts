@@ -157,7 +157,8 @@ export function googleLiveFlightSource(
           // A failure counts toward the streak once its retry (if one was allowed) also failed.
           const transient = r.errorReason === "no_payload" || r.errorReason === "server_error";
           if (transient && (r.retried || !allowRetry)) noPayloadStreak += 1;
-          else if (r.reason === null || r.reason === "no_result") noPayloadStreak = 0;
+          else if (r.reason === null || r.reason === "no_result" || r.errorReason === "parse")
+            noPayloadStreak = 0;
         }
         // An explicit block also leaves its own batch unresolved; a payload-less streak only the rest.
         let firstUnresolved = i;

@@ -302,15 +302,16 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
   });
 
   describe("retried payload-less pages", () => {
-    const outcome = (kind: "np" | "ok" | "np-retried" | "ok-retried") => {
+    const outcome = (kind: "np" | "ok" | "parse" | "np-retried" | "ok-retried") => {
       const retried = kind.endsWith("retried");
       return {
-        reason: kind.startsWith("np") ? ("error" as const) : null,
+        reason: kind.startsWith("np") || kind === "parse" ? ("error" as const) : null,
         ...(kind.startsWith("np") ? { errorReason: "no_payload" } : {}),
+        ...(kind === "parse" ? { errorReason: "parse" } : {}),
         ...(retried ? { retried: true as const } : {}),
       };
     };
-    const run = async (kinds: ("np" | "ok" | "np-retried" | "ok-retried")[]) => {
+    const run = async (kinds: ("np" | "ok" | "parse" | "np-retried" | "ok-retried")[]) => {
       vi.useFakeTimers();
       try {
         const queried: string[] = [];
@@ -352,6 +353,11 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         "np-retried",
         "np-retried",
       ]);
+      expect(queried).toHaveLength(6);
+    });
+
+    it("a parse failure with results data resets the transient failure streak", async () => {
+      const { queried } = await run(["np-retried", "parse", "np-retried", "np-retried"]);
       expect(queried).toHaveLength(6);
     });
 

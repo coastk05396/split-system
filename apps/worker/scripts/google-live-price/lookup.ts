@@ -12,6 +12,7 @@ const resultsSchema = z.array(
     reason: z.enum(["no_result", "error", "blocked"]).nullable(),
     blockedReason: z.string().optional(),
     errorReason: z.string().optional(),
+    retried: z.boolean().optional(),
     itineraries: z.array(
       z.object({
         priceTwd: z.number(),

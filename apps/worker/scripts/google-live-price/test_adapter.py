@@ -168,6 +168,11 @@ def cand(i, allow_retry=True):
 
 
 class MainLoop(unittest.TestCase):
+    def test_malformed_results_payload_is_a_parse_error(self):
+        malformed = '<script class="ds:1">AF_initDataCallback({data:[invalid], sideChannel:{}});</script>'
+        results, _, _ = run_main([cand(1)], [(200, malformed)])
+        self.assertEqual((results[0]["reason"], results[0]["errorReason"]), ("error", "parse"))
+
     def test_queries_sequentially_with_a_3_second_pause_between_queries(self):
         results, sleeps, fetched = run_main([cand(1), cand(2), cand(3)], [(200, page([entry(1000)]))] * 3)
         self.assertEqual([r["id"] for r in results], ["c1", "c2", "c3"])

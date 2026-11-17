@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p scripts/tsconfig.json",
     "build:types": "tsc -p tsconfig.types.json",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run && node --experimental-strip-types --test scripts/google-live-price/lookup.check.ts",
     "dev": "node -e \"require('node:fs').mkdirSync('../web/dist',{recursive:true})\" && wrangler d1 migrations apply DB --local && wrangler dev",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
