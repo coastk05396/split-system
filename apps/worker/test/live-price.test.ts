@@ -605,11 +605,32 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         ["a", "b", "c", "d", "e"],
       );
       expect(seen.map((x) => x.id)).toEqual(["a", "b", "c", "d", "e", "a"]);
-      expect(collected.live?.queries).toMatchObject({
+      expect(collected.live?.queries).toEqual({
+        ok: 2,
+        no_result: 0,
+        error: 2, // a's error is replaced by its blocked sweep outcome; c and e stay
+        errorReasons: { no_payload: 2 },
+        blocked: 1,
+        blockedReasons: { consent: 1 },
+        retried: 3,
         swept: 1,
         sweptRecovered: 0,
-        blockedReasons: { consent: 1 },
       });
+    });
+
+    it("decrements errorReasons per key and drops a key at zero when both kinds recover", async () => {
+      const { collected } = await sweepRun({ a: ["5xx", "ok"], b: ["np", "ok"], c: ["np"] }, [
+        "a",
+        "b",
+        "d",
+        "c",
+      ]);
+      expect((collected.live?.queries as { errorReasons: object }).errorReasons).toEqual({
+        no_payload: 1,
+      });
+      expect(collected.live?.queries).toMatchObject({ swept: 3, sweptRecovered: 2, error: 1 });
+      const all = await sweepRun({ a: ["5xx", "ok"], b: ["np", "ok"] }, ["a", "b", "c"]);
+      expect((all.collected.live?.queries as { errorReasons: object }).errorReasons).toEqual({});
     });
 
     it("sweeps at most SWEEP_MAX fares and keeps total requests within cap + retries + sweep", async () => {

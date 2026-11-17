@@ -148,22 +148,29 @@ export function googleLiveFlightSource(
         console.warn(JSON.stringify({ event: "live_price_sweep_failed", error: String(error) }));
       }
       queries.swept += 1;
-      if (result?.reason === "blocked") {
+      const blockedNow = result?.reason === "blocked";
+      const recovered = result?.reason === null || result?.reason === "no_result";
+      if (!result || !(blockedNow || recovered)) continue;
+      // The sweep outcome replaces this fare's earlier error tally, so tallies still sum to the fares.
+      const before = live.get(c.id)?.errorReason ?? "unknown";
+      queries.error -= 1;
+      queries.errorReasons = Object.fromEntries(
+        Object.entries({
+          ...queries.errorReasons,
+          [before]: (queries.errorReasons[before] ?? 1) - 1,
+        }).filter(([, count]) => count > 0),
+      );
+      if (blockedNow) {
         const why = result.blockedReason ?? "unknown";
+        queries.blocked += 1;
         queries.blockedReasons[why] = (queries.blockedReasons[why] ?? 0) + 1;
+        blockedIds.add(c.id); // keeps its cached price
         console.warn(JSON.stringify({ event: "live_price_blocked", reason: why, phase: "sweep" }));
         return;
       }
-      if (result && (result.reason === null || result.reason === "no_result")) {
-        const before = live.get(c.id)?.errorReason ?? "unknown";
-        queries.error -= 1;
-        const { [before]: _gone, ...rest } = queries.errorReasons;
-        const left = (queries.errorReasons[before] ?? 1) - 1;
-        queries.errorReasons = left > 0 ? { ...rest, [before]: left } : rest;
-        queries[result.reason ?? "ok"] += 1;
-        queries.sweptRecovered += 1;
-        live.set(c.id, result);
-      }
+      queries[result.reason === null ? "ok" : "no_result"] += 1;
+      queries.sweptRecovered += 1;
+      live.set(c.id, result);
     }
   }
 
