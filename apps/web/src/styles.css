@@ -21,7 +21,9 @@
   --color-fl-ink: #0f172a;
   --color-fl-green: #047857;
   --color-fl-tint: #ecfdf5;
-  --color-fl-muted: #475569;
+  /* Warm neutral greys: fl-sub for info lines (airline, date, stops), fl-muted for hints. */
+  --color-fl-sub: #44403c;
+  --color-fl-muted: #6f6963;
   --color-fl-hair: #dfe9e4;
   --color-fl-hair-soft: #e6efea;
   --color-fl-track: #e4efe9;

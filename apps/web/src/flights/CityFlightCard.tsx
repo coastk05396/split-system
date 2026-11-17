@@ -106,7 +106,7 @@ export function Price({
 
 function Dot() {
   return (
-    <span aria-hidden="true" className="text-[#94a3b8]">
+    <span aria-hidden="true" className="text-[#a8a29e]">
       {" · "}
     </span>
   );
@@ -171,7 +171,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
               <RouteChip item={cheapest} />
             </span>
             {open ? (
-              <span className="min-w-0 text-[13px] leading-[18px] text-[#56655f]">
+              <span className="min-w-0 text-[13px] leading-[18px] text-fl-sub">
                 {airlineLabel(cheapest, lang)}
                 <Dot />
                 <span className="whitespace-nowrap">{stopsText(cheapest)}</span>
@@ -179,11 +179,11 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                 <span className="whitespace-nowrap">{fareCountText(fares.length)}</span>
               </span>
             ) : (
-              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-[18px] text-[#334155]">
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-[18px] text-fl-sub">
                 <span className="max-w-full min-w-0 truncate font-medium">
                   {airlineLabel(cheapest, lang)}
                 </span>
-                <span className="shrink-0 rounded-full bg-[#eef2f0] px-2 py-px text-[11px] font-semibold text-fl-muted">
+                <span className="shrink-0 rounded-full bg-[#f1eeea] px-2 py-px text-[11px] font-semibold text-fl-sub">
                   {fareCountText(fares.length)}
                 </span>
               </span>
@@ -228,7 +228,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                         {formatFareDates(fare.outDate, fare.inDate)}
                       </span>
                     </span>
-                    <span className="fare-row-detail flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-[18px] text-fl-muted">
+                    <span className="fare-row-detail flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-[18px] text-fl-sub">
                       {rowDetail(fare, lang).map((part, i) => (
                         <Fragment key={i}>
                           {i > 0 && <Dot />}
