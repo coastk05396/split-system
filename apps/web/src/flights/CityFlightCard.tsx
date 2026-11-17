@@ -179,9 +179,10 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                 <span className="whitespace-nowrap">{fareCountText(fares.length)}</span>
               </span>
             ) : (
-              <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] whitespace-nowrap text-[#334155]">
-                <span className="min-w-0 truncate font-medium">{airlineLabel(cheapest, lang)}</span>
-                <Dot />
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-[18px] text-[#334155]">
+                <span className="max-w-full min-w-0 truncate font-medium">
+                  {airlineLabel(cheapest, lang)}
+                </span>
                 <span className="shrink-0 rounded-full bg-[#eef2f0] px-2 py-px text-[11px] font-semibold text-fl-muted">
                   {fareCountText(fares.length)}
                 </span>

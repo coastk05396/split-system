@@ -24,9 +24,9 @@ import {
 } from "./flights.js";
 
 describe("flights domain helpers", () => {
-  it("names Philippines AirAsia (Z2) in both languages", () => {
+  it("names Philippines AirAsia (Z2) in both languages, with a short English label that fits the card", () => {
     expect(getAirlineName("Z2", "zh-TW")).toBe("菲律賓亞洲航空");
-    expect(getAirlineName("Z2", "en")).toBe("Philippines AirAsia");
+    expect(getAirlineName("Z2", "en")).toBe("AirAsia PH");
   });
 
   it("detects red-eye flight times between 00:00 and 05:59", () => {

@@ -1256,7 +1256,7 @@ export const AIRLINE_NAMES: Readonly<Record<string, { zhTW: string; en: string }
   VZ: { zhTW: "泰越捷航空", en: "Thai Vietjet" },
   AK: { zhTW: "亞洲航空", en: "AirAsia" },
   D7: { zhTW: "全亞洲航空", en: "AirAsia X" },
-  Z2: { zhTW: "菲律賓亞洲航空", en: "Philippines AirAsia" },
+  Z2: { zhTW: "菲律賓亞洲航空", en: "AirAsia PH" },
   "5J": { zhTW: "宿霧太平洋航空", en: "Cebu Pacific" },
   ZE: { zhTW: "易斯達航空", en: "Eastar Jet" },
   "7C": { zhTW: "濟州航空", en: "Jeju Air" },
