@@ -19,7 +19,8 @@ from fast_flights.parser import parse_js
 from primp import Client
 from selectolax.lexbor import LexborHTMLParser
 
-MAX_ITINERARIES = 15
+# All priced itineraries are sorted cheapest first before this cap, so it never cuts off the best fare.
+MAX_ITINERARIES = 40
 # Pause between queries; the TS caller also spaces its calls, this keeps a multi-candidate stdin polite.
 QUERY_GAP_SECONDS = 3.0
 # Explicit block signals only. Anything else that goes wrong is an "error", never "blocked".
@@ -69,6 +70,14 @@ def has_price(entry: Any) -> bool:
         return False
 
 
+def group(payload: Any, index: int) -> list[Any]:
+    """Itineraries of one result group, or [] when the group is missing or empty."""
+    try:
+        return payload[index][0] or []
+    except (IndexError, TypeError, KeyError):
+        return []
+
+
 def parse_tolerant(html: str) -> tuple[list[Any], dict[str, str]]:
     """Like fast_flights.parser.parse, but one malformed itinerary (e.g. no price) is skipped
     instead of crashing the page (fast-flights 3.1.0 raises IndexError on `k[1][0][1]`)."""
@@ -80,28 +89,33 @@ def parse_tolerant(html: str) -> tuple[list[Any], dict[str, str]]:
     if data.endswith("errorHasStatus: true"):
         raise FlightsNotFound("no flights found; received error")
     payload = json.loads(data)
-    entries = payload[3][0]
-    if entries is None:
-        return [], {}
+    # Google splits results in "best flights" (payload[2][0]: where the low-cost carriers sit) and
+    # "other flights" (payload[3][0]); fast-flights only reads the latter. Either may be missing.
+    entries = group(payload, 2) + group(payload, 3)
     found: list[Any] = []
     codes: dict[str, str] = {}
+    seen: set[tuple[Any, ...]] = set()
     priced = 0
     for entry in entries:
         if not has_price(entry):
             continue
         priced += 1
         single = list(payload)
-        single[3] = list(payload[3])
-        single[3][0] = [entry]
+        single[3] = [[entry]]
         try:
             one = parse_js("data:" + json.dumps(single) + ",")
-            found.extend(one)
-            # Google lists airline names; the board stores IATA codes, so map through the page metadata.
-            codes.update({a.name: a.code for a in one.metadata.airlines})
         except (IndexError, TypeError, KeyError, ValueError):
             continue
+        # Google lists airline names; the board stores IATA codes, so map through the page metadata.
+        codes.update({a.name: a.code for a in one.metadata.airlines})
+        for f in one:
+            key = (f.price, tuple(f.airlines), f.flights[0].departure.time, f.flights[-1].arrival.time, len(f.flights))
+            if key not in seen:
+                seen.add(key)
+                found.append(f)
     if priced and not found:
         raise ValueError("no itinerary could be parsed")
+    found.sort(key=lambda f: f.price)
     return found, codes
 
 

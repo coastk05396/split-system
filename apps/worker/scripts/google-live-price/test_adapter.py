@@ -10,25 +10,27 @@ import adapter
 from adapter import exception_block_reason, read_page
 
 
-def single_flight():
+def single_flight(dep=(9, 30)):
     f = [None] * 22
     f[3], f[4], f[5], f[6] = "TPE", "Taoyuan", "Hong Kong", "HKG"
-    f[8], f[10], f[11], f[17] = [9, 30], [11, 40], 130, "A320"
+    f[8], f[10], f[11], f[17] = list(dep), [11, 40], 130, "A320"
     f[20], f[21] = [2026, 12, 12], [2026, 12, 12]
     return f
 
 
-def entry(price):
+def entry(price, airline="Hong Kong Express", dep=(9, 30)):
     flight = [None] * 23
-    flight[0], flight[1], flight[2] = "one-way", ["Hong Kong Express"], [single_flight()]
+    flight[0], flight[1], flight[2] = "one-way", [airline], [single_flight(dep)]
     flight[22] = [None] * 7 + [100, 120]
     return [flight, [[None, price]] if price is not None else []]
 
 
-def page(entries):
+def page(other, best=None, payload3="group"):
+    """`best` is payload[2][0] (best flights), `other` is payload[3][0] (other flights)."""
     payload = [None] * 8
-    payload[3] = [entries]
-    payload[7] = [None, [[], [["UO", "Hong Kong Express"]]]]
+    payload[2] = [best] if best is not None else None
+    payload[3] = [other] if payload3 == "group" else payload3
+    payload[7] = [None, [[], [["UO", "Hong Kong Express"], ["PR", "Philippines AirAsia"]]]]
     return (
         '<html><script class="ds:1">AF_initDataCallback({key: \'ds:1\', hash: \'2\', data:'
         + json.dumps(payload)
@@ -37,6 +39,36 @@ def page(entries):
 
 
 EMPTY = page(None)
+
+
+class BothGroups(unittest.TestCase):
+    def test_low_cost_carrier_only_in_best_flights_is_found(self):
+        reason, items, _ = read_page(page([entry(8066)], best=[entry(4670, "Philippines AirAsia")]))
+        self.assertIsNone(reason)
+        self.assertEqual([(i["priceTwd"], i["airlines"]) for i in items], [(4670, ["PR"]), (8066, ["UO"])])
+
+    def test_best_flights_alone_with_other_group_empty(self):
+        reason, items, _ = read_page(page(None, best=[entry(4670, "Philippines AirAsia")]))
+        self.assertEqual((reason, [i["priceTwd"] for i in items]), (None, [4670]))
+
+    def test_cheapest_survives_the_cap_even_when_it_comes_last(self):
+        many = [entry(6000 + n, dep=(8, n % 60)) for n in range(60)]
+        _, items, _ = read_page(page(many, best=[entry(4670, "Philippines AirAsia")]))
+        self.assertEqual(items[0]["priceTwd"], 4670)
+        self.assertEqual(len(items), 40)
+
+    def test_same_itinerary_in_both_groups_is_listed_once(self):
+        _, items, _ = read_page(page([entry(5000)], best=[entry(5000)]))
+        self.assertEqual(len(items), 1)
+
+    def test_price_less_entries_in_either_group_are_skipped(self):
+        _, items, _ = read_page(page([entry(None), entry(7000)], best=[entry(None), entry(4670, "Philippines AirAsia")]))
+        self.assertEqual([i["priceTwd"] for i in items], [4670, 7000])
+
+    def test_missing_or_empty_groups_are_no_result_not_an_error(self):
+        for payload3 in (None, [None], [], "group"):
+            self.assertEqual(read_page(page([] if payload3 == "group" else None, payload3=payload3)), ("no_result", [], None), payload3)
+        self.assertEqual(read_page(page(None, best=[])), ("no_result", [], None))
 
 
 class ReadPage(unittest.TestCase):
