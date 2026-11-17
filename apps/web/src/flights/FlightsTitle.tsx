@@ -46,7 +46,7 @@ export function FlightsTitle({
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
-        <Heading className={`font-black text-fl-ink ${wrap} ${text}`}>
+        <Heading className={`font-extrabold text-fl-ink ${wrap} ${text}`}>
           {at < 0 ? (
             title
           ) : (

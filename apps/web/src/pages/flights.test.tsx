@@ -1,4 +1,4 @@
-import type { DailyFlightItem } from "@split/shared";
+import type { DailyFlightItem, FlightRegion } from "@split/shared";
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -28,7 +28,7 @@ function fare(
   };
 }
 
-/** Round trips: Tokyo has 4 fares over two airports (cheapest is a red-eye 45% deal at NRT), KIX 1, ICN 1; one-ways: ICN, BKK. */
+/** Round trips: Tokyo has 4 fares over two airports (cheapest is a 45% deal at NRT), KIX 1, ICN 1; one-ways: ICN, BKK. */
 const SAMPLE_FLIGHTS: DailyFlightItem[] = [
   fare("nrt-b", {
     dest: "NRT",
@@ -147,7 +147,7 @@ describe("daily flights page", () => {
     setup();
     await screen.findAllByRole("heading", { level: 2 });
     const heading = screen.getByRole("heading", { level: 1, name: "今天想飛去哪？" });
-    expect(heading).toHaveClass("font-black", "whitespace-nowrap");
+    expect(heading).toHaveClass("font-extrabold", "whitespace-nowrap");
     const mark = within(heading).getByText("去哪");
     expect(mark.className).toContain("linear-gradient(transparent_60%,#d3ebdf_60%)");
     const row = heading.parentElement as HTMLElement;
@@ -167,13 +167,11 @@ describe("daily flights page", () => {
     // Default 來回 tab: 3 cities (NRT, KIX, ICN) from 6 round-trip fares; 最划算 order
     expect(cityOrder()).toEqual(["東京", "大阪", "首爾"]);
     const nrt = cityHeadings()[0] as HTMLElement;
-    // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, 5,680, 省 45%, red-eye)
+    // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, 5,680, 省 45%)
     expect(nrt).toHaveTextContent("TPE ⇄ NRT");
     expect(nrt).toHaveTextContent("樂桃航空");
     expect(nrt).toHaveTextContent("5,680");
     expect(nrt).toHaveTextContent("省 45%");
-    const redEye = within(nrt).getByText("紅眼");
-    expect(redEye.className).toContain("bg-[#334155]");
     // 4 fares pill; no directness while collapsed, no dates
     const pill = within(nrt).getByText("4 筆");
     expect(pill.className).toMatch(/bg-\[#eef2f0\].*text-fl-muted/);
@@ -202,15 +200,13 @@ describe("daily flights page", () => {
     ]);
     expect(rows[0]).toHaveTextContent("12/10–12/14");
     expect(rows[0]).toHaveTextContent("桃園出發 · 樂桃航空 · 直飛");
-    expect(rows[0]).toHaveTextContent("紅眼");
     expect(rows[0]).toHaveTextContent("NT$5,680");
     expect(rows[1]).toHaveTextContent("03/05–03/09");
     expect(rows[1]).toHaveTextContent("松山出發 · 中華航空 · 直飛");
     expect(rows[2]).toHaveTextContent("高雄出發 · 台灣虎航 · 轉 1");
     expect(rows[3]).toHaveTextContent("01/12–01/16");
     expect(rows[3]).toHaveTextContent("桃園出發");
-    // Only the red-eye fare carries the red-eye pill; the route chip stays on the card header
-    expect(rows.map((r) => /紅眼/.test(r.textContent))).toEqual([true, false, false, false]);
+    // The route chip stays on the card header, never on rows
     expect(rows.every((r) => !/⇄|→/.test(r.textContent))).toBe(true);
     // First row is mint, others white, separated by dashed hairlines
     expect(rows[0]?.closest("li")).toHaveClass("bg-fl-tint", "border-dashed");
@@ -343,7 +339,7 @@ describe("daily flights page", () => {
     expect(within(dialog2).getByRole("button", { name: "查看 6 筆機票" })).toBeVisible();
   });
 
-  it("offers budget caps of $5,000 and $10,000, month-only labels, and the 排除紅眼班機 checkbox", async () => {
+  it("offers budget caps of $5,000 and $10,000, month-only labels, and no red-eye row", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });
@@ -370,15 +366,9 @@ describe("daily flights page", () => {
         .map((b) => b.textContent.replace(/\d+$/, "")),
     ).toEqual(["全部", "12月", "1月", "2月", "3月"]);
 
-    // Red-eye is a checkbox row; checking it drops the red-eye 45% fare (6 -> 5)
-    const redEye = within(dialog).getByRole("checkbox", { name: "排除紅眼班機" });
-    expect(redEye).not.toBeChecked();
-    await user.click(redEye);
-    expect(redEye).toBeChecked();
-    expect(within(dialog).getByRole("button", { name: "查看 5 筆機票" })).toBeVisible();
-    await user.click(within(dialog).getByRole("button", { name: "重設" }));
-    expect(redEye).not.toBeChecked();
-    expect(within(dialog).getByRole("button", { name: "查看 6 筆機票" })).toBeVisible();
+    // Red-eye was removed from the product: no row or checkbox for it
+    expect(within(dialog).queryByRole("checkbox")).toBeNull();
+    expect(dialog).not.toHaveTextContent(/紅眼/);
   });
 
   it("switches between 來回 and 單程, groups one-way fares per city, and keeps every region tab visible without scrolling", async () => {
@@ -581,19 +571,23 @@ describe("daily flights page", () => {
     expect(screen.getByRole("button", { name: "看全部 7 筆" })).toBeVisible();
   });
 
-  it.each([
-    ["NRT", "jp", "bg-[#fce7f3]", "text-[#9d174d]"],
-    ["ICN", "kr", "bg-[#e0f2fe]", "text-[#075985]"],
-    ["BKK", "sea", "bg-[#ffedd5]", "text-[#9a3412]"],
-    ["HKG", "hkmo", "bg-[#f3e8ff]", "text-[#6b21a8]"],
-    ["LHR", "longhaul", "bg-[#dff3e9]", "text-[#065f46]"],
-  ] as const)("colours the %s route chip by its %s region", async (dest, region, bg, fg) => {
-    const { api } = setup();
-    setItems(api, [fare("x", { dest, region, priceTwd: 5000 })]);
-    await screen.findAllByRole("heading", { level: 2 });
-    const chip = within(cityHeadings()[0] as HTMLElement).getByText(`TPE ⇄ ${dest}`);
-    expect(chip).toHaveClass(bg, fg, "rounded-full", "font-bold");
-  });
+  const chipCases = [
+    ["NRT", "jp"],
+    ["ICN", "kr"],
+    ["BKK", "sea"],
+    ["HKG", "hkmo"],
+    ["LHR", "longhaul"],
+  ] as const satisfies readonly (readonly [string, FlightRegion])[];
+  it.each(chipCases)(
+    "renders the %s (%s) route chip in the single orange chip style",
+    async (dest, region) => {
+      const { api } = setup();
+      setItems(api, [fare("x", { dest, region, priceTwd: 5000 })]);
+      await screen.findAllByRole("heading", { level: 2 });
+      const chip = within(cityHeadings()[0] as HTMLElement).getByText(`TPE ⇄ ${dest}`);
+      expect(chip).toHaveClass("bg-[#ffedd5]", "text-[#9a3412]", "rounded-full", "font-bold");
+    },
+  );
 
   it("renders English labels, sort chips and redirect links", async () => {
     const user = userEvent.setup();
@@ -618,7 +612,6 @@ describe("daily flights page", () => {
     expect(nrt).not.toHaveTextContent("Narita");
     expect(nrt).toHaveTextContent("Peach");
     expect(nrt).toHaveTextContent("Save 45%");
-    expect(nrt).toHaveTextContent("Red-eye");
     expect(nrt).toHaveTextContent("4 fares");
     expect(nrt).not.toHaveTextContent(/Nonstop/);
     await user.click(within(nrt).getByRole("button"));
@@ -785,7 +778,7 @@ describe("daily flights page", () => {
     expect(resetBtn).toBeVisible();
     expect(scrollableBody).toHaveClass("min-h-0", "flex-1", "overflow-y-auto");
 
-    // Group order: mock groups first, then the kept 目的地 / 航空公司, then 預算 and the red-eye row
+    // Group order: mock groups first, then the kept 目的地 / 航空公司, then 預算
     const groups = [...(scrollableBody as HTMLElement).querySelectorAll('[role="group"]')];
     expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual([
       "出發地",
