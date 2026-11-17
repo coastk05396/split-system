@@ -7,7 +7,7 @@ import {
 } from "@split/shared/flights";
 import { asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { dailyFlights } from "../db/schema.js";
+import { dailyFlights, dailyFlightsRuns } from "../db/schema.js";
 import {
   collectVerifiedDailyFlights,
   logDailyFlightsSummary,
@@ -27,6 +27,8 @@ export {
 };
 
 const D1_INSERT_CHUNK_SIZE = 5;
+/** A run (and its stored fares) stays authoritative for 48 hours (one missed daily 08:00 run); after that the data is unavailable. */
+const RUN_FRESH_MS = 48 * 3_600_000;
 
 function parseAirlinesJson(json: string): string[] {
   try {
@@ -53,16 +55,23 @@ export async function refreshDailyFlights(
   const collected = await collectVerifiedDailyFlights(source, now);
   const { rows, items } = collected;
 
-  if (rows.length > 0) {
-    // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
-    const insertStmts = [];
-    for (let i = 0; i < rows.length; i += D1_INSERT_CHUNK_SIZE) {
-      insertStmts.push(db.insert(dailyFlights).values(rows.slice(i, i + D1_INSERT_CHUNK_SIZE)));
-    }
-    await db.batch([db.delete(dailyFlights), ...insertStmts]);
-  } else {
-    await db.delete(dailyFlights);
+  // One atomic batch: a failed run throws above and leaves the previous board and marker untouched.
+  // The marker says "completed with zero Good Deals" (empty board); no discovery clears it (fallback).
+  const marker = collected.completed
+    ? db
+        .insert(dailyFlightsRuns)
+        .values({ id: 1, digestDate: collected.digestDate, completedAt: now })
+        .onConflictDoUpdate({
+          target: dailyFlightsRuns.id,
+          set: { digestDate: collected.digestDate, completedAt: now },
+        })
+    : db.delete(dailyFlightsRuns);
+  // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
+  const insertStmts = [];
+  for (let i = 0; i < rows.length; i += D1_INSERT_CHUNK_SIZE) {
+    insertStmts.push(db.insert(dailyFlights).values(rows.slice(i, i + D1_INSERT_CHUNK_SIZE)));
   }
+  await db.batch([db.delete(dailyFlights), marker, ...insertStmts]);
 
   logDailyFlightsSummary("daily_flights_refresh_summary", collected);
 
@@ -91,9 +100,25 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .orderBy(desc(dailyFlights.digestDate), desc(dailyFlights.createdAt))
     .limit(1);
 
+  // One freshness rule for stored fares and the run marker (both are written together, so the
+  // manual sync path is covered too): older than RUN_FRESH_MS means unavailable, never carried over.
+  const isFresh = (writtenAt: number): boolean => now - writtenAt <= RUN_FRESH_MS;
+  // A completed run is an empty board, never curated fares, while it is fresh (ADR 0010).
+  const [run] = await db.select().from(dailyFlightsRuns).limit(1);
+  const emptyBoard = (): DailyFlightsResponse | null =>
+    run !== undefined && isFresh(run.completedAt)
+      ? {
+          date: run.digestDate,
+          updatedAt: new Date(run.completedAt).toISOString(),
+          items: [],
+          isFallback: false,
+        }
+      : null;
+
   if (latest === undefined) {
-    return buildFallbackResponse(now);
+    return emptyBoard() ?? buildFallbackResponse(now);
   }
+  if (!isFresh(latest.createdAt)) return buildFallbackResponse(now);
 
   const rows = await db
     .select()
@@ -103,7 +128,7 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
 
   const upcomingRows = withinDepartureWindow(rows, today);
   if (upcomingRows.length === 0) {
-    return buildFallbackResponse(now);
+    return emptyBoard() ?? buildFallbackResponse(now);
   }
 
   const items: DailyFlightItem[] = upcomingRows.map((row) => {

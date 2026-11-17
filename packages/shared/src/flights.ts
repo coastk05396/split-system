@@ -19,6 +19,10 @@ export type LonghaulSubRegion = (typeof LONGHAUL_SUBREGIONS)[number];
 export const FLIGHT_TRIP_TYPES = ["rt", "ow"] as const;
 export type FlightTripType = (typeof FLIGHT_TRIP_TYPES)[number];
 
+/** Baselines compare like with like: direct fares with direct prices, connecting with connecting. */
+export const FLIGHT_STOP_CLASSES = ["direct", "connecting"] as const;
+export type FlightStopClass = (typeof FLIGHT_STOP_CLASSES)[number];
+
 export const DEAL_TAGS = ["steal", "below_market", "normal"] as const;
 export type DealTag = (typeof DEAL_TAGS)[number];
 
@@ -795,6 +799,19 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     baselineTwd: 31000,
   },
   {
+    airport: "LGW",
+    cityCode: "lon",
+    countryCode: "GB",
+    flag: "🇬🇧",
+    zhTW: "倫敦蓋威克",
+    en: "London Gatwick",
+    countryZhTW: "英國",
+    countryEn: "United Kingdom",
+    region: "longhaul",
+    subRegion: "europe",
+    baselineTwd: 30500,
+  },
+  {
     airport: "CDG",
     cityCode: "par",
     countryCode: "FR",
@@ -838,13 +855,26 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     cityCode: "ist",
     countryCode: "TR",
     flag: "🇹🇷",
-    zhTW: "伊斯坦堡",
-    en: "Istanbul",
+    zhTW: "伊斯坦堡新機場",
+    en: "Istanbul Airport",
     countryZhTW: "土耳其",
     countryEn: "Turkey",
     region: "longhaul",
     subRegion: "middle_east_islands",
     baselineTwd: 27000,
+  },
+  {
+    airport: "SAW",
+    cityCode: "ist",
+    countryCode: "TR",
+    flag: "🇹🇷",
+    zhTW: "伊斯坦堡薩比哈",
+    en: "Istanbul Sabiha",
+    countryZhTW: "土耳其",
+    countryEn: "Turkey",
+    region: "longhaul",
+    subRegion: "middle_east_islands",
+    baselineTwd: 26000,
   },
   {
     airport: "DXB",
@@ -910,6 +940,19 @@ export const DESTINATION_CATALOG: readonly DestinationMeta[] = [
     region: "longhaul",
     subRegion: "north_america",
     baselineTwd: 29000,
+  },
+  {
+    airport: "YTZ",
+    cityCode: "yto",
+    countryCode: "CA",
+    flag: "🇨🇦",
+    zhTW: "多倫多城市",
+    en: "Toronto City",
+    countryZhTW: "加拿大",
+    countryEn: "Canada",
+    region: "longhaul",
+    subRegion: "north_america",
+    baselineTwd: 33000,
   },
   {
     airport: "SYD",
@@ -1196,7 +1239,6 @@ const AIRPORT_CITY_MAP = new Map<string, string>([
   ["ITM", "osa"],
   ["PKX", "bjs"],
   ["LCY", "lon"],
-  ["LGW", "lon"],
   ["STN", "lon"],
   ["LTN", "lon"],
   ["ORY", "par"],
@@ -1222,6 +1264,8 @@ const CITY_NAMES: Readonly<Record<string, { zhTW: string; en: string }>> = {
   sha: { zhTW: "上海", en: "Shanghai" },
   bjs: { zhTW: "北京", en: "Beijing" },
   lon: { zhTW: "倫敦", en: "London" },
+  ist: { zhTW: "伊斯坦堡", en: "Istanbul" },
+  yto: { zhTW: "多倫多", en: "Toronto" },
   par: { zhTW: "巴黎", en: "Paris" },
   nyc: { zhTW: "紐約", en: "New York" },
   mil: { zhTW: "米蘭", en: "Milan" },
@@ -1590,6 +1634,7 @@ const AIRPORT_TIMEZONES: Readonly<Record<string, string>> = {
   HNL: "Pacific/Honolulu",
   PHX: "America/Phoenix",
   YUL: "America/Toronto",
+  YTZ: "America/Toronto",
   PER: "Australia/Perth",
 };
 
@@ -1665,7 +1710,13 @@ export function computeDealSignal(
     return { discountPct: 0, tag: "normal" };
   }
   const discountPct = Math.min(99, Math.max(0, Math.round((1 - priceTwd / baselineTwd) * 100)));
-  const tag: DealTag = discountPct >= 30 ? "steal" : discountPct >= 15 ? "below_market" : "normal";
+  // Tiers use the unrounded discount (integer math): 14.99% must not pass the 15% Good Deal gate.
+  const tag: DealTag =
+    priceTwd * 100 <= baselineTwd * 70
+      ? "steal"
+      : priceTwd * 100 <= baselineTwd * 85
+        ? "below_market"
+        : "normal";
   return { discountPct, tag };
 }
 

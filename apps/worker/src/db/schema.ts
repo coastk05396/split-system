@@ -7,6 +7,7 @@ import {
   CURRENCY_CODES,
   DEAL_TAGS,
   FLIGHT_ORIGINS,
+  FLIGHT_STOP_CLASSES,
   FLIGHT_TRIP_TYPES,
   LANGUAGES,
   MEMBER_ROLES,
@@ -240,7 +241,14 @@ export const dailyFlights = sqliteTable(
   (t) => [index("daily_flights_digest_price_idx").on(t.digestDate, t.priceTwd)],
 );
 
-/** Month-matrix median baselines reused for 3 days by the daily flights sync (NULL: fewer than 3 prices). */
+/** Single row (id 1): the last daily run that discovered fares and completed, even with zero Good Deals. */
+export const dailyFlightsRuns = sqliteTable("daily_flights_runs", {
+  id: integer("id").primaryKey(),
+  digestDate: text("digest_date").notNull(),
+  completedAt: integer("completed_at").notNull(),
+});
+
+/** Month-matrix median baselines per stop class, reused for 3 days by the daily flights sync (NULL: fewer than 3 prices). */
 export const flightBaselines = sqliteTable(
   "flight_baselines",
   {
@@ -248,8 +256,9 @@ export const flightBaselines = sqliteTable(
     destination: text("destination").notNull(),
     tripType: text("trip_type", { enum: FLIGHT_TRIP_TYPES }).notNull(),
     month: text("month").notNull(),
+    stopClass: text("stop_class", { enum: FLIGHT_STOP_CLASSES }).notNull(),
     baselineTwd: integer("baseline_twd"),
     fetchedAt: integer("fetched_at").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.origin, t.destination, t.tripType, t.month] })],
+  (t) => [primaryKey({ columns: [t.origin, t.destination, t.tripType, t.month, t.stopClass] })],
 );

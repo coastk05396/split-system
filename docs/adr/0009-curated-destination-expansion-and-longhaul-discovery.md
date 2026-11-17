@@ -26,3 +26,5 @@ status: accepted
 
 - One-way quota is 5 of 230 (round trip 225), not 30 of 230: one-way fares are a secondary slice; the One-way view shows an empty state when a region has none.
 - `MAX_DATES_PER_ROUTE` is fixed at 3 (the ADR allowed 2–3).
+- Refined by ADR 0010: the 230-fare size is a ceiling and selection is deal-first, so decisions 3 and 4 above no longer describe the board.
+- Superseded in part by ADR 0011: decision 5 (five top-level region tabs, sub-region and country filters under Long-haul) no longer applies.

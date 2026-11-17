@@ -58,6 +58,14 @@ describe("flights domain helpers", () => {
     expect(computeDealSignal(11000, 10000)).toEqual({ discountPct: 0, tag: "normal" });
   });
 
+  it("decides the Good Deal gate and the steal tier from the unrounded discount", () => {
+    expect(computeDealSignal(8500, 10000)).toEqual({ discountPct: 15, tag: "below_market" });
+    expect(computeDealSignal(8501, 10000).tag).toBe("normal"); // 14.99% never passes as 15%
+    expect(computeDealSignal(7000, 10000).tag).toBe("steal");
+    expect(computeDealSignal(7001, 10000).tag).toBe("below_market"); // 29.99% is not a steal
+    expect(computeDealSignal(7040, 10000)).toEqual({ discountPct: 30, tag: "below_market" });
+  });
+
   it("matches overlapping 2026 and 2027 Taiwan public holidays", () => {
     expect(matchTaiwanHoliday("2026-09-25", "2026-09-29")?.id).toBe("mid-autumn-2026");
     expect(matchTaiwanHoliday("2026-10-08", "2026-10-12")?.id).toBe("national-day-2026");
@@ -435,6 +443,29 @@ describe("Curated Destination catalog integrity", () => {
         zone,
       ]);
     }
+    // Istanbul Sabiha, London Gatwick and Toronto City (ADR 0010)
+    expect(
+      Object.fromEntries(
+        ["SAW", "LGW", "YTZ"].map((a) => {
+          const m = getDestinationMeta(a);
+          return [a, [m?.countryCode, m?.flag, m?.region, getAirportTimeZone(a)]];
+        }),
+      ),
+    ).toEqual({
+      SAW: ["TR", "🇹🇷", "longhaul", "Europe/Istanbul"],
+      LGW: ["GB", "🇬🇧", "longhaul", "Europe/London"],
+      YTZ: ["CA", "🇨🇦", "longhaul", "America/Toronto"],
+    });
+    expect(getDestinationMeta("SAW")?.zhTW).not.toBe(getDestinationMeta("IST")?.zhTW);
+    // Sabiha and Gatwick share a City Card with Istanbul and London; Toronto has its own city name
+    expect(getDestinationMeta("SAW")?.cityCode).toBe(getDestinationMeta("IST")?.cityCode);
+    expect(getDestinationMeta("LGW")?.cityCode).toBe(getDestinationMeta("LHR")?.cityCode);
+    expect([getCityName("SAW", "en"), getCityName("SAW", "zh-TW")]).toEqual([
+      "Istanbul",
+      "伊斯坦堡",
+    ]);
+    expect(getCityName("LGW", "zh-TW")).toBe("倫敦");
+    expect([getCityName("YTZ", "en"), getCityName("YTZ", "zh-TW")]).toEqual(["Toronto", "多倫多"]);
     // Multi-airport cities render as one City Card name
     expect(getCityName("BGY", "en")).toBe("Milan");
     expect(getCityName("IAD", "zh-TW")).toBe("華盛頓");

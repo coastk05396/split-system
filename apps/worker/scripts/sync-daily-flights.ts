@@ -78,7 +78,10 @@ async function main(): Promise<void> {
   );
   logDailyFlightsSummary("manual_daily_flights_collected", collected);
 
-  const sql = formatDailyFlightsSyncSql(collected.rows);
+  const sql = formatDailyFlightsSyncSql(
+    collected.rows,
+    collected.completed ? { digestDate: collected.digestDate, at: now } : undefined,
+  );
   if (dryRun) {
     console.log(sql);
     return;

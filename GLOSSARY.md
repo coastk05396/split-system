@@ -49,11 +49,19 @@ An airport in the hand-maintained catalog (~80–90 major travel airports across
 _Avoid_: Open airport list, destination whitelist, global airport dump
 
 **Flight Region**:
-One of the five top-level board tabs (`日本`, `韓國`, `東南亞`, `港澳中`, `長程`); finer geographic sub-regions (Europe, North America, Oceania, Middle East & Islands) and individual countries live inside the filter drawer rather than adding more top-level tabs.
-_Avoid_: Continent tab, region pill (when meaning the sub-region filter)
+One of the destination areas in the Daily Flights filter: `日本`, `韓國`, `中港澳`, `東南亞`, `歐洲`, `美加`, `紐澳`, `中東`. Exactly one can be chosen, or none for all; each shows its fare count. There are no top-level tabs, and no separate country or city filter.
+_Avoid_: Continent tab, region pill, sub-region, region tab
+
+**Baseline**:
+The typical price of a Route for one departure month and one stop class (direct or connecting), against which a fare is compared.
+_Avoid_: Market price, normal price, reference price
+
+**Good Deal**:
+A fare at least 15% below its Baseline. Only Good Deals reach the Daily Flights board: a country or city with none that day shows nothing rather than being padded with ordinary fares.
+_Avoid_: Cheap fare (cheap is an absolute price, a Good Deal is relative to the Baseline), Steal (that is a Deal Signal tier)
 
 **Deal Signal**:
-How a verified fare compares to the Travelpayouts monthly route median (`/v2/prices/month-matrix` per origin, destination, trip type, and departure month, when at least 3 prices exist), falling back to the median of that day's Stage 1 candidate fares for the same destination and trip type (no signal when too few candidates exist in both): domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a solid pill from 50%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
+How far a verified fare sits below its Baseline: domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a solid pill from 50%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
 _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price)
 
 **Ghost Fare**:
