@@ -64,7 +64,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
       now,
     );
     expect(collected.items.map((i) => [i.priceTwd, i.discountPct])).toEqual([[5000, 50]]);
-    expect(collected.live).toEqual({ repriced: 1, kept: 0, dropped: 0, blocked: 0 });
+    expect(collected.live).toMatchObject({ repriced: 1, kept: 0, dropped: 0, blocked: 0 });
   });
 
   it("drops a fare whose Live Price falls under 15% below the Baseline", async () => {
@@ -73,7 +73,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
       now,
     );
     expect(collected.items).toEqual([]);
-    expect(collected.live).toEqual({ repriced: 0, kept: 0, dropped: 1, blocked: 0 });
+    expect(collected.live).toMatchObject({ repriced: 0, kept: 0, dropped: 1, blocked: 0 });
   });
 
   it("reprices a much higher Live Price that stays a Good Deal instead of calling it a Ghost Fare", async () => {
@@ -93,7 +93,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
   ])("keeps the cached price on %s", async (_name, lookup) => {
     const collected = await collectVerifiedDailyFlights(sourceOf([candidate("a")], lookup), now);
     expect(collected.items.map((i) => i.priceTwd)).toEqual([6000]);
-    expect(collected.live).toEqual({ repriced: 0, kept: 1, dropped: 0, blocked: 0 });
+    expect(collected.live).toMatchObject({ repriced: 0, kept: 1, dropped: 0, blocked: 0 });
   });
 
   it("keeps cached prices when the lookup itself throws", async () => {
@@ -125,7 +125,7 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
       const source = sourceOf(
         ids.map((id) => candidate(id)),
         lookup,
-        { minGapMs: 500, maxGapMs: 500 },
+        { batchSize: 3, minGapMs: 500, maxGapMs: 500 },
       );
       const pending = collectVerifiedDailyFlights(source, now);
 
@@ -142,10 +142,56 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
         ["a", "b", "c"],
         ["d", "e", "f"],
       ]);
-      expect(collected.live).toEqual({ repriced: 3, kept: 5, dropped: 0, blocked: 5 });
+      expect(collected.live).toMatchObject({ repriced: 3, kept: 5, dropped: 0, blocked: 5 });
       expect(collected.items.map((i) => i.priceTwd)).toEqual([
         5000, 5000, 5000, 6000, 6000, 6000, 6000, 6000,
       ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("by default queries one at a time, 3 s apart, and tallies outcomes with blocked reasons", async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: string[][] = [];
+      const reasons: LiveResult["reason"][] = [null, "error", "no_result", "blocked", null];
+      const lookup: LiveLookup = (batch) => {
+        const reason = reasons[seen.length] ?? null;
+        seen.push(batch.map((c) => c.id));
+        return Promise.resolve(
+          batch.map((c) => ({
+            id: c.id,
+            reason,
+            ...(reason === "blocked" ? { blockedReason: "consent" } : {}),
+            itineraries: [],
+          })),
+        );
+      };
+      const source = googleLiveFlightSource(
+        {
+          fetchCandidates: () =>
+            Promise.resolve(["a", "b", "c", "d", "e"].map((id) => candidate(id))),
+        },
+        lookup,
+      );
+      const pending = collectVerifiedDailyFlights(source, now);
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(seen).toEqual([["a"]]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(seen).toEqual([["a"], ["b"]]);
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      const collected = await pending;
+      expect(seen).toEqual([["a"], ["b"], ["c"], ["d"]]); // stopped at the block
+      expect(collected.live?.queries).toEqual({
+        ok: 1,
+        no_result: 1,
+        error: 1,
+        blocked: 1,
+        blockedReasons: { consent: 1 },
+      });
+      expect(collected.live).toMatchObject({ kept: 5, blocked: 2 });
     } finally {
       vi.useRealTimers();
     }

@@ -10,6 +10,7 @@ const resultsSchema = z.array(
   z.object({
     id: z.string(),
     reason: z.enum(["no_result", "error", "blocked"]).nullable(),
+    blockedReason: z.string().optional(),
     itineraries: z.array(
       z.object({
         priceTwd: z.number(),

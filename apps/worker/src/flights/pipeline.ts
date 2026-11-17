@@ -96,7 +96,12 @@ export interface FlightSource {
   /** Fares discovered before Good Deal selection in the last run; 0 means no upstream data (not "no deals"). */
   discoveredCandidates?(): number;
   /** Live Price outcomes of the last run (`repriced` counts every matched fare, dropped ones included). */
-  liveStats?(): { repriced: number; kept: number; blocked: number };
+  liveStats?(): {
+    repriced: number;
+    kept: number;
+    blocked: number;
+    queries?: object;
+  };
 }
 
 // ~70 broad discovery + ~135 per-route queries + baselines for the cheapest candidates + <= 230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0010).
@@ -777,7 +782,14 @@ export interface CollectedDailyFlights {
   /** Upstream requests this run used (Workers Paid allows 1,000 subrequests per invocation). */
   upstreamCalls: number;
   /** Present for Live Price runs: matched fares kept (`repriced`) or dropped under 15%, fares left on the cached price (`kept`), and those skipped after a block (`blocked`). */
-  live?: { repriced: number; kept: number; dropped: number; blocked: number };
+  live?: {
+    repriced: number;
+    kept: number;
+    dropped: number;
+    blocked: number;
+    /** Per-query outcome counts (ok / no_result / error / blocked and a blocked-reason tally). */
+    queries?: object;
+  };
   rows: DailyFlightRow[];
   items: DailyFlightItem[];
 }
@@ -991,6 +1003,7 @@ export async function collectVerifiedDailyFlights(
             kept: liveStats.kept,
             dropped: droppedLive,
             blocked: liveStats.blocked,
+            ...(liveStats.queries ? { queries: liveStats.queries } : {}),
           },
         }
       : {}),

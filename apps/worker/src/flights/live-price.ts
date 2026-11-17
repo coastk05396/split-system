@@ -18,11 +18,22 @@ export interface LiveItinerary {
 export interface LiveResult {
   id: string;
   reason: "no_result" | "error" | "blocked" | null;
+  /** Why it was blocked: `http` (429/403), `consent`, `sorry` or `no_payload`. */
+  blockedReason?: string | undefined;
   itineraries: LiveItinerary[];
 }
 
 /** Looks up one batch of candidates; the production one runs the Python adapter. */
 export type LiveLookup = (batch: readonly FlightCandidate[]) => Promise<LiveResult[]>;
+
+/** Outcome of each Google query this run (counts only, never URLs or ids). */
+export interface LiveQueries {
+  ok: number;
+  no_result: number;
+  error: number;
+  blocked: number;
+  blockedReasons: Record<string, number>;
+}
 
 export interface LiveOptions {
   /** Concurrent queries per batch (ADR 0012: 2 to 3). */
@@ -33,6 +44,14 @@ export interface LiveOptions {
   maxGapMs?: number;
   random?: () => number;
 }
+
+const emptyQueries = (): LiveQueries => ({
+  ok: 0,
+  no_result: 0,
+  error: 0,
+  blocked: 0,
+  blockedReasons: {},
+});
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
   const left = new Set(a.map((x) => x.toUpperCase()));
@@ -51,26 +70,29 @@ export function googleLiveFlightSource(
   options: LiveOptions = {},
 ): FlightSource {
   const {
-    batchSize = 3,
+    // One query at a time, 3 s apart: Google blocked faster pacing from a home IP (ADR 0012).
+    batchSize = 1,
     maxQueries = 240,
-    minGapMs = 500,
-    maxGapMs = 1000,
+    minGapMs = 3000,
+    maxGapMs = 3000,
     random = Math.random,
   } = options;
   let live = new Map<string, LiveResult>();
   let stats = { repriced: 0, kept: 0, blocked: 0 };
   let blockedIds = new Set<string>();
+  let queries = emptyQueries();
 
   return {
     ...(base.upstreamCalls ? { upstreamCalls: () => base.upstreamCalls?.() ?? 0 } : {}),
     discoveredCandidates: () => base.discoveredCandidates?.() ?? 0,
-    liveStats: () => stats,
+    liveStats: () => ({ ...stats, queries }),
 
     async fetchCandidates(digestDate, now) {
       const candidates = await base.fetchCandidates(digestDate, now);
       live = new Map();
       stats = { repriced: 0, kept: 0, blocked: 0 };
       blockedIds = new Set();
+      queries = emptyQueries();
       const queried = candidates.slice(0, maxQueries);
       for (let i = 0; i < queried.length; i += batchSize) {
         if (i > 0) {
@@ -87,6 +109,12 @@ export function googleLiveFlightSource(
         let blocked = false;
         for (const r of results) {
           live.set(r.id, r);
+          const key = r.reason ?? "ok";
+          queries[key] += 1;
+          if (r.reason === "blocked") {
+            const why = r.blockedReason ?? "unknown";
+            queries.blockedReasons[why] = (queries.blockedReasons[why] ?? 0) + 1;
+          }
           blocked ||= r.reason === "blocked";
         }
         if (blocked) {
