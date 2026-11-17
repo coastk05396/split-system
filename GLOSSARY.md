@@ -40,6 +40,10 @@ _Avoid_: Flight Radar, Price Watch, Trip module
 One collapsed row on the Daily Flights board per destination city, summarising that city's cheapest fare and expandable to its fares.
 _Avoid_: Fare card, destination tile
 
+**Route**:
+One origin airport × destination airport × trip type (round trip or one way) combination on the Daily Flights board; a Route may carry several fares on different dates, and board coverage is counted in destination cities (one City Card each), not airports.
+_Avoid_: Flight line, itinerary
+
 **Curated Destination**:
 An airport in the hand-maintained catalog (~80–90 major travel airports across Asia, Europe, North America, Oceania, and the Middle East) with verified localized city names, country flags, and IANA timezones; unlisted minor airports are filtered out.
 _Avoid_: Open airport list, destination whitelist, global airport dump
