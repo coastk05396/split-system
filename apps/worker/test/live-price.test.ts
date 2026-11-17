@@ -197,6 +197,69 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
     }
   });
 
+  describe("payload-less pages (no_payload errors)", () => {
+    // "np" = a page without Google's results payload, "ok" = a page with results.
+    const run = async (pattern: ("np" | "ok" | "blocked")[]) => {
+      vi.useFakeTimers();
+      try {
+        const queried: string[] = [];
+        const lookup: LiveLookup = (batch) => {
+          const kind = pattern[queried.length] ?? "ok";
+          queried.push(...batch.map((c) => c.id));
+          return Promise.resolve(
+            batch.map((c) => ({
+              id: c.id,
+              reason:
+                kind === "np"
+                  ? ("error" as const)
+                  : kind === "blocked"
+                    ? ("blocked" as const)
+                    : null,
+              ...(kind === "np" ? { errorReason: "no_payload" } : {}),
+              ...(kind === "blocked" ? { blockedReason: "consent" } : {}),
+              itineraries: [],
+            })),
+          );
+        };
+        const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
+        const source = googleLiveFlightSource(
+          { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
+          lookup,
+        );
+        const pending = collectVerifiedDailyFlights(source, now);
+        await vi.advanceTimersByTimeAsync(60_000);
+        return { queried, collected: await pending };
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("does not stop on a single payload-less page", async () => {
+      const { queried } = await run(["ok", "np", "ok"]);
+      expect(queried).toHaveLength(8);
+    });
+
+    it("stops after 3 consecutive payload-less pages and keeps the rest cached", async () => {
+      const { queried, collected } = await run(["np", "np", "np"]);
+      expect(queried).toEqual(["a", "b", "c"]);
+      expect(collected.live).toMatchObject({ kept: 8, blocked: 5 });
+      expect(collected.live?.queries).toMatchObject({
+        error: 3,
+        blockedReasons: { no_payload: 1 },
+      });
+    });
+
+    it("resets the counter on any page with a payload", async () => {
+      const { queried } = await run(["np", "np", "ok", "np", "np", "ok"]);
+      expect(queried).toHaveLength(8);
+    });
+
+    it("still stops at once on an explicit block", async () => {
+      const { queried } = await run(["ok", "blocked"]);
+      expect(queried).toEqual(["a", "b"]);
+    });
+  });
+
   it("never queries more than the hard cap", async () => {
     const seen: string[] = [];
     const lookup: LiveLookup = (batch) => {

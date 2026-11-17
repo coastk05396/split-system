@@ -20,6 +20,8 @@ export interface LiveResult {
   reason: "no_result" | "error" | "blocked" | null;
   /** Why it was blocked: `http` (429/403), `consent`, `sorry` or `no_payload`. */
   blockedReason?: string | undefined;
+  /** `no_payload`: an error page without Google's results payload (ambiguous, not yet a block). */
+  errorReason?: string | undefined;
   itineraries: LiveItinerary[];
 }
 
@@ -34,6 +36,9 @@ export interface LiveQueries {
   blocked: number;
   blockedReasons: Record<string, number>;
 }
+
+/** Stop after this many payload-less pages in a row (a single one is ambiguous, not a block). */
+const MAX_CONSECUTIVE_NO_PAYLOAD = 3;
 
 export interface LiveOptions {
   /** Concurrent queries per batch (ADR 0012: 2 to 3). */
@@ -93,6 +98,7 @@ export function googleLiveFlightSource(
       stats = { repriced: 0, kept: 0, blocked: 0 };
       blockedIds = new Set();
       queries = emptyQueries();
+      let noPayloadStreak = 0;
       const queried = candidates.slice(0, maxQueries);
       for (let i = 0; i < queried.length; i += batchSize) {
         if (i > 0) {
@@ -107,6 +113,7 @@ export function googleLiveFlightSource(
           console.warn(JSON.stringify({ event: "live_price_lookup_failed", error: String(error) }));
         }
         let blocked = false;
+        let stopReason = "";
         for (const r of results) {
           live.set(r.id, r);
           const key = r.reason ?? "ok";
@@ -114,12 +121,30 @@ export function googleLiveFlightSource(
           if (r.reason === "blocked") {
             const why = r.blockedReason ?? "unknown";
             queries.blockedReasons[why] = (queries.blockedReasons[why] ?? 0) + 1;
+            blocked = true;
+            stopReason = why;
           }
-          blocked ||= r.reason === "blocked";
+          // Only a page with a payload (results or genuinely none) resets the streak.
+          if (r.errorReason === "no_payload") noPayloadStreak += 1;
+          else if (r.reason === null || r.reason === "no_result") noPayloadStreak = 0;
+        }
+        // An explicit block also leaves its own batch unresolved; a payload-less streak only the rest.
+        let firstUnresolved = i;
+        if (!blocked && noPayloadStreak >= MAX_CONSECUTIVE_NO_PAYLOAD) {
+          blocked = true;
+          firstUnresolved = i + batch.length;
+          stopReason = "no_payload";
+          queries.blockedReasons["no_payload"] = (queries.blockedReasons["no_payload"] ?? 0) + 1;
         }
         if (blocked) {
-          for (const c of queried.slice(i)) blockedIds.add(c.id);
-          console.warn(JSON.stringify({ event: "live_price_blocked", queried: i + batch.length }));
+          for (const c of queried.slice(firstUnresolved)) blockedIds.add(c.id);
+          console.warn(
+            JSON.stringify({
+              event: "live_price_blocked",
+              reason: stopReason,
+              queried: i + batch.length,
+            }),
+          );
           break;
         }
       }

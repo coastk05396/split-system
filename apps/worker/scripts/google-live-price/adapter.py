@@ -13,8 +13,10 @@ import sys
 import time
 from typing import Any
 
-from fast_flights import FlightQuery, FlightsNotFound, create_query, fetch_flights_html
+from fast_flights import FlightQuery, FlightsNotFound, create_query
+from fast_flights.fetcher import URL
 from fast_flights.parser import parse_js
+from primp import Client
 from selectolax.lexbor import LexborHTMLParser
 
 MAX_ITINERARIES = 15
@@ -26,18 +28,33 @@ BLOCK_MARKERS = (
     ("sorry", "/sorry/"),
     ("sorry", "unusual traffic"),
 )
-HTTP_BLOCK = re.compile(r"\b(?:HTTP|status)\D{0,12}(?:429|403)\b|Too Many Requests", re.IGNORECASE)
+HTTP_BLOCK = re.compile(
+    r"\bHTTP(?:/\d(?:\.\d)?)?\s*(?:429|403)\b|\bstatus(?: code)?\W{0,4}(?:429|403)\b|Too Many Requests",
+    re.IGNORECASE,
+)
 
 
 def hm(time_pair: tuple[int, int]) -> str:
     return f"{time_pair[0]:02d}:{time_pair[1]:02d}"
 
 
-def block_reason(html: str) -> str | None:
-    """consent | sorry | no_payload when the page is an explicit block or lacks Google's results payload."""
+def fetch_page(q: Any) -> tuple[int, str]:
+    """GET the results page with fast-flights' own client settings, keeping the HTTP status
+    (fast_flights.fetch_flights_html returns only the body)."""
+    client = Client(
+        impersonate="chrome_145", impersonate_os="macos", referer=True, cookie_store=True
+    )
+    res = client.get(URL, params=q.params())
+    return res.status_code, res.text
+
+
+def block_reason(html: str, status: int | None = None) -> str | None:
+    """consent | sorry (explicit blocks) | server_error (confirmed 5xx) | no_payload (ambiguous) for a page without results."""
     for reason, marker in BLOCK_MARKERS:
         if marker in html:
             return reason
+    if status is not None and status >= 500:
+        return "server_error"
     return None if "ds:1" in html else "no_payload"
 
 
@@ -88,14 +105,25 @@ def parse_tolerant(html: str) -> tuple[list[Any], dict[str, str]]:
     return found, codes
 
 
-def read_page(html: str) -> tuple[str | None, list[dict[str, Any]], str | None]:
-    """Turn a fetched page into (reason, itineraries, blocked_reason).
+def read_page(
+    html: str, status: int | None = None
+) -> tuple[str | None, list[dict[str, Any]], str | None]:
+    """Turn a fetched page into (reason, itineraries, detail): the block reason when blocked,
+    `no_payload` for a payload-less error.
 
     fast-flights returns the body without a status, so an interstitial or HTTP-error body is
-    recognised by an explicit marker or by lacking Google's results payload (`ds:1`).
+    recognised by an explicit marker. A page lacking Google's results payload (`ds:1`) is an
+    "error" tagged `no_payload`.
     A page with the payload but no flights is a genuine "no_result".
     """
-    blocked = block_reason(html)
+    if status in (429, 403):
+        return "blocked", [], "http"
+    blocked = block_reason(html, status)
+    if blocked == "server_error":
+        return "error", [], None  # a confirmed 5xx is transient, not a block
+    if blocked == "no_payload":
+        # One payload-less page is ambiguous; the caller stops after 3 in a row.
+        return "error", [], "no_payload"
     if blocked:
         return "blocked", [], blocked
     try:
@@ -130,10 +158,11 @@ def query_one(c: dict[str, Any]) -> dict[str, Any]:
             language="en-US",
             currency="TWD",
         )
-        reason, itineraries, blocked = read_page(fetch_flights_html(q))
+        status, html = fetch_page(q)
+        reason, itineraries, detail = read_page(html, status)
         result["reason"], result["itineraries"] = reason, itineraries
-        if blocked:
-            result["blockedReason"] = blocked
+        if detail:
+            result["blockedReason" if reason == "blocked" else "errorReason"] = detail
     except Exception as e:  # noqa: BLE001 - report, never crash the run
         blocked = exception_block_reason(e)
         result["reason"] = "blocked" if blocked else "error"
