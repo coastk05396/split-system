@@ -217,12 +217,21 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
 
-  /** Narrows the Long-haul scope; a country or destination outside it is cleared. */
-  function narrowLonghaul(nextSub: LonghaulSubRegion | "all", nextCountry: string) {
+  /** The Long-haul scope after a click: a country or destination outside it is cleared. */
+  function narrowedLonghaul(nextSub: LonghaulSubRegion | "all", nextCountry: string) {
     const scoped = inLonghaulScope(items, nextSub, nextCountry);
-    setSubRegion(nextSub);
-    setCountry(nextCountry !== "all" && scoped.length === 0 ? "all" : nextCountry);
-    if (dest !== "all" && !scoped.some((i) => matchesFlightDest(i.dest, dest))) setDest("all");
+    return {
+      subRegion: nextSub,
+      country: nextCountry !== "all" && scoped.length === 0 ? "all" : nextCountry,
+      dest: dest !== "all" && !scoped.some((i) => matchesFlightDest(i.dest, dest)) ? "all" : dest,
+    };
+  }
+
+  function narrowLonghaul(nextSub: LonghaulSubRegion | "all", nextCountry: string) {
+    const next = narrowedLonghaul(nextSub, nextCountry);
+    setSubRegion(next.subRegion);
+    setCountry(next.country);
+    setDest(next.dest);
   }
 
   function selectRegion(next: FlightRegion | "all") {
@@ -428,7 +437,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                     <FilterSection label={t("flights.subRegionLabel")}>
                       <FilterChip
                         active={subRegion === "all"}
-                        count={countWith({ subRegion: "all" })}
+                        count={countWith(narrowedLonghaul("all", country))}
                         onClick={() => {
                           narrowLonghaul("all", country);
                         }}
@@ -439,7 +448,9 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                         <FilterChip
                           key={sr}
                           active={subRegion === sr}
-                          count={countWith({ subRegion: sr })}
+                          count={countWith(
+                            narrowedLonghaul(subRegion === sr ? "all" : sr, country),
+                          )}
                           onClick={() => {
                             narrowLonghaul(subRegion === sr ? "all" : sr, country);
                           }}
@@ -452,7 +463,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                     <FilterSection label={t("flights.countryLabel")}>
                       <FilterChip
                         active={country === "all"}
-                        count={countWith({ country: "all" })}
+                        count={countWith(narrowedLonghaul(subRegion, "all"))}
                         onClick={() => {
                           narrowLonghaul(subRegion, "all");
                         }}
@@ -463,7 +474,12 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                         <FilterChip
                           key={option.code}
                           active={country === option.code}
-                          count={countWith({ country: option.code })}
+                          count={countWith(
+                            narrowedLonghaul(
+                              subRegion,
+                              country === option.code ? "all" : option.code,
+                            ),
+                          )}
                           onClick={() => {
                             narrowLonghaul(
                               subRegion,

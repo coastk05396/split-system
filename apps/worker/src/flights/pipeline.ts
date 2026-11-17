@@ -376,7 +376,13 @@ async function fetchMonthMatrixPrices(
     monthMatrixResponseSchema,
     logContext,
   );
-  return parsed ? parsed.data.map((d) => Math.round(d.value)) : null;
+  if (parsed === null) return null;
+  // HTTP 200 with `success: false` is an upstream failure, not "no prices": null so it is retried, never cached.
+  if (parsed.success === false) {
+    console.warn(JSON.stringify({ ...logContext, error: "success_false" }));
+    return null;
+  }
+  return parsed.data.map((d) => Math.round(d.value));
 }
 
 /**

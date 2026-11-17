@@ -75,7 +75,7 @@ function fakeTravelpayouts(
     destination: string,
     oneWay: boolean,
     month: string,
-  ) => { status?: number; prices: number[] } | null,
+  ) => { status?: number; success?: boolean; prices: number[] } | null,
   targeted?: (destination: string) => (FakeFare & { month: string })[],
 ) {
   const discoveries: { origin: string; oneWay: boolean; month: string; unique: string | null }[] =
@@ -138,7 +138,7 @@ function fakeTravelpayouts(
           return new Response("upstream error", { status: result.status });
         }
         return Response.json({
-          success: true,
+          success: result.success ?? true,
           data: result.prices.map((value, idx) => ({
             value,
             depart_date: `${month.slice(0, 7)}-${String(idx + 1).padStart(2, "0")}`,
@@ -730,7 +730,9 @@ describe("public flight routes and daily pipeline", () => {
     });
 
     // BKK rt in 2026-12 only; the month-matrix answers `matrix(call)` (default median 7000).
-    function bkkSupply(matrix?: () => { status?: number; prices: number[] } | null) {
+    function bkkSupply(
+      matrix?: () => { status?: number; success?: boolean; prices: number[] } | null,
+    ) {
       return fakeTravelpayouts(
         (origin, oneWay, month) =>
           origin === "TPE" && !oneWay && month === "2026-12"
@@ -790,6 +792,17 @@ describe("public flight routes and daily pipeline", () => {
       const recovered = bkkSupply();
       await refreshAt(recovered, day0 + DAY_MS);
       expect(recovered.monthMatrixCalls).toHaveLength(1);
+    });
+
+    it("treats an HTTP 200 success:false answer as a failure: not cached, retried and recovered next run", async () => {
+      const bad = bkkSupply(() => ({ success: false, prices: [] }));
+      const items = await refreshAt(bad, day0);
+      expect(items.every((i) => i.tag === "normal" && i.discountPct === 0)).toBe(true);
+
+      const recovered = bkkSupply(); // median 7000
+      const after = await refreshAt(recovered, day0 + DAY_MS);
+      expect(recovered.monthMatrixCalls).toHaveLength(1);
+      expect(after).toContainEqual({ price: 4200, tag: "steal", discountPct: 40 });
     });
   });
 

@@ -758,6 +758,19 @@ describe("daily flights page", () => {
       expect(cityHeadings()[0]).toHaveTextContent("伯斯");
     });
 
+    it("counts a sub-region chip the way clicking it will filter, even with a country already chosen", async () => {
+      const { user, dialog } = await openLonghaul();
+      await user.click(within(dialog).getByRole("button", { name: /^美國/ }));
+      const europe = within(dialog).getByRole("button", { name: /^歐洲/ });
+      const shown = Number(/(\d+)\s*$/.exec(europe.textContent)?.[1]);
+      expect(shown).toBeGreaterThan(0); // clicking Europe clears the US, so it is not 0
+      await user.click(europe);
+      await user.click(
+        within(dialog).getByRole("button", { name: new RegExp(`查看 ${String(shown)} 筆機票`) }),
+      );
+      expect(cityHeadings().length).toBeGreaterThan(0);
+    });
+
     it("drops the filters when leaving the Long-haul tab", async () => {
       const { user, dialog } = await openLonghaul();
       await user.click(within(dialog).getByRole("button", { name: /^歐洲/ }));
