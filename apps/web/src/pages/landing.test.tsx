@@ -42,7 +42,7 @@ describe("public landing route", () => {
     expect(screen.getByRole("link", { name: "服務條款" })).toBeVisible();
   });
 
-  it("shows the same v3 city cards as /flights: city-only name, route chip, fare-count pill, no directness, solid pill from 30%", async () => {
+  it("shows the same v3 city cards as /flights: city-only name, route chip, fare-count pill, no directness, solid pill from 50%", async () => {
     const { api } = renderApp({ path: "/landing" });
     const board = await screen.findByRole("region", { name: "今日浮動特價機票" });
     const cards = await within(board).findAllByRole("heading", { level: 2 });
@@ -55,16 +55,16 @@ describe("public landing route", () => {
     expect(within(board).getByText("BETA").className).toContain("bg-[#fef3c7]");
     expect(within(board).getByText("每天 08:00 更新")).toBeVisible();
     expect(board.textContent).not.toMatch(/•/);
-    // Same threshold as /flights: solid pill from 30%, plain text 15-29%, nothing below 15%
+    // Same threshold as /flights: solid pill from 50%, plain text 15-49%, nothing below 15%
     const pcts = (nodes: Element[]) =>
       nodes.map((n) => Number(/\d+/.exec(n.textContent)?.[0] ?? 0));
     const labels = [...board.querySelectorAll("span")].filter((n) =>
       /^省 \d+%$/.test(n.textContent),
     );
     const pills = labels.filter((n) => n.className.includes("bg-fl-green"));
-    expect(pcts(pills).every((pct) => pct >= 30)).toBe(true);
+    expect(pcts(pills).every((pct) => pct >= 50)).toBe(true);
     expect(
-      pcts(labels.filter((n) => !pills.includes(n))).every((pct) => pct >= 15 && pct < 30),
+      pcts(labels.filter((n) => !pills.includes(n))).every((pct) => pct >= 15 && pct < 50),
     ).toBe(true);
     expect(api.dailyFlights).toBeDefined();
   });
