@@ -279,7 +279,7 @@ export function CountryFlag({
   const code = countryCode.toUpperCase();
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/90 shadow-2xs ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 ring-[1.5px] ring-fl-hair ${className}`}
     >
       <svg viewBox="0 0 32 32" aria-hidden="true" data-country={code} className="size-full">
         <defs>

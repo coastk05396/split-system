@@ -16,6 +16,22 @@
   --color-line: #06c755;
   --color-telegram: #229ed9;
 
+  /* Flights board v3 (mint): tokens from .scratch/flights-v3 mocks. */
+  --color-fl-paper: #f3faf6;
+  --color-fl-ink: #0f172a;
+  --color-fl-green: #047857;
+  --color-fl-tint: #ecfdf5;
+  --color-fl-muted: #475569;
+  --color-fl-hair: #dfe9e4;
+  --color-fl-hair-soft: #e6efea;
+  --color-fl-track: #e4efe9;
+  /* Home marquee only (kept from v2); the flights board itself is sans. */
+  --font-serif-tc: "Noto Serif TC", "Noto Sans TC", serif;
+  --font-num: "Newsreader", "Noto Serif TC", serif;
+
+  /* Flights board: Noto Sans TC first (loaded in index.html), as in the v3 mocks. */
+  --font-flights: "Noto Sans TC", system-ui, -apple-system, sans-serif;
+
   --font-sans:
     "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
 
@@ -1206,6 +1222,9 @@ body::before {
     radial-gradient(50rem 28rem at 92% 4%, rgb(14 165 233 / 0.09), transparent 70%),
     linear-gradient(180deg, #f6fbf8 0%, #f9fcff 46%, #ffffff 100%);
 }
+.flights-paper {
+  background: var(--color-fl-paper);
+}
 .clay-receipt {
   background: linear-gradient(145deg, #ffffff, #f6faf8);
   border: 1px solid rgb(226 232 240 / 0.9);
@@ -1400,16 +1419,6 @@ body::before {
 @media (hover: hover) and (pointer: fine) {
   .flight-marquee:hover .flight-marquee-track {
     animation-play-state: paused;
-  }
-  .flight-card:hover {
-    border-color: rgb(46 157 113 / 0.55);
-  }
-  .flight-card:hover .flight-card-city {
-    color: var(--color-sprout-700);
-  }
-  .flight-card:hover .flight-card-route {
-    border-color: rgb(46 157 113 / 0.4);
-    background-color: var(--color-sprout-100);
   }
   .flight-card:hover .flight-card-plane {
     transform: translateX(2px);

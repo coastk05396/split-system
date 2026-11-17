@@ -42,26 +42,30 @@ describe("public landing route", () => {
     expect(screen.getByRole("link", { name: "服務條款" })).toBeVisible();
   });
 
-  it("shows the same city cards as /flights: city-only name, route chip, fare count, solid pill only from 40%", async () => {
+  it("shows the same v3 city cards as /flights: city-only name, route chip, fare-count pill, no directness, solid pill from 30%", async () => {
     const { api } = renderApp({ path: "/landing" });
     const board = await screen.findByRole("region", { name: "今日浮動特價機票" });
     const cards = await within(board).findAllByRole("heading", { level: 2 });
     expect(cards.length).toBeLessThanOrEqual(5); // shared title + at most 4 cards
-    expect(board.textContent).not.toMatch(/東京成田|大阪關西|首爾仁川/);
+    expect(board.textContent).not.toMatch(/東京成田|大阪關西|首爾仁川|直飛/);
+    for (const card of cards.slice(1)) expect(card.textContent).toMatch(/\d+ 筆/);
     // Same shared title block as /flights, as an h2 under the page's h1
-    expect(within(board).getByRole("heading", { level: 2, name: "今日低價機票" })).toBeVisible();
+    const title = within(board).getByRole("heading", { level: 2, name: "今天想飛去哪？" });
+    expect(within(title).getByText("去哪")).toBeVisible();
+    expect(within(board).getByText("BETA").className).toContain("bg-[#fef3c7]");
     expect(within(board).getByText("每天 08:00 更新")).toBeVisible();
-    expect(board.textContent).toMatch(/筆/);
     expect(board.textContent).not.toMatch(/•/);
-    // Same threshold as /flights: a solid 省 X% pill only for 40% and up, plain text below
+    // Same threshold as /flights: solid pill from 30%, plain text 15-29%, nothing below 15%
     const pcts = (nodes: Element[]) =>
       nodes.map((n) => Number(/\d+/.exec(n.textContent)?.[0] ?? 0));
     const labels = [...board.querySelectorAll("span")].filter((n) =>
       /^省 \d+%$/.test(n.textContent),
     );
-    const solid = labels.filter((n) => n.className.includes("bg-sprout-600"));
-    expect(pcts(solid).every((pct) => pct >= 40)).toBe(true);
-    expect(pcts(labels.filter((n) => !solid.includes(n))).every((pct) => pct < 40)).toBe(true);
+    const pills = labels.filter((n) => n.className.includes("bg-fl-green"));
+    expect(pcts(pills).every((pct) => pct >= 30)).toBe(true);
+    expect(
+      pcts(labels.filter((n) => !pills.includes(n))).every((pct) => pct >= 15 && pct < 30),
+    ).toBe(true);
     expect(api.dailyFlights).toBeDefined();
   });
 

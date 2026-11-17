@@ -2,32 +2,66 @@ import { getLocale, t } from "../i18n/messages.js";
 import { CuteTripPlaneIcon } from "../pages/HomeIcons.js";
 import { FlightBetaBadge } from "./FlightBetaBadge.js";
 
+/** `● 每天 08:00 更新`: the refresh note under the title. */
+export function FlightsUpdateNote({ className = "" }: { className?: string }) {
+  return (
+    <p
+      className={`flex min-w-0 items-center gap-[7px] text-[13px] leading-[18px] whitespace-nowrap text-fl-muted ${className}`}
+    >
+      <span
+        aria-hidden="true"
+        className="size-2 shrink-0 rounded-full bg-[#5fb394] ring-[3px] ring-[#e0f2ea]"
+      />
+      <span className="truncate">{t("flights.subtitle")}</span>
+    </p>
+  );
+}
+
 /**
- * The flights board title, shared by /flights (signed in and out) and the landing page: a big
- * one-line title with a small BETA pill beside it, then a soft grey refresh note.
- * `compact` shrinks the English title for the crowded public header at 390px.
+ * The flights board title, shared by /flights (signed in and out) and the landing page: a bold
+ * one-line title with its key words marked in mint and an amber BETA pill beside it; `note` adds
+ * the refresh note below.
  */
 export function FlightsTitle({
   as: Heading = "h1",
-  compact = false,
+  size = "lg",
+  note = false,
 }: {
   as?: "h1" | "h2";
-  compact?: boolean;
+  size?: "lg" | "md";
+  note?: boolean;
 }) {
-  const size = compact && getLocale() === "en" ? "text-base" : "text-[22px]";
+  const title = t("flights.title");
+  const mark = t("flights.titleHighlight");
+  const at = title.indexOf(mark);
+  // English is wider than 中文 beside BETA on a phone: smaller, and only 中文 stays nowrap.
+  const en = getLocale() === "en";
+  const wrap = en ? "text-balance" : "whitespace-nowrap";
+  const text =
+    size === "md"
+      ? "text-[22px] leading-[30px]"
+      : en
+        ? "text-[22px] leading-7"
+        : "text-[26px] leading-8";
   return (
     <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-1.5">
-        <Heading
-          className={`leading-tight font-black tracking-tight whitespace-nowrap text-slate-900 sm:text-2xl ${size}`}
-        >
-          {t("flights.title")}
+      <div className="flex items-center gap-2">
+        <Heading className={`font-black text-fl-ink ${wrap} ${text}`}>
+          {at < 0 ? (
+            title
+          ) : (
+            <>
+              {title.slice(0, at)}
+              <span className="bg-[linear-gradient(transparent_60%,#d3ebdf_60%)] px-0.5">
+                {mark}
+              </span>
+              {title.slice(at + mark.length)}
+            </>
+          )}
         </Heading>
         <FlightBetaBadge />
       </div>
-      <p className="mt-0.5 truncate text-[13px] leading-tight text-slate-500">
-        {t("flights.subtitle")}
-      </p>
+      {note && <FlightsUpdateNote className="mt-2.5" />}
     </div>
   );
 }

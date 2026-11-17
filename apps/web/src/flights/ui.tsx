@@ -103,6 +103,31 @@ export function flightOriginCityLabel(origin: string, lang: Language): string {
 
 const MS_PER_DAY = 86_400_000;
 
+/** `MM/DD` from an ISO date, or `null` when it is not a real month/day. */
+function monthDay(iso: string): string | null {
+  const match = /^\d{4}-(\d{2})-(\d{2})/.exec(iso);
+  if (match === null) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  return month >= 1 && month <= 12 && day >= 1 && day <= 31 ? `${match[1]}/${match[2]}` : null;
+}
+
+/**
+ * Fare dates without the year (the board only holds the current season), the same in every
+ * language: `12/09–12/12` round trip, `12/09` one-way or same-day.
+ */
+export function formatFareDates(outDate: string, inDate: string | null): string {
+  const out = monthDay(outDate);
+  if (out === null) return outDate;
+  const back = inDate === null ? null : monthDay(inDate);
+  return back === null || back === out ? out : `${out}–${back}`;
+}
+
+/** Stops on the worse leg; 0 means nonstop. */
+export function fareStops(item: DailyFlightItem): number {
+  return Math.max(item.transfers, item.returnTransfers ?? 0);
+}
+
 function formatTripSpan(item: DailyFlightItem): string {
   if (item.inDate === null) return t("flights.tripOneWay");
   const outMs = Date.parse(`${item.outDate}T00:00:00Z`);

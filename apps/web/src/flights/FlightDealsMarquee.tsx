@@ -1,11 +1,12 @@
 import { type DailyFlightItem, type Language, sortDailyFlights } from "@split/shared";
-import { ChevronRight, Plane } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { getLocale, t } from "../i18n/messages.js";
 import { useDailyFlights } from "./api.js";
+import { DealBadge, Price, RouteChip } from "./CityFlightCard.js";
 import { CountryFlag } from "./CountryFlag.js";
 import { FlightBetaBadge } from "./FlightBetaBadge.js";
-import { flightDestinationLabel, tripGoHref } from "./ui.js";
+import { flightCityLabel, flightDestinationLabel, tripGoHref } from "./ui.js";
 
 /**
  * Interactive horizontal marquee of top daily flight deals for signed-in Home.
@@ -23,7 +24,10 @@ export function FlightDealsMarquee() {
     <section aria-labelledby="home-flights-marquee" className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id="home-flights-marquee" className="text-xl font-bold">
+          <h2
+            id="home-flights-marquee"
+            className="font-serif-tc text-[22px] leading-[30px] font-bold"
+          >
             {t("home.flightsMarquee.title")}
           </h2>
           <FlightBetaBadge />
@@ -31,14 +35,14 @@ export function FlightDealsMarquee() {
 
         <Link
           to="/flights"
-          className="press-pill group flex shrink-0 items-center gap-0.5 text-sm font-bold text-sprout-600 hover:text-sprout-700"
+          className="press-pill group flex min-h-11 shrink-0 items-center gap-0.5 text-sm font-semibold text-fl-green"
         >
           <span>{t("home.flightsMarquee.more")}</span>
           <ChevronRight aria-hidden="true" className="hover-nudge-x size-4" />
         </Link>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="-mt-2 text-[13px] leading-[18px] text-fl-muted">
         {showFallback ? t("flights.fallbackNote") : t("flights.refreshSchedule")}
       </p>
 
@@ -68,8 +72,6 @@ function MarqueeDealTile({
   decorative?: boolean;
 }) {
   const dest = flightDestinationLabel(item, lang);
-  const routeText = `${item.origin} ${item.tripType === "rt" ? "⇄" : "→"} ${item.dest}`;
-  const priceText = item.priceTwd.toLocaleString("en-US");
 
   return (
     <a
@@ -77,34 +79,18 @@ function MarqueeDealTile({
       target="_blank"
       rel="noopener noreferrer"
       tabIndex={decorative ? -1 : undefined}
-      className="press-card surface-card flight-card flex w-[228px] shrink-0 flex-col justify-between gap-2 rounded-2xl border border-sprout-200/80 bg-white px-3.5 py-2.5 shadow-2xs"
+      className="press-card flight-card flex w-[200px] shrink-0 flex-col gap-3 rounded-2xl border border-[#e9e6de] bg-white p-4 shadow-[0_1px_2px_rgb(18_25_21/0.04),0_10px_24px_-16px_rgb(18_25_21/0.14)] focus-visible:outline-2 focus-visible:outline-fl-green"
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <CountryFlag countryCode={dest.countryCode} className="size-7 shrink-0 shadow-2xs" />
-          <span className="truncate text-sm font-bold text-slate-900">{dest.city}</span>
-        </div>
-        <div className="inline-flex shrink-0 items-baseline gap-0.5">
-          <span className="text-[10px] font-semibold text-slate-400">NT$</span>
-          <span className="text-base font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">
-            {priceText}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-sprout-200/80 bg-sprout-50 px-1.5 py-0.5 text-[10px] font-semibold text-sprout-700 tabular-nums">
-          <Plane aria-hidden="true" className="size-2.5 text-sprout-500" />
-          <span>{routeText}</span>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <CountryFlag countryCode={dest.countryCode} className="size-7 shrink-0" />
+        <span className="truncate text-base leading-6 font-semibold text-fl-ink">
+          {flightCityLabel(item, lang)}
         </span>
-        {item.discountPct >= 15 && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sprout-600/90 tabular-nums">
-            {item.discountPct >= 30 && (
-              <span aria-hidden="true" className="size-1 rounded-full bg-sprout-500" />
-            )}
-            <span>{t("flights.deal.save", { pct: item.discountPct })}</span>
-          </span>
-        )}
+      </div>
+      <Price item={item} size="tile" />
+      <div className="flex items-center justify-between gap-2">
+        <RouteChip item={item} />
+        <DealBadge item={item} className="shrink-0" />
       </div>
     </a>
   );

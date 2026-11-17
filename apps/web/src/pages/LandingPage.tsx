@@ -36,7 +36,7 @@ export function LandingPage() {
     directOnly: false,
     holidayOnly: false,
   });
-  // Same city cards, order and badge rule as /flights; only the four cheapest cities fit here
+  // Same city cards and badge rule as /flights, cheapest cities first; only four fit here
   const boardGroups = groupByCity(filtered).slice(0, 4);
 
   return (
@@ -74,11 +74,11 @@ export function LandingPage() {
           <div className="relative flex min-w-0 flex-col gap-4">
             <section
               aria-label={t("landing.liveBoard.title")}
-              className="-mx-3 min-w-0 rounded-[1.75rem] border border-sprout-200/75 bg-white/95 p-3 sm:mx-0 sm:p-5 shadow-lg shadow-slate-900/[0.04] backdrop-blur-sm"
+              className="font-flights -mx-3 min-w-0 rounded-[1.75rem] border border-sprout-200/75 bg-white/95 p-3 sm:mx-0 sm:p-5 shadow-lg shadow-slate-900/[0.04] backdrop-blur-sm"
             >
               <div className="flex items-center gap-2.5">
                 <FlightsIconTile />
-                <FlightsTitle as="h2" />
+                <FlightsTitle as="h2" size="md" note />
               </div>
 
               <div
