@@ -571,10 +571,16 @@ describe("daily flights page", () => {
     expect(screen.getByRole("button", { name: "看全部 7 筆" })).toBeVisible();
   });
 
-  it.each(["NRT:jp", "ICN:kr", "BKK:sea", "HKG:hkmo", "LHR:longhaul"])(
-    "renders the %s route chip in the single orange chip style",
-    async (pair) => {
-      const [dest, region] = pair.split(":") as [string, FlightRegion];
+  const chipCases = [
+    ["NRT", "jp"],
+    ["ICN", "kr"],
+    ["BKK", "sea"],
+    ["HKG", "hkmo"],
+    ["LHR", "longhaul"],
+  ] as const satisfies readonly (readonly [string, FlightRegion])[];
+  it.each(chipCases)(
+    "renders the %s (%s) route chip in the single orange chip style",
+    async (dest, region) => {
       const { api } = setup();
       setItems(api, [fare("x", { dest, region, priceTwd: 5000 })]);
       await screen.findAllByRole("heading", { level: 2 });
