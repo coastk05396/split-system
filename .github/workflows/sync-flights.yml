@@ -22,7 +22,8 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 23:00 UTC + 40 min ends before the Worker's 00:00 UTC fallback cron (ADR 0012).
+    timeout-minutes: 40
     environment: production
     env:
       # Scheduled runs write; manual runs default to dry-run.
