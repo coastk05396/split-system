@@ -28,7 +28,16 @@ export interface LiveResult {
 }
 
 /** Looks up one batch of candidates; the production one runs the Python adapter. */
-export type LiveLookup = (batch: readonly FlightCandidate[]) => Promise<LiveResult[]>;
+export type LiveLookup = (
+  batch: readonly FlightCandidate[],
+  options: { allowRetry: boolean },
+) => Promise<LiveResult[]>;
+
+/**
+ * Retries (one re-request each, after a payload-less page or 5xx) the whole run may spend, so
+ * Google requests never exceed `maxQueries` plus this many. Once spent, failures are not retried.
+ */
+export const MAX_RETRIES_PER_RUN = 20;
 
 /** Outcome of each Google query this run (counts only, never URLs or ids). */
 export interface LiveQueries {
@@ -107,6 +116,7 @@ export function googleLiveFlightSource(
       blockedIds = new Set();
       queries = emptyQueries();
       let noPayloadStreak = 0;
+      let retriesUsed = 0;
       const queried = candidates.slice(0, maxQueries);
       for (let i = 0; i < queried.length; i += batchSize) {
         if (i > 0) {
@@ -114,9 +124,12 @@ export function googleLiveFlightSource(
           await new Promise((resolve) => setTimeout(resolve, gap));
         }
         const batch = queried.slice(i, i + batchSize);
+        const allowRetry = retriesUsed + batch.length <= MAX_RETRIES_PER_RUN;
         let results: LiveResult[] = [];
         try {
-          results = await lookup(batch);
+          results = await lookup(batch, {
+            allowRetry,
+          });
         } catch (error) {
           console.warn(JSON.stringify({ event: "live_price_lookup_failed", error: String(error) }));
         }
@@ -126,7 +139,10 @@ export function googleLiveFlightSource(
           live.set(r.id, r);
           const key = r.reason ?? "ok";
           queries[key] += 1;
-          if (r.retried) queries.retried += 1;
+          if (r.retried) {
+            queries.retried += 1;
+            retriesUsed += 1;
+          }
           if (r.reason === "error") {
             const why = r.errorReason ?? "unknown";
             queries.errorReasons[why] = (queries.errorReasons[why] ?? 0) + 1;
@@ -138,8 +154,9 @@ export function googleLiveFlightSource(
             stopReason = why;
           }
           // Only a page with a payload (results or genuinely none) resets the streak.
-          // Only a page still payload-less after its own retry counts toward the streak.
-          if (r.errorReason === "no_payload" && r.retried) noPayloadStreak += 1;
+          // A failure counts toward the streak once its retry (if one was allowed) also failed.
+          const transient = r.errorReason === "no_payload" || r.errorReason === "server_error";
+          if (transient && (r.retried || !allowRetry)) noPayloadStreak += 1;
           else if (r.reason === null || r.reason === "no_result") noPayloadStreak = 0;
         }
         // An explicit block also leaves its own batch unresolved; a payload-less streak only the rest.

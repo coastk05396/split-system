@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  MAX_RETRIES_PER_RUN,
   googleLiveFlightSource,
   type LiveItinerary,
   type LiveLookup,
@@ -360,11 +361,88 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
     });
   });
 
+  describe("run-wide retry budget and 5xx streak", () => {
+    type Kind = "ok" | "5xx" | "np";
+    /** Fakes the adapter: a failing page is retried (and fails again) only when allowed. */
+    const fakeAdapter = (kinds: (id: number) => Kind) => {
+      const calls = { lookups: 0, requests: 0, allowed: [] as boolean[] };
+      const lookup: LiveLookup = (batch, opts) => {
+        calls.lookups += 1;
+        calls.allowed.push(opts.allowRetry);
+        return Promise.resolve(
+          batch.map((c) => {
+            const kind = kinds(Number(c.id));
+            calls.requests += 1;
+            if (kind === "ok") return { id: c.id, reason: null, itineraries: [] };
+            const errorReason = kind === "5xx" ? "server_error" : "no_payload";
+            if (!opts.allowRetry)
+              return { id: c.id, reason: "error" as const, errorReason, itineraries: [] };
+            calls.requests += 1;
+            return {
+              id: c.id,
+              reason: "error" as const,
+              errorReason,
+              retried: true,
+              itineraries: [],
+            };
+          }),
+        );
+      };
+      return { lookup, calls };
+    };
+    const run = async (n: number, lookup: LiveLookup, opts = {}) => {
+      vi.useFakeTimers();
+      try {
+        const ids = Array.from({ length: n }, (_, k) => String(k));
+        const source = googleLiveFlightSource(
+          { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
+          lookup,
+          { maxQueries: 240, ...opts },
+        );
+        const pending = collectVerifiedDailyFlights(source, now);
+        await vi.advanceTimersByTimeAsync(2_000_000);
+        return await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("stops after 3 consecutive 5xx that still fail after their retry: at most 3 + 3 requests", async () => {
+      const { lookup, calls } = fakeAdapter(() => "5xx");
+      const collected = await run(240, lookup);
+      expect(calls.lookups).toBe(3);
+      expect(calls.requests).toBe(6);
+      expect(collected.items).toHaveLength(240); // the rest keep their cached price
+      expect(collected.live?.queries).toMatchObject({
+        retried: 3,
+        errorReasons: { server_error: 3 },
+      });
+    });
+
+    it("spends at most MAX_RETRIES_PER_RUN retries and never exceeds cap + budget requests", async () => {
+      expect(MAX_RETRIES_PER_RUN).toBe(20);
+      // fail, fail, ok, ...: the streak never reaches 3, so only the budget bounds the retries
+      const { lookup, calls } = fakeAdapter((id) => (id % 3 === 2 ? "ok" : id % 2 ? "5xx" : "np"));
+      const collected = await run(240, lookup);
+      expect(collected.live?.queries).toMatchObject({ retried: MAX_RETRIES_PER_RUN });
+      expect(calls.requests).toBeLessThanOrEqual(240 + MAX_RETRIES_PER_RUN);
+      expect(calls.lookups).toBe(240);
+      expect(calls.allowed.lastIndexOf(true)).toBeLessThan(calls.allowed.indexOf(false));
+    });
+
+    it("once the budget is spent a failing page still counts toward the streak and stops the run", async () => {
+      // queries 0-29 (fail, fail, ok) spend the 20 retries; 30, 31, 32 then fail without a retry
+      const { lookup, calls } = fakeAdapter((id) => (id >= 30 || id % 3 !== 2 ? "5xx" : "ok"));
+      await run(240, lookup);
+      expect(calls.lookups).toBe(33);
+    });
+  });
+
   it("never queries more than the hard cap", async () => {
     const seen: string[] = [];
     const lookup: LiveLookup = (batch) => {
       seen.push(...batch.map((c) => c.id));
-      return hit()(batch);
+      return hit()(batch, { allowRetry: true });
     };
     await collectVerifiedDailyFlights(
       sourceOf(

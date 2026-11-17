@@ -1,6 +1,6 @@
 """Google Flights Live Price adapter (ADR 0012).
 
-stdin : JSON array of candidates {id, origin, dest, tripType, outDate, inDate}
+stdin : JSON array of candidates {id, origin, dest, tripType, outDate, inDate, allowRetry?}
 stdout: JSON array with one result per candidate, in order:
         {id, reason: null | "no_result" | "error" | "blocked", itineraries: [...]}
 Matching and pricing decisions stay in TypeScript. No proxies, no evasion, no challenge solving:
@@ -200,7 +200,8 @@ def attempt(c: dict[str, Any]) -> dict[str, Any]:
 
 def query_one(c: dict[str, Any]) -> dict[str, Any]:
     result = attempt(c)
-    if result["reason"] == "error" and result.get("errorReason") in TRANSIENT:
+    # The caller owns the run-wide retry budget and says per candidate whether a retry is allowed.
+    if c.get("allowRetry") is True and result["reason"] == "error" and result.get("errorReason") in TRANSIENT:
         time.sleep(RETRY_PAUSE_SECONDS)  # just wait and ask again, once: no tricks
         result = attempt(c)
         result["retried"] = True

@@ -160,8 +160,11 @@ def run_main(candidates, pages):
     return json.loads(out.getvalue()), sleeps, len(fetched)
 
 
-def cand(i):
-    return {"id": f"c{i}", "origin": "TPE", "dest": "HKG", "tripType": "ow", "outDate": "2026-12-12", "inDate": None}
+def cand(i, allow_retry=True):
+    c = {"id": f"c{i}", "origin": "TPE", "dest": "HKG", "tripType": "ow", "outDate": "2026-12-12", "inDate": None}
+    if allow_retry is not None:
+        c["allowRetry"] = allow_retry
+    return c
 
 
 class MainLoop(unittest.TestCase):
@@ -228,6 +231,15 @@ class RetryOnce(unittest.TestCase):
         self.assertEqual((results[0]["reason"], results[0]["retried"]), (None, True))
         self.assertEqual(results[0]["itineraries"][0]["priceTwd"], 1000)
         self.assertEqual((sleeps, fetched), ([10], 2))
+
+    def test_no_retry_unless_the_caller_allows_it_run_wide_budget(self):
+        for allow in (False, None):
+            results, sleeps, fetched = run_main([cand(1, allow)], [(200, VERIFYING), (200, GOOD)])
+            self.assertEqual((results[0]["reason"], results[0]["errorReason"]), ("error", "no_payload"), allow)
+            self.assertEqual((sleeps, fetched), ([], 1), allow)
+            self.assertNotIn("retried", results[0])
+        results, _, fetched = run_main([cand(1, False)], [(503, "down"), (200, GOOD)])
+        self.assertEqual((results[0]["errorReason"], fetched), ("server_error", 1))
 
     def test_a_5xx_is_retried_too(self):
         results, sleeps, fetched = run_main([cand(1)], [(503, "down"), (200, GOOD)])
