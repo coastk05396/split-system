@@ -14,7 +14,7 @@ The board used to pick the cheapest fares per Flight Region and only then score 
 4. **No fare with 3 or more stops on either leg**.
 5. **Baselines before selection**: fetch Baselines for the cheapest ~6 candidates of each Route, then keep the 3 best by discount. If the daily upstream calls would pass ~800, shrink the candidate count.
 6. **Per-route discovery so every country has a chance**: query the ~20 most popular destinations from each main origin, plus the main airport of every other country from the main Taipei airport, next to the existing broad discovery.
-7. **City card headline**: sorted by best deal, a City Card leads with its highest-discount fare; sorted by lowest price it is unchanged.
+7. **City card headline**: a City Card always leads with its lowest-price fare and cards are listed from lowest price to highest; there is no sort control (see ADR 0011).
 8. **No carry-over**: when no verified fare exists today, yesterday's fare is not reused.
 
 ## Considered Options
