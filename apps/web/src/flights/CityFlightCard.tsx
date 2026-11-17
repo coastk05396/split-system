@@ -118,14 +118,6 @@ export function Price({
   );
 }
 
-function RedEyePill() {
-  return (
-    <span className="shrink-0 rounded-full bg-[#334155] px-2 py-0.5 text-[11px] leading-4 font-semibold whitespace-nowrap text-white">
-      {t("flights.badge.redEyeText")}
-    </span>
-  );
-}
-
 function Dot() {
   return (
     <span aria-hidden="true" className="text-[#94a3b8]">
@@ -191,7 +183,6 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                 {flightCityLabel(cheapest, lang)}
               </span>
               <RouteChip item={cheapest} />
-              {cheapest.isRedEye && <RedEyePill />}
             </span>
             {open ? (
               <span className="min-w-0 text-[13px] leading-[18px] text-[#56655f]">
@@ -249,7 +240,6 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                       <span className="whitespace-nowrap">
                         {formatFareDates(fare.outDate, fare.inDate)}
                       </span>
-                      {fare.isRedEye && <RedEyePill />}
                     </span>
                     <span className="fare-row-detail flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-[18px] text-fl-muted">
                       {rowDetail(fare, lang).map((part, i) => (

@@ -574,8 +574,6 @@ const zhTW = {
   "flights.empty.reset": "重設篩選",
   "flights.deal.steal": "超值省 {pct}%",
   "flights.deal.save": "省 {pct}%",
-  "flights.badge.redEye": "🌙 紅眼",
-  "flights.badge.redEyeText": "紅眼",
   "flights.badge.direct": "直飛",
   "flights.badge.stops": "轉 {count}",
   "flights.badge.stops.many": "轉 {count}",
