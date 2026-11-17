@@ -435,6 +435,29 @@ describe("Curated Destination catalog integrity", () => {
         zone,
       ]);
     }
+    // Istanbul Sabiha, London Gatwick and Toronto City (ADR 0010)
+    expect(
+      Object.fromEntries(
+        ["SAW", "LGW", "YTZ"].map((a) => {
+          const m = getDestinationMeta(a);
+          return [a, [m?.countryCode, m?.flag, m?.region, getAirportTimeZone(a)]];
+        }),
+      ),
+    ).toEqual({
+      SAW: ["TR", "🇹🇷", "longhaul", "Europe/Istanbul"],
+      LGW: ["GB", "🇬🇧", "longhaul", "Europe/London"],
+      YTZ: ["CA", "🇨🇦", "longhaul", "America/Toronto"],
+    });
+    expect(getDestinationMeta("SAW")?.zhTW).not.toBe(getDestinationMeta("IST")?.zhTW);
+    // Sabiha and Gatwick share a City Card with Istanbul and London; Toronto has its own city name
+    expect(getDestinationMeta("SAW")?.cityCode).toBe(getDestinationMeta("IST")?.cityCode);
+    expect(getDestinationMeta("LGW")?.cityCode).toBe(getDestinationMeta("LHR")?.cityCode);
+    expect([getCityName("SAW", "en"), getCityName("SAW", "zh-TW")]).toEqual([
+      "Istanbul",
+      "伊斯坦堡",
+    ]);
+    expect(getCityName("LGW", "zh-TW")).toBe("倫敦");
+    expect([getCityName("YTZ", "en"), getCityName("YTZ", "zh-TW")]).toEqual(["Toronto", "多倫多"]);
     // Multi-airport cities render as one City Card name
     expect(getCityName("BGY", "en")).toBe("Milan");
     expect(getCityName("IAD", "zh-TW")).toBe("華盛頓");
