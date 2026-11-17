@@ -64,6 +64,10 @@ def block_reason(html: str, status: int | None = None) -> str | None:
     return None if "ds:1" in html else "no_payload"
 
 
+class NoPayload(Exception):
+    """The page has no real `script.ds:1` results script (it may only mention the text)."""
+
+
 class ParseError(ValueError):
     """The page has priced fares but none could be read."""
 
@@ -92,7 +96,7 @@ def parse_tolerant(html: str) -> list[dict[str, Any]]:
     instead of crashing the page (fast-flights 3.1.0 raises IndexError on `k[1][0][1]`)."""
     script = LexborHTMLParser(html).css_first(r"script.ds\:1")
     if script is None:
-        raise ValueError("results script missing")
+        raise NoPayload("results script missing")
     js = script.text()
     data = js.split("data:", 1)[1].rsplit(",", 1)[0]
     if data.endswith("errorHasStatus: true"):
@@ -154,6 +158,8 @@ def read_page(
         flights = parse_tolerant(html)
     except FlightsNotFound:
         return "no_result", [], None
+    except NoPayload:
+        return "error", [], "no_payload"  # same as a page without `ds:1`: transient, retry-eligible
     except (ValueError, IndexError, TypeError) as e:
         raise ParseError("could not parse results payload") from e
     if not flights:

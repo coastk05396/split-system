@@ -39,6 +39,13 @@ export type LiveLookup = (
  */
 export const MAX_RETRIES_PER_RUN = 20;
 
+/**
+ * Consecutive `parse` errors (a results payload we cannot read: Google changed its format) that
+ * stop the run. `parse` is neutral for the transient streak, so alternating no_payload/parse
+ * cannot hide either; only a good result (results, or genuinely none) resets both counters.
+ */
+export const PARSE_STREAK_STOP = 10;
+
 /** Outcome of each Google query this run (counts only, never URLs or ids). */
 export interface LiveQueries {
   ok: number;
@@ -117,6 +124,7 @@ export function googleLiveFlightSource(
       queries = emptyQueries();
       let noPayloadStreak = 0;
       let retriesUsed = 0;
+      let parseStreak = 0;
       const queried = candidates.slice(0, maxQueries);
       for (let i = 0; i < queried.length; i += batchSize) {
         if (i > 0) {
@@ -157,8 +165,10 @@ export function googleLiveFlightSource(
           // A failure counts toward the streak once its retry (if one was allowed) also failed.
           const transient = r.errorReason === "no_payload" || r.errorReason === "server_error";
           if (transient && (r.retried || !allowRetry)) noPayloadStreak += 1;
-          else if (r.reason === null || r.reason === "no_result" || r.errorReason === "parse")
-            noPayloadStreak = 0;
+          const good = r.reason === null || r.reason === "no_result";
+          if (good) noPayloadStreak = 0;
+          if (r.errorReason === "parse") parseStreak += 1;
+          else if (good) parseStreak = 0;
         }
         // An explicit block also leaves its own batch unresolved; a payload-less streak only the rest.
         let firstUnresolved = i;
@@ -167,6 +177,12 @@ export function googleLiveFlightSource(
           firstUnresolved = i + batch.length;
           stopReason = "no_payload";
           queries.blockedReasons["no_payload"] = (queries.blockedReasons["no_payload"] ?? 0) + 1;
+        }
+        if (!blocked && parseStreak >= PARSE_STREAK_STOP) {
+          blocked = true;
+          firstUnresolved = i + batch.length;
+          stopReason = "parse";
+          queries.blockedReasons["parse"] = (queries.blockedReasons["parse"] ?? 0) + 1;
         }
         if (blocked) {
           for (const c of queried.slice(firstUnresolved)) blockedIds.add(c.id);

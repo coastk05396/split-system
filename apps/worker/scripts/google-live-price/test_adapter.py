@@ -227,6 +227,22 @@ VERIFYING = "<html><title>Verifying...</title>Verifying your request... Please w
 GOOD = page([entry(1000)])
 
 
+class ScriptMissing(unittest.TestCase):
+    MENTIONS = "<html>this page only mentions ds:1 in text</html>"
+
+    def test_a_page_that_only_mentions_ds_1_is_no_payload_not_parse(self):
+        self.assertEqual(read_page(self.MENTIONS, 200), ("error", [], "no_payload"))
+
+    def test_it_is_retry_eligible_like_any_payload_less_page(self):
+        results, sleeps, fetched = run_main([cand(1)], [(200, self.MENTIONS), (200, GOOD)])
+        self.assertEqual((results[0]["reason"], results[0]["retried"], sleeps, fetched), (None, True, [10], 2))
+
+    def test_a_found_script_with_broken_json_is_still_parse(self):
+        broken = '<html><script class="ds:1">AF_initDataCallback({key: \'ds:1\', data:[not json], sideChannel: {}});</script></html>'
+        with self.assertRaises(adapter.ParseError):
+            read_page(broken, 200)
+
+
 class RetryOnce(unittest.TestCase):
     def test_pause_is_ten_seconds(self):
         self.assertEqual(adapter.RETRY_PAUSE_SECONDS, 10)

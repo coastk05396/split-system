@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MAX_RETRIES_PER_RUN,
+  PARSE_STREAK_STOP,
   googleLiveFlightSource,
   type LiveItinerary,
   type LiveLookup,
@@ -356,9 +357,9 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
       expect(queried).toHaveLength(6);
     });
 
-    it("a parse failure with results data resets the transient failure streak", async () => {
+    it("a parse failure does not reset the transient failure streak", async () => {
       const { queried } = await run(["np-retried", "parse", "np-retried", "np-retried"]);
-      expect(queried).toHaveLength(6);
+      expect(queried).toHaveLength(4); // three transient failures stop the run despite the parse in between
     });
 
     it("tallies how many queries were retried", async () => {
@@ -441,6 +442,57 @@ describe("Google Live Price reconciliation (ADR 0012)", () => {
       const { lookup, calls } = fakeAdapter((id) => (id >= 30 || id % 3 !== 2 ? "5xx" : "ok"));
       await run(240, lookup);
       expect(calls.lookups).toBe(33);
+    });
+  });
+
+  describe("parse errors and the failure streaks", () => {
+    type Kind = "np" | "parse" | "ok";
+    const run = async (kindOf: (n: number) => Kind, total = 30) => {
+      vi.useFakeTimers();
+      try {
+        let calls = 0;
+        const lookup: LiveLookup = (batch) => {
+          const kind = kindOf(calls);
+          calls += 1;
+          return Promise.resolve(
+            batch.map((c) => ({
+              id: c.id,
+              itineraries: [],
+              reason: kind === "ok" ? null : ("error" as const),
+              ...(kind === "np" ? { errorReason: "no_payload", retried: true } : {}),
+              ...(kind === "parse" ? { errorReason: "parse" } : {}),
+            })),
+          );
+        };
+        const ids = Array.from({ length: total }, (_, k) => String(k));
+        const source = googleLiveFlightSource(
+          { fetchCandidates: () => Promise.resolve(ids.map((id) => candidate(id))) },
+          lookup,
+        );
+        const pending = collectVerifiedDailyFlights(source, now);
+        await vi.advanceTimersByTimeAsync(200_000);
+        return { calls, collected: await pending };
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("a parse error neither resets nor adds to the transient streak: alternating np/parse still stops", async () => {
+      const { calls } = await run((n) => (n % 2 === 0 ? "np" : "parse"));
+      expect(calls).toBe(5); // np, parse, np, parse, np: three transient failures
+    });
+
+    it("stops after PARSE_STREAK_STOP consecutive parse errors and keeps cached prices", async () => {
+      expect(PARSE_STREAK_STOP).toBe(10);
+      const { calls, collected } = await run(() => "parse");
+      expect(calls).toBe(10);
+      expect(collected.items).toHaveLength(30);
+      expect(collected.live?.queries).toMatchObject({ blockedReasons: { parse: 1 } });
+    });
+
+    it("a good result resets both counters", async () => {
+      const { calls } = await run((n) => (n === 9 || n === 19 ? "ok" : "parse"), 25);
+      expect(calls).toBe(25); // 9 + ok + 9 + ok + 5: neither streak ever reaches its limit
     });
   });
 
