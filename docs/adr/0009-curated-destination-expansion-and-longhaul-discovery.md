@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Curated Destination Expansion and Targeted Long-Haul Discovery
@@ -21,3 +21,8 @@ status: proposed
 - **Open-world airport ingestion**: Rejected because uncurated airports lack reliable Traditional Chinese city names and timezones, inflate the shared client bundle, and often have fewer than `3` candidates for `Deal Signal`.
 - **Scaling board to 500–1,000+ fares**: Rejected for now because it would require splitting the daily sync across multiple cron batches/queues to stay under Workers Paid subrequest and CPU limits.
 - **Adding 8+ top-level region tabs**: Rejected because horizontal tab overflow degrades mobile header ergonomics when a filter drawer already exists.
+
+## Amendments (2026-11-17)
+
+- One-way quota is 5 of 230 (round trip 225), not 30 of 230: one-way fares are a secondary slice; the One-way view shows an empty state when a region has none.
+- `MAX_DATES_PER_ROUTE` is fixed at 3 (the ADR allowed 2–3).
