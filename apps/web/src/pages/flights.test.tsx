@@ -1,4 +1,4 @@
-import type { DailyFlightItem } from "@split/shared";
+import type { DailyFlightItem, FlightRegion } from "@split/shared";
 import { screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -147,7 +147,7 @@ describe("daily flights page", () => {
     setup();
     await screen.findAllByRole("heading", { level: 2 });
     const heading = screen.getByRole("heading", { level: 1, name: "今天想飛去哪？" });
-    expect(heading).toHaveClass("font-black", "whitespace-nowrap");
+    expect(heading).toHaveClass("font-extrabold", "whitespace-nowrap");
     const mark = within(heading).getByText("去哪");
     expect(mark.className).toContain("linear-gradient(transparent_60%,#d3ebdf_60%)");
     const row = heading.parentElement as HTMLElement;
@@ -580,19 +580,17 @@ describe("daily flights page", () => {
     expect(screen.getByRole("button", { name: "看全部 7 筆" })).toBeVisible();
   });
 
-  it.each([
-    ["NRT", "jp", "bg-[#fce7f3]", "text-[#9d174d]"],
-    ["ICN", "kr", "bg-[#e0f2fe]", "text-[#075985]"],
-    ["BKK", "sea", "bg-[#ffedd5]", "text-[#9a3412]"],
-    ["HKG", "hkmo", "bg-[#f3e8ff]", "text-[#6b21a8]"],
-    ["LHR", "longhaul", "bg-[#dff3e9]", "text-[#065f46]"],
-  ] as const)("colours the %s route chip by its %s region", async (dest, region, bg, fg) => {
-    const { api } = setup();
-    setItems(api, [fare("x", { dest, region, priceTwd: 5000 })]);
-    await screen.findAllByRole("heading", { level: 2 });
-    const chip = within(cityHeadings()[0] as HTMLElement).getByText(`TPE ⇄ ${dest}`);
-    expect(chip).toHaveClass(bg, fg, "rounded-full", "font-bold");
-  });
+  it.each(["NRT:jp", "ICN:kr", "BKK:sea", "HKG:hkmo", "LHR:longhaul"])(
+    "renders the %s route chip in the single orange chip style",
+    async (pair) => {
+      const [dest, region] = pair.split(":") as [string, FlightRegion];
+      const { api } = setup();
+      setItems(api, [fare("x", { dest, region, priceTwd: 5000 })]);
+      await screen.findAllByRole("heading", { level: 2 });
+      const chip = within(cityHeadings()[0] as HTMLElement).getByText(`TPE ⇄ ${dest}`);
+      expect(chip).toHaveClass("bg-[#ffedd5]", "text-[#9a3412]", "rounded-full", "font-bold");
+    },
+  );
 
   it("renders English labels, sort chips and redirect links", async () => {
     const user = userEvent.setup();
