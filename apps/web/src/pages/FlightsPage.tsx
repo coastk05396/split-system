@@ -465,7 +465,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
               className={`press-pill relative min-h-9 cursor-pointer rounded-full border-[1.5px] px-3.5 text-[13px] whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-[5.5px] after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
                 sort === option.value
                   ? "border-fl-green bg-fl-tint font-bold text-fl-green"
-                  : "border-fl-hair bg-white font-medium text-slate-700"
+                  : "border-fl-hair bg-white font-medium text-fl-sub"
               }`}
             >
               {t(option.label)}
@@ -498,7 +498,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </ul>
       )}
 
-      <p className="text-center text-xs text-slate-400">
+      <p className="text-center text-xs text-fl-muted">
         {flightsUpdatedNote(data.date, data.isFallback)}
       </p>
     </div>
@@ -538,7 +538,7 @@ function RegionTab({
 function FilterSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-[9px]">
-      <span className="text-[13px] font-bold text-slate-700">{label}</span>
+      <span className="text-[13px] font-bold text-fl-sub">{label}</span>
       <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
         {children}
       </div>
@@ -565,14 +565,14 @@ function FilterChip({
       className={`press-pill inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-[15px] text-sm transition-colors focus-visible:outline-2 focus-visible:outline-fl-green ${
         active
           ? "border-fl-green bg-fl-tint font-bold text-fl-green"
-          : "border-fl-hair bg-white font-medium text-slate-700"
+          : "border-fl-hair bg-white font-medium text-fl-sub"
       }`}
     >
       <span>{children}</span>
       {count !== undefined && (
         <span
           className={`text-[11px] font-medium tabular-nums ${
-            active ? "text-fl-green/70" : count === 0 ? "text-slate-300" : "text-slate-400"
+            active ? "text-fl-green" : "text-fl-muted"
           }`}
         >
           {count}
