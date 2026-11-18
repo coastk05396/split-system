@@ -177,6 +177,7 @@ export function googleLiveFlightSource(
   return {
     ...(base.upstreamCalls ? { upstreamCalls: () => base.upstreamCalls?.() ?? 0 } : {}),
     discoveredCandidates: () => base.discoveredCandidates?.() ?? 0,
+    skippedUnverifiableAirlines: () => base.skippedUnverifiableAirlines?.() ?? 0,
     liveStats: () => ({ ...stats, queries }),
 
     async fetchCandidates(digestDate, now) {

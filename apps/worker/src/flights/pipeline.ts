@@ -95,6 +95,8 @@ export interface FlightSource {
   upstreamCalls?(): number;
   /** Fares discovered before Good Deal selection in the last run; 0 means no upstream data (not "no deals"). */
   discoveredCandidates?(): number;
+  /** Fares skipped in the last run because their airline is an Unverifiable Airline. */
+  skippedUnverifiableAirlines?(): number;
   /** Live Price outcomes of the last run (`repriced` counts every matched fare, dropped ones included). */
   liveStats?(): {
     repriced: number;
@@ -103,6 +105,17 @@ export interface FlightSource {
     queries?: object;
   };
 }
+
+/**
+ * Unverifiable Airlines: Google Flights does not list them and Trip.com sold them well above the
+ * Travelpayouts price, so the board would advertise a fare nobody can buy. Their fares are never
+ * candidates; other airlines on the same route and day take the slot. Evidence (2026-11-18, price and
+ * stops read twice by two independent agents on tw.trip.com): MF TSA-HKG board 9,504 vs 14,322 and
+ * TSA-AMS 17,145 vs 19,799; 9G TPE-SGN 7,882 vs 10,682. Remove an airline once fresh samples match.
+ * shortcut: one airline code per Travelpayouts fare, so a code-share sold under another code but
+ * operated by one of these (seen: UNI Air B7 operated by MF) is not caught; add the code if it recurs.
+ */
+export const UNVERIFIABLE_AIRLINES: ReadonlySet<string> = new Set(["MF", "9G"]);
 
 // ~70 broad discovery + ~135 per-route queries + baselines for the cheapest candidates + <= 230 verifications per run, all sequential: needs Workers Paid (ADR 0008/0010).
 /** Board size ceiling per trip type: 230 fares at most, never padded (ADR 0010). */
@@ -445,6 +458,7 @@ export function productionFlightSource(
 ): FlightSource {
   let upstreamCalls = 0;
   let discovered = 0;
+  let skippedUnverifiable = 0;
   const fetchFn: FetchFn = (input, init) => {
     upstreamCalls += 1;
     return upstreamFetch(input, init);
@@ -452,10 +466,12 @@ export function productionFlightSource(
   return {
     upstreamCalls: () => upstreamCalls,
     discoveredCandidates: () => discovered,
+    skippedUnverifiableAirlines: () => skippedUnverifiable,
 
     async fetchCandidates(digestDate, now = Date.now()) {
       upstreamCalls = 0;
       discovered = 0;
+      skippedUnverifiable = 0;
       const token = env.TRAVELPAYOUTS_TOKEN;
       if (!token) return [];
 
@@ -465,6 +481,11 @@ export function productionFlightSource(
 
       const ingest = (data: readonly TravelpayoutsItem[], oneWay: boolean) => {
         for (const raw of data) {
+          // Before the dedupe below: an excluded fare must not take the slot of a buyable one.
+          if (UNVERIFIABLE_AIRLINES.has(raw.airline.toUpperCase())) {
+            skippedUnverifiable += 1;
+            continue;
+          }
           if (!isAcceptableFoundAt(raw.found_at, now)) continue;
           const parsedOrigin = resolveOriginAirport(raw);
           const meta = resolveDestinationAirport(raw);
@@ -717,6 +738,8 @@ export function productionFlightSource(
       const candidateClass = stopClassOf(candidate.transfers, candidate.returnTransfers);
 
       const matches = data.filter((raw) => {
+        // The cheapest-any-airline fallback below must not bring an Unverifiable Airline back in.
+        if (UNVERIFIABLE_AIRLINES.has(raw.airline.toUpperCase())) return false;
         const rowOrigin = resolveOriginAirport(raw);
         const rowDest = resolveDestinationAirport(raw);
         if (rowOrigin !== candidate.origin || rowDest?.airport !== candidate.dest) {
@@ -775,6 +798,8 @@ export interface CollectedDailyFlights {
   droppedStops: number;
   /** Below 15% under the Baseline, or no Baseline at all. */
   droppedNotDeal: number;
+  /** Fares skipped because their airline is an Unverifiable Airline (counted per upstream row, before dedupe). */
+  skippedUnverifiableAirline: number;
   /** Distinct countries with at least one Good Deal on the board. */
   countriesWithDeal: number;
   /** The run found upstream fares (even if none was a Good Deal), so an empty board is a real answer. */
@@ -805,6 +830,7 @@ export function logDailyFlightsSummary(event: string, collected: CollectedDailyF
       droppedGhost: collected.droppedGhost,
       droppedStops: collected.droppedStops,
       droppedNotDeal: collected.droppedNotDeal,
+      skippedUnverifiableAirline: collected.skippedUnverifiableAirline,
       countriesWithDeal: collected.countriesWithDeal,
       upstreamCalls: collected.upstreamCalls,
       persisted: collected.rows.length,
@@ -993,6 +1019,7 @@ export async function collectVerifiedDailyFlights(
     droppedGhost,
     droppedStops,
     droppedNotDeal,
+    skippedUnverifiableAirline: source.skippedUnverifiableAirlines?.() ?? 0,
     countriesWithDeal: new Set(items.map((i) => getDestinationMeta(i.dest)?.countryCode)).size,
     completed: (source.discoveredCandidates?.() ?? candidates.length) > 0,
     upstreamCalls: source.upstreamCalls?.() ?? 0,
