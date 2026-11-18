@@ -63,6 +63,18 @@ const miss =
     Promise.resolve(batch.map((c) => ({ id: c.id, reason, itineraries: [] })));
 
 describe("Google Live Price reconciliation (ADR 0012)", () => {
+  it("passes the base source's Unverifiable Airline count through to the run summary", async () => {
+    const lookup: LiveLookup = () => Promise.resolve([]);
+    const source = googleLiveFlightSource(
+      { fetchCandidates: () => Promise.resolve([]), skippedUnverifiableAirlines: () => 3 },
+      lookup,
+    );
+
+    const collected = await collectVerifiedDailyFlights(source, now);
+
+    expect(collected.skippedUnverifiableAirline).toBe(3);
+  });
+
   it("reprices a matching itinerary and recomputes the Deal Signal", async () => {
     const collected = await collectVerifiedDailyFlights(
       sourceOf([candidate("a")], hit(itinerary({ priceTwd: 5000 }))),

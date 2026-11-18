@@ -459,6 +459,47 @@ describe("public flight routes and daily pipeline", () => {
         expect(board.items.map((i) => [i.priceTwd, i.airlines])).toEqual([[7000, ["IT"]]]);
       });
 
+      it("never falls back to an excluded airline when the fresh answer lacks the candidate's airline", async () => {
+        // Discovery sees an IT fare; verification then answers with only a cheaper MF fare on that day.
+        const fake = supply([{ dest: "NRT", day: 5, price: 7000, airline: "IT" }]);
+        const fetchFn: typeof fetch = async (input, init) => {
+          const url = new URL(
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+          );
+          const isVerify =
+            !url.pathname.includes("month-matrix") &&
+            url.searchParams.get("destination") !== null &&
+            (url.searchParams.get("departure_at") ?? "") !== "";
+          if (!isVerify) return fake.fetchFn(input, init);
+          return Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                destination: "NRT",
+                airline: "MF",
+                departure_at: `${DEC}-05T10:00:00+08:00`,
+                return_at: `${DEC}-09T15:00:00+08:00`,
+                price: 5000,
+                transfers: 0,
+                return_transfers: 0,
+                duration_to: 180,
+                duration_back: 180,
+                found_at: new Date(clock.now - 4 * 3_600_000).toISOString(),
+              },
+            ],
+          });
+        };
+        const db = createDb(env.DB);
+        const collected = await collectVerifiedDailyFlights(
+          productionFlightSource(tpEnv, fetchFn, d1BaselineCache(db)),
+          cronNow,
+        );
+
+        expect(collected.rows).toEqual([]); // the IT fare could not be re-found, so it is a ghost fare
+        expect(collected.droppedNull).toBe(1);
+      });
+
       it("leaves other unverifiable-by-Google airlines alone", async () => {
         const board = await boardOf(
           supply([
