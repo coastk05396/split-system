@@ -195,12 +195,17 @@ function fakeTravelpayouts(
       verifyCount += 1;
       const month = departure.slice(0, 7);
       const day = Number(departure.slice(8, 10));
+      // Like upstream: every fare of that route and day, not just the first.
+      const sameDay = fares(origin, oneWay, month).filter(
+        (f) => f.dest === destination && f.day === day,
+      );
       const match =
-        fares(origin, oneWay, month).find((f) => f.dest === destination && f.day === day) ??
-        targeted?.(destination).find((f) => f.month === month && f.day === day);
+        sameDay.length > 0
+          ? sameDay
+          : (targeted?.(destination).filter((f) => f.month === month && f.day === day) ?? []);
       return Response.json({
         success: true,
-        data: match ? [toItem(origin, oneWay, month, match)] : [],
+        data: match.map((f) => toItem(origin, oneWay, month, f)),
       });
     } finally {
       inFlight -= 1;
@@ -420,6 +425,108 @@ describe("public flight routes and daily pipeline", () => {
         ["NRT", 7000, 30],
       ]);
       expect(fake.stats().verifyCount).toBe(1); // dropped fares are never verified
+    });
+
+    describe("Unverifiable Airlines (issue #194)", () => {
+      const supply = (fares: FakeFare[]) =>
+        tpeSupply(
+          (month) => (month === DEC ? fares : []),
+          () => ({ prices: [8000, 10000, 12000] }),
+        );
+
+      it("never puts an MF or 9G fare on the board, even at a Good Deal price", async () => {
+        const board = await boardOf(
+          supply([
+            { dest: "NRT", day: 5, price: 6000, airline: "MF" },
+            { dest: "KIX", day: 6, price: 6000, airline: "9G" },
+            { dest: "ICN", day: 7, price: 6000, airline: "mf" },
+            { dest: "NGO", day: 8, price: 6000, airline: "IT" },
+          ]),
+        );
+
+        expect(board.items.map((i) => [i.dest, i.airlines])).toEqual([["NGO", ["IT"]]]);
+      });
+
+      it("lets another airline take the slot of an excluded cheaper fare on the same route and day", async () => {
+        // Both are TPE-NRT on 2026-12-05: the dedupe keeps the first one seen, so exclusion must come first.
+        const board = await boardOf(
+          supply([
+            { dest: "NRT", day: 5, price: 5000, airline: "MF" },
+            { dest: "NRT", day: 5, price: 7000, airline: "IT" },
+          ]),
+        );
+
+        expect(board.items.map((i) => [i.priceTwd, i.airlines])).toEqual([[7000, ["IT"]]]);
+      });
+
+      it("never falls back to an excluded airline when the fresh answer lacks the candidate's airline", async () => {
+        // Discovery sees an IT fare; verification then answers with only a cheaper MF fare on that day.
+        const fake = supply([{ dest: "NRT", day: 5, price: 7000, airline: "IT" }]);
+        const fetchFn: typeof fetch = async (input, init) => {
+          const url = new URL(
+            typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+          );
+          const isVerify =
+            !url.pathname.includes("month-matrix") &&
+            url.searchParams.get("destination") !== null &&
+            (url.searchParams.get("departure_at") ?? "") !== "";
+          if (!isVerify) return fake.fetchFn(input, init);
+          return Response.json({
+            success: true,
+            data: [
+              {
+                origin: "TPE",
+                destination: "NRT",
+                airline: "MF",
+                departure_at: `${DEC}-05T10:00:00+08:00`,
+                return_at: `${DEC}-09T15:00:00+08:00`,
+                price: 5000,
+                transfers: 0,
+                return_transfers: 0,
+                duration_to: 180,
+                duration_back: 180,
+                found_at: new Date(clock.now - 4 * 3_600_000).toISOString(),
+              },
+            ],
+          });
+        };
+        const db = createDb(env.DB);
+        const collected = await collectVerifiedDailyFlights(
+          productionFlightSource(tpEnv, fetchFn, d1BaselineCache(db)),
+          cronNow,
+        );
+
+        expect(collected.rows).toEqual([]); // the IT fare could not be re-found, so it is a ghost fare
+        expect(collected.droppedNull).toBe(1);
+      });
+
+      it("leaves other unverifiable-by-Google airlines alone", async () => {
+        const board = await boardOf(
+          supply([
+            { dest: "NRT", day: 5, price: 6000, airline: "VZ" },
+            { dest: "KIX", day: 6, price: 6000, airline: "NQ" },
+          ]),
+        );
+
+        expect(board.items.map((i) => i.airlines[0]).sort()).toEqual(["NQ", "VZ"]);
+      });
+
+      it("reports how many fares the rule skipped in the run summary", async () => {
+        const fake = supply([
+          { dest: "NRT", day: 5, price: 6000, airline: "MF" },
+          { dest: "KIX", day: 6, price: 6000, airline: "9G" },
+          { dest: "NGO", day: 8, price: 6000, airline: "IT" },
+        ]);
+        const source = productionFlightSource(
+          tpEnv,
+          fake.fetchFn,
+          d1BaselineCache(createDb(env.DB)),
+        );
+        const collected = await collectVerifiedDailyFlights(source, cronNow);
+
+        expect(collected.skippedUnverifiableAirline).toBe(2);
+        expect(collected.rows.map((r) => r.destination)).toEqual(["NGO"]);
+      });
     });
 
     it("scores a connecting fare against the connecting Baseline, not the cheaper direct mix", async () => {

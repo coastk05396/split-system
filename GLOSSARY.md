@@ -68,6 +68,10 @@ _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus
 The current fare for the same itinerary read from Google Flights during Stage 2 verification (`即時價`). It replaces the cached price only for a matching Route, dates, trip type, stop class and airline set; with no match the cached price stays. It is still not the booking-page price.
 _Avoid_: Real price, Actual price (neither Google nor Travelpayouts is the checkout price)
 
+**Unverifiable Airline**:
+An airline (`不可驗證航空`) whose fares are never candidates: Google Flights does not list it, so Live Price cannot check it, and Trip.com sold it well above the Travelpayouts price when sampled. Fares are excluded before candidate selection, so another airline takes the route's slot. Currently Xiamen Air (MF) and Sun PhuQuoc Airways (9G); the list and its evidence live in code and ADR 0012.
+_Avoid_: Blocked airline, unverified fare (this is an airline-level exclusion, not a per-fare label)
+
 **Ghost Fare**:
 A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by Stage 2 verification (`FlightSource.verifyCandidate`). With the Travelpayouts-only verifier it is dropped when no matching fresh itinerary exists or the re-checked price rises by more than 20% AND NT$800; with Live Price verification a missing or higher Live Price is not a Ghost Fare (the fare is kept or repriced).
 _Avoid_: Phantom ticket, cache hit

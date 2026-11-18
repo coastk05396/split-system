@@ -1,9 +1,9 @@
 name: Sync flights
 
-# 23:00 UTC = 07:00 Taipei, ahead of the "updated 08:00" promise; the Worker cron at 00:00 UTC is the fallback.
+# 22:00 UTC = 06:00 Taipei, two hours ahead of the "updated 08:00" promise; the Worker cron at 00:00 UTC is the fallback.
 on:
   schedule:
-    - cron: "0 23 * * *"
+    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -22,7 +22,8 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A 22:00 UTC start (even if delayed up to ~80 min) + 40 min ends before the Worker's 00:00 UTC fallback cron (ADR 0012).
+    timeout-minutes: 40
     environment: production
     env:
       # Scheduled runs write; manual runs default to dry-run.

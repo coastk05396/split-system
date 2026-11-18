@@ -10,6 +10,9 @@ const resultsSchema = z.array(
   z.object({
     id: z.string(),
     reason: z.enum(["no_result", "error", "blocked"]).nullable(),
+    blockedReason: z.string().optional(),
+    errorReason: z.string().optional(),
+    retried: z.boolean().optional(),
     itineraries: z.array(
       z.object({
         priceTwd: z.number(),
@@ -24,7 +27,7 @@ const resultsSchema = z.array(
 
 /** Runs the Python Google adapter for one batch; `python` defaults to `python3`. */
 export function pythonLiveLookup(python = "python3"): LiveLookup {
-  return (batch) =>
+  return (batch, { allowRetry }) =>
     new Promise<LiveResult[]>((resolve, reject) => {
       const child = execFile(
         python,
@@ -51,6 +54,7 @@ export function pythonLiveLookup(python = "python3"): LiveLookup {
             tripType: c.tripType,
             outDate: c.outDate,
             inDate: c.inDate,
+            allowRetry,
           })),
         ),
       );
