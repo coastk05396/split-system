@@ -193,7 +193,7 @@ describe("typical-high Baselines", () => {
       typical: () => [8_000, 16_000],
     });
     await sync(EXPLORE_ONLY);
-    expect(exploreCalls()).toBe(14); // 8 short + 6 long
+    expect(exploreCalls()).toBe(16); // 8 short + 8 long (no long2 key)
     expect(flightsCalls).toHaveLength(0);
     expect(await stored()).toEqual([]);
   });
@@ -278,7 +278,7 @@ describe("typical-high Baselines", () => {
       typicalStatus: 429,
     });
     await sync(ALL_KEYS);
-    expect(exploreCalls()).toBe(14); // 8 short + 6 long
+    expect(exploreCalls()).toBe(16); // 8 short + 8 long (no long2 key)
     expect(flightsCalls).toHaveLength(1);
     expect((await board()).items.length).toBe(3);
     expect(await stored()).toEqual([]);

@@ -1,11 +1,11 @@
 /**
  * Manually runs the daily SerpApi Explore sync (the Worker cron's job) and writes it into D1.
  *
- *   SERPAPI_KEY_SHORT=... SERPAPI_KEY_LONG=... pnpm --filter @split/worker sync-flights -- --dry-run
- *   SERPAPI_KEY_SHORT=... SERPAPI_KEY_LONG=... pnpm --filter @split/worker sync-flights -- --remote
+ *   SERPAPI_KEY_SHORT=... SERPAPI_KEY_LONG=... SERPAPI_KEY_LONG2=... pnpm --filter @split/worker sync-flights -- --dry-run
+ *   SERPAPI_KEY_SHORT=... SERPAPI_KEY_LONG=... SERPAPI_KEY_LONG2=... pnpm --filter @split/worker sync-flights -- --remote
  *
- * Runs the Explore roles (short-haul and long-haul); the Baseline key is only for the cron and the
- * seed CLI, so it is ignored here (setting all three variables is fine). A missing role is skipped,
+ * Runs the Explore roles (short-haul, long-haul and long2); the Baseline key is only for the cron and
+ * the seed CLI, so it is ignored here (setting all four variables is fine). A missing role is skipped,
  * as in the cron. Defaults to local D1 (`--local`) unless `--remote` is passed. Never commit the keys.
  */
 import { existsSync } from "node:fs";
@@ -63,9 +63,12 @@ async function main(): Promise<void> {
   const roleKeys = {
     ...(env["SERPAPI_KEY_SHORT"] ? { SERPAPI_KEY_SHORT: env["SERPAPI_KEY_SHORT"] } : {}),
     ...(env["SERPAPI_KEY_LONG"] ? { SERPAPI_KEY_LONG: env["SERPAPI_KEY_LONG"] } : {}),
+    ...(env["SERPAPI_KEY_LONG2"] ? { SERPAPI_KEY_LONG2: env["SERPAPI_KEY_LONG2"] } : {}),
   };
   if (Object.keys(roleKeys).length === 0) {
-    console.error("Set SERPAPI_KEY_SHORT and/or SERPAPI_KEY_LONG in the environment.");
+    console.error(
+      "Set SERPAPI_KEY_SHORT, SERPAPI_KEY_LONG and/or SERPAPI_KEY_LONG2 in the environment.",
+    );
     exit(1);
   }
   const now = Date.now();

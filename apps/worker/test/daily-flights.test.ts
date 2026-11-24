@@ -122,7 +122,11 @@ const exhausted = () =>
   Response.json({ error: "Your account has run out of searches." }, { status: 429 });
 
 /** The Explore roles' keys; the Baseline key is left out so these runs make no Baseline requests. */
-const EXPLORE_KEYS: SerpApiKeys = { SERPAPI_KEY_SHORT: "short-key", SERPAPI_KEY_LONG: "long-key" };
+const EXPLORE_KEYS: SerpApiKeys = {
+  SERPAPI_KEY_SHORT: "short-key",
+  SERPAPI_KEY_LONG: "long-key",
+  SERPAPI_KEY_LONG2: "long2-key",
+};
 const ALL_KEYS: SerpApiKeys = { ...EXPLORE_KEYS, SERPAPI_KEY_BASELINE: "baseline-key" };
 
 async function sync(keys: SerpApiKeys = EXPLORE_KEYS, now = clock.now) {
@@ -292,12 +296,14 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     });
   });
 
-  describe("long-haul queries on the long key (ADR 0014, decision 3)", () => {
+  describe("long-haul queries on the long and long2 keys (ADR 0016, decisions 4 and 5)", () => {
     const EUROPE = "/m/02j9z";
     const NORTH_AMERICA = "/m/059g4";
     const OCEANIA = "/m/05nrg";
     const MIDDLE_EAST = "/m/04wsz";
+    const CANADA = "/m/0d060g";
     const longCalls = (calls: ExploreCall[]) => calls.filter((c) => c.key === "long-key");
+    const long2Calls = (calls: ExploreCall[]) => calls.filter((c) => c.key === "long2-key");
     const monthCall = (calls: ExploreCall[], area: string) =>
       calls.find((c) => c.arrival === area && c.month !== null);
     /** Europe's month with the fewest cities is Feb, North America's is Mar. */
@@ -321,9 +327,10 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       return [];
     };
 
-    it("sends exactly 6 requests a day with the listed parameters", async () => {
+    it("sends exactly 8 requests a day on the long key with the listed parameters", async () => {
       const calls = stubSerpApi(answers);
       await sync();
+      // Oceania's answer is empty, so its month 1 is the earliest upcoming month, December.
       expect(longCalls(calls).map(label).sort()).toEqual([
         `TPE|${EUROPE}|-`,
         `TPE|${EUROPE}|2`,
@@ -331,8 +338,11 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         `TPE|${NORTH_AMERICA}|-`,
         `TPE|${NORTH_AMERICA}|3`,
         `TPE|${OCEANIA}|-`,
+        `TPE|${OCEANIA}|12`,
+        `TPE|${CANADA}|-`,
       ]);
-      for (const c of longCalls(calls)) {
+      for (const c of [...longCalls(calls), ...long2Calls(calls)]) {
+        expect(c.params.get("stops")).toBe("3");
         expect(c.params.get("engine")).toBe("google_travel_explore");
         expect(c.params.get("type")).toBe("1");
         expect(c.params.get("currency")).toBe("TWD");
@@ -341,18 +351,72 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       }
     });
 
+    it("sends month 2 of Europe, North America and Oceania and months 1 and 2 of the Middle East on the long2 key", async () => {
+      const calls = stubSerpApi(answers);
+      await sync();
+      // Europe: Feb has the fewest cities, then Dec/Jan/Mar/Apr tie and the earliest wins. North
+      // America: Mar, then Dec. Oceania and the Middle East answer nothing: Dec, then Jan.
+      expect(long2Calls(calls).map(label).sort()).toEqual([
+        `TPE|${EUROPE}|12`,
+        `TPE|${MIDDLE_EAST}|1`,
+        `TPE|${MIDDLE_EAST}|12`,
+        `TPE|${NORTH_AMERICA}|12`,
+        `TPE|${OCEANIA}|1`,
+      ]);
+    });
+
+    it("reaches every long-haul city with at least 3 queries, and Canada's with 4", async () => {
+      const longhaul = DESTINATION_CATALOG.filter((d) => d.region === "longhaul");
+      const AREA_SUBREGION: Record<string, string> = {
+        [EUROPE]: "europe",
+        [NORTH_AMERICA]: "north_america",
+        [OCEANIA]: "oceania",
+        [MIDDLE_EAST]: "middle_east_islands",
+      };
+      // Each area query prices every city of its area on a date of its own: the unscoped answer in
+      // December (so its month queries pick January and February), Canada's on 3 December.
+      stubSerpApi((c) => {
+        const inArea =
+          c.arrival === CANADA
+            ? longhaul.filter((d) => d.countryCode === "CA")
+            : longhaul.filter((d) => d.subRegion === AREA_SUBREGION[c.arrival ?? ""]);
+        const out =
+          c.month !== null
+            ? dateInMonth(Number(c.month))
+            : c.arrival === CANADA
+              ? "2026-12-03"
+              : "2026-12-01";
+        return inArea.map((d) => ({ dest: d.airport, price: 20000, out }));
+      });
+      await sync();
+
+      const fares = new Map<string, number>();
+      for (const item of (await board()).items) {
+        fares.set(item.dest, (fares.get(item.dest) ?? 0) + 1);
+      }
+      expect(longhaul.length).toBeGreaterThan(0);
+      for (const d of longhaul) {
+        expect([d.airport, fares.get(d.airport)]).toEqual([
+          d.airport,
+          d.countryCode === "CA" ? 4 : 3,
+        ]);
+      }
+    });
+
     it("sends the same long-haul queries on every day of the week", async () => {
       const labelsOn = async (now: number) => {
         const calls = stubSerpApi(answers);
         await sync(EXPLORE_KEYS, now);
         vi.unstubAllGlobals();
-        return longCalls(calls).map(label).sort();
+        return [...longCalls(calls), ...long2Calls(calls)]
+          .map((c) => `${c.key}|${label(c)}`)
+          .sort();
       };
       const first = await labelsOn(clock.now);
       for (let day = 1; day < 7; day += 1) {
         expect(await labelsOn(clock.now + day * 86_400_000)).toEqual(first);
       }
-      expect(first).toHaveLength(6);
+      expect(first).toHaveLength(13);
     });
 
     it("breaks a tie on the fewest cities with the earlier month, and never picks the current month or one past Explore's window", async () => {
@@ -382,7 +446,8 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         const calls = stubSerpApi((c) => (c.arrival === EUROPE ? answer() : []));
         await sync();
         expect(monthCall(calls, EUROPE)?.month).toBe("12");
-        expect(longCalls(calls)).toHaveLength(6);
+        expect(longCalls(calls)).toHaveLength(8);
+        expect(long2Calls(calls).find((c) => c.arrival === EUROPE)?.month).toBe("1");
       },
     );
 
@@ -612,7 +677,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
   });
 
   describe("one SerpApi key per role (ADR 0014)", () => {
-    const SECRETS = /baseline-key|short-key|long-key/;
+    const SECRETS = /baseline-key|short-key|long-key|long2-key/;
     const captureLogs = () => {
       const logged: string[] = [];
       for (const level of ["info", "warn", "error", "log"] as const) {
@@ -622,7 +687,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       }
       return logged;
     };
-    const LONG_AREAS = ["/m/02j9z", "/m/059g4", "/m/05nrg", "/m/04wsz"];
+    const LONG_AREAS = ["/m/02j9z", "/m/059g4", "/m/05nrg", "/m/04wsz", "/m/0d060g"];
     /** Short-haul fares answer KIX from KHH; long-haul areas answer LHR from Europe only. */
     const bothRoles = (c: ExploreCall) =>
       c.arrival === "/m/02j9z"
@@ -637,11 +702,14 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync(ALL_KEYS);
 
       const explore = calls.filter((c) => c.engine === "google_travel_explore");
-      expect(explore).toHaveLength(14); // 8 short + 6 long
+      expect(explore).toHaveLength(21); // 8 short + 8 long + 5 long2
       for (const c of explore) {
-        expect(c.key).toBe(LONG_AREAS.includes(c.arrival ?? "") ? "long-key" : "short-key");
+        expect(c.key).toMatch(
+          LONG_AREAS.includes(c.arrival ?? "") ? /^long2?-key$/ : /^short-key$/,
+        );
       }
-      expect(explore.filter((c) => c.key === "long-key")).toHaveLength(6);
+      expect(explore.filter((c) => c.key === "long-key")).toHaveLength(8);
+      expect(explore.filter((c) => c.key === "long2-key")).toHaveLength(5);
       expect(explore.filter((c) => c.key === "short-key")).toHaveLength(8);
       const baseline = calls.filter((c) => c.engine === "google_flights");
       expect(baseline.length).toBeGreaterThan(0);
@@ -660,7 +728,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync(EXPLORE_KEYS, clock.now + 3_600_000);
 
       expect(calls.filter((c) => c.key === "short-key")).toHaveLength(1); // not asked again
-      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(6);
+      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(8);
       expect(await dests()).toEqual(["LHR"]);
       expect(logged.some((line) => line.includes("serpapi_key_refused"))).toBe(true);
       expect(logged.join("\n")).not.toMatch(SECRETS);
@@ -675,9 +743,45 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         await sync();
         expect(calls.filter((c) => c.key === "long-key")).toHaveLength(1);
         expect(calls.filter((c) => c.key === "short-key")).toHaveLength(8);
-        expect(await dests()).toEqual(["KIX"]);
+        expect(calls.filter((c) => c.key === "long2-key")).toHaveLength(5);
+        expect(await dests()).toEqual(["KIX", "LHR"]); // LHR from long2's Europe month query
       },
     );
+
+    it("drops only long2's fares when its key is missing, logging the skipped role and no key", async () => {
+      // short answers KIX, long answers LHR, long2 answers CDG.
+      const byKey = (c: ExploreCall) =>
+        c.key === "long2-key" ? [{ dest: "CDG", price: 22000, out: OUT }] : bothRoles(c);
+      stubSerpApi(byKey);
+      await sync();
+      expect(await dests()).toEqual(["CDG", "KIX", "LHR"]);
+      vi.unstubAllGlobals();
+
+      const logged = captureLogs();
+      const calls = stubSerpApi(byKey);
+      await sync(
+        { SERPAPI_KEY_SHORT: "short-key", SERPAPI_KEY_LONG: "long-key" },
+        clock.now + 3_600_000,
+      );
+      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(8);
+      expect(calls.filter((c) => c.key === "short-key")).toHaveLength(8);
+      expect(await dests()).toEqual(["KIX", "LHR"]);
+      expect(
+        logged.some((line) => line.includes("serpapi_role_skipped") && line.includes("long2")),
+      ).toBe(true);
+      expect(logged.join("\n")).not.toMatch(SECRETS);
+      expect(logged.join("\n")).not.toContain("serpapi.com");
+    });
+
+    it.each([401, 429])("skips only the long2 role when its key answers %i", async (status) => {
+      const calls = stubSerpApi((c) =>
+        c.key === "long2-key" ? Response.json({ error: "no" }, { status }) : bothRoles(c),
+      );
+      await sync();
+      expect(calls.filter((c) => c.key === "long2-key")).toHaveLength(1);
+      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(8);
+      expect(await dests()).toEqual(["KIX", "LHR"]);
+    });
 
     it("skips only a role whose key is missing or blank, logging the role and no key", async () => {
       const logged = captureLogs();
@@ -685,7 +789,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync({ SERPAPI_KEY_SHORT: "  ", SERPAPI_KEY_LONG: "long-key" });
 
       expect(calls.every((c) => c.key === "long-key")).toBe(true);
-      expect(calls).toHaveLength(6);
+      expect(calls).toHaveLength(8);
       expect(await dests()).toEqual(["LHR"]);
       expect(logged.some((line) => line.includes("serpapi_role_skipped"))).toBe(true);
       expect(logged.join("\n")).not.toMatch(SECRETS);
@@ -699,7 +803,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
 
       const calls = stubSerpApi(() => exhausted());
       await sync(EXPLORE_KEYS, clock.now + 3_600_000);
-      expect(calls.map((c) => c.key)).toEqual(["short-key", "long-key"]); // one ask per role
+      expect(calls.map((c) => c.key)).toEqual(["short-key", "long-key", "long2-key"]); // one ask per role
       expect(await dests()).toEqual(["NRT"]);
 
       await env.DB.prepare("DELETE FROM daily_flights").run();
@@ -763,7 +867,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     const calls = stubSerpApi(() => []);
     await sync();
     await sync(EXPLORE_KEYS, clock.now + 3_600_000);
-    expect(calls).toHaveLength(28); // twice (8 short-haul + 6 long-haul)
+    expect(calls).toHaveLength(42); // twice (8 short-haul + 8 long-haul + 5 long2)
   });
 
   it("serves a completed run's fares for 48 hours, then counts them as unavailable (curated fares)", async () => {
@@ -970,7 +1074,7 @@ describe("manual sync SQL", () => {
 
     const collected = await collectDailyFlights(source, cronNow);
     expect(collected.completed).toBe(true);
-    expect(collected.upstreamCalls).toBe(14); // 8 short + 6 long
+    expect(collected.upstreamCalls).toBe(21); // 8 short + 8 long + 5 long2
     expect(collected.items.map((i) => i.origin).sort()).toEqual(["KHH", "TPE"]);
     const sql = formatDailyFlightsSyncSql(collected.rows, {
       digestDate: collected.digestDate,

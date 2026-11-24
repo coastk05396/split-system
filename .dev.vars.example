@@ -8,9 +8,11 @@ TEST_SIGN_IN=1
 LINE_CHANNEL_SECRET=
 LINE_CHANNEL_ACCESS_TOKEN=
 # One SerpApi key per role for the daily Daily Flights sync (deployed: `wrangler secret put SERPAPI_KEY_<ROLE>`):
-# BASELINE = Baseline lookups, SHORT = Asia, Japan and Korea Explore, LONG = Europe, North America, Oceania and Middle East Explore.
+# BASELINE = Baseline lookups, SHORT = Asia, Japan and Korea Explore, LONG = Europe, North America, Oceania,
+# Middle East and Canada Explore, LONG2 = the second long-haul key (more long-haul month queries, ADR 0016).
 # A role left empty is skipped. All empty locally: the cron sync answers no query and leaves the board untouched.
 # Never commit a key.
 SERPAPI_KEY_BASELINE=
 SERPAPI_KEY_SHORT=
 SERPAPI_KEY_LONG=
+SERPAPI_KEY_LONG2=
