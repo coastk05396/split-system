@@ -1,10 +1,12 @@
 /**
  * Manually runs the daily SerpApi Explore sync (the Worker cron's job) and writes it into D1.
  *
- *   SERPAPI_KEYS=key1,key2 pnpm --filter @split/worker sync-flights -- --dry-run
- *   SERPAPI_KEYS=key1,key2 pnpm --filter @split/worker sync-flights -- --remote
+ *   SERPAPI_KEY_SHORT=... SERPAPI_KEY_LONG=... pnpm --filter @split/worker sync-flights -- --dry-run
+ *   SERPAPI_KEY_SHORT=... SERPAPI_KEY_LONG=... pnpm --filter @split/worker sync-flights -- --remote
  *
- * Defaults to local D1 (`--local`) unless `--remote` is passed. Never commit the keys.
+ * Runs the Explore roles (short-haul and long-haul); the Baseline key is only for the cron and the
+ * seed CLI, so it is ignored here (setting all three variables is fine). A missing role is skipped,
+ * as in the cron. Defaults to local D1 (`--local`) unless `--remote` is passed. Never commit the keys.
  */
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -33,15 +35,6 @@ function installTsExtensionHook(): void {
   });
 }
 
-function requireEnv(name: string): string {
-  const value = env[name];
-  if (value === undefined || value === "") {
-    console.error(`Set ${name} in the environment.`);
-    exit(1);
-  }
-  return value;
-}
-
 async function main(): Promise<void> {
   installTsExtensionHook();
   const { collectDailyFlights, formatDailyFlightsSyncSql, logDailyFlightsSummary } =
@@ -67,12 +60,20 @@ async function main(): Promise<void> {
     }
     remoteEnv = envArg;
   }
-  const keys = requireEnv("SERPAPI_KEYS");
+  const roleKeys = {
+    ...(env["SERPAPI_KEY_SHORT"] ? { SERPAPI_KEY_SHORT: env["SERPAPI_KEY_SHORT"] } : {}),
+    ...(env["SERPAPI_KEY_LONG"] ? { SERPAPI_KEY_LONG: env["SERPAPI_KEY_LONG"] } : {}),
+  };
+  if (Object.keys(roleKeys).length === 0) {
+    console.error("Set SERPAPI_KEY_SHORT and/or SERPAPI_KEY_LONG in the environment.");
+    exit(1);
+  }
   const now = Date.now();
 
   const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
   // Score against the target D1's fresh Baselines (seed-baselines), as the cron does; a dry run may
-  // fall back to the static catalog when the target cannot be read, a real sync must not.
+  // fall back to no Baselines when the target cannot be read (no Deal Signal, TSA fares dropped), a
+  // real sync must not.
   const resolveBaselines = async (): Promise<ReadonlyMap<string, number>> => {
     try {
       const { stdout } = await execFileAsync("pnpm", [
@@ -90,16 +91,12 @@ async function main(): Promise<void> {
     } catch (error) {
       if (!dryRun) throw error;
       console.warn(
-        "Could not read flight_baselines from D1; dry run scores with the static catalog.",
+        "Could not read flight_baselines from D1; dry run has no Deal Signal, so every TSA fare is dropped.",
       );
       return new Map();
     }
   };
-  const collected = await collectDailyFlights(
-    serpApiFlightSource({ SERPAPI_KEYS: keys }),
-    now,
-    resolveBaselines,
-  );
+  const collected = await collectDailyFlights(serpApiFlightSource(roleKeys), now, resolveBaselines);
   logDailyFlightsSummary("manual_daily_flights_collected", collected);
   if (!collected.completed) {
     console.error("SerpApi answered no query; D1 is left untouched.");

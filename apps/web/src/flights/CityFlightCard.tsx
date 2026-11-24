@@ -1,4 +1,9 @@
-import { type DailyFlightItem, getAirlineName, type Language } from "@split/shared";
+import {
+  type DailyFlightItem,
+  getAirlineName,
+  type Language,
+  type TripComAffiliateConfig,
+} from "@split/shared";
 import { ArrowUpRight, Calendar, ChevronDown, ChevronUp, Flame } from "lucide-react";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { t } from "../i18n/messages.js";
@@ -85,7 +90,7 @@ const PRICE_STYLE = {
   row: { nt: "text-base font-bold text-fl-ink", num: "text-base font-bold text-fl-ink" },
   // Home marquee tile: kept from v2 (serif numerals).
   tile: {
-    nt: "text-[11px] font-medium text-fl-muted",
+    nt: "mr-1 text-[11px] font-medium text-fl-muted",
     num: "font-num text-[28px] leading-8 font-semibold tracking-[-0.01em] text-fl-ink lining-nums",
   },
 } as const;
@@ -140,7 +145,15 @@ function rowDetail(fare: DailyFlightItem, lang: Language): ReactNode[] {
 }
 
 /** One destination: collapsed summary of its cheapest fare; tap to list its fares. */
-export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Language }) {
+export function CityFlightCard({
+  group,
+  lang,
+  affiliate,
+}: {
+  group: CityGroup;
+  lang: Language;
+  affiliate?: TripComAffiliateConfig | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const panelId = useId();
@@ -219,6 +232,7 @@ export function CityFlightCard({ group, lang }: { group: CityGroup; lang: Langua
                 <FlightBookAnchor
                   item={fare}
                   lang={lang}
+                  affiliate={affiliate}
                   className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-fl-ink/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-fl-green"
                 >
                   <span className="flex min-w-0 flex-col gap-[7px]">

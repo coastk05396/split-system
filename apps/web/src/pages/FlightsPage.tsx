@@ -386,7 +386,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {groups.map((group) => (
             <li key={group.cityKey} className="min-w-0">
-              <CityFlightCard group={group} lang={locale} />
+              <CityFlightCard group={group} lang={locale} affiliate={query.data.affiliate} />
             </li>
           ))}
         </ul>

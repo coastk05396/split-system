@@ -1,10 +1,12 @@
 import {
+  buildTripComUrl,
   type DailyFlightItem,
   type FlightOrigin,
   getCityName,
   getDestinationMeta,
   type Language,
   ORIGIN_META,
+  type TripComAffiliateConfig,
 } from "@split/shared";
 import { ExternalLink } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
@@ -50,12 +52,17 @@ export function FlightBookAnchor({
   lang,
   className = "",
   ariaLabel,
+  affiliate,
+  tabIndex,
   children,
 }: {
   item: DailyFlightItem;
   lang: Language;
   className?: string;
   ariaLabel?: string;
+  /** Public affiliate parameters from the daily payload, for the direct URL inside LINE. */
+  affiliate?: TripComAffiliateConfig | undefined;
+  tabIndex?: number | undefined;
   children?: ReactNode;
 }) {
   const { line } = useDeps();
@@ -67,7 +74,13 @@ export function FlightBookAnchor({
       return;
     }
     event.preventDefault();
-    const target = new URL(href, window.location.origin).toString();
+    // ADR 0015: the final Trip.com URL, one hop, handed over inside the tap itself. Without
+    // affiliate parameters (daily payload pending or curated fallback) the /flights/go hop adds them.
+    // openExternal needs an absolute URL, so resolve the relative hop against the page origin.
+    const target =
+      affiliate === undefined
+        ? new URL(href, window.location.origin).toString()
+        : buildTripComUrl({ ...item, lang }, affiliate);
     void line.openExternal(target).catch(() => {
       window.open(href, "_blank", "noopener,noreferrer");
     });
@@ -79,6 +92,7 @@ export function FlightBookAnchor({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={ariaLabel}
+      tabIndex={tabIndex}
       onClick={handleClick}
       className={className}
     >

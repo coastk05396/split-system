@@ -1,11 +1,11 @@
 /**
  * Seeds or refreshes the Route Baselines (Google Flights typical price range) in D1.
  *
- *   SERPAPI_KEYS=key1,key2 pnpm --filter @split/worker seed-baselines -- --dry-run
- *   SERPAPI_KEYS=key1,key2 pnpm --filter @split/worker seed-baselines -- --remote
+ *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --dry-run
+ *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --remote
  *
- * Fetches the ~55 core Routes (one SerpApi request each, rotating over the keys). Defaults to local D1
- * unless `--remote` is passed. Never commit the keys.
+ * Fetches the ~55 core Routes (one SerpApi request each, all on the Baseline key). Defaults to local D1
+ * unless `--remote` is passed. Never commit the key.
  */
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -44,14 +44,14 @@ async function main(): Promise<void> {
     console.error("Use --env <name> only together with --remote.");
     exit(1);
   }
-  const keys = env["SERPAPI_KEYS"];
-  if (keys === undefined || keys === "") {
-    console.error("Set SERPAPI_KEYS in the environment.");
+  const key = env["SERPAPI_KEY_BASELINE"];
+  if (key === undefined || key === "") {
+    console.error("Set SERPAPI_KEY_BASELINE in the environment.");
     exit(1);
   }
 
   const now = Date.now();
-  const ranges = await fetchTypicalRanges({ SERPAPI_KEYS: keys }, CORE_BASELINE_ROUTES, now);
+  const ranges = await fetchTypicalRanges({ SERPAPI_KEY_BASELINE: key }, CORE_BASELINE_ROUTES, now);
   console.info(
     JSON.stringify({
       event: "seed_baselines_fetched",

@@ -11,7 +11,9 @@ The production hostname is `https://split.rickchen.si`. Keep staging and product
 | LINE Login | Login channel ID and LIFF app ID, with endpoint `https://split.rickchen.si/` and `openid` scope | Channel secret is not used by the LIFF ID-token flow |
 | LINE Messaging API | Messaging API channel and webhook URL `https://split.rickchen.si/api/v1/line/webhook` | Channel secret and channel access token |
 | Worker | None | A new, random `SESSION_SIGNING_KEY` for each environment |
-| SerpApi | None | `SERPAPI_KEYS`: one or more SerpApi keys, comma-separated (a second key buys Baseline refreshes, ADR 0013). Set it as a Worker secret and in `.dev.vars` only; never in code, tests, docs or logs |
+| SerpApi | None | Three Worker secrets, one SerpApi free-tier key per role (ADR 0014): `SERPAPI_KEY_BASELINE` (up to 8 Baseline lookups a day), `SERPAPI_KEY_SHORT` (Asia, Japan and Korea Explore queries, up to 8 a day) and `SERPAPI_KEY_LONG` (Europe, North America, Oceania and Middle East Explore queries, up to 6 a day). A role never uses another's key; a missing or refused key skips only that role for the run. Use three different keys. Never in code, tests, docs or logs |
+
+Set each SerpApi key on its own, entering the value interactively: `pnpm --filter @split/worker exec wrangler secret put SERPAPI_KEY_BASELINE --env staging|production`, then the same with `SERPAPI_KEY_SHORT` and `SERPAPI_KEY_LONG`. For local development copy `.dev.vars.example` to `apps/worker/.dev.vars` and fill the three variables there (the file is gitignored). A role left empty is skipped. After the release dry run, rotate any key that was shared outside the secret store.
 
 Do not put tokens or secrets in GitHub issues, chat, `wrangler.jsonc`, or Vite `VITE_` variables. Set Worker secrets with `pnpm --filter @split/worker exec wrangler secret put NAME --env staging|production`, or the Cloudflare dashboard. The `VITE_` values are shipped to every browser and must be public IDs only.
 

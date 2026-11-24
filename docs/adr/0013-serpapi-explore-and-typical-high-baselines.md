@@ -6,6 +6,8 @@ status: accepted
 
 The Daily Flights board came from a 48-hour Travelpayouts cache with thin Taiwan coverage and stale phantom fares, then up to 240 sequential Google Flights scrapes from GitHub Actions datacenter IPs. When Google throttled or blocked those requests the board silently kept the cached prices, which drifted far from Trip.com, and a Python runtime, a second workflow and a two-stage verifier made the pipeline fragile for a zero-budget product. We replace all of it with one pure-TypeScript sync in the Worker cron on SerpApi's free tier. This supersedes ADR 0006 (Google queries in a Container), ADR 0008 (Workers Paid for a larger verified board), ADR 0010 (deal-first board) and ADR 0012 (GitHub Actions sync and Google Live Price). The Trip.com redirect of ADR 0007 is unchanged.
 
+> Amended by ADR 0014: decision 2 (the query plan), decision 4 (keys: three role keys replace `SERPAPI_KEYS`), decision 5 (a `TSA` fare is admitted only as a real deal) and decision 7 (Baseline refresh on its own key; no static Baseline tier for the board).
+
 ## Decision
 
 1. **One stage, in the Worker cron** (`0 0 * * *`, 08:00 Taipei): plain `fetch` calls to SerpApi, no Python, no GitHub Actions workflow, no Travelpayouts, no verification stage. The Worker cron runs on every trigger; there is no skip window. A local CLI (`sync-flights`) keeps manual dry runs and backfills.
