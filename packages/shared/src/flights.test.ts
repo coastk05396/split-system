@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildTripComUrl,
   flightGoQuerySchema,
-  computeArrivalTimeHm,
   computeDealSignal,
   departureBounds,
   DESTINATION_CATALOG,
@@ -27,11 +26,6 @@ describe("flights domain helpers", () => {
   it("names Philippines AirAsia (Z2) in both languages, with a short English label that fits the card", () => {
     expect(getAirlineName("Z2", "zh-TW")).toBe("菲律賓亞洲航空");
     expect(getAirlineName("Z2", "en")).toBe("AirAsia PH");
-  });
-
-  it("computes local arrival times in the arrival airport timezone", () => {
-    expect(computeArrivalTimeHm("2026-12-01T19:00:00+08:00", 840, "LHR")).toBe("01:00");
-    expect(computeArrivalTimeHm("2026-12-11T21:00:00+08:00", 210, "NRT")).toBe("01:30");
   });
 
   it("scores the discount against the typical high price and tiers it at 50% and 15%", () => {

@@ -83,7 +83,7 @@ function stubSerpApi(handler: (call: ExploreCall) => readonly FakeDest[] | Respo
     const call: ExploreCall = {
       key: url.searchParams.get("api_key") ?? "",
       departure: url.searchParams.get("departure_id") ?? "",
-      arrival: url.searchParams.get("arrival_id"),
+      arrival: url.searchParams.get("arrival_area_id"),
       month: url.searchParams.get("month"),
       params: url.searchParams,
     };
@@ -164,7 +164,15 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       expect(c.params.get("currency")).toBe("TWD");
       expect(c.params.get("hl")).toBe("en");
       expect(c.params.get("gl")).toBe("tw");
+      expect(c.params.get("type")).toBe("1");
+      expect(c.params.has("arrival_id")).toBe(false);
     }
+    // Continents are `arrival_area_id` (arrival_id is a single airport or city).
+    expect(calls.filter((c) => c.arrival !== null).map((c) => c.arrival)).toEqual([
+      "/m/02j9z",
+      "/m/059g4",
+      "/m/05nrg",
+    ]);
   });
 
   it("rotates the 2 target months from day to day", async () => {
@@ -388,6 +396,23 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       expect(calls).toHaveLength(0);
       expect((await board()).isFallback).toBe(true);
     });
+  });
+
+  it("never logs the API key when fetch itself rejects with an error echoing the URL", async () => {
+    const logged: string[] = [];
+    for (const level of ["info", "warn", "error", "log"] as const) {
+      vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        logged.push(args.map(String).join(" "));
+      });
+    }
+    vi.stubGlobal("fetch", (input: RequestInfo | URL) =>
+      Promise.reject(
+        new TypeError(`fetch failed: ${input instanceof Request ? input.url : input.toString()}`),
+      ),
+    );
+    await sync("key-secret-xyz");
+    expect(logged.some((line) => line.includes("serpapi_query_failed"))).toBe(true);
+    expect(logged.join("\n")).not.toContain("key-secret-xyz");
   });
 
   it("skips a failed query without failing the run", async () => {

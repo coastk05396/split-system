@@ -116,7 +116,7 @@ function Dot() {
   );
 }
 
-/** `直飛` or `轉 N`, N being the worse leg's stops. */
+/** `直飛` or `轉 N`, N being the fare's stop count. */
 function stopsText(fare: DailyFlightItem): string {
   const stops = fare.transfers;
   if (stops === 0) return t("flights.badge.direct");

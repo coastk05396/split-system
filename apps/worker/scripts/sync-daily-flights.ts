@@ -47,6 +47,7 @@ async function main(): Promise<void> {
   const { collectDailyFlights, formatDailyFlightsSyncSql, logDailyFlightsSummary } =
     await import("../src/flights/pipeline.ts");
   const { serpApiFlightSource } = await import("../src/flights/serpapi.ts");
+  const { freshBaselinesSql, parseWranglerBaselines } = await import("../src/flights/baselines.ts");
 
   const cliArgs = argv.slice(2);
   const args = new Set(cliArgs);
@@ -69,7 +70,36 @@ async function main(): Promise<void> {
   const keys = requireEnv("SERPAPI_KEYS");
   const now = Date.now();
 
-  const collected = await collectDailyFlights(serpApiFlightSource({ SERPAPI_KEYS: keys }), now);
+  const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
+  // Score against the target D1's fresh Baselines (seed-baselines), as the cron does; a dry run may
+  // fall back to the static catalog when the target cannot be read, a real sync must not.
+  const resolveBaselines = async (): Promise<ReadonlyMap<string, number>> => {
+    try {
+      const { stdout } = await execFileAsync("pnpm", [
+        "exec",
+        "wrangler",
+        "d1",
+        "execute",
+        "DB",
+        ...targetFlags,
+        "--json",
+        "--command",
+        freshBaselinesSql(now),
+      ]);
+      return parseWranglerBaselines(stdout);
+    } catch (error) {
+      if (!dryRun) throw error;
+      console.warn(
+        "Could not read flight_baselines from D1; dry run scores with the static catalog.",
+      );
+      return new Map();
+    }
+  };
+  const collected = await collectDailyFlights(
+    serpApiFlightSource({ SERPAPI_KEYS: keys }),
+    now,
+    resolveBaselines,
+  );
   logDailyFlightsSummary("manual_daily_flights_collected", collected);
   if (!collected.completed) {
     console.error("SerpApi answered no query; D1 is left untouched.");
@@ -92,7 +122,6 @@ async function main(): Promise<void> {
   const sqlFile = join(dir, "sync.sql");
   try {
     await writeFile(sqlFile, sql, "utf8");
-    const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
     const { stdout, stderr } = await execFileAsync("pnpm", [
       "exec",
       "wrangler",

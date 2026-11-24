@@ -214,7 +214,7 @@ export const personalSpending = sqliteTable(
   ],
 );
 
-/** Daily verified cheap flight deals departing Taiwan. */
+/** Daily round-trip flight fares departing Taiwan. */
 export const dailyFlights = sqliteTable(
   "daily_flights",
   {
@@ -234,7 +234,7 @@ export const dailyFlights = sqliteTable(
   (t) => [index("daily_flights_digest_price_idx").on(t.digestDate, t.priceTwd)],
 );
 
-/** Single row (id 1): the last daily run that discovered fares and completed, even with zero Good Deals. */
+/** Single row (id 1): the last daily run that discovered fares and completed, even with zero admissible fares. */
 export const dailyFlightsRuns = sqliteTable("daily_flights_runs", {
   id: integer("id").primaryKey(),
   digestDate: text("digest_date").notNull(),

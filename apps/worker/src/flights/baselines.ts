@@ -1,5 +1,6 @@
 import type { FlightOrigin } from "@split/shared/flights";
 import { z } from "zod";
+import { sqlLiteral } from "./pipeline.js";
 import {
   createSerpApiClient,
   parseSerpApiKeys,
@@ -95,17 +96,33 @@ export async function fetchTypicalRanges(
   return ranges;
 }
 
-const num = (value: number): string => String(Math.trunc(value));
-
 /** `INSERT OR REPLACE` statements (one per line, `;` separated) for `wrangler d1 execute --file`. */
 export function formatBaselineSql(ranges: readonly TypicalRange[], now: number): string {
   if (ranges.length === 0) return "";
   return `${ranges
     .map(
       (r) =>
-        `INSERT OR REPLACE INTO flight_baselines (origin, destination, typical_low_twd, typical_high_twd, fetched_at) VALUES ('${r.origin}', '${r.dest.replaceAll("'", "''")}', ${num(r.typicalLowTwd)}, ${num(r.typicalHighTwd)}, ${num(now)})`,
+        `INSERT OR REPLACE INTO flight_baselines (origin, destination, typical_low_twd, typical_high_twd, fetched_at) VALUES ('${r.origin}', '${r.dest.replaceAll("'", "''")}', ${sqlLiteral(r.typicalLowTwd)}, ${sqlLiteral(r.typicalHighTwd)}, ${sqlLiteral(now)})`,
     )
     .join(";\n")};\n`;
 }
 
 export const baselineKey = (origin: string, dest: string): string => `${origin}-${dest}`;
+
+/** The SELECT that reads the Baselines still within their 30 days, for `wrangler d1 execute --json`. */
+export const freshBaselinesSql = (now: number): string =>
+  `SELECT origin, destination, typical_high_twd FROM flight_baselines WHERE fetched_at >= ${sqlLiteral(now - BASELINE_TTL_MS)}`;
+
+const wranglerRowsSchema = z.array(
+  z.object({
+    results: z.array(
+      z.object({ origin: z.string(), destination: z.string(), typical_high_twd: z.number() }),
+    ),
+  }),
+);
+
+/** Typical highs by `ORIGIN-DEST` out of `wrangler d1 execute --json` stdout of `freshBaselinesSql`. */
+export function parseWranglerBaselines(stdout: string): Map<string, number> {
+  const rows = wranglerRowsSchema.parse(JSON.parse(stdout)).flatMap((r) => r.results);
+  return new Map(rows.map((r) => [baselineKey(r.origin, r.destination), r.typical_high_twd]));
+}

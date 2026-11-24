@@ -35,7 +35,7 @@ const SAMPLE_FLIGHTS: DailyFlightItem[] = [
     dest: "NRT",
     priceTwd: 5680,
     discountPct: 45,
-    tag: "steal",
+    tag: "below_market",
     airlines: ["MM"],
   }),
   fare("nrt-c", {
@@ -532,7 +532,7 @@ describe("daily flights page", () => {
     expect(cityHeadings()[0]).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
   });
 
-  it("formats fare dates as MM/DD–MM/DD, one-way MM/DD, and same-day MM/DD", async () => {
+  it("formats fare dates as MM/DD–MM/DD, and same-day MM/DD", async () => {
     const user = userEvent.setup();
     const { api } = setup();
     setItems(api, [
@@ -881,7 +881,7 @@ describe("daily flights page", () => {
     });
   });
 
-  it("renders the empty state and no curated disclosure when the day has no Good Deal", async () => {
+  it("renders the empty state and no curated disclosure when the day has no admissible fares", async () => {
     const view = renderApp({ path: "/flights" });
     view.api.dailyFlights = {
       date: "2026-11-16",

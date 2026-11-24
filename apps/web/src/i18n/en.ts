@@ -60,7 +60,7 @@ export const en: Record<MessageId, string> = {
   "home.allSettled": "All settled ✓",
   "home.currencyTag": "Preferred currency {currency}, go to settings",
   "home.flights.title": "Today's Cheap Flights",
-  "home.flights.body": "Daily deals from Taiwan, verified",
+  "home.flights.body": "Daily deals from Taiwan",
   "home.flightsMarquee.title": "Today's Cheap Flights",
   "home.flightsMarquee.more": "All deals",
   "home.tab.title": "Quick split",

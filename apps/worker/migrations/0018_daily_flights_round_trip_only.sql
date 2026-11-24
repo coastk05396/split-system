@@ -20,7 +20,7 @@ INSERT INTO daily_flights_new
   (id, digest_date, origin, destination, out_date, in_date, price_twd, discount_pct, tag, airlines_json, transfers, created_at)
 SELECT id, digest_date, origin, destination, out_date, in_date, price_twd, discount_pct, tag, airlines_json, transfers, created_at
 FROM daily_flights
-WHERE trip_type = 'rt' AND in_date IS NOT NULL AND origin IN ('TPE', 'TSA', 'KHH');
+WHERE trip_type = 'rt' AND in_date IS NOT NULL AND in_date > out_date AND origin IN ('TPE', 'TSA', 'KHH');
 
 DROP TABLE daily_flights;
 ALTER TABLE daily_flights_new RENAME TO daily_flights;

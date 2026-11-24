@@ -11,6 +11,7 @@ The production hostname is `https://split.rickchen.si`. Keep staging and product
 | LINE Login | Login channel ID and LIFF app ID, with endpoint `https://split.rickchen.si/` and `openid` scope | Channel secret is not used by the LIFF ID-token flow |
 | LINE Messaging API | Messaging API channel and webhook URL `https://split.rickchen.si/api/v1/line/webhook` | Channel secret and channel access token |
 | Worker | None | A new, random `SESSION_SIGNING_KEY` for each environment |
+| SerpApi | None | `SERPAPI_KEYS`: one or more SerpApi keys, comma-separated (a second key buys Baseline refreshes, ADR 0013). Set it as a Worker secret and in `.dev.vars` only; never in code, tests, docs or logs |
 
 Do not put tokens or secrets in GitHub issues, chat, `wrangler.jsonc`, or Vite `VITE_` variables. Set Worker secrets with `pnpm --filter @split/worker exec wrangler secret put NAME --env staging|production`, or the Cloudflare dashboard. The `VITE_` values are shipped to every browser and must be public IDs only.
 

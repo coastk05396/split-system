@@ -92,7 +92,7 @@ export function logDailyFlightsSummary(event: string, collected: CollectedDailyF
   );
 }
 
-function sqlLiteral(value: string | number | null | undefined): string {
+export function sqlLiteral(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
@@ -163,8 +163,12 @@ export async function collectDailyFlights(
   }
 
   const routes = new Map<string, { origin: FlightOrigin; dest: string }>();
-  for (const c of cheapest.values())
-    routes.set(`${c.origin}-${c.dest}`, { origin: c.origin, dest: c.dest });
+  for (const c of cheapest.values()) {
+    // Keyed on the Curated Destination's own airport code, the same key the baselines are stored under.
+    const airport = getDestinationMeta(c.dest)?.airport;
+    if (airport !== undefined)
+      routes.set(`${c.origin}-${airport}`, { origin: c.origin, dest: airport });
+  }
   const typicalHighs =
     routes.size === 0 || resolveBaselines === undefined
       ? new Map<string, number>()
@@ -175,7 +179,7 @@ export async function collectDailyFlights(
   for (const c of cheapest.values()) {
     const meta = getDestinationMeta(c.dest);
     if (meta === null || c.inDate === null) continue;
-    const baseline = scoringBaseline(typicalHighs, c.origin, c.dest, meta.baselineTwd);
+    const baseline = scoringBaseline(typicalHighs, c.origin, meta.airport, meta.baselineTwd);
     const { discountPct, tag } = computeDealSignal(c.priceTwd, baseline);
     rows.push({
       id: c.id,

@@ -23,7 +23,7 @@ export type FetchFn = (
 /** One `google_travel_explore` request: where from, which continent, and optionally one calendar month (1-12). */
 export interface ExploreQuery {
   origin: FlightOrigin;
-  arrivalId?: string;
+  arrivalAreaId?: string;
   month?: number;
 }
 
@@ -42,9 +42,9 @@ export function exploreQueryPlan(digestDate: string): ExploreQuery[] {
   });
   return [
     { origin: "TPE" },
-    { origin: "TPE", arrivalId: EUROPE },
-    { origin: "TPE", arrivalId: NORTH_AMERICA },
-    { origin: "TPE", arrivalId: OCEANIA },
+    { origin: "TPE", arrivalAreaId: EUROPE },
+    { origin: "TPE", arrivalAreaId: NORTH_AMERICA },
+    { origin: "TPE", arrivalAreaId: OCEANIA },
     { origin: "KHH" },
     { origin: "TSA" },
     ...months.map((m): ExploreQuery => ({ origin: "TPE", month: m })),
@@ -119,7 +119,13 @@ export function createSerpApiClient(keys: readonly string[], upstreamFetch: Fetc
           }
           return body;
         } catch (error) {
-          console.warn(JSON.stringify({ event: "serpapi_query_failed", error: String(error) }));
+          // Only the error class: a fetch error message can echo the request URL, and with it `api_key`.
+          console.warn(
+            JSON.stringify({
+              event: "serpapi_query_failed",
+              error: error instanceof Error ? error.name : "Error",
+            }),
+          );
           return null;
         } finally {
           clearTimeout(timer);
@@ -157,7 +163,8 @@ export function serpApiFlightSource(
           await client.get({
             engine: "google_travel_explore",
             departure_id: query.origin,
-            ...(query.arrivalId === undefined ? {} : { arrival_id: query.arrivalId }),
+            type: "1",
+            ...(query.arrivalAreaId === undefined ? {} : { arrival_area_id: query.arrivalAreaId }),
             ...(query.month === undefined ? {} : { month: String(query.month) }),
             currency: "TWD",
             hl: "en",

@@ -7,6 +7,8 @@ import {
   CORE_BASELINE_ROUTES,
   fetchTypicalRanges,
   formatBaselineSql,
+  freshBaselinesSql,
+  parseWranglerBaselines,
 } from "../src/flights/baselines.js";
 import { FLIGHTS_CRON, runScheduled } from "../src/maintenance.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
@@ -54,7 +56,7 @@ function stubSerpApi(opts: {
       exploreCalls += 1;
       const departure = p.get("departure_id") ?? "";
       const fares =
-        p.get("arrival_id") === null && p.get("month") === null
+        p.get("arrival_area_id") === null && p.get("month") === null
           ? (opts.explore?.(departure) ?? [])
           : [];
       return Promise.resolve(
@@ -300,5 +302,30 @@ describe("Baseline seed", () => {
     }
     expect(await stored()).toHaveLength(2);
     expect(formatBaselineSql([], now)).toBe("");
+  });
+
+  it("reads only fresh Baselines for the manual sync CLI and parses wrangler's --json output", async () => {
+    await env.DB.prepare("DELETE FROM flight_baselines").run();
+    const now = Date.parse("2026-11-16T00:00:00Z");
+    const stale = now - 31 * DAY;
+    await env.DB.prepare(
+      "INSERT INTO flight_baselines (origin, destination, typical_low_twd, typical_high_twd, fetched_at) VALUES ('TPE','NRT',8000,15500,?), ('TPE','ICN',9000,16000,?)",
+    )
+      .bind(now - DAY, stale)
+      .run();
+    const { results } = await env.DB.prepare(freshBaselinesSql(now)).all();
+    // wrangler `d1 execute --json` prints an array of statement results.
+    const parsed = parseWranglerBaselines(JSON.stringify([{ results, success: true }]));
+    expect([...parsed]).toEqual([["TPE-NRT", 15_500]]);
+    expect(parseWranglerBaselines(JSON.stringify([{ results: [], success: true }])).size).toBe(0);
+  });
+
+  it("rejects a non-finite value instead of writing invalid SQL", () => {
+    expect(() =>
+      formatBaselineSql(
+        [{ origin: "TPE", dest: "NRT", typicalLowTwd: Number.NaN, typicalHighTwd: 1 }],
+        1,
+      ),
+    ).toThrow(/Invalid numeric/);
   });
 });

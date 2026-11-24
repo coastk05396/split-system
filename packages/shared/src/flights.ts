@@ -1653,32 +1653,6 @@ export function getAirportTimeZone(airport: string): string {
   return "Asia/Taipei";
 }
 
-/** Computes local `HH:mm` arrival time in the arrival airport's timezone from departure ISO + minutes. */
-export function computeArrivalTimeHm(
-  depIso: string | null | undefined,
-  durationMinutes: number | null | undefined,
-  arrivalAirport: string,
-): string | null {
-  if (
-    !depIso ||
-    durationMinutes === null ||
-    durationMinutes === undefined ||
-    durationMinutes <= 0
-  ) {
-    return null;
-  }
-  const normalizedIso = /(?:Z|[+-]\d{2}:?\d{2})$/.test(depIso) ? depIso : `${depIso}+08:00`;
-  const depMs = Date.parse(normalizedIso);
-  if (Number.isNaN(depMs)) return null;
-  const arrMs = depMs + durationMinutes * 60_000;
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: getAirportTimeZone(arrivalAirport),
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(arrMs));
-}
-
 /**
  * Deal Signal (ADR 0013): the rounded percentage a fare sits below the Route's typical high price,
  * never below 0. Tiers use that rounded value, the one the traveler sees: `steal` from 50%,
@@ -1893,7 +1867,7 @@ const DEFAULT_SEEDS: readonly SeedSpec[] = [
     transfers: 0,
   },
   {
-    id: "seed-tpe-nrt-it-redeye",
+    id: "seed-tpe-nrt-it",
     origin: "TPE",
     dest: "NRT",
     offsetDays: 32,
@@ -1943,7 +1917,7 @@ const DEFAULT_SEEDS: readonly SeedSpec[] = [
     transfers: 0,
   },
   {
-    id: "seed-tpe-pus-bx-redeye",
+    id: "seed-tpe-pus-bx",
     origin: "TPE",
     dest: "PUS",
     offsetDays: 21,
@@ -1993,7 +1967,7 @@ const DEFAULT_SEEDS: readonly SeedSpec[] = [
     transfers: 0,
   },
   {
-    id: "seed-tpe-sin-tr-redeye",
+    id: "seed-tpe-sin-tr",
     origin: "TPE",
     dest: "SIN",
     offsetDays: 36,
@@ -2043,7 +2017,7 @@ const DEFAULT_SEEDS: readonly SeedSpec[] = [
     transfers: 1,
   },
   {
-    id: "seed-tpe-cdg-af-redeye",
+    id: "seed-tpe-cdg-af",
     origin: "TPE",
     dest: "CDG",
     offsetDays: 63,
