@@ -7,7 +7,7 @@
 ## Run and check
 
 - Start the local app with `pnpm dev`. Open the web UI at `http://localhost:5173`.
-- CI runs `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` and `pnpm e2e` on every pull request. The pre-commit hook already lints each commit's staged files, so before opening a PR that changes `apps/` or `packages/`, run `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm e2e` locally and fix what fails; a docs-only change needs none of them.
+- Before opening a PR that changes `apps/` or `packages/`, run `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm e2e` and open it only when all four are green. Lint is left to the pre-commit hook and CI. A docs-only change needs none of them.
 - `pnpm e2e` must not run while `pnpm dev` is running; they use the same local ports.
 
 ## Tests
@@ -18,9 +18,8 @@
 ## Git, CI and deploys
 
 - Never push to `main` without the user's approval: a push to `main` deploys production.
-- Opening a pull request into `main` runs CI. That is allowed.
-- A docs-only change needs no CI run: put `[skip ci]` in its commit message.
-- One piece of work, one pull request: when it spans several branches (parallel workers, stacked refactors), combine them on one branch and open a single PR. GitHub only looks at the newest commit for `[skip ci]`, so when the PR holds code, keep `[skip ci]` off its newest commit.
+- Put `[skip ci]` in the commit message of a docs-only change. GitHub reads only the newest commit, so a PR that holds code keeps it off its newest commit.
+- One piece of work, one pull request: when it spans several branches (parallel workers, stacked refactors), combine them on one branch and open a single PR.
 
 ## Staging
 
@@ -30,19 +29,11 @@
 ## Spec and review
 
 - Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.
-- Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. The author fixes findings and never signs off on their own change.
+- Another agent reviews in a fresh context, read-only (no file edits, no git writes). The author fixes findings and never signs off on their own change.
 - Review arguments: `origin/main docs/SPEC.md`. The reviewer also applies `CODING_STANDARDS.md`.
 
 ## Agent skills
 
-### Issue tracker
-
-GitHub issues on `coastk05396/split-system` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five default roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
+- Issue tracker: GitHub issues on `coastk05396/split-system` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+- Triage labels: see `docs/agents/triage-labels.md`.
+- Domain docs: single-context, `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
