@@ -1,0 +1,11 @@
+title = "split-system"
+
+[extend]
+useDefault = true
+
+# SerpApi puts the key in the query string, so a logged or committed URL leaks it.
+[[rules]]
+id = "serpapi-api-key-query"
+description = "SerpApi api_key query parameter with a literal key"
+regex = '''(?i)api_key=[0-9a-f]{32,}'''
+keywords = ["api_key"]
