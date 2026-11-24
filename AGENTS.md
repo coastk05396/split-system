@@ -31,7 +31,7 @@
 
 - Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.
 - Code review is done by a different agent in a fresh context, read-only (no file edits, no git writes), never by the author. The author fixes findings and never signs off on their own change.
-- Review arguments: `origin/main docs/SPEC.md`.
+- Review arguments: `origin/main docs/SPEC.md`. The reviewer also applies `CODING_STANDARDS.md`.
 
 ## Agent skills
 
