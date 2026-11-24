@@ -1,5 +1,5 @@
 import { type DailyFlightItem, getAirlineName, type Language } from "@split/shared";
-import { ArrowUpRight, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUpRight, Calendar, ChevronDown, ChevronUp, Flame } from "lucide-react";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { t } from "../i18n/messages.js";
 import { CountryFlag } from "./CountryFlag.js";
@@ -25,7 +25,7 @@ export function routeText(item: DailyFlightItem): string {
 }
 
 function airlineLabel(item: DailyFlightItem, lang: Language): string {
-  return getAirlineName(item.airlines[0] ?? "", lang);
+  return item.airlines.map((code) => getAirlineName(code, lang)).join(" + ");
 }
 
 export function RouteChip({ item, className = "" }: { item: DailyFlightItem; className?: string }) {
@@ -58,8 +58,13 @@ export function DealBadge({
   if (pct >= SOLID_PILL_MIN_PCT) {
     return (
       <span
-        className={`inline-block rounded-full bg-fl-green font-bold whitespace-nowrap text-white tabular-nums ${DEAL_SIZE[size].solid} ${className}`}
+        className={`inline-flex items-center gap-1 rounded-full bg-fl-green font-bold whitespace-nowrap text-white tabular-nums ${DEAL_SIZE[size].solid} ${className}`}
       >
+        <Flame
+          aria-hidden="true"
+          strokeWidth={2}
+          className="size-3.5 shrink-0 rounded-full bg-white p-0.5 text-fl-green"
+        />
         {text}
       </span>
     );
