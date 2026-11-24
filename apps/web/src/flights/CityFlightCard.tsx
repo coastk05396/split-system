@@ -5,7 +5,6 @@ import { t } from "../i18n/messages.js";
 import { CountryFlag } from "./CountryFlag.js";
 import type { CityGroup } from "./groups.js";
 import {
-  fareStops,
   FlightBookAnchor,
   flightCityLabel,
   flightDestinationLabel,
@@ -21,7 +20,7 @@ const SOLID_PILL_MIN_PCT = 50;
 const SIGNAL_MIN_PCT = 15;
 
 export function routeText(item: DailyFlightItem): string {
-  return `${item.origin} ${item.tripType === "rt" ? "⇄" : "→"} ${item.dest}`;
+  return `${item.origin} ⇄ ${item.dest}`;
 }
 
 function airlineLabel(item: DailyFlightItem, lang: Language): string {
@@ -119,7 +118,7 @@ function Dot() {
 
 /** `直飛` or `轉 N`, N being the worse leg's stops. */
 function stopsText(fare: DailyFlightItem): string {
-  const stops = fareStops(fare);
+  const stops = fare.transfers;
   if (stops === 0) return t("flights.badge.direct");
   return t(stops === 1 ? "flights.badge.stops" : "flights.badge.stops.many", { count: stops });
 }
@@ -130,7 +129,7 @@ function fareCountText(count: number): string {
 
 /** Row detail line: `高雄出發 · 航司 · 直飛 | 轉 N`; wraps, never truncates. */
 function rowDetail(fare: DailyFlightItem, lang: Language): ReactNode[] {
-  const stops = fareStops(fare);
+  const stops = fare.transfers;
   return [
     t("flights.fromOrigin", { city: flightOriginCityLabel(fare.origin, lang) }),
     airlineLabel(fare, lang),

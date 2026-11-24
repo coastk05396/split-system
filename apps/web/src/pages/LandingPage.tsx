@@ -31,7 +31,6 @@ export function LandingPage() {
   const filtered = filterDailyFlights(items, {
     region,
     origin: "all",
-    tripType: "rt",
     month: "all",
     directOnly: false,
     holidayOnly: false,

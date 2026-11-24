@@ -204,7 +204,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     expect(isFallback).toBe(false);
     expect(items.map((i) => i.dest).sort()).toEqual(["KIX", "NRT", "OKA"]);
     const nrt = items.find((i) => i.dest === "NRT");
-    expect(nrt).toMatchObject({ origin: "TPE", tripType: "rt", priceTwd: 30000, discountPct: 0 });
+    expect(nrt).toMatchObject({ origin: "TPE", priceTwd: 30000, discountPct: 0 });
     expect(nrt?.inDate).toBe(addDaysIso(OUT, 5));
   });
 
@@ -456,7 +456,6 @@ describe("daily flights API", () => {
     outDate,
     inDate: addDaysIso(outDate, 4),
     priceTwd: 5000,
-    dealBaselineTwd: 10000,
     airlines: ["MM"],
     transfers: 0,
     ...overrides,
@@ -504,18 +503,16 @@ describe("daily flights API", () => {
     const source: FlightSource = {
       fetchCandidates: (digestDate) =>
         Promise.resolve(
-          getDefaultDailyFlights(digestDate)
-            .filter((i) => i.tripType === "rt")
-            .map((item, idx) =>
-              candidate(`${digestDate}-${idx}`, item.outDate, {
-                origin: item.origin,
-                dest: item.dest,
-                inDate: item.inDate,
-                priceTwd: item.priceTwd,
-                airlines: item.airlines,
-                transfers: item.transfers,
-              }),
-            ),
+          getDefaultDailyFlights(digestDate).map((item, idx) =>
+            candidate(`${digestDate}-${idx}`, item.outDate, {
+              origin: item.origin,
+              dest: item.dest,
+              inDate: item.inDate,
+              priceTwd: item.priceTwd,
+              airlines: item.airlines,
+              transfers: item.transfers,
+            }),
+          ),
         ),
     };
     const day1 = await refreshDailyFlights(db, source, clock.now);
@@ -528,7 +525,7 @@ describe("daily flights API", () => {
     const app = setupApp();
 
     const zhRes = await app.request(
-      "https://split.test/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-01&inDate=2026-12-06&tripType=rt&lang=zh-TW",
+      "https://split.test/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-01&inDate=2026-12-06&lang=zh-TW",
       {},
       { ...env, TRIP_COM_ALLIANCE_ID: "111", TRIP_COM_SID: "222" },
     );
@@ -544,7 +541,7 @@ describe("daily flights API", () => {
     expect(zhLocation).toContain("SID=222");
 
     const enRes = await app.request(
-      "https://split.test/api/v1/flights/go?origin=TSA&dest=HND&outDate=2026-12-05&inDate=2026-12-09&tripType=rt&lang=en",
+      "https://split.test/api/v1/flights/go?origin=TSA&dest=HND&outDate=2026-12-05&inDate=2026-12-09&lang=en",
       {},
       env,
     );
@@ -557,11 +554,22 @@ describe("daily flights API", () => {
     expect(enLocation).toContain("rdate=2026-12-09");
 
     const badRes = await app.request(
-      "https://split.test/api/v1/flights/go?origin=https://evil.com&dest=NRT&outDate=2026-12-01&inDate=2026-12-06&tripType=rt",
+      "https://split.test/api/v1/flights/go?origin=https://evil.com&dest=NRT&outDate=2026-12-01&inDate=2026-12-06",
       {},
       env,
     );
     expect(badRes.status).toBe(400);
+  });
+
+  it("GET /flights/go requires a return date and an active origin", async () => {
+    const app = setupApp();
+    const go = (query: string) =>
+      app.request(`https://split.test/api/v1/flights/go?${query}`, {}, env);
+    expect((await go("origin=TPE&dest=NRT&outDate=2026-12-01&lang=en")).status).toBe(400);
+    expect((await go("origin=TPE&dest=NRT&outDate=2026-12-01&inDate=&lang=en")).status).toBe(400);
+    expect((await go("origin=TPE&dest=NRT&outDate=2026-12-05&inDate=2026-12-01")).status).toBe(400);
+    expect((await go("origin=RMQ&dest=NRT&outDate=2026-12-01&inDate=2026-12-06")).status).toBe(400);
+    expect((await go("origin=KHH&dest=NRT&outDate=2026-12-01&inDate=2026-12-06")).status).toBe(302);
   });
 });
 

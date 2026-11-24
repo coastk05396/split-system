@@ -593,7 +593,6 @@ export const en: Record<MessageId, string> = {
   "flights.tripDaysNights": "{days}d {nights}n",
   "flights.sameDay": "Same-day",
   "flights.tripDays": "{days}d",
-  "flights.tripOneWay": "One-way",
   "flights.bookCta": "View",
   "flights.refreshSchedule": "Refreshes daily at 08:00 (GMT+8)",
   "flights.fallbackNote": "Sample fares. Live deals arrive daily at 8 AM.",

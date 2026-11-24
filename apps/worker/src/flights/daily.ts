@@ -64,7 +64,7 @@ export async function refreshDailyFlights(
       target: dailyFlightsRuns.id,
       set: { digestDate: collected.digestDate, completedAt: now },
     });
-  // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
+  // D1 allows at most 100 bound parameters per query (12 columns * 5 rows = 60).
   const insertStmts = [];
   for (let i = 0; i < rows.length; i += D1_INSERT_CHUNK_SIZE) {
     insertStmts.push(db.insert(dailyFlights).values(rows.slice(i, i + D1_INSERT_CHUNK_SIZE)));
@@ -134,7 +134,6 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
       origin: row.origin,
       dest: row.destination,
       region: meta?.region ?? "jp",
-      tripType: row.tripType,
       outDate: row.outDate,
       inDate: row.inDate,
       priceTwd: row.priceTwd,
@@ -142,10 +141,6 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
       tag: row.tag,
       airlines: parseAirlinesJson(row.airlinesJson),
       transfers: row.transfers,
-      returnTransfers: row.returnTransfers,
-      isRedEye: row.isRedEye === 1,
-      outboundDep: row.outboundDep,
-      inboundDep: row.inboundDep,
     };
   });
 

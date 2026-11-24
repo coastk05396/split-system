@@ -13,17 +13,12 @@ function fare(
     id,
     origin: "TPE",
     region: "jp",
-    tripType: "rt",
     outDate: "2026-12-10",
     inDate: "2026-12-14",
     discountPct: 0,
     tag: "normal",
     airlines: ["CI"],
     transfers: 0,
-    returnTransfers: 0,
-    isRedEye: false,
-    outboundDep: "10:00",
-    inboundDep: "15:00",
     ...over,
   };
 }
@@ -42,8 +37,6 @@ const SAMPLE_FLIGHTS: DailyFlightItem[] = [
     discountPct: 45,
     tag: "steal",
     airlines: ["MM"],
-    isRedEye: true,
-    outboundDep: "02:15",
   }),
   fare("nrt-c", {
     dest: "NRT",
@@ -182,10 +175,10 @@ describe("daily flights page", () => {
     expect(card.className).toContain("overflow-hidden");
     const rows = rowsOf(nrt);
     expect(rows.map((r) => r.getAttribute("href"))).toEqual([
-      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-10&tripType=rt&lang=zh-TW&inDate=2026-12-14",
-      "/api/v1/flights/go?origin=TSA&dest=HND&outDate=2027-03-05&tripType=rt&lang=zh-TW&inDate=2027-03-09",
-      "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&tripType=rt&lang=zh-TW&inDate=2027-02-07",
-      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&tripType=rt&lang=zh-TW&inDate=2027-01-16",
+      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-10&inDate=2026-12-14&lang=zh-TW",
+      "/api/v1/flights/go?origin=TSA&dest=HND&outDate=2027-03-05&inDate=2027-03-09&lang=zh-TW",
+      "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&inDate=2027-02-07&lang=zh-TW",
+      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&inDate=2027-01-16&lang=zh-TW",
     ]);
     expect(rows[0]).toHaveTextContent("12/10–12/14");
     expect(rows[0]).toHaveTextContent("桃園出發 · 樂桃航空 · 直飛");
@@ -355,21 +348,11 @@ describe("daily flights page", () => {
 
   it("shows round-trip fares directly, with no round-trip / one-way toggle and no region tabs", async () => {
     const { api } = setup();
-    setItems(api, [
-      ...SAMPLE_FLIGHTS,
-      fare("stray-ow", {
-        dest: "BKK",
-        region: "sea",
-        tripType: "ow",
-        priceTwd: 1000,
-        inDate: null,
-      }),
-    ]);
+    setItems(api, [...SAMPLE_FLIGHTS]);
     await screen.findAllByRole("heading", { level: 2 });
 
     expect(screen.queryByRole("group", { name: /^(行程|Trip)$/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^(來回|單程|Round-trip|One-way)$/ })).toBeNull();
-    // Only round trips are listed, so the one-way stray never shows up
     expect(cityOrder()).toEqual(["東京", "首爾", "大阪"]);
     expect(screen.getAllByText(/⇄/).length).toBe(3);
     expect(screen.queryByText(/→/)).toBeNull();
@@ -432,7 +415,7 @@ describe("daily flights page", () => {
     expect(within(again).getByRole("button", { name: "查看 1 筆機票" })).toBeVisible();
   });
 
-  it("offers only the origins on the board in the filter sheet, never RMQ or TNN", async () => {
+  it("offers only the origins on the board in the filter sheet", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findAllByRole("heading", { level: 2 });

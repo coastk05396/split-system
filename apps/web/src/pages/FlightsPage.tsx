@@ -72,13 +72,10 @@ function collectMonthOptions(items: readonly DailyFlightItem[]): string[] {
   return [...months].sort();
 }
 
-// RMQ/TNN left discovery (ADR 0013) but old fares and the curated fallback may still carry them.
-const RETIRED_ORIGINS: ReadonlySet<string> = new Set(["RMQ", "TNN"]);
-
 /** Origins that have a fare on the board (the filter never offers an empty origin), in `FLIGHT_ORIGINS` order. */
 function collectOriginOptions(items: readonly DailyFlightItem[]): FlightOrigin[] {
   const present = new Set<string>(items.map((item) => item.origin));
-  return FLIGHT_ORIGINS.filter((o) => present.has(o) && !RETIRED_ORIGINS.has(o));
+  return FLIGHT_ORIGINS.filter((o) => present.has(o));
 }
 
 /** Every carrier of every fare (a multi-airline fare lists all of them), one option per carrier. */
@@ -123,7 +120,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const currentFilter: DailyFlightsFilter = {
     region: "all",
     origin,
-    tripType: "rt",
     month,
     airline,
     directOnly: false,

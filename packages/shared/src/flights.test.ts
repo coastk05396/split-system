@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTripComUrl,
+  flightGoQuerySchema,
   computeArrivalTimeHm,
   computeDealSignal,
   departureBounds,
@@ -12,8 +13,6 @@ import {
   getCityName,
   getDefaultDailyFlights,
   getDestinationMeta,
-  isGhostFare,
-  isRedEyeTime,
   matchTaiwanHoliday,
   parseExploreAirlines,
   sortDailyFlights,
@@ -30,25 +29,9 @@ describe("flights domain helpers", () => {
     expect(getAirlineName("Z2", "en")).toBe("AirAsia PH");
   });
 
-  it("detects red-eye flight times between 00:00 and 05:59", () => {
-    expect(isRedEyeTime("00:15")).toBe(true);
-    expect(isRedEyeTime("02:45")).toBe(true);
-    expect(isRedEyeTime("2026-11-20T05:59:00+09:00")).toBe(true);
-    expect(isRedEyeTime("06:00")).toBe(false);
-    expect(isRedEyeTime("2026-11-20T14:30:00+08:00")).toBe(false);
-    expect(isRedEyeTime("23:55")).toBe(false);
-    expect(isRedEyeTime(null)).toBe(false);
-    expect(isRedEyeTime(undefined)).toBe(false);
+  it("computes local arrival times in the arrival airport timezone", () => {
     expect(computeArrivalTimeHm("2026-12-01T19:00:00+08:00", 840, "LHR")).toBe("01:00");
     expect(computeArrivalTimeHm("2026-12-11T21:00:00+08:00", 210, "NRT")).toBe("01:30");
-  });
-
-  it("identifies ghost fares when verifier returns null or jumps > 20% and > NT$800", () => {
-    expect(isGhostFare(4000, null)).toBe(true);
-    expect(isGhostFare(4000, 5200)).toBe(true); // +30% and +1200
-    expect(isGhostFare(4000, 4300)).toBe(false); // +7.5% and +300
-    expect(isGhostFare(2500, 3200)).toBe(false); // +28% but only +700 (<= 800)
-    expect(isGhostFare(10000, 11800)).toBe(false); // +1800 but only +18% (<= 20%)
   });
 
   it("scores the discount against the typical high price and tiers it at 50% and 15%", () => {
@@ -86,7 +69,6 @@ describe("flights domain helpers", () => {
       dest: "NRT",
       outDate: "2026-11-20",
       inDate: "2026-11-25",
-      tripType: "rt",
       lang: "zh-TW",
     });
     expect(zhUrl).toBe(
@@ -98,7 +80,7 @@ describe("flights domain helpers", () => {
         origin: "TSA",
         dest: "HND",
         outDate: "2026-12-05",
-        tripType: "ow",
+        inDate: "2026-12-09",
         lang: "en",
       },
       { allianceId: "123456", sid: "789012" },
@@ -111,8 +93,8 @@ describe("flights domain helpers", () => {
     expect(parsed.searchParams.get("acity")).toBe("tyo");
     expect(parsed.searchParams.get("aairport")).toBe("HND");
     expect(parsed.searchParams.get("ddate")).toBe("2026-12-05");
-    expect(parsed.searchParams.get("rdate")).toBeNull();
-    expect(parsed.searchParams.get("triptype")).toBe("ow");
+    expect(parsed.searchParams.get("rdate")).toBe("2026-12-09");
+    expect(parsed.searchParams.get("triptype")).toBe("rt");
     expect(parsed.searchParams.get("locale")).toBe("en-US");
     expect(parsed.searchParams.get("curr")).toBe("TWD");
     expect(parsed.searchParams.get("Allianceid")).toBe("123456");
@@ -127,7 +109,6 @@ describe("flights domain helpers", () => {
     const jpDirect = filterDailyFlights(sample, {
       region: "jp",
       origin: "all",
-      tripType: "all",
       month: "all",
       directOnly: true,
       holidayOnly: false,
@@ -154,13 +135,12 @@ describe("flights domain helpers", () => {
     const custom: DailyFlightItem[] = [
       { ...seed0, id: "a", priceTwd: 5000, discountPct: 20 },
       { ...seed0, id: "b", priceTwd: 15000, discountPct: 45 },
-      { ...seed0, id: "c", transfers: 0, returnTransfers: 1 },
+      { ...seed0, id: "c", transfers: 1 },
     ];
     expect(
       filterDailyFlights(custom, {
         region: "all",
         origin: "all",
-        tripType: "all",
         month: "all",
         directOnly: true,
         holidayOnly: false,
@@ -176,7 +156,6 @@ describe("flights domain helpers", () => {
       filterDailyFlights(holidayDec, {
         region: "all",
         origin: "all",
-        tripType: "all",
         month: "2026-12",
         directOnly: false,
         holidayOnly: true,
@@ -196,7 +175,6 @@ describe("flights domain helpers", () => {
       filterDailyFlights(custom, {
         region: "all",
         origin: "all",
-        tripType: "all",
         month: "all",
         directOnly: false,
         holidayOnly: false,
@@ -207,30 +185,12 @@ describe("flights domain helpers", () => {
       filterDailyFlights(custom.slice(0, 2), {
         region: "all",
         origin: "all",
-        tripType: "all",
         month: "all",
         directOnly: false,
         holidayOnly: false,
         maxPriceTwd: 6000,
       }).map((x) => x.id),
     ).toEqual(["a"]);
-    expect(
-      filterDailyFlights(
-        [
-          { ...seed0, id: "red", isRedEye: true },
-          { ...seed0, id: "day", isRedEye: false },
-        ],
-        {
-          region: "all",
-          origin: "all",
-          tripType: "all",
-          month: "all",
-          directOnly: false,
-          holidayOnly: false,
-          excludeRedEye: true,
-        },
-      ).map((x) => x.id),
-    ).toEqual(["day"]);
 
     expect(
       filterDailyFlights(
@@ -241,7 +201,6 @@ describe("flights domain helpers", () => {
         {
           region: "all",
           origin: "all",
-          tripType: "all",
           month: "all",
           directOnly: false,
           holidayOnly: false,
@@ -259,7 +218,6 @@ describe("flights domain helpers", () => {
         {
           region: "all",
           origin: "all",
-          tripType: "all",
           month: "all",
           directOnly: false,
           holidayOnly: false,
@@ -415,7 +373,6 @@ describe("Curated Destination catalog integrity", () => {
       origin: "TPE",
       dest,
       region: "longhaul",
-      tripType: "rt",
       outDate: "2026-12-10",
       inDate: "2026-12-20",
       priceTwd: 30000,
@@ -423,16 +380,11 @@ describe("Curated Destination catalog integrity", () => {
       tag: "normal",
       airlines: ["CI"],
       transfers: 0,
-      returnTransfers: 0,
-      isRedEye: false,
-      outboundDep: null,
-      inboundDep: null,
     });
     const items = ["FCO", "VCE", "ORD", "LAX", "PER"].map(at);
     const base = {
       region: "longhaul",
       origin: "all",
-      tripType: "all",
       month: "all",
       directOnly: false,
       holidayOnly: false,
@@ -523,5 +475,29 @@ describe("Curated Destination catalog integrity", () => {
     expect(getDestinationMeta("LHR")).toMatchObject({ cityCode: "lon", baselineTwd: 31000 });
     expect(getDestinationMeta("SYD")).toMatchObject({ zhTW: "雪梨", baselineTwd: 25500 });
     expect(getAirlineName("BA", "zh-TW")).toBe("英國航空");
+  });
+});
+
+describe("Trip.com redirect query", () => {
+  const ok = { origin: "tpe", dest: "nrt", outDate: "2026-12-01", inDate: "2026-12-06" };
+
+  it("normalizes a round trip from an active origin", () => {
+    expect(flightGoQuerySchema.parse(ok)).toEqual({
+      origin: "TPE",
+      dest: "NRT",
+      outDate: "2026-12-01",
+      inDate: "2026-12-06",
+      lang: "zh-TW",
+    });
+  });
+
+  it("requires the return date, a return not before departure, and an active origin", () => {
+    expect(flightGoQuerySchema.safeParse({ ...ok, inDate: undefined }).success).toBe(false);
+    expect(flightGoQuerySchema.safeParse({ ...ok, inDate: "" }).success).toBe(false);
+    expect(flightGoQuerySchema.safeParse({ ...ok, inDate: "2026-11-30" }).success).toBe(false);
+    expect(flightGoQuerySchema.safeParse({ ...ok, origin: "RMQ" }).success).toBe(false);
+    expect(flightGoQuerySchema.safeParse({ ...ok, origin: "https://evil.com" }).success).toBe(
+      false,
+    );
   });
 });

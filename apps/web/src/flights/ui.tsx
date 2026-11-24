@@ -17,10 +17,9 @@ export function tripGoHref(item: DailyFlightItem, lang: Language): string {
     origin: item.origin,
     dest: item.dest,
     outDate: item.outDate,
-    tripType: item.tripType,
+    inDate: item.inDate,
     lang,
   });
-  if (item.inDate !== null) params.set("inDate", item.inDate);
   return `/api/v1/flights/go?${params.toString()}`;
 }
 
@@ -114,22 +113,16 @@ function monthDay(iso: string): string | null {
 
 /**
  * Fare dates without the year (the board only holds the current season), the same in every
- * language: `12/09–12/12` round trip, `12/09` one-way or same-day.
+ * language: `12/09–12/12` round trip, `12/09` same-day.
  */
-export function formatFareDates(outDate: string, inDate: string | null): string {
+export function formatFareDates(outDate: string, inDate: string): string {
   const out = monthDay(outDate);
   if (out === null) return outDate;
-  const back = inDate === null ? null : monthDay(inDate);
+  const back = monthDay(inDate);
   return back === null || back === out ? out : `${out}–${back}`;
 }
 
-/** Stops on the worse leg; 0 means nonstop. */
-export function fareStops(item: DailyFlightItem): number {
-  return Math.max(item.transfers, item.returnTransfers ?? 0);
-}
-
 function formatTripSpan(item: DailyFlightItem): string {
-  if (item.inDate === null) return t("flights.tripOneWay");
   const outMs = Date.parse(`${item.outDate}T00:00:00Z`);
   const inMs = Date.parse(`${item.inDate}T00:00:00Z`);
   if (!Number.isFinite(outMs) || !Number.isFinite(inMs)) {
@@ -145,7 +138,7 @@ export function formatFlightTripSummary(item: DailyFlightItem, lang: Language): 
   const city = flightOriginCityLabel(item.origin, lang);
   const departLabel = t("flights.departFrom", { date: outShort, city });
   const spanLabel = formatTripSpan(item);
-  const maxStops = Math.max(item.transfers, item.returnTransfers ?? 0);
+  const maxStops = item.transfers;
   const stopLabel =
     maxStops === 0
       ? t("flights.badge.direct")

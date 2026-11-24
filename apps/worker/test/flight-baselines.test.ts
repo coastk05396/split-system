@@ -189,9 +189,8 @@ describe("typical-high Baselines", () => {
     expect(call?.params.get("hl")).toBe("en");
     expect(call?.params.get("gl")).toBe("tw");
     // A round trip a month out: both dates are set and the return is after the departure.
-    expect(call?.outDate > "2026-11-16" && (call?.returnDate ?? "") > (call?.outDate ?? "")).toBe(
-      true,
-    );
+    const out = call?.outDate ?? "";
+    expect(out > "2026-11-16" && (call?.returnDate ?? "") > out).toBe(true);
     expect(await stored()).toEqual([
       { origin: "TPE", destination: "NRT", low: 8_400, high: 15_500, at: clock.now },
     ]);

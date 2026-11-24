@@ -12,18 +12,13 @@ export interface DailyFlightRow {
   digestDate: string;
   origin: FlightOrigin;
   destination: string;
-  tripType: "rt";
   outDate: string;
-  inDate: string | null;
+  inDate: string;
   priceTwd: number;
   discountPct: number;
   tag: DealTag;
   airlinesJson: string;
   transfers: number;
-  returnTransfers: number | null;
-  isRedEye: number;
-  outboundDep: string | null;
-  inboundDep: string | null;
   createdAt: number;
 }
 
@@ -125,7 +120,6 @@ export function formatDailyFlightsSyncSql(
       sqlLiteral(row.digestDate),
       sqlLiteral(row.origin),
       sqlLiteral(row.destination),
-      sqlLiteral(row.tripType),
       sqlLiteral(row.outDate),
       sqlLiteral(row.inDate),
       sqlLiteral(row.priceTwd),
@@ -133,14 +127,10 @@ export function formatDailyFlightsSyncSql(
       sqlLiteral(row.tag),
       sqlLiteral(row.airlinesJson),
       sqlLiteral(row.transfers),
-      sqlLiteral(row.returnTransfers),
-      sqlLiteral(row.isRedEye),
-      sqlLiteral(row.outboundDep),
-      sqlLiteral(row.inboundDep),
       sqlLiteral(row.createdAt),
     ].join(", ");
     lines.push(
-      `INSERT INTO daily_flights (id, digest_date, origin, destination, trip_type, out_date, in_date, price_twd, discount_pct, tag, airlines_json, transfers, return_transfers, is_red_eye, outbound_dep, inbound_dep, created_at) VALUES (${values});`,
+      `INSERT INTO daily_flights (id, digest_date, origin, destination, out_date, in_date, price_twd, discount_pct, tag, airlines_json, transfers, created_at) VALUES (${values});`,
     );
   }
   return `${lines.join("\n")}\n`;
@@ -184,7 +174,7 @@ export async function collectDailyFlights(
   const items: DailyFlightItem[] = [];
   for (const c of cheapest.values()) {
     const meta = getDestinationMeta(c.dest);
-    if (meta === null) continue;
+    if (meta === null || c.inDate === null) continue;
     const baseline = scoringBaseline(typicalHighs, c.origin, c.dest, meta.baselineTwd);
     const { discountPct, tag } = computeDealSignal(c.priceTwd, baseline);
     rows.push({
@@ -192,7 +182,6 @@ export async function collectDailyFlights(
       digestDate,
       origin: c.origin,
       destination: meta.airport,
-      tripType: "rt",
       outDate: c.outDate,
       inDate: c.inDate,
       priceTwd: c.priceTwd,
@@ -200,10 +189,6 @@ export async function collectDailyFlights(
       tag,
       airlinesJson: JSON.stringify(c.airlines),
       transfers: c.transfers,
-      returnTransfers: null,
-      isRedEye: 0,
-      outboundDep: null,
-      inboundDep: null,
       createdAt: now,
     });
     items.push({
@@ -211,7 +196,6 @@ export async function collectDailyFlights(
       origin: c.origin,
       dest: meta.airport,
       region: meta.region,
-      tripType: "rt",
       outDate: c.outDate,
       inDate: c.inDate,
       priceTwd: c.priceTwd,
@@ -219,10 +203,6 @@ export async function collectDailyFlights(
       tag,
       airlines: c.airlines,
       transfers: c.transfers,
-      returnTransfers: null,
-      isRedEye: false,
-      outboundDep: null,
-      inboundDep: null,
     });
   }
 

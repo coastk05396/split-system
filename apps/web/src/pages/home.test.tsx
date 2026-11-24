@@ -329,16 +329,11 @@ describe("home", () => {
     const base = {
       origin: "TPE" as const,
       region: "jp" as const,
-      tripType: "rt" as const,
       outDate: "2026-12-10",
       inDate: "2026-12-14",
       tag: "normal" as const,
       airlines: ["IT"],
       transfers: 0,
-      returnTransfers: 0,
-      isRedEye: false,
-      outboundDep: "10:00",
-      inboundDep: "15:00",
     };
     api.dailyFlights = {
       date: "2026-11-16",

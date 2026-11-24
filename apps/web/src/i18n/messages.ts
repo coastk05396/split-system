@@ -582,7 +582,6 @@ const zhTW = {
   "flights.tripDaysNights": "{days}天{nights}夜",
   "flights.sameDay": "當日來回",
   "flights.tripDays": "{days} 天",
-  "flights.tripOneWay": "單程",
   "flights.bookCta": "查看",
   "flights.refreshSchedule": "每日 08:00（台灣時間）更新",
   "flights.fallbackNote": "顯示精選參考票價，每日 08:00（台灣時間）更新最新行情。",

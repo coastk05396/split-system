@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { localDateSchema } from "./schemas.js";
 
-export const FLIGHT_ORIGINS = ["TPE", "TSA", "KHH", "RMQ", "TNN"] as const;
+export const FLIGHT_ORIGINS = ["TPE", "TSA", "KHH"] as const;
 export type FlightOrigin = (typeof FLIGHT_ORIGINS)[number];
 
 export const FLIGHT_REGIONS = ["jp", "kr", "sea", "hkmo", "longhaul"] as const;
@@ -16,9 +16,6 @@ export const LONGHAUL_SUBREGIONS = [
 ] as const;
 export type LonghaulSubRegion = (typeof LONGHAUL_SUBREGIONS)[number];
 
-export const FLIGHT_TRIP_TYPES = ["rt", "ow"] as const;
-export type FlightTripType = (typeof FLIGHT_TRIP_TYPES)[number];
-
 export const DEAL_TAGS = ["steal", "below_market", "normal"] as const;
 export type DealTag = (typeof DEAL_TAGS)[number];
 
@@ -27,12 +24,8 @@ export type FlightSortBy = (typeof FLIGHT_SORT_OPTIONS)[number];
 export type FlightSortDirection = "asc" | "desc";
 export type FlightStopsFilter = "all" | "direct" | "transfer";
 
-/** Multiplier converting typical roundtrip baseline fares into one-way deal baselines. */
-export const ONE_WAY_BASELINE_FACTOR = 0.58;
-
 export const flightOriginSchema = z.enum(FLIGHT_ORIGINS);
 export const flightRegionSchema = z.enum(FLIGHT_REGIONS);
-export const flightTripTypeSchema = z.enum(FLIGHT_TRIP_TYPES);
 export const dealTagSchema = z.enum(DEAL_TAGS);
 
 export interface OriginMeta {
@@ -68,22 +61,6 @@ export const ORIGIN_META: Readonly<Record<FlightOrigin, OriginMeta>> = {
     en: "Kaohsiung",
     shortZhTW: "高雄",
     shortEn: "Kaohsiung",
-  },
-  RMQ: {
-    code: "RMQ",
-    cityCode: "rmq",
-    zhTW: "台中清泉崗",
-    en: "Taichung",
-    shortZhTW: "台中",
-    shortEn: "Taichung",
-  },
-  TNN: {
-    code: "TNN",
-    cityCode: "tnn",
-    zhTW: "台南機場",
-    en: "Tainan",
-    shortZhTW: "台南",
-    shortEn: "Tainan",
   },
 };
 
@@ -1572,37 +1549,21 @@ export function matchTaiwanHoliday(outDate: string, inDate?: string | null): Tai
   return null;
 }
 
-const optionalDateSchema = z.preprocess(
-  (value) => (value === "" || value === null ? undefined : value),
-  localDateSchema.optional(),
-);
-
 export const flightGoQuerySchema = z
   .object({
-    origin: z
-      .string()
-      .trim()
-      .toUpperCase()
-      .regex(/^[A-Z]{3}$/, "INVALID_AIRPORT"),
+    origin: z.string().trim().toUpperCase().pipe(flightOriginSchema),
     dest: z
       .string()
       .trim()
       .toUpperCase()
       .regex(/^[A-Z]{3}$/, "INVALID_AIRPORT"),
     outDate: localDateSchema,
-    inDate: optionalDateSchema,
-    tripType: flightTripTypeSchema.default("rt"),
+    inDate: localDateSchema,
     lang: z.enum(["zh-TW", "en"]).default("zh-TW"),
   })
   .superRefine((val, ctx) => {
-    if (val.tripType === "rt") {
-      if (val.inDate === undefined) {
-        ctx.addIssue({ code: "custom", message: "RETURN_DATE_REQUIRED", path: ["inDate"] });
-        return;
-      }
-      if (val.inDate < val.outDate) {
-        ctx.addIssue({ code: "custom", message: "RETURN_BEFORE_DEPARTURE", path: ["inDate"] });
-      }
+    if (val.inDate < val.outDate) {
+      ctx.addIssue({ code: "custom", message: "RETURN_BEFORE_DEPARTURE", path: ["inDate"] });
     }
   });
 
@@ -1613,18 +1574,13 @@ export const dailyFlightItemSchema = z.object({
   origin: flightOriginSchema,
   dest: z.string().regex(/^[A-Z]{3}$/),
   region: flightRegionSchema,
-  tripType: flightTripTypeSchema,
   outDate: localDateSchema,
-  inDate: localDateSchema.nullable(),
+  inDate: localDateSchema,
   priceTwd: z.number().int().positive(),
   discountPct: z.number().int().min(0).max(99),
   tag: dealTagSchema,
   airlines: z.array(z.string()).min(1),
   transfers: z.number().int().min(0),
-  returnTransfers: z.number().int().min(0).nullable(),
-  isRedEye: z.boolean(),
-  outboundDep: z.string().nullable(),
-  inboundDep: z.string().nullable(),
 });
 
 export type DailyFlightItem = z.infer<typeof dailyFlightItemSchema>;
@@ -1723,31 +1679,6 @@ export function computeArrivalTimeHm(
   }).format(new Date(arrMs));
 }
 
-/** True when the flight time falls within 00:00–05:59 local time. */
-export function isRedEyeTime(isoOrHm: string | null | undefined): boolean {
-  if (typeof isoOrHm !== "string" || isoOrHm.trim() === "") return false;
-  const isoMatch = isoOrHm.match(/T(\d{2}):(\d{2})/);
-  const hmMatch = isoOrHm.match(/^(\d{2}):(\d{2})/);
-  const match = isoMatch ?? hmMatch;
-  if (!match) return false;
-  const hour = Number(match[1]);
-  return Number.isInteger(hour) && hour >= 0 && hour <= 5;
-}
-
-/** True when any departure or arrival timestamp falls within the red-eye window. */
-export function hasRedEyeLeg(times: readonly (string | null | undefined)[]): boolean {
-  return times.some((t) => isRedEyeTime(t));
-}
-
-/**
- * Discards stale cached fares ("ghost fares") that fail live verification or jump beyond tolerance:
- * live unavailable (`null`) OR both >20% AND >NT$800 above the cached price.
- */
-export function isGhostFare(cachedPriceTwd: number, livePriceTwd: number | null): boolean {
-  if (livePriceTwd === null) return true;
-  return livePriceTwd > cachedPriceTwd * 1.2 && livePriceTwd - cachedPriceTwd > 800;
-}
-
 /**
  * Deal Signal (ADR 0013): the rounded percentage a fare sits below the Route's typical high price,
  * never below 0. Tiers use that rounded value, the one the traveler sees: `steal` from 50%,
@@ -1782,8 +1713,7 @@ export function buildTripComUrl(
     origin: string;
     dest: string;
     outDate: string;
-    inDate?: string | null | undefined;
-    tripType: FlightTripType;
+    inDate: string;
     lang: "zh-TW" | "en";
   },
   affiliate?: TripComAffiliateConfig,
@@ -1800,10 +1730,8 @@ export function buildTripComUrl(
   url.searchParams.set("dcity", dcity);
   url.searchParams.set("acity", acity);
   url.searchParams.set("ddate", params.outDate);
-  if (params.tripType === "rt" && params.inDate) {
-    url.searchParams.set("rdate", params.inDate);
-  }
-  url.searchParams.set("triptype", params.tripType);
+  url.searchParams.set("rdate", params.inDate);
+  url.searchParams.set("triptype", "rt");
   url.searchParams.set("class", "ys");
   url.searchParams.set("quantity", "1");
   url.searchParams.set("nonstoponly", "off");
@@ -1837,7 +1765,6 @@ export interface DailyFlightsFilter {
   origin: FlightOrigin | "all";
   /** `"all"` or a destination airport IATA code (e.g. `"NRT"`). */
   dest?: string;
-  tripType: FlightTripType | "all";
   /** `"all"`, `"holiday"`, or a `"YYYY-MM"` month prefix. */
   month: string;
   /** `"all"` or an airline IATA code (e.g. `"CI"`). */
@@ -1848,8 +1775,6 @@ export interface DailyFlightsFilter {
   stops?: FlightStopsFilter;
   /** Maximum TWD fare ceiling (inclusive), or `null` for no limit. */
   maxPriceTwd?: number | null;
-  /** Exclude flights with red-eye segments. */
-  excludeRedEye?: boolean;
 }
 
 /** Filters daily flight deals by user-selected tabs and quick filter chips. */
@@ -1882,12 +1807,10 @@ export function filterDailyFlights(
       if (getDestinationMeta(item.dest)?.countryCode !== filter.country) return false;
     }
     if (normalizedDest !== null && !matchesFlightDest(item.dest, normalizedDest)) return false;
-    if (filter.tripType !== "all" && item.tripType !== filter.tripType) return false;
-    const maxStops = Math.max(item.transfers, item.returnTransfers ?? 0);
+    const maxStops = item.transfers;
     if (stopsMode === "direct" && maxStops > 0) return false;
     if (stopsMode === "transfer" && maxStops === 0) return false;
     if (filter.maxPriceTwd != null && item.priceTwd > filter.maxPriceTwd) return false;
-    if (filter.excludeRedEye && item.isRedEye) return false;
     if (normalizedAirline !== null) {
       if (!item.airlines.some((code) => code.toUpperCase() === normalizedAirline)) return false;
     }
@@ -1951,315 +1874,203 @@ interface SeedSpec {
   id: string;
   origin: FlightOrigin;
   dest: string;
-  tripType: FlightTripType;
   offsetDays: number | string;
-  stayDays?: number;
+  stayDays: number;
   priceTwd: number;
   airlines: string[];
   transfers: number;
-  returnTransfers: number | null;
-  outboundDep: string;
-  inboundDep: string | null;
 }
 
 const DEFAULT_SEEDS: readonly SeedSpec[] = [
-  // Japan
   {
     id: "seed-tpe-oka-mm",
     origin: "TPE",
     dest: "OKA",
-    tripType: "rt",
     offsetDays: 24,
     stayDays: 4,
     priceTwd: 4590,
     airlines: ["MM"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "09:40",
-    inboundDep: "16:20",
   },
   {
     id: "seed-tpe-nrt-it-redeye",
     origin: "TPE",
     dest: "NRT",
-    tripType: "rt",
     offsetDays: 32,
     stayDays: 5,
     priceTwd: 6490,
     airlines: ["IT"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "02:35",
-    inboundDep: "20:10",
   },
   {
     id: "seed-khh-kix-ci",
     origin: "KHH",
     dest: "KIX",
-    tripType: "rt",
     offsetDays: 41,
     stayDays: 5,
     priceTwd: 7480,
     airlines: ["CI"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "07:20",
-    inboundDep: "14:50",
   },
   {
     id: "seed-tpe-fuk-br",
     origin: "TPE",
     dest: "FUK",
-    tripType: "rt",
     offsetDays: "2027-02-05",
     stayDays: 5,
     priceTwd: 6990,
     airlines: ["BR"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "08:10",
-    inboundDep: "19:00",
   },
   {
     id: "seed-tpe-cts-jx",
     origin: "TPE",
     dest: "CTS",
-    tripType: "rt",
     offsetDays: "2027-04-02",
     stayDays: 5,
     priceTwd: 10900,
     airlines: ["JX"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "10:15",
-    inboundDep: "15:20",
   },
   {
     id: "seed-tsa-hnd-nh",
     origin: "TSA",
     dest: "HND",
-    tripType: "rt",
     offsetDays: 29,
     stayDays: 4,
     priceTwd: 8950,
     airlines: ["NH"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "13:30",
-    inboundDep: "12:15",
   },
-  // South Korea
   {
     id: "seed-tpe-pus-bx-redeye",
     origin: "TPE",
     dest: "PUS",
-    tripType: "rt",
     offsetDays: 21,
     stayDays: 4,
     priceTwd: 4880,
     airlines: ["BX"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "02:50",
-    inboundDep: "22:05",
   },
   {
     id: "seed-tpe-icn-ke",
     origin: "TPE",
     dest: "ICN",
-    tripType: "rt",
     offsetDays: "2027-02-26",
     stayDays: 4,
     priceTwd: 5990,
     airlines: ["KE"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "12:15",
-    inboundDep: "16:30",
   },
   {
     id: "seed-khh-icn-7c",
     origin: "KHH",
     dest: "ICN",
-    tripType: "rt",
     offsetDays: 38,
     stayDays: 5,
     priceTwd: 5690,
     airlines: ["7C"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "15:10",
-    inboundDep: "11:40",
   },
   {
     id: "seed-tpe-cju-tw",
     origin: "TPE",
     dest: "CJU",
-    tripType: "rt",
     offsetDays: 48,
     stayDays: 4,
     priceTwd: 5750,
     airlines: ["TW"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "14:20",
-    inboundDep: "11:05",
   },
-  // Southeast Asia
   {
     id: "seed-tpe-bkk-fd",
     origin: "TPE",
     dest: "BKK",
-    tripType: "rt",
     offsetDays: 27,
     stayDays: 5,
     priceTwd: 5690,
     airlines: ["FD"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "13:50",
-    inboundDep: "18:10",
-  },
-  {
-    id: "seed-tpe-dad-vj-ow",
-    origin: "TPE",
-    dest: "DAD",
-    tripType: "ow",
-    offsetDays: 19,
-    priceTwd: 2680,
-    airlines: ["VJ"],
-    transfers: 0,
-    returnTransfers: null,
-    outboundDep: "15:00",
-    inboundDep: null,
   },
   {
     id: "seed-tpe-sin-tr-redeye",
     origin: "TPE",
     dest: "SIN",
-    tripType: "rt",
     offsetDays: 36,
     stayDays: 4,
     priceTwd: 6780,
     airlines: ["TR"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "01:45",
-    inboundDep: "12:55",
   },
   {
     id: "seed-tpe-cnx-jx",
     origin: "TPE",
     dest: "CNX",
-    tripType: "rt",
     offsetDays: "2027-06-09",
     stayDays: 5,
     priceTwd: 6880,
     airlines: ["JX"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "13:15",
-    inboundDep: "17:40",
   },
-  {
-    id: "seed-rmq-dad-it",
-    origin: "RMQ",
-    dest: "DAD",
-    tripType: "rt",
-    offsetDays: 44,
-    stayDays: 5,
-    priceTwd: 5990,
-    airlines: ["IT"],
-    transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "07:45",
-    inboundDep: "11:25",
-  },
-  // HK / Macau / China
   {
     id: "seed-tpe-hkg-uo",
     origin: "TPE",
     dest: "HKG",
-    tripType: "rt",
     offsetDays: 18,
     stayDays: 3,
     priceTwd: 4180,
     airlines: ["UO"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "10:30",
-    inboundDep: "18:45",
   },
   {
     id: "seed-khh-mfm-nx",
     origin: "KHH",
     dest: "MFM",
-    tripType: "rt",
     offsetDays: 22,
     stayDays: 3,
     priceTwd: 3890,
     airlines: ["IT"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "11:20",
-    inboundDep: "16:10",
   },
-  // Long-haul (steal deals even at higher nominal price)
   {
     id: "seed-tpe-lhr-br",
     origin: "TPE",
     dest: "LHR",
-    tripType: "rt",
     offsetDays: 55,
     stayDays: 10,
     priceTwd: 19800,
     airlines: ["BR"],
     transfers: 1,
-    returnTransfers: 1,
-    outboundDep: "09:00",
-    inboundDep: "21:35",
   },
   {
     id: "seed-tpe-cdg-af-redeye",
     origin: "TPE",
     dest: "CDG",
-    tripType: "rt",
     offsetDays: 63,
     stayDays: 11,
     priceTwd: 20400,
     airlines: ["AF"],
     transfers: 1,
-    returnTransfers: 1,
-    outboundDep: "00:25",
-    inboundDep: "13:15",
   },
   {
     id: "seed-tpe-lax-jx",
     origin: "TPE",
     dest: "LAX",
-    tripType: "rt",
     offsetDays: 50,
     stayDays: 9,
     priceTwd: 19600,
     airlines: ["JX"],
     transfers: 0,
-    returnTransfers: 0,
-    outboundDep: "23:40",
-    inboundDep: "00:50",
   },
   {
     id: "seed-tpe-syd-qf",
     origin: "TPE",
     dest: "SYD",
-    tripType: "rt",
     offsetDays: 58,
     stayDays: 8,
     priceTwd: 16200,
     airlines: ["QF"],
     transfers: 1,
-    returnTransfers: 1,
-    outboundDep: "19:30",
-    inboundDep: "10:15",
   },
 ];
 
@@ -2276,16 +2087,8 @@ export function getDefaultDailyFlights(
           ? addDays(referenceDateIso, 30)
           : seed.offsetDays
         : addDays(referenceDateIso, seed.offsetDays);
-    const inDate =
-      seed.tripType === "rt" && seed.stayDays !== undefined
-        ? addDays(outDate, seed.stayDays)
-        : null;
-    const baseline =
-      seed.tripType === "ow"
-        ? Math.round(meta.baselineTwd * ONE_WAY_BASELINE_FACTOR)
-        : meta.baselineTwd;
-    const { discountPct, tag } = computeDealSignal(seed.priceTwd, baseline);
-    const isRedEye = hasRedEyeLeg([seed.outboundDep, seed.inboundDep]);
+    const inDate = addDays(outDate, seed.stayDays);
+    const { discountPct, tag } = computeDealSignal(seed.priceTwd, meta.baselineTwd);
 
     return [
       {
@@ -2293,7 +2096,6 @@ export function getDefaultDailyFlights(
         origin: seed.origin,
         dest: seed.dest,
         region: meta.region,
-        tripType: seed.tripType,
         outDate,
         inDate,
         priceTwd: seed.priceTwd,
@@ -2301,10 +2103,6 @@ export function getDefaultDailyFlights(
         tag,
         airlines: seed.airlines,
         transfers: seed.transfers,
-        returnTransfers: seed.returnTransfers,
-        isRedEye,
-        outboundDep: seed.outboundDep,
-        inboundDep: seed.inboundDep,
       },
     ];
   });
