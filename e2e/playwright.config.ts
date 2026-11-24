@@ -13,7 +13,7 @@ export default defineConfig({
     // otherwise report en-US and be shown English.
     locale: "zh-TW",
     baseURL: "http://[::1]:8787",
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
   },
   projects: [
     {
