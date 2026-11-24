@@ -6,7 +6,7 @@ import { CountryFlag } from "./CountryFlag.js";
 describe("CountryFlag", () => {
   it("renders a crisp SVG emblem for every country in DESTINATION_CATALOG without text fallback", () => {
     const codes = Array.from(new Set(DESTINATION_CATALOG.map((d) => d.countryCode)));
-    expect(codes.length).toBe(41);
+    expect(codes.length).toBe(45);
 
     const { container } = render(
       <div>

@@ -412,6 +412,40 @@ function renderFlagBody(code: string): ReactNode {
           <circle cx={23.5} cy={22.5} r={1.2} fill="#C8102E" />
         </>
       );
+    case "MT":
+      return (
+        <>
+          <rect width={16} height={32} fill="#FFFFFF" />
+          <rect x={16} width={16} height={32} fill="#CF142B" />
+          <path d="M8,6 V12 M5,9 H11" stroke="#9CA3AF" strokeWidth={1.8} />
+        </>
+      );
+    case "GU":
+      return (
+        <>
+          <rect width={32} height={32} fill="#C62139" />
+          <rect x={2.5} y={2.5} width={27} height={27} fill="#00297B" />
+          <ellipse cx={16} cy={16} rx={5.5} ry={8} fill="#C62139" />
+          <ellipse cx={16} cy={16} rx={4.5} ry={7} fill="#7EC8E3" />
+          <path d="M11.5,19 H20.5 V22 Q16,24.5 11.5,22 Z" fill="#E9D8A6" />
+        </>
+      );
+    case "PW":
+      return (
+        <>
+          <rect width={32} height={32} fill="#4AADD6" />
+          <circle cx={14} cy={16} r={7.5} fill="#FFDE00" />
+        </>
+      );
+    case "MP":
+      return (
+        <>
+          <rect width={32} height={32} fill="#0071BC" />
+          <circle cx={16} cy={16} r={9} fill="none" stroke="#4D8B3F" strokeWidth={1.6} />
+          <rect x={13.5} y={10} width={5} height={13} rx={1.5} fill="#9CA3AF" />
+          <polygon points={STAR_5} transform="translate(16 16) scale(1.1)" fill="#FFFFFF" />
+        </>
+      );
     default:
       return (
         <>

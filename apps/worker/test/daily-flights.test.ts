@@ -521,6 +521,27 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     expect(items.every((i) => i.discountPct === 0)).toBe(true);
   });
 
+  it("puts fares to the nonstop-catalog airports (#220) on the board as long-haul fares", async () => {
+    const answers: Record<string, string[]> = {
+      "/m/059g4": [
+        ...["EWR", "KOA", "SLC", "AUS", "SAT", "MSP", "PHL", "BNA", "PIT", "FLL"],
+        ...["MSY", "DTW", "TPA", "STL", "YOW", "YHZ", "YWG", "YEG"],
+      ],
+      "/m/02j9z": ["NAP", "KRK", "GLA", "HAM", "MLA"],
+      "/m/05nrg": ["GUM", "ROR", "SPN"],
+    };
+    stubSerpApi((c) =>
+      // only the unscoped area queries answer (never a nonstop-only one), so each airport has one fare
+      c.month === null && c.arrival !== null && c.params.get("stops") !== "1"
+        ? (answers[c.arrival] ?? []).map((dest) => ({ dest, price: 20000, out: OUT }))
+        : [],
+    );
+    await sync();
+    const { items } = await board();
+    expect(items.map((i) => i.dest).sort()).toEqual(Object.values(answers).flat().sort());
+    expect(new Set(items.map((i) => i.region))).toEqual(new Set(["longhaul"]));
+  });
+
   it("replaces yesterday's fares on a completed run, even when today has none", async () => {
     stubSerpApi((c) =>
       c.departure === "TPE" && c.arrival === null && c.month === null

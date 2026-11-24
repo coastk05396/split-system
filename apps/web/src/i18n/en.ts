@@ -558,7 +558,7 @@ export const en: Record<MessageId, string> = {
   "flights.area.sea": "SE Asia",
   "flights.area.europe": "Europe",
   "flights.area.na": "North America",
-  "flights.area.anz": "Australia & NZ",
+  "flights.area.anz": "Oceania",
   "flights.area.me": "Middle East",
   "flights.betaBadge": "BETA",
   "flights.region.all": "All",
