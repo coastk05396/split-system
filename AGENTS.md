@@ -7,7 +7,7 @@
 ## Run and check
 
 - Start the local app with `pnpm dev`. Open the web UI at `http://localhost:5173`.
-- CI runs `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` and `pnpm e2e` on every pull request. Before opening a PR that changes `apps/` or `packages/`, run all five locally and fix what fails; a docs-only change needs none of them.
+- CI runs `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` and `pnpm e2e` on every pull request. The pre-commit hook already lints each commit's staged files, so before opening a PR that changes `apps/` or `packages/`, run `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm e2e` locally and fix what fails; a docs-only change needs none of them.
 - `pnpm e2e` must not run while `pnpm dev` is running; they use the same local ports.
 
 ## Tests
