@@ -1370,8 +1370,59 @@ export const AIRLINE_NAMES: Readonly<Record<string, { zhTW: string; en: string }
 /** Formats an airline IATA code to its localized display name. */
 export function getAirlineName(code: string, lang: "zh-TW" | "en"): string {
   const entry = AIRLINE_NAMES[code.toUpperCase()];
-  if (entry === undefined) return code.toUpperCase();
+  // A 2-character code is shown upper-case; a preserved Explore carrier name (see `parseExploreAirlines`) as is.
+  if (entry === undefined) return /^[A-Z0-9]{2}$/i.test(code) ? code.toUpperCase() : code;
   return lang === "en" ? entry.en : entry.zhTW;
+}
+
+/** Google Explore carrier names that differ from `AIRLINE_NAMES[...].en`, lower-cased. */
+const EXPLORE_NAME_ALIASES: Readonly<Record<string, string>> = {
+  "peach aviation": "MM",
+  "jetstar airways": "JQ",
+  "jetstar japan": "GK",
+  "etihad airways": "EY",
+  "china eastern airlines": "MU",
+  "china southern airlines": "CZ",
+  "hong kong express": "UO",
+  "tigerair taiwan": "IT",
+  tigerair: "IT",
+  "thai lion air": "SL",
+  "thai vietjet air": "VZ",
+  "vietjet air": "VJ",
+  vietjet: "VJ",
+  "cebu pacific": "5J",
+  scoot: "TR",
+  "starlux airlines": "JX",
+  "eva air": "BR",
+  "korean air": "KE",
+  "malaysia airlines": "MH",
+  "singapore airlines": "SQ",
+  "all nippon airways": "NH",
+  "air asia": "AK",
+  airasia: "AK",
+};
+
+const EXPLORE_CODE_BY_NAME: ReadonlyMap<string, string> = new Map([
+  ...Object.entries(AIRLINE_NAMES).map(([code, names]) => [names.en.toLowerCase(), code] as const),
+  ...Object.entries(EXPLORE_NAME_ALIASES),
+]);
+
+/**
+ * Carriers of one Google Explore fare. A single IATA `airline_code` is stored as is; `"multi"` (or no
+ * code) has its combined `airline` string ("A and B", "A, B, and C") split into carriers, known
+ * names mapped to IATA codes and unknown names kept verbatim, without repeats and in order.
+ */
+export function parseExploreAirlines(
+  airlineCode: string | null | undefined,
+  airlineName: string | null | undefined,
+): string[] {
+  const code = airlineCode?.trim() ?? "";
+  if (/^[A-Za-z0-9]{2}$/.test(code)) return [code.toUpperCase()];
+  const names = (airlineName ?? "")
+    .split(/\s*,\s*(?:and\s+)?|\s+and\s+|\s*&\s*/i)
+    .map((name) => name.trim())
+    .filter((name) => name !== "" && name.toLowerCase() !== "and");
+  return [...new Set(names.map((name) => EXPLORE_CODE_BY_NAME.get(name.toLowerCase()) ?? name))];
 }
 
 export interface TaiwanHoliday {
@@ -1873,7 +1924,7 @@ export function sortDailyFlights(
   });
 }
 
-/** Departure window of the public board: 14 days to 6 months from `todayIso`, inclusive. */
+/** Departure window of the public board: tomorrow to 6 months from `todayIso`, inclusive. */
 export function departureBounds(todayIso: string): { from: string; to: string } {
   const [y, m, day] = todayIso.split("-").map(Number) as [number, number, number];
   const first = new Date(Date.UTC(y, m - 1 + 6, 1));
@@ -1881,10 +1932,10 @@ export function departureBounds(todayIso: string): { from: string; to: string } 
     Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
   ).getUTCDate();
   first.setUTCDate(Math.min(day, lastDay));
-  return { from: addDays(todayIso, 14), to: first.toISOString().slice(0, 10) };
+  return { from: addDays(todayIso, 1), to: first.toISOString().slice(0, 10) };
 }
 
-/** Keeps only fares departing inside the board's window (never under 14 days or over 6 months). */
+/** Keeps only fares departing inside the board's window (never today or over 6 months out). */
 export function withinDepartureWindow<T extends { outDate: string }>(
   items: readonly T[],
   todayIso: string,

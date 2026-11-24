@@ -6,13 +6,7 @@ import type { Bindings } from "./env.js";
 import { refreshDailyFlights } from "./flights/daily.js";
 import { groupLedger } from "./ledger-client.js";
 import { refreshRates } from "./rates/rates.js";
-import {
-  dailyFlightsRuns,
-  groupReservations,
-  linkCodes,
-  rateCounters,
-  sessions,
-} from "./db/schema.js";
+import { groupReservations, linkCodes, rateCounters, sessions } from "./db/schema.js";
 import { RATE_COUNTER_RETENTION_MS } from "./rate-limit.js";
 
 /** Old pending reservations need an authoritative membership check before release. */
@@ -89,18 +83,8 @@ export const MAINTENANCE_CRON = "30 16 * * *";
 /** Daily Flights scan (08:00 Taipei / 00:00 UTC) so it gets the full subrequest budget. */
 export const FLIGHTS_CRON = "0 0 * * *";
 
-/** A completed sync (GitHub Actions or this Worker) younger than this makes the Worker cron a no-op (ADR 0012). */
-const FLIGHTS_SKIP_WITHIN_MS = 20 * 3_600_000;
-
 async function scheduledDailyFlights(db: ReturnType<typeof createDb>, env: Bindings, now: number) {
   try {
-    const [run] = await db.select().from(dailyFlightsRuns).limit(1);
-    if (run !== undefined && now - run.completedAt < FLIGHTS_SKIP_WITHIN_MS) {
-      console.info(
-        JSON.stringify({ event: "daily_flights_skipped", completedAt: run.completedAt }),
-      );
-      return;
-    }
     await refreshDailyFlights(db, productionDeps.flightSource(env), now);
   } catch (error) {
     console.error(JSON.stringify({ event: "daily_flights_refresh_failed", error: String(error) }));

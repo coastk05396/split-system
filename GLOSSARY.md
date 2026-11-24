@@ -33,7 +33,7 @@ One planned place or activity on one day of a Trip, with a time range, category,
 _Avoid_: Itinerary item, activity, waypoint
 
 **Daily Flights**:
-The curated daily board (`每日航班` / `/flights`) of verified cheap flights departing Taiwan, accessible both signed in and signed out, updated daily and linked to Trip.com for booking.
+The daily board (`每日航班` / `/flights`) of round-trip fares departing Taiwan (`TPE`, `KHH`, `TSA`), accessible both signed in and signed out, refreshed every day from Google Explore prices and linked to Trip.com for booking. Round trips only: no one-way fares.
 _Avoid_: Flight Radar, Price Watch, Trip module
 
 **City Card**:
@@ -41,7 +41,7 @@ One collapsed row on the Daily Flights board per destination city, summarising t
 _Avoid_: Fare card, destination tile
 
 **Route**:
-One origin airport × destination airport × trip type (round trip or one way) combination on the Daily Flights board; a Route may carry several fares on different dates, and board coverage is counted in destination cities (one City Card each), not airports.
+One origin airport (`TPE`, `KHH` or `TSA`) × destination airport combination on the Daily Flights board; a Route may carry several fares on different dates, and board coverage is counted in destination cities (one City Card each), not airports.
 _Avoid_: Flight line, itinerary
 
 **Curated Destination**:
@@ -53,28 +53,12 @@ One of the destination areas in the Daily Flights filter: `日本`, `韓國`, `�
 _Avoid_: Continent tab, region pill, sub-region, region tab
 
 **Baseline**:
-The typical price of a Route for one departure month and one stop class (direct or connecting), against which a fare is compared.
-_Avoid_: Market price, normal price, reference price
-
-**Good Deal**:
-A fare at least 15% below its Baseline. Only Good Deals reach the Daily Flights board: a country or city with none that day shows nothing rather than being padded with ordinary fares.
-_Avoid_: Cheap fare (cheap is an absolute price, a Good Deal is relative to the Baseline), Steal (that is a Deal Signal tier)
+The Route's typical price range from Google Flights (`typical_price_range`: `typicalLowTwd` and `typicalHighTwd`), cached per origin and destination for 30 days. A fare is compared against the high end. Missing a Route's own range, it falls back to the same destination from `TPE`, then to the Curated Destination's static baseline.
+_Avoid_: Market price, normal price, reference price, median
 
 **Deal Signal**:
-How far a verified fare sits below its Baseline: domain tier is `steal` (discount >= 30%), `below_market` (discount >= 15%), or `normal`; the discount is shown only at 15% or more (a solid pill from 50%, plain text from 15%); smaller discounts and `normal` fares show nothing. Shown to users as `省 X%` / `Save X%`.
-_Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price)
-
-**Live Price**:
-The current fare for the same itinerary read from Google Flights during Stage 2 verification (`即時價`). It replaces the cached price only for a matching Route, dates, trip type, stop class and airline set; with no match the cached price stays. It is still not the booking-page price.
-_Avoid_: Real price, Actual price (neither Google nor Travelpayouts is the checkout price)
-
-**Unverifiable Airline**:
-An airline (`不可驗證航空`) whose fares are never candidates: Google Flights does not list it, so Live Price cannot check it, and Trip.com sold it well above the Travelpayouts price when sampled. Fares are excluded before candidate selection, so another airline takes the route's slot. Currently Xiamen Air (MF) and Sun PhuQuoc Airways (9G); the list and its evidence live in code and ADR 0012.
-_Avoid_: Blocked airline, unverified fare (this is an airline-level exclusion, not a per-fare label)
-
-**Ghost Fare**:
-A stale, mismatched, or unavailable candidate fare (`幽靈票`) discarded by Stage 2 verification (`FlightSource.verifyCandidate`). With the Travelpayouts-only verifier it is dropped when no matching fresh itinerary exists or the re-checked price rises by more than 20% AND NT$800; with Live Price verification a missing or higher Live Price is not a Ghost Fare (the fare is kept or repriced).
-_Avoid_: Phantom ticket, cache hit
+How far a fare sits below its Baseline's typical high price, `Math.round((typicalHighTwd - priceTwd) / typicalHighTwd * 100)`, never below 0. Domain tier is `steal` (discount >= 50%, a solid green pill with a green flame), `below_market` (15-49%, plain green text) or `normal` (under 15%, nothing shown). Shown to users as `省 X%` / `Save X%`. Every fare is admitted to the board whatever its Deal Signal; the discount only decorates it, and the footnote says it compares against the typical high price, not the checkout price.
+_Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price), Good Deal (there is no deal-only admission gate)
 
 **User**:
 One real person, who may sign in through more than one Identity.

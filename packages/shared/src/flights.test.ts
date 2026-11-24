@@ -15,6 +15,7 @@ import {
   isGhostFare,
   isRedEyeTime,
   matchTaiwanHoliday,
+  parseExploreAirlines,
   sortDailyFlights,
   withinDepartureWindow,
   type DailyFlightItem,
@@ -263,16 +264,60 @@ describe("flights domain helpers", () => {
     ).toEqual(["ci-kix"]);
   });
 
-  it("keeps the departure window at 14 days to 6 months, with month-end clamping, on curated fares too", () => {
-    expect(departureBounds("2026-11-16")).toEqual({ from: "2026-11-30", to: "2027-05-16" });
-    expect(departureBounds("2026-08-31")).toEqual({ from: "2026-09-14", to: "2027-02-28" });
+  it("keeps the departure window at tomorrow to 6 months, with month-end clamping, on curated fares too", () => {
+    expect(departureBounds("2026-11-16")).toEqual({ from: "2026-11-17", to: "2027-05-16" });
+    expect(departureBounds("2026-08-31")).toEqual({ from: "2026-09-01", to: "2027-02-28" });
 
     const early = withinDepartureWindow(getDefaultDailyFlights("2026-11-16"), "2026-11-16");
     expect(early.length).toBeGreaterThan(0);
     expect(early.some((f) => f.outDate === "2027-06-09")).toBe(false);
     const late = withinDepartureWindow(getDefaultDailyFlights("2027-02-01"), "2027-02-01");
-    expect(late.some((f) => f.outDate === "2027-02-05")).toBe(false);
-    for (const f of [...early, ...late]) expect(f.outDate >= "2026-11-30").toBe(true);
+    for (const f of early) expect(f.outDate >= "2026-11-17").toBe(true);
+    for (const f of late) expect(f.outDate >= "2027-02-02").toBe(true);
+  });
+
+  it("keeps a fare departing tomorrow and drops today and anything past 6 months", () => {
+    const fares = ["2026-11-16", "2026-11-17", "2027-05-16", "2027-05-17"].map((outDate) => ({
+      outDate,
+    }));
+    expect(withinDepartureWindow(fares, "2026-11-16").map((f) => f.outDate)).toEqual([
+      "2026-11-17",
+      "2027-05-16",
+    ]);
+  });
+});
+
+describe("Explore airline parsing", () => {
+  it("stores a single IATA airline_code as one carrier", () => {
+    expect(parseExploreAirlines("IT", "Tigerair Taiwan")).toEqual(["IT"]);
+    expect(parseExploreAirlines("it", undefined)).toEqual(["IT"]);
+  });
+
+  it("splits a multi-carrier name into IATA codes in order, keeping unknown names as fallback strings", () => {
+    expect(parseExploreAirlines("multi", "Jetstar and Peach Aviation")).toEqual(["JQ", "MM"]);
+    expect(parseExploreAirlines("multi", "Jetstar and Scoot")).toEqual(["JQ", "TR"]);
+    expect(parseExploreAirlines("multi", "Air India, EVA Air, and Etihad")).toEqual([
+      "Air India",
+      "BR",
+      "EY",
+    ]);
+  });
+
+  it("deduplicates repeated carriers and ignores empty parts", () => {
+    expect(parseExploreAirlines("multi", "EVA Air, EVA Air and Jetstar")).toEqual(["BR", "JQ"]);
+    expect(parseExploreAirlines("multi", " and ")).toEqual([]);
+  });
+
+  it("returns no carrier when Explore names none, never the literal multi", () => {
+    expect(parseExploreAirlines("multi", undefined)).toEqual([]);
+    expect(parseExploreAirlines(undefined, undefined)).toEqual([]);
+  });
+
+  it("falls back to a recognised name when the code is absent, and shows a preserved name as is", () => {
+    expect(parseExploreAirlines(undefined, "Peach Aviation")).toEqual(["MM"]);
+    expect(getAirlineName("Air India", "en")).toBe("Air India");
+    expect(getAirlineName("Air India", "zh-TW")).toBe("Air India");
+    expect(getAirlineName("xx", "en")).toBe("XX");
   });
 });
 
