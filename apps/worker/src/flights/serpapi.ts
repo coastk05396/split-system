@@ -15,7 +15,7 @@ const KEY_REFUSED_MESSAGE = /run out of searches|out of searches|invalid api key
 const MONTH_POOL_SIZE = 5;
 const MONTH_QUERIES_PER_DAY = 2;
 
-type FetchFn = (
+export type FetchFn = (
   input: string,
   init?: { signal?: AbortSignal },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
@@ -74,13 +74,67 @@ const exploreDestinationSchema = z.object({
 
 const exploreResponseSchema = z.object({ destinations: z.array(z.unknown()).optional() });
 
-/** An answered SerpApi request: the parsed body, or `null` when it failed or every key is spent. */
-type SerpApiAnswer = unknown;
+/**
+ * SerpApi requests over an ordered list of keys: a key answering 401, 403, 429 or an out-of-searches /
+ * invalid-key error is skipped for the rest of the client's life and the same request is retried on the
+ * next key. `get` resolves to the parsed body, or `null` when the request failed or every key is spent.
+ * Keys never reach a log line.
+ */
+export function createSerpApiClient(keys: readonly string[], upstreamFetch: FetchFn) {
+  let keyIndex = 0;
+  let calls = 0;
+  return {
+    calls: () => calls,
+    async get(params: Record<string, string>): Promise<unknown> {
+      while (keyIndex < keys.length) {
+        const url = new URL(SERPAPI_URL);
+        for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
+        url.searchParams.set("api_key", keys[keyIndex] ?? "");
+        // A cleared timer (not `AbortSignal.timeout`) so a run leaves no pending timeouts behind.
+        const abort = new AbortController();
+        const timer = setTimeout(() => {
+          abort.abort();
+        }, QUERY_TIMEOUT_MS);
+        calls += 1;
+        try {
+          const res = await upstreamFetch(url.toString(), { signal: abort.signal });
+          const body: unknown = await res.json().catch(() => null);
+          const message =
+            typeof body === "object" && body !== null && "error" in body
+              ? String(body.error)
+              : null;
+          if (
+            KEY_REFUSED_STATUSES.has(res.status) ||
+            (message !== null && KEY_REFUSED_MESSAGE.test(message))
+          ) {
+            console.warn(
+              JSON.stringify({ event: "serpapi_key_refused", status: res.status, keyIndex }),
+            );
+            keyIndex += 1;
+            continue;
+          }
+          if (!res.ok || message !== null) {
+            console.warn(JSON.stringify({ event: "serpapi_query_failed", status: res.status }));
+            return null;
+          }
+          return body;
+        } catch (error) {
+          console.warn(JSON.stringify({ event: "serpapi_query_failed", error: String(error) }));
+          return null;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      return null;
+    },
+  };
+}
+
+export type SerpApiClient = ReturnType<typeof createSerpApiClient>;
 
 /**
  * Production source backed by SerpApi `google_travel_explore` (ADR 0013). Queries run one after
- * another so a spent key hands over to the next one deterministically. A query that fails is
- * skipped; keys are never logged.
+ * another so a spent key hands over to the next one deterministically. A query that fails is skipped.
  */
 export function serpApiFlightSource(
   env: { SERPAPI_KEYS?: string },
@@ -94,70 +148,28 @@ export function serpApiFlightSource(
     answeredQueries: () => answered,
 
     async fetchCandidates(digestDate) {
-      upstreamCalls = 0;
       answered = 0;
-      const keys = parseSerpApiKeys(env.SERPAPI_KEYS);
-      let keyIndex = 0;
+      const client = createSerpApiClient(parseSerpApiKeys(env.SERPAPI_KEYS), upstreamFetch);
       const candidates: FlightCandidate[] = [];
 
-      async function request(query: ExploreQuery): Promise<SerpApiAnswer> {
-        while (keyIndex < keys.length) {
-          const url = new URL(SERPAPI_URL);
-          url.searchParams.set("engine", "google_travel_explore");
-          url.searchParams.set("departure_id", query.origin);
-          if (query.arrivalId !== undefined) url.searchParams.set("arrival_id", query.arrivalId);
-          if (query.month !== undefined) url.searchParams.set("month", String(query.month));
-          url.searchParams.set("currency", "TWD");
-          url.searchParams.set("hl", "en");
-          url.searchParams.set("gl", "tw");
-          url.searchParams.set("api_key", keys[keyIndex] ?? "");
-          // A cleared timer (not `AbortSignal.timeout`) so a run leaves no pending timeouts behind.
-          const abort = new AbortController();
-          const timer = setTimeout(() => {
-            abort.abort();
-          }, QUERY_TIMEOUT_MS);
-          upstreamCalls += 1;
-          try {
-            const res = await upstreamFetch(url.toString(), { signal: abort.signal });
-            const body: unknown = await res.json().catch(() => null);
-            const message =
-              typeof body === "object" && body !== null && "error" in body
-                ? String(body.error)
-                : null;
-            if (
-              KEY_REFUSED_STATUSES.has(res.status) ||
-              (message !== null && KEY_REFUSED_MESSAGE.test(message))
-            ) {
-              console.warn(
-                JSON.stringify({ event: "serpapi_key_refused", status: res.status, keyIndex }),
-              );
-              keyIndex += 1;
-              continue;
-            }
-            if (!res.ok || message !== null) {
-              console.warn(JSON.stringify({ event: "serpapi_query_failed", status: res.status }));
-              return null;
-            }
-            return body;
-          } catch (error) {
-            console.warn(JSON.stringify({ event: "serpapi_query_failed", error: String(error) }));
-            return null;
-          } finally {
-            clearTimeout(timer);
-          }
-        }
-        return null;
-      }
-
       for (const query of exploreQueryPlan(digestDate)) {
-        const parsed = exploreResponseSchema.safeParse(await request(query));
+        const parsed = exploreResponseSchema.safeParse(
+          await client.get({
+            engine: "google_travel_explore",
+            departure_id: query.origin,
+            ...(query.arrivalId === undefined ? {} : { arrival_id: query.arrivalId }),
+            ...(query.month === undefined ? {} : { month: String(query.month) }),
+            currency: "TWD",
+            hl: "en",
+            gl: "tw",
+          }),
+        );
         if (!parsed.success) continue;
         answered += 1;
         for (const raw of parsed.data.destinations ?? []) {
           const row = exploreDestinationSchema.safeParse(raw);
           const dest = row.success ? row.data.destination_airport?.code.toUpperCase() : undefined;
           if (!row.success || dest === undefined) continue;
-          const airlines = parseExploreAirlines(row.data.airline_code, row.data.airline);
           candidates.push({
             id: `${digestDate}-${query.origin}-${dest}-${row.data.start_date}`.toLowerCase(),
             origin: query.origin,
@@ -165,11 +177,12 @@ export function serpApiFlightSource(
             outDate: row.data.start_date,
             inDate: row.data.end_date ?? null,
             priceTwd: Math.round(row.data.flight_price),
-            airlines,
+            airlines: parseExploreAirlines(row.data.airline_code, row.data.airline),
             transfers: row.data.number_of_stops ?? 0,
           });
         }
       }
+      upstreamCalls = client.calls();
       return candidates;
     },
   };

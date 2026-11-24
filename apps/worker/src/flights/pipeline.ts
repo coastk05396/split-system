@@ -37,8 +37,6 @@ export interface FlightCandidate {
   priceTwd: number;
   airlines: string[];
   transfers: number;
-  /** The Route's typical-high price used to score the Deal Signal; null/absent means no discount shown. */
-  dealBaselineTwd?: number | null;
 }
 
 export interface FlightSource {
@@ -56,6 +54,22 @@ const TAIPEI_OFFSET_MS = 8 * 3_600_000;
 /** Current YYYY-MM-DD in Asia/Taipei (`UTC+8`). */
 export function taipeiDate(now: number): string {
   return new Date(now + TAIPEI_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** Typical highs by `ORIGIN-DEST` for the admitted Routes (D1, topped up upstream), see `scoringBaseline`. */
+export type ResolveBaselines = (
+  routes: { origin: FlightOrigin; dest: string }[],
+  digestDate: string,
+) => Promise<ReadonlyMap<string, number>>;
+
+/** Baseline tiers (ADR 0013): the Route's own typical high, then the same destination from TPE, then the static one. */
+function scoringBaseline(
+  fares: ReadonlyMap<string, number>,
+  origin: FlightOrigin,
+  dest: string,
+  staticTwd: number,
+): number {
+  return fares.get(`${origin}-${dest}`) ?? fares.get(`TPE-${dest}`) ?? staticTwd;
 }
 
 export interface CollectedDailyFlights {
@@ -135,12 +149,13 @@ export function formatDailyFlightsSyncSql(
 /**
  * Applies the board's admission rules to the source's fares (ADR 0013): a Curated Destination, a
  * round trip departing from tomorrow to 6 months out, under 3 stops, the cheapest fare per
- * origin × destination × departure date. Every survivor is admitted, whatever its discount.
- * Nothing is written to D1.
+ * origin × destination × departure date. Every survivor is admitted, whatever its discount, and
+ * scored against `resolveBaselines`' typical highs. Nothing is written to D1.
  */
 export async function collectDailyFlights(
   source: FlightSource,
   now: number,
+  resolveBaselines?: ResolveBaselines,
 ): Promise<CollectedDailyFlights> {
   const digestDate = taipeiDate(now);
   const candidates = await source.fetchCandidates(digestDate, now);
@@ -157,12 +172,20 @@ export async function collectDailyFlights(
     if (held === undefined || c.priceTwd < held.priceTwd) cheapest.set(key, c);
   }
 
+  const routes = new Map<string, { origin: FlightOrigin; dest: string }>();
+  for (const c of cheapest.values())
+    routes.set(`${c.origin}-${c.dest}`, { origin: c.origin, dest: c.dest });
+  const typicalHighs =
+    routes.size === 0 || resolveBaselines === undefined
+      ? new Map<string, number>()
+      : await resolveBaselines([...routes.values()], digestDate);
+
   const rows: DailyFlightRow[] = [];
   const items: DailyFlightItem[] = [];
   for (const c of cheapest.values()) {
     const meta = getDestinationMeta(c.dest);
     if (meta === null) continue;
-    const baseline = c.dealBaselineTwd ?? meta.baselineTwd;
+    const baseline = scoringBaseline(typicalHighs, c.origin, c.dest, meta.baselineTwd);
     const { discountPct, tag } = computeDealSignal(c.priceTwd, baseline);
     rows.push({
       id: c.id,

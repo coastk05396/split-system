@@ -51,20 +51,25 @@ describe("flights domain helpers", () => {
     expect(isGhostFare(10000, 11800)).toBe(false); // +1800 but only +18% (<= 20%)
   });
 
-  it("computes deal signal tiers from baseline price", () => {
-    expect(computeDealSignal(6500, 10000)).toEqual({ discountPct: 35, tag: "steal" });
-    expect(computeDealSignal(7000, 10000)).toEqual({ discountPct: 30, tag: "steal" });
-    expect(computeDealSignal(8200, 10000)).toEqual({ discountPct: 18, tag: "below_market" });
+  it("scores the discount against the typical high price and tiers it at 50% and 15%", () => {
+    expect(computeDealSignal(5000, 10000)).toEqual({ discountPct: 50, tag: "steal" });
+    expect(computeDealSignal(2500, 10000)).toEqual({ discountPct: 75, tag: "steal" });
+    expect(computeDealSignal(8500, 10000)).toEqual({ discountPct: 15, tag: "below_market" });
+    expect(computeDealSignal(6500, 10000)).toEqual({ discountPct: 35, tag: "below_market" });
+    expect(computeDealSignal(8600, 10000)).toEqual({ discountPct: 14, tag: "normal" });
     expect(computeDealSignal(9500, 10000)).toEqual({ discountPct: 5, tag: "normal" });
-    expect(computeDealSignal(11000, 10000)).toEqual({ discountPct: 0, tag: "normal" });
   });
 
-  it("decides the Good Deal gate and the steal tier from the unrounded discount", () => {
-    expect(computeDealSignal(8500, 10000)).toEqual({ discountPct: 15, tag: "below_market" });
-    expect(computeDealSignal(8501, 10000).tag).toBe("normal"); // 14.99% never passes as 15%
-    expect(computeDealSignal(7000, 10000).tag).toBe("steal");
-    expect(computeDealSignal(7001, 10000).tag).toBe("below_market"); // 29.99% is not a steal
-    expect(computeDealSignal(7040, 10000)).toEqual({ discountPct: 30, tag: "below_market" });
+  it("rounds the discount and tiers from the rounded value the traveler sees", () => {
+    expect(computeDealSignal(5050, 10000)).toEqual({ discountPct: 50, tag: "steal" }); // 49.5% shows 50%
+    expect(computeDealSignal(5051, 10000)).toEqual({ discountPct: 49, tag: "below_market" });
+    expect(computeDealSignal(8549, 10000)).toEqual({ discountPct: 15, tag: "below_market" });
+  });
+
+  it("never shows a negative discount, and has none without a usable typical high", () => {
+    expect(computeDealSignal(11000, 10000)).toEqual({ discountPct: 0, tag: "normal" });
+    expect(computeDealSignal(10000, 10000)).toEqual({ discountPct: 0, tag: "normal" });
+    expect(computeDealSignal(5000, 0)).toEqual({ discountPct: 0, tag: "normal" });
   });
 
   it("matches overlapping 2026 and 2027 Taiwan public holidays", () => {

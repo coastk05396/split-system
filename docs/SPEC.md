@@ -263,16 +263,14 @@ CREATE TABLE daily_flights (
   created_at INTEGER NOT NULL
 );
 
--- 14. 月度票價中位數快取（3 天，依直飛／轉機分開，ADR 0009／0010；可棄置、3 天內自動重建）
+-- 14. 航線典型價格區間快取（Google Flights `typical_price_range`，30 天；可棄置、過期自動重抓，ADR 0013）
 CREATE TABLE flight_baselines (
   origin TEXT NOT NULL,
   destination TEXT NOT NULL,
-  trip_type TEXT NOT NULL, -- 'rt' | 'ow'
-  month TEXT NOT NULL,     -- YYYY-MM-01
-  stop_class TEXT NOT NULL, -- 'direct' | 'connecting'
-  baseline_twd INTEGER,    -- NULL: 該類別上游不足 3 筆票價
+  typical_low_twd INTEGER NOT NULL,
+  typical_high_twd INTEGER NOT NULL, -- Deal Signal 的比較基準
   fetched_at INTEGER NOT NULL,
-  PRIMARY KEY (origin, destination, trip_type, month, stop_class)
+  PRIMARY KEY (origin, destination)
 );
 ```
 
@@ -325,7 +323,7 @@ CREATE TABLE flight_baselines (
 
   收錄規則（ADR 0013，低價總覽）：目的地須為手工維護的精選目的地目錄 (`DESTINATION_CATALOG`，約 90 個機場，每筆具中英文城市與國家名、國旗、同城共用城市代碼、地區、機場時區與備援基準價，並有目錄完整性測試)，未列入的機場一律丟棄；必須有回程日且回程晚於出發日（僅來回票）；出發日介於**明天（含）至今日起 6 個月（含）**；轉機次數 `< 3`（3 次以上排除）；同一（出發機場 × 目的地 × 出發日）只保留最便宜者。通過者**全數收錄，不論折扣多少**（沒有 15% 門檻），當日不沿用前一天的票價。
 
-  航空公司：`airline_code` 為單一 IATA 代碼時存為 `[code]`；為 `"multi"` 且帶有合併的 `airline` 字串（如 `Jetstar and Peach Aviation`、`Air India, EVA Air, and Etihad`）時拆成各家航空，已知名稱對應為 IATA 代碼、未知名稱原樣保留為字串、去除重複並保留順序，絕不儲存 `"multi"`；完全沒有航空資訊的票價略過。評分暫對照精選目的地的備援基準價（Baseline 見 ADR 0013）。
+  航空公司：`airline_code` 為單一 IATA 代碼時存為 `[code]`；為 `"multi"` 且帶有合併的 `airline` 字串（如 `Jetstar and Peach Aviation`、`Air India, EVA Air, and Etihad`）時拆成各家航空，已知名稱對應為 IATA 代碼、未知名稱原樣保留為字串、去除重複並保留順序，絕不儲存 `"multi"`；完全沒有航空資訊的票價略過。評分對照該航線的**典型高價**（`typicalHighTwd`，Google Flights `price_insights.typical_price_range` 上緣；每航線快取 30 天於 `flight_baselines`）：折扣 = `round((高價 − 票價) / 高價 × 100)`，不低於 0，≥50% 為 `steal`、15–49% 為 `below_market`、其餘 `normal`（不顯示）。基準三層解析：(出發地, 目的地) 的 D1 快取 → (`TPE`, 目的地) 的 D1 快取 → 精選目錄的靜態 `baselineTwd`。每日同步在有備用 SerpApi 金鑰時，順手補抓缺漏航線（每把備用金鑰最多 8 次，台北出發優先）；單一金鑰則不花額度。種子與刷新工具：`pnpm --filter @split/worker seed-baselines`（約 55 條核心航線，`--dry-run` / `--remote`）。失敗或沒有區間的回應不寫入。
 
   寫入與可用性：只要本次有任何查詢獲得 SerpApi 回應，就在**單一原子 D1 批次**內清空 `daily_flights`、寫入今日票價與 `daily_flights_runs` 完成標記（即使沒有任何票價通過，也是真實的空看板，`GET /flights/daily` 回傳 `items: []`、`isFallback: false`）；若沒有任何查詢獲得回應（未設定金鑰、金鑰全數用盡、上游故障）則完全不寫入，沿用上一批票價直到滿 48 小時（以最新一批票價的 `created_at` 與標記的 `completed_at` 判斷，手動同步亦同），超過 48 小時一律視為資料不可用，回傳精選參考票價 (`isFallback: true`)。票價分塊寫入 `daily_flights`（每次最多 5 列以符合 D1 綁定參數上限）。任一外部航班來源失敗時記錄錯誤，不中斷其餘維護步驟。`GET /flights/daily` 於公開邊界再次套用同一個出發窗口（明天至 6 個月），無論資料來自 D1 或精選參考票價 fallback，快取票在跨日後若已成為今天或超出窗口一律不回傳。
 

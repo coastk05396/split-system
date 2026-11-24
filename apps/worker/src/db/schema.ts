@@ -7,7 +7,6 @@ import {
   CURRENCY_CODES,
   DEAL_TAGS,
   FLIGHT_ORIGINS,
-  FLIGHT_STOP_CLASSES,
   FLIGHT_TRIP_TYPES,
   LANGUAGES,
   MEMBER_ROLES,
@@ -248,17 +247,15 @@ export const dailyFlightsRuns = sqliteTable("daily_flights_runs", {
   completedAt: integer("completed_at").notNull(),
 });
 
-/** Month-matrix median baselines per stop class, reused for 3 days by the daily flights sync (NULL: fewer than 3 prices). */
+/** Google Flights `typical_price_range` per Route, reused for 30 days (ADR 0013). */
 export const flightBaselines = sqliteTable(
   "flight_baselines",
   {
     origin: text("origin", { enum: FLIGHT_ORIGINS }).notNull(),
     destination: text("destination").notNull(),
-    tripType: text("trip_type", { enum: FLIGHT_TRIP_TYPES }).notNull(),
-    month: text("month").notNull(),
-    stopClass: text("stop_class", { enum: FLIGHT_STOP_CLASSES }).notNull(),
-    baselineTwd: integer("baseline_twd"),
+    typicalLowTwd: integer("typical_low_twd").notNull(),
+    typicalHighTwd: integer("typical_high_twd").notNull(),
     fetchedAt: integer("fetched_at").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.origin, t.destination, t.tripType, t.month, t.stopClass] })],
+  (t) => [primaryKey({ columns: [t.origin, t.destination] })],
 );

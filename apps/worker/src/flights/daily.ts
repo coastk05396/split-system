@@ -8,6 +8,7 @@ import {
 import { asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { dailyFlights, dailyFlightsRuns } from "../db/schema.js";
+import { resolveBaselines } from "./baseline-store.js";
 import {
   collectDailyFlights,
   logDailyFlightsSummary,
@@ -15,7 +16,7 @@ import {
   type FlightCandidate,
   type FlightSource,
 } from "./pipeline.js";
-import { serpApiFlightSource } from "./serpapi.js";
+import { parseSerpApiKeys, serpApiFlightSource } from "./serpapi.js";
 
 export { serpApiFlightSource, taipeiDate, type FlightCandidate, type FlightSource };
 
@@ -45,8 +46,12 @@ export async function refreshDailyFlights(
   db: Db,
   source: FlightSource,
   now: number,
+  env: { SERPAPI_KEYS?: string } = {},
 ): Promise<DailyFlightItem[]> {
-  const collected = await collectDailyFlights(source, now);
+  const keys = parseSerpApiKeys(env.SERPAPI_KEYS);
+  const collected = await collectDailyFlights(source, now, (routes, digestDate) =>
+    resolveBaselines(db, routes, now, digestDate, keys),
+  );
   logDailyFlightsSummary("daily_flights_refresh_summary", collected);
   if (!collected.completed) return [];
   const { rows, items } = collected;

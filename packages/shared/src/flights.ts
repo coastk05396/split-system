@@ -19,10 +19,6 @@ export type LonghaulSubRegion = (typeof LONGHAUL_SUBREGIONS)[number];
 export const FLIGHT_TRIP_TYPES = ["rt", "ow"] as const;
 export type FlightTripType = (typeof FLIGHT_TRIP_TYPES)[number];
 
-/** Baselines compare like with like: direct fares with direct prices, connecting with connecting. */
-export const FLIGHT_STOP_CLASSES = ["direct", "connecting"] as const;
-export type FlightStopClass = (typeof FLIGHT_STOP_CLASSES)[number];
-
 export const DEAL_TAGS = ["steal", "below_market", "normal"] as const;
 export type DealTag = (typeof DEAL_TAGS)[number];
 
@@ -103,7 +99,7 @@ export interface DestinationMeta {
   region: FlightRegion;
   /** Set on every Long-haul airport (exactly one sub-region), absent elsewhere. */
   subRegion?: LonghaulSubRegion;
-  /** Typical roundtrip baseline in TWD; only scores the curated fallback board (live fares use the day's median). */
+  /** Static typical-high round-trip price in TWD: the last tier of Baseline resolution and the curated fallback board's score. */
   baselineTwd: number;
 }
 
@@ -1752,22 +1748,23 @@ export function isGhostFare(cachedPriceTwd: number, livePriceTwd: number | null)
   return livePriceTwd > cachedPriceTwd * 1.2 && livePriceTwd - cachedPriceTwd > 800;
 }
 
-/** Computes discount percentage against typical baseline and assigns deal tier badge. */
+/**
+ * Deal Signal (ADR 0013): the rounded percentage a fare sits below the Route's typical high price,
+ * never below 0. Tiers use that rounded value, the one the traveler sees: `steal` from 50%,
+ * `below_market` from 15%, otherwise `normal` (shows nothing).
+ */
 export function computeDealSignal(
   priceTwd: number,
-  baselineTwd: number,
+  typicalHighTwd: number,
 ): { discountPct: number; tag: DealTag } {
-  if (baselineTwd <= 0 || priceTwd >= baselineTwd) {
+  if (typicalHighTwd <= 0 || priceTwd >= typicalHighTwd) {
     return { discountPct: 0, tag: "normal" };
   }
-  const discountPct = Math.min(99, Math.max(0, Math.round((1 - priceTwd / baselineTwd) * 100)));
-  // Tiers use the unrounded discount (integer math): 14.99% must not pass the 15% Good Deal gate.
-  const tag: DealTag =
-    priceTwd * 100 <= baselineTwd * 70
-      ? "steal"
-      : priceTwd * 100 <= baselineTwd * 85
-        ? "below_market"
-        : "normal";
+  const discountPct = Math.min(
+    99,
+    Math.max(0, Math.round(((typicalHighTwd - priceTwd) / typicalHighTwd) * 100)),
+  );
+  const tag: DealTag = discountPct >= 50 ? "steal" : discountPct >= 15 ? "below_market" : "normal";
   return { discountPct, tag };
 }
 

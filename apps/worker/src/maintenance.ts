@@ -85,7 +85,7 @@ export const FLIGHTS_CRON = "0 0 * * *";
 
 async function scheduledDailyFlights(db: ReturnType<typeof createDb>, env: Bindings, now: number) {
   try {
-    await refreshDailyFlights(db, productionDeps.flightSource(env), now);
+    await refreshDailyFlights(db, productionDeps.flightSource(env), now, env);
   } catch (error) {
     console.error(JSON.stringify({ event: "daily_flights_refresh_failed", error: String(error) }));
   }

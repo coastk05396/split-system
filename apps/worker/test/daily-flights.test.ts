@@ -342,7 +342,8 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync(" key-one-secret , key-two-secret ,");
 
       // 2 served by the first key, the third retried on the second, the rest never touch the first again.
-      expect(calls.map((c) => c.key)).toEqual([
+      // (Later calls are Baseline requests on the spare key, see flight-baselines.test.ts.)
+      expect(calls.slice(0, 9).map((c) => c.key)).toEqual([
         "key-one-secret",
         "key-one-secret",
         "key-one-secret",
