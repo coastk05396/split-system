@@ -16,6 +16,9 @@ const AREA_BY_COUNTRY: Readonly<Record<string, FlightArea>> = {
   NZ: "anz",
   TR: "me",
   AE: "me",
+  QA: "me",
+  EG: "me",
+  JO: "me",
 };
 
 /** The area of a destination airport, or `null` (shown under 全部 only) when its country is unmapped. */

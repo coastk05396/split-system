@@ -77,7 +77,7 @@ describe("flights domain helpers", () => {
         inDate: "2026-12-09",
         lang: "en",
       },
-      { allianceId: "123456", sid: "789012" },
+      { allianceId: "123456", sid: "789012", sub3: "345678" },
     );
     const parsed = new URL(enUrl);
     expect(parsed.origin).toBe("https://www.trip.com");
@@ -93,6 +93,37 @@ describe("flights domain helpers", () => {
     expect(parsed.searchParams.get("curr")).toBe("TWD");
     expect(parsed.searchParams.get("Allianceid")).toBe("123456");
     expect(parsed.searchParams.get("SID")).toBe("789012");
+    expect(parsed.searchParams.get("trip_sub1")).toBe("sprout-daily-flights");
+    expect(parsed.searchParams.get("trip_sub3")).toBe("345678");
+  });
+
+  it("appends no affiliate parameters unless both Allianceid and SID are set", () => {
+    const params = {
+      origin: "TPE",
+      dest: "NRT",
+      outDate: "2026-11-20",
+      inDate: "2026-11-25",
+      lang: "zh-TW" as const,
+    };
+    for (const affiliate of [
+      { allianceId: "1", sub3: "3" },
+      { sid: "2", sub3: "3" },
+      { sub3: "3" },
+    ]) {
+      expect(buildTripComUrl(params, affiliate)).not.toMatch(/Allianceid|SID|trip_sub/);
+    }
+    const withoutSub3 = new URL(buildTripComUrl(params, { allianceId: "1", sid: "2" }));
+    expect(withoutSub3.searchParams.get("trip_sub1")).not.toBeNull();
+    expect(withoutSub3.searchParams.has("trip_sub3")).toBe(false);
+  });
+
+  it("scores the curated fallback board against each destination's static baseline", () => {
+    const sample = getDefaultDailyFlights("2026-11-16");
+    expect(sample.length).toBeGreaterThan(0);
+    for (const item of sample) {
+      const baseline = getDestinationMeta(item.dest)?.baselineTwd ?? 0;
+      expect(item.discountPct).toBe(computeDealSignal(item.priceTwd, baseline).discountPct);
+    }
   });
 
   it("filters and sorts daily flights cleanly", () => {
@@ -302,7 +333,7 @@ describe("Curated Destination catalog integrity", () => {
       expect(/[一-鿿]/.test(d.zhTW), `${d.airport} zh-TW name`).toBe(true);
       expect(/[一-鿿]/.test(d.en), `${d.airport} English name`).toBe(false);
       expect(FLIGHT_REGIONS).toContain(d.region);
-      expect(d.baselineTwd, `${d.airport} baseline`).toBeGreaterThan(0);
+      expect(d.baselineTwd ?? 1, `${d.airport} baseline`).toBeGreaterThan(0);
     }
   });
 
@@ -429,7 +460,75 @@ describe("Curated Destination catalog integrity", () => {
       YUL: ["CA", "🇨🇦", "America/Toronto"],
       CHC: ["NZ", "🇳🇿", "Pacific/Auckland"],
       PER: ["AU", "🇦🇺", "Australia/Perth"],
+      // Europe and Middle East expansion (#210)
+      BCN: ["ES", "🇪🇸", "Europe/Madrid"],
+      MXP: ["IT", "🇮🇹", "Europe/Rome"],
+      VIE: ["AT", "🇦🇹", "Europe/Vienna"],
+      BER: ["DE", "🇩🇪", "Europe/Berlin"],
+      BUD: ["HU", "🇭🇺", "Europe/Budapest"],
+      CPH: ["DK", "🇩🇰", "Europe/Copenhagen"],
+      DUB: ["IE", "🇮🇪", "Europe/Dublin"],
+      EDI: ["GB", "🇬🇧", "Europe/London"],
+      LIS: ["PT", "🇵🇹", "Europe/Lisbon"],
+      OPO: ["PT", "🇵🇹", "Europe/Lisbon"],
+      ATH: ["GR", "🇬🇷", "Europe/Athens"],
+      BRU: ["BE", "🇧🇪", "Europe/Brussels"],
+      ARN: ["SE", "🇸🇪", "Europe/Stockholm"],
+      OSL: ["NO", "🇳🇴", "Europe/Oslo"],
+      HEL: ["FI", "🇫🇮", "Europe/Helsinki"],
+      WAW: ["PL", "🇵🇱", "Europe/Warsaw"],
+      MAN: ["GB", "🇬🇧", "Europe/London"],
+      NCE: ["FR", "🇫🇷", "Europe/Paris"],
+      DOH: ["QA", "🇶🇦", "Asia/Qatar"],
+      CAI: ["EG", "🇪🇬", "Africa/Cairo"],
+      AMM: ["JO", "🇯🇴", "Asia/Amman"],
     };
+    // North America and Oceania expansion (#211): no static baseline needed
+    const expansion: Record<string, [string, string, string, string, string, string]> = {
+      ATL: ["US", "north_america", "America/New_York", "亞特蘭大", "Atlanta", "atl"],
+      BOS: ["US", "north_america", "America/New_York", "波士頓", "Boston", "bos"],
+      LAS: ["US", "north_america", "America/Los_Angeles", "拉斯維加斯", "Las Vegas", "las"],
+      DEN: ["US", "north_america", "America/Denver", "丹佛", "Denver", "den"],
+      SAN: ["US", "north_america", "America/Los_Angeles", "聖地牙哥", "San Diego", "san"],
+      PDX: ["US", "north_america", "America/Los_Angeles", "波特蘭", "Portland", "pdx"],
+      ANC: ["US", "north_america", "America/Anchorage", "安克拉治", "Anchorage", "anc"],
+      MIA: ["US", "north_america", "America/New_York", "邁阿密", "Miami", "mia"],
+      IAH: ["US", "north_america", "America/Chicago", "休士頓", "Houston", "hou"],
+      MCO: ["US", "north_america", "America/New_York", "奧蘭多", "Orlando", "orl"],
+      YYZ: ["CA", "north_america", "America/Toronto", "多倫多", "Toronto", "yto"],
+      YYC: ["CA", "north_america", "America/Edmonton", "卡加利", "Calgary", "yyc"],
+      CUN: ["MX", "north_america", "America/Cancun", "坎昆", "Cancun", "cun"],
+      MEX: ["MX", "north_america", "America/Mexico_City", "墨西哥城", "Mexico City", "mex"],
+      BNE: ["AU", "oceania", "Australia/Brisbane", "布里斯本", "Brisbane", "bne"],
+      ADL: ["AU", "oceania", "Australia/Adelaide", "阿得雷德", "Adelaide", "adl"],
+      CBR: ["AU", "oceania", "Australia/Sydney", "坎培拉", "Canberra", "cbr"],
+      OOL: ["AU", "oceania", "Australia/Brisbane", "黃金海岸", "Gold Coast", "ool"],
+      CNS: ["AU", "oceania", "Australia/Brisbane", "凱恩斯", "Cairns", "cns"],
+      HBA: ["AU", "oceania", "Australia/Hobart", "荷伯特", "Hobart", "hba"],
+      WLG: ["NZ", "oceania", "Pacific/Auckland", "威靈頓", "Wellington", "wlg"],
+      ZQN: ["NZ", "oceania", "Pacific/Auckland", "皇后鎮", "Queenstown", "zqn"],
+    };
+    for (const [airport, [country, sub, zone, zh, en, city]] of Object.entries(expansion)) {
+      const meta = getDestinationMeta(airport);
+      expect(meta, airport).toMatchObject({
+        region: "longhaul",
+        subRegion: sub,
+        countryCode: country,
+        cityCode: city,
+      });
+      expect(meta?.baselineTwd, `${airport} needs no static price`).toBeUndefined();
+      expect(getAirportTimeZone(airport), airport).toBe(zone);
+      expect([getCityName(airport, "zh-TW"), getCityName(airport, "en")], airport).toEqual([
+        zh,
+        en,
+      ]);
+    }
+    expect(getDestinationMeta("CUN")).toMatchObject({
+      flag: "🇲🇽",
+      countryZhTW: "墨西哥",
+      countryEn: "Mexico",
+    });
+    expect(getDestinationMeta("YYZ")?.zhTW).not.toBe(getDestinationMeta("YTZ")?.zhTW);
     for (const [airport, [country, flag, zone]] of Object.entries(expected)) {
       const meta = getDestinationMeta(airport);
       expect(meta?.region, airport).toBe("longhaul");
@@ -465,6 +564,16 @@ describe("Curated Destination catalog integrity", () => {
     // Multi-airport cities render as one City Card name
     expect(getCityName("BGY", "en")).toBe("Milan");
     expect(getCityName("IAD", "zh-TW")).toBe("華盛頓");
+    // Malpensa joins Bergamo's Milan City Card; the new cities need no static price
+    expect(getDestinationMeta("MXP")?.cityCode).toBe(getDestinationMeta("BGY")?.cityCode);
+    expect(getCityName("MXP", "zh-TW")).toBe("米蘭");
+    expect(getDestinationMeta("DOH")).toMatchObject({ zhTW: "杜哈", countryZhTW: "卡達" });
+    expect(getDestinationMeta("CAI")?.baselineTwd).toBeUndefined();
+    expect(["DOH", "CAI", "AMM"].map((a) => getDestinationMeta(a)?.subRegion)).toEqual([
+      "middle_east_islands",
+      "middle_east_islands",
+      "middle_east_islands",
+    ]);
     // Existing Long-haul destinations are unchanged
     expect(getDestinationMeta("LHR")).toMatchObject({ cityCode: "lon", baselineTwd: 31000 });
     expect(getDestinationMeta("SYD")).toMatchObject({ zhTW: "雪梨", baselineTwd: 25500 });

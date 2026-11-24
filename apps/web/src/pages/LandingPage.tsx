@@ -113,7 +113,11 @@ export function LandingPage() {
               <ul className="mt-3.5 flex min-w-0 flex-col gap-2" aria-live="polite">
                 {boardGroups.map((group) => (
                   <li key={group.cityKey} className="min-w-0">
-                    <CityFlightCard group={group} lang={locale} />
+                    <CityFlightCard
+                      group={group}
+                      lang={locale}
+                      affiliate={flights.data.affiliate}
+                    />
                   </li>
                 ))}
               </ul>

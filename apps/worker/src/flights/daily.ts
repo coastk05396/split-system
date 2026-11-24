@@ -16,7 +16,7 @@ import {
   type FlightCandidate,
   type FlightSource,
 } from "./pipeline.js";
-import { parseSerpApiKeys, serpApiFlightSource } from "./serpapi.js";
+import { serpApiFlightSource, type SerpApiKeys } from "./serpapi.js";
 
 export { serpApiFlightSource, taipeiDate, type FlightCandidate, type FlightSource };
 
@@ -46,11 +46,10 @@ export async function refreshDailyFlights(
   db: Db,
   source: FlightSource,
   now: number,
-  env: { SERPAPI_KEYS?: string } = {},
+  env: SerpApiKeys = {},
 ): Promise<DailyFlightItem[]> {
-  const keys = parseSerpApiKeys(env.SERPAPI_KEYS);
   const collected = await collectDailyFlights(source, now, (routes, digestDate) =>
-    resolveBaselines(db, routes, now, digestDate, keys),
+    resolveBaselines(db, routes, now, digestDate, env),
   );
   logDailyFlightsSummary("daily_flights_refresh_summary", collected);
   if (!collected.completed) return [];

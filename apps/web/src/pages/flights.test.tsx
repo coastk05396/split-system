@@ -1041,6 +1041,7 @@ describe("daily flights page", () => {
       updatedAt: "2026-11-16T00:00:00.000Z",
       items: SAMPLE_FLIGHTS,
       isFallback: false,
+      affiliate: { allianceId: "111", sid: "222", sub3: "333" },
     };
 
     const tokyoToggle = await screen.findByRole("button", { name: /東京/ });
@@ -1051,8 +1052,66 @@ describe("daily flights page", () => {
     if (!firstLink) throw new Error("Expected booking link");
     await user.click(firstLink);
 
+    // The direct Trip.com URL goes to LINE in the tap itself: no /flights/go hop.
     expect(view.lineExternalOpens).toHaveLength(1);
-    expect(view.lineExternalOpens[0]).toMatch(/^https?:\/\/[^/]+\/api\/v1\/flights\/go\?/);
+    const opened = new URL(view.lineExternalOpens[0] ?? "");
+    expect(opened.origin).toBe("https://tw.trip.com");
+    expect(opened.pathname).toBe("/flights/showfarefirst");
+    expect(opened.searchParams.get("Allianceid")).toBe("111");
+    expect(opened.searchParams.get("SID")).toBe("222");
+    expect(opened.searchParams.get("trip_sub1")).toBe("sprout-daily-flights");
+    expect(opened.searchParams.get("trip_sub3")).toBe("333");
+    expect(view.api.requests.some((r) => r.route.includes("/flights/go"))).toBe(false);
+  });
+
+  it("hands the /flights/go URL to LINE when no affiliate data has loaded", async () => {
+    const user = userEvent.setup();
+    const view = renderApp({ path: "/flights", insideLine: { idToken: null } });
+    view.api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T00:00:00.000Z",
+      items: SAMPLE_FLIGHTS,
+      isFallback: true,
+    };
+
+    const tokyoToggle = await screen.findByRole("button", { name: /東京/ });
+    await user.click(tokyoToggle);
+    const [firstLink] = within(tokyoToggle.closest(".flight-card") as HTMLElement).getAllByRole(
+      "link",
+    );
+    if (!firstLink) throw new Error("Expected booking link");
+    await user.click(firstLink);
+
+    // Without affiliate parameters a direct URL would lose the commission: use the redirect hop.
+    expect(view.lineExternalOpens).toHaveLength(1);
+    // LINE's openExternal parses the URL, so it must be absolute.
+    const opened = new URL(view.lineExternalOpens[0] ?? "");
+    expect(opened.origin).toBe(window.location.origin);
+    expect(opened.pathname).toBe("/api/v1/flights/go");
+  });
+
+  it("opens the English Trip.com host from inside LINE when the page is English", async () => {
+    const user = userEvent.setup();
+    const view = renderApp({ path: "/flights", insideLine: { idToken: null } });
+    view.api.dailyFlights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T00:00:00.000Z",
+      items: SAMPLE_FLIGHTS,
+      isFallback: false,
+      affiliate: { allianceId: "111", sid: "222", sub3: "333" },
+    };
+    await screen.findAllByRole("heading", { level: 2 });
+    await user.click(screen.getByRole("button", { name: "切換為英文" }));
+
+    const tokyoToggle = await screen.findByRole("button", { name: /Tokyo/ });
+    await user.click(tokyoToggle);
+    const [firstLink] = within(tokyoToggle.closest(".flight-card") as HTMLElement).getAllByRole(
+      "link",
+    );
+    if (!firstLink) throw new Error("Expected booking link");
+    await user.click(firstLink);
+
+    expect(new URL(view.lineExternalOpens[0] ?? "").origin).toBe("https://www.trip.com");
   });
 
   it("uses plain booking anchors outside LINE without calling openExternal", async () => {
@@ -1068,5 +1127,6 @@ describe("daily flights page", () => {
     await user.click(firstLink);
 
     expect(view.lineExternalOpens).toEqual([]);
+    expect(firstLink.getAttribute("href")).toMatch(/^\/api\/v1\/flights\/go\?/);
   });
 });

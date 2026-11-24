@@ -45,19 +45,19 @@ One origin airport (`TPE`, `KHH` or `TSA`) × destination airport combination on
 _Avoid_: Flight line, itinerary
 
 **Curated Destination**:
-An airport in the hand-maintained catalog (~80–90 major travel airports across Asia, Europe, North America, Oceania, and the Middle East) with verified localized city names, country flags, and IANA timezones; unlisted minor airports are filtered out.
+An airport in the hand-maintained catalog (~135 major travel airports across Asia, Europe, North America, Oceania, and the Middle East) with verified localized city names, country flags, and IANA timezones; unlisted minor airports are filtered out.
 _Avoid_: Open airport list, destination whitelist, global airport dump
 
 **Flight Region**:
-One of the destination areas in the Daily Flights filter: `日本`, `韓國`, `中港澳`, `東南亞`, `歐洲`, `美加`, `紐澳`, `中東`. Exactly one can be chosen, or none for all; each shows its fare count. There are no top-level tabs, and no separate country or city filter.
+One of the destination areas in the Daily Flights filter: `日本`, `韓國`, `中港澳`, `東南亞`, `歐洲`, `美加`, `紐澳`, `中東` (Turkey, the Emirates, Qatar, Egypt and Jordan). Exactly one can be chosen, or none for all; each shows its fare count. There are no top-level tabs, and no separate country or city filter.
 _Avoid_: Continent tab, region pill, sub-region, region tab
 
 **Baseline**:
-The Route's typical price range from Google Flights (`typical_price_range`: `typicalLowTwd` and `typicalHighTwd`), cached per origin and destination for 30 days. A fare is compared against the high end. Missing a Route's own range, it falls back to the same destination from `TPE`, then to the Curated Destination's static baseline.
+The Route's typical price range from Google Flights (`typical_price_range`: `typicalLowTwd` and `typicalHighTwd`), cached per origin and destination for 30 days. A fare is compared against the high end. Missing a Route's own range, it falls back to the same destination from `TPE`; with neither, the fare has no Baseline and no Deal Signal.
 _Avoid_: Market price, normal price, reference price, median
 
 **Deal Signal**:
-How far a fare sits below its Baseline's typical high price, `Math.round((typicalHighTwd - priceTwd) / typicalHighTwd * 100)`, never below 0. Domain tier is `steal` (discount >= 50%, a solid green pill with a green flame), `below_market` (15-49%, plain green text) or `normal` (under 15%, nothing shown). Shown to users as `省 X%` / `Save X%`. Every fare is admitted to the board whatever its Deal Signal; the discount only decorates it, and the footnote says it compares against the typical high price, not the checkout price.
+How far a fare sits below its Baseline's typical high price, `Math.round((typicalHighTwd - priceTwd) / typicalHighTwd * 100)`, never below 0. Domain tier is `steal` (discount >= 50%, a solid green pill with a green flame), `below_market` (15-49%, plain green text) or `normal` (under 15%, nothing shown). Shown to users as `省 X%` / `Save X%`. A fare with no Baseline shows no Deal Signal at all (never a guessed one). Every fare is admitted to the board whatever its Deal Signal, except a `TSA` fare, which needs a `below_market` or `steal` Deal Signal; the discount only decorates it, and the footnote says it compares against the typical high price, not the checkout price.
 _Avoid_: Strong Buy, Price Score, Price drop / 降幅 (it is not a change versus an earlier price), Good Deal (there is no deal-only admission gate)
 
 **User**:

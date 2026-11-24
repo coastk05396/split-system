@@ -1,2 +1,8 @@
-command -v gitleaks >/dev/null 2>&1 && gitleaks protect --staged --no-banner
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --no-banner
+else
+  echo "pre-commit: gitleaks is not installed, so the secret scan was skipped (CI still runs it)." >&2
+fi
+# eslint on apps/web reads the worker's declaration files; a fresh worktree has none.
+[ -d apps/worker/dist-types ] || pnpm --filter @split/worker build:types
 pnpm exec lint-staged

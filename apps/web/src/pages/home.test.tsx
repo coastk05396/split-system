@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
@@ -374,6 +375,58 @@ describe("home", () => {
     expect(within(tiles[0] as HTMLElement).getByText("TPE ⇄ OKA").className).toContain(
       "bg-[#ffedd5]",
     );
+  });
+
+  describe("marquee booking links", () => {
+    const base = {
+      origin: "TPE" as const,
+      region: "jp" as const,
+      outDate: "2026-12-10",
+      inDate: "2026-12-14",
+      tag: "normal" as const,
+      airlines: ["IT"],
+      transfers: 0,
+    };
+    const flights = {
+      date: "2026-11-16",
+      updatedAt: "2026-11-16T01:00:00.000Z",
+      isFallback: false,
+      items: [{ ...base, id: "oka", dest: "OKA", priceTwd: 4631, discountPct: 55 }],
+      affiliate: { allianceId: "111", sid: "222", sub3: "333" },
+    };
+
+    async function firstTile(view: ReturnType<typeof renderApp>) {
+      view.api.dailyFlights = flights;
+      const marquee = await screen.findByRole("region", { name: /今日低價機票/ });
+      // Wait for the served board: the first paint holds curated fares that are replaced.
+      await within(marquee).findAllByText(/4,631/);
+      const tile = marquee.querySelector<HTMLAnchorElement>("a[href*='flights/go']");
+      if (tile === null) throw new Error("Expected a marquee tile");
+      return tile;
+    }
+
+    it("hands the direct Trip.com URL to LINE in the tap, like /flights", async () => {
+      const view = renderApp({ cookieUser: me, insideLine: { idToken: null } });
+      const tile = await firstTile(view);
+      await userEvent.setup().click(tile);
+
+      expect(view.lineExternalOpens).toHaveLength(1);
+      const opened = new URL(view.lineExternalOpens[0] ?? "");
+      expect(opened.origin).toBe("https://tw.trip.com");
+      expect(opened.searchParams.get("acity")).toBe("oka");
+      expect(opened.searchParams.get("Allianceid")).toBe("111");
+      expect(opened.searchParams.get("trip_sub3")).toBe("333");
+    });
+
+    it("stays a plain new-tab link through /flights/go in an external browser", async () => {
+      const view = renderApp({ cookieUser: me });
+      const tile = await firstTile(view);
+      await userEvent.setup().click(tile);
+
+      expect(view.lineExternalOpens).toEqual([]);
+      expect(tile.getAttribute("target")).toBe("_blank");
+      expect(tile.getAttribute("href")).toMatch(/^\/api\/v1\/flights\/go\?/);
+    });
   });
 
   it("omits fallback/pause clutter and displays the daily 08:00 refresh schedule in fallback and live modes", async () => {

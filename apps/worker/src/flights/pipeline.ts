@@ -57,14 +57,13 @@ export type ResolveBaselines = (
   digestDate: string,
 ) => Promise<ReadonlyMap<string, number>>;
 
-/** Baseline tiers (ADR 0013): the Route's own typical high, then the same destination from TPE, then the static one. */
+/** Baseline tiers (ADR 0014): the Route's own typical high, then the same destination from TPE; with neither, 0 (no Deal Signal). */
 function scoringBaseline(
   fares: ReadonlyMap<string, number>,
   origin: FlightOrigin,
   dest: string,
-  staticTwd: number,
 ): number {
-  return fares.get(`${origin}-${dest}`) ?? fares.get(`TPE-${dest}`) ?? staticTwd;
+  return fares.get(`${origin}-${dest}`) ?? fares.get(`TPE-${dest}`) ?? 0;
 }
 
 export interface CollectedDailyFlights {
@@ -139,8 +138,8 @@ export function formatDailyFlightsSyncSql(
 /**
  * Applies the board's admission rules to the source's fares (ADR 0013): a Curated Destination, a
  * round trip departing from tomorrow to 6 months out, under 3 stops, the cheapest fare per
- * origin × destination × departure date. Every survivor is admitted, whatever its discount, and
- * scored against `resolveBaselines`' typical highs. Nothing is written to D1.
+ * origin × destination × departure date. Every survivor is admitted, whatever its discount (except `TSA`,
+ * which needs a `below_market` or `steal` Deal Signal), and scored against `resolveBaselines`' typical highs. Nothing is written to D1.
  */
 export async function collectDailyFlights(
   source: FlightSource,
@@ -179,8 +178,10 @@ export async function collectDailyFlights(
   for (const c of cheapest.values()) {
     const meta = getDestinationMeta(c.dest);
     if (meta === null || c.inDate === null) continue;
-    const baseline = scoringBaseline(typicalHighs, c.origin, meta.airport, meta.baselineTwd);
+    const baseline = scoringBaseline(typicalHighs, c.origin, meta.airport);
     const { discountPct, tag } = computeDealSignal(c.priceTwd, baseline);
+    // Songshan (ADR 0014, decision 6): only a real deal, so no Baseline means not admitted.
+    if (c.origin === "TSA" && tag === "normal") continue;
     rows.push({
       id: c.id,
       digestDate,

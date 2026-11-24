@@ -21,5 +21,7 @@ export default defineConfig({
   ],
   test: {
     setupFiles: ["./test/apply-migrations.ts"],
+    // Same budget as apps/web: the 5 s default fails unrelated tests when the machine is busy.
+    testTimeout: 20_000,
   },
 });

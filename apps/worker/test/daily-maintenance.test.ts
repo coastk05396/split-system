@@ -106,7 +106,7 @@ it("runScheduled dispatches 08:00 GMT+8 (0 0 * * *) exclusively for flights and 
         : Response.json({ date: "2026-11-16", rates: { TWD: 32 } }),
     );
   });
-  const withKeys = { ...env, SERPAPI_KEYS: "test-key" };
+  const withKeys = { ...env, SERPAPI_KEY_SHORT: "test-short", SERPAPI_KEY_LONG: "test-long" };
   try {
     await runScheduled(FLIGHTS_CRON, withKeys, clock.now);
     expect(seenUrls.some((u) => u.includes("serpapi.com"))).toBe(true);

@@ -3,6 +3,13 @@ import { type ReactNode, useId } from "react";
 const STAR_5 =
   "0,-4.5 1.1,-1.5 4.3,-1.5 1.7,0.6 2.7,3.7 0,1.8 -2.7,3.7 -1.7,0.6 -4.3,-1.5 -1.1,-1.5";
 
+/** Seven-pointed star (Jordan), unit-ish size like STAR_5: outer radius 4.5, inner 2. */
+const STAR_7 = Array.from({ length: 14 }, (_, i) => {
+  const r = i % 2 === 0 ? 4.5 : 2;
+  const a = (i * Math.PI) / 7;
+  return `${(r * Math.sin(a)).toFixed(2)},${(-r * Math.cos(a)).toFixed(2)}`;
+}).join(" ");
+
 function hBands(bands: readonly { h: number; fill: string }[]): ReactNode {
   let y = 0;
   return bands.map((band, index) => {
@@ -18,6 +25,17 @@ function vBands(colors: readonly [string, string, string]): ReactNode {
       <rect x={0} y={0} width={10.7} height={32} fill={colors[0]} />
       <rect x={10.6} y={0} width={10.8} height={32} fill={colors[1]} />
       <rect x={21.3} y={0} width={10.7} height={32} fill={colors[2]} />
+    </>
+  );
+}
+
+/** Scandinavian off-centre cross: a field with a `cross` colour band 9 units from the hoist. */
+function nordicCross(field: string, cross: string): ReactNode {
+  return (
+    <>
+      <rect width={32} height={32} fill={field} />
+      <rect x={9} width={5} height={32} fill={cross} />
+      <rect y={13.5} width={32} height={5} fill={cross} />
     </>
   );
 }
@@ -120,6 +138,101 @@ function renderFlagBody(code: string): ReactNode {
           <rect y={13} width={32} height={6} fill="#FFFFFF" />
           <rect x={9.5} width={3} height={32} fill="#DC1E35" />
           <rect y={14.5} width={32} height={3} fill="#DC1E35" />
+        </>
+      );
+    case "AT":
+      return hBands([
+        { h: 10.7, fill: "#ED2939" },
+        { h: 10.6, fill: "#FFFFFF" },
+        { h: 10.7, fill: "#ED2939" },
+      ]);
+    case "HU":
+      return hBands([
+        { h: 10.7, fill: "#CD2A3E" },
+        { h: 10.6, fill: "#FFFFFF" },
+        { h: 10.7, fill: "#436F4D" },
+      ]);
+    case "PL":
+      return hBands([
+        { h: 16, fill: "#FFFFFF" },
+        { h: 16, fill: "#DC143C" },
+      ]);
+    case "BE":
+      return vBands(["#000000", "#FAE042", "#ED2939"]);
+    case "IE":
+      return vBands(["#169B62", "#FFFFFF", "#FF883E"]);
+    case "DK":
+      return nordicCross("#C8102E", "#FFFFFF");
+    case "SE":
+      return nordicCross("#006AA7", "#FECC00");
+    case "FI":
+      return nordicCross("#FFFFFF", "#003580");
+    case "NO":
+      return (
+        <>
+          {nordicCross("#BA0C2F", "#FFFFFF")}
+          <rect x={10} width={3} height={32} fill="#00205B" />
+          <rect y={14.5} width={32} height={3} fill="#00205B" />
+        </>
+      );
+    case "PT":
+      return (
+        <>
+          <rect width={32} height={32} fill="#FF0000" />
+          <rect width={12.8} height={32} fill="#006600" />
+          <circle cx={12.8} cy={16} r={5} fill="#FFE000" />
+          <circle cx={12.8} cy={16} r={3} fill="#FF0000" />
+          <rect x={11.3} y={14.5} width={3} height={3} fill="#FFFFFF" />
+        </>
+      );
+    case "GR":
+      return (
+        <>
+          {Array.from({ length: 9 }, (_, i) => (
+            <rect
+              key={i}
+              y={(i * 32) / 9}
+              width={32}
+              height={32 / 9 + 0.05}
+              fill={i % 2 === 0 ? "#0D5EAF" : "#FFFFFF"}
+            />
+          ))}
+          <rect width={17.8} height={17.8} fill="#0D5EAF" />
+          <rect x={7.4} width={3} height={17.8} fill="#FFFFFF" />
+          <rect y={7.4} width={17.8} height={3} fill="#FFFFFF" />
+        </>
+      );
+    case "QA":
+      return (
+        <>
+          <rect width={32} height={32} fill="#8A1538" />
+          <polygon
+            points={`0,0 ${Array.from({ length: 9 }, (_, i) => `9,${(i * 32) / 9} 13.5,${(i * 32) / 9 + 16 / 9}`).join(" ")} 9,32 0,32`}
+            fill="#FFFFFF"
+          />
+        </>
+      );
+    case "EG":
+      return (
+        <>
+          {hBands([
+            { h: 10.7, fill: "#CE1126" },
+            { h: 10.6, fill: "#FFFFFF" },
+            { h: 10.7, fill: "#000000" },
+          ])}
+          <circle cx={16} cy={16} r={3} fill="#C09300" />
+        </>
+      );
+    case "JO":
+      return (
+        <>
+          {hBands([
+            { h: 10.7, fill: "#000000" },
+            { h: 10.6, fill: "#FFFFFF" },
+            { h: 10.7, fill: "#007A3D" },
+          ])}
+          <path d="M0,0 L18,16 L0,32 Z" fill="#CE1126" />
+          <polygon points={STAR_7} transform="translate(5.5 16) scale(0.9)" fill="#FFFFFF" />
         </>
       );
     case "CA":
@@ -259,6 +372,14 @@ function renderFlagBody(code: string): ReactNode {
               <circle key={`${x}-${y}`} cx={x} cy={y} r={0.95} fill="#FFFFFF" />
             )),
           )}
+        </>
+      );
+    case "MX":
+      return (
+        <>
+          {vBands(["#006847", "#FFFFFF", "#CE1126"])}
+          <circle cx={16} cy={16} r={3.6} fill="#8C6A3F" />
+          <circle cx={16} cy={16} r={2.2} fill="#006847" />
         </>
       );
     case "GB":

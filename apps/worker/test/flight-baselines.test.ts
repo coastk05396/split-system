@@ -1,5 +1,5 @@
 import type { DailyFlightsResponse } from "@split/shared";
-import { DESTINATION_CATALOG, getDestinationMeta } from "@split/shared";
+import { DESTINATION_CATALOG } from "@split/shared";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
@@ -13,6 +13,7 @@ import {
 import { FLIGHTS_CRON, runScheduled } from "../src/maintenance.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
 import type { RateSource } from "../src/rates/rate-source.js";
+import type { SerpApiKeys } from "../src/flights/serpapi.js";
 import { clock, fakeVerifier } from "./auth-harness.js";
 
 const DAY = 86_400_000;
@@ -46,6 +47,8 @@ interface FlightsCall {
 function stubSerpApi(opts: {
   explore?: (departure: string) => FareSpec[];
   typical?: (departure: string, arrival: string) => [number, number] | null | undefined;
+  /** HTTP status of a failed (`null`) `google_flights` answer; default 503. */
+  typicalStatus?: number;
 }) {
   const flightsCalls: FlightsCall[] = [];
   let exploreCalls = 0;
@@ -85,7 +88,8 @@ function stubSerpApi(opts: {
       params: p,
     });
     const range = opts.typical?.(p.get("departure_id") ?? "", p.get("arrival_id") ?? "");
-    if (range === null) return Promise.resolve(new Response("down", { status: 503 }));
+    if (range === null)
+      return Promise.resolve(new Response("down", { status: opts.typicalStatus ?? 503 }));
     return Promise.resolve(
       Response.json({
         price_insights:
@@ -111,8 +115,12 @@ async function seed(origin: string, destination: string, high: number, fetchedAt
     .run();
 }
 
-const sync = (keys: string, now = clock.now) =>
-  runScheduled(FLIGHTS_CRON, { ...env, SERPAPI_KEYS: keys }, now);
+/** Explore roles only: no Baseline key, so a run makes no Baseline requests. */
+const EXPLORE_ONLY: SerpApiKeys = { SERPAPI_KEY_SHORT: "short-key", SERPAPI_KEY_LONG: "long-key" };
+const ALL_KEYS: SerpApiKeys = { ...EXPLORE_ONLY, SERPAPI_KEY_BASELINE: "baseline-key" };
+
+const sync = (keys: SerpApiKeys, now = clock.now) =>
+  runScheduled(FLIGHTS_CRON, { ...env, ...keys }, now);
 
 async function board(now = clock.now): Promise<DailyFlightsResponse> {
   clock.now = now;
@@ -139,54 +147,80 @@ describe("typical-high Baselines", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  it("scores each fare against typicalHighTwd via (origin, destination), then (TPE, destination), then the static baseline", async () => {
+  it("scores each fare against typicalHighTwd via (origin, destination), then (TPE, destination), and shows no Deal Signal with neither", async () => {
     await seed("KHH", "KIX", 20_000, clock.now - DAY);
     await seed("TPE", "FUK", 12_000, clock.now - DAY);
     await seed("TPE", "OKA", 10_000, clock.now - DAY);
     await seed("KHH", "OKA", 99_999, clock.now - 31 * DAY); // expired: ignored, TPE-OKA applies
-    const staticHnd = getDestinationMeta("HND")?.baselineTwd ?? 0;
     stubSerpApi({
       explore: () => [
         { origin: "KHH", dest: "KIX", price: 5_000 }, // own range: 75% off 20,000
         { origin: "KHH", dest: "FUK", price: 9_000 }, // no KHH range: TPE-FUK 12,000 -> 25%
         { origin: "KHH", dest: "OKA", price: 4_000 }, // expired own range: TPE-OKA 10,000 -> 60%
-        { origin: "TSA", dest: "HND", price: staticHnd }, // nothing in D1: static baseline -> 0%
         { origin: "TPE", dest: "NRT", price: 30_000 }, // above any typical high
       ],
     });
-    await sync("only-key");
+    await sync(EXPLORE_ONLY);
 
     const { items } = await board();
     expect(discountOf(items, "KHH", "KIX")).toMatchObject({ discountPct: 75, tag: "steal" });
     expect(discountOf(items, "KHH", "FUK")).toMatchObject({ discountPct: 25, tag: "below_market" });
     expect(discountOf(items, "KHH", "OKA")).toMatchObject({ discountPct: 60, tag: "steal" });
-    expect(discountOf(items, "TSA", "HND")).toMatchObject({ discountPct: 0, tag: "normal" });
     expect(discountOf(items, "TPE", "NRT")).toMatchObject({ discountPct: 0, tag: "normal" });
   });
 
-  it("spends no Baseline requests with a single key: the daily quota goes to Explore", async () => {
+  it("admits a TSA fare only when it is at least 15% under its Baseline; TPE and KHH are admitted whatever their Deal Signal", async () => {
+    await seed("TSA", "ICN", 20_000, clock.now - DAY);
+    await seed("TPE", "FUK", 12_000, clock.now - DAY);
+    await seed("TPE", "OKA", 10_000, clock.now - DAY);
+    stubSerpApi({
+      explore: () => [
+        { origin: "TSA", dest: "ICN", price: 17_000 }, // own Baseline, 15% off: admitted with its badge
+        { origin: "TSA", dest: "FUK", price: 9_000 }, // TPE Baseline fallback, 25% off: admitted
+        { origin: "TSA", dest: "OKA", price: 9_000 }, // 10% off: not admitted
+        { origin: "TSA", dest: "HND", price: 1_000 }, // no Baseline at all: not admitted, however cheap
+        { origin: "KHH", dest: "HND", price: 30_000 }, // no Baseline: still admitted
+        { origin: "TPE", dest: "OKA", price: 30_000 }, // above its Baseline: still admitted
+      ],
+    });
+    await sync(EXPLORE_ONLY);
+
+    const { items } = await board();
+    expect(items.map((i) => `${i.origin}-${i.dest}`).sort()).toEqual([
+      "KHH-HND",
+      "TPE-OKA",
+      "TSA-FUK",
+      "TSA-ICN",
+    ]);
+    expect(discountOf(items, "TSA", "ICN")).toMatchObject({ discountPct: 15, tag: "below_market" });
+    expect(discountOf(items, "TSA", "FUK")).toMatchObject({ discountPct: 25, tag: "below_market" });
+    expect(discountOf(items, "KHH", "HND")).toMatchObject({ discountPct: 0, tag: "normal" });
+  });
+
+  it("spends no Baseline requests without a Baseline key: the Explore roles still run", async () => {
     const { flightsCalls, exploreCalls } = stubSerpApi({
       explore: () => [{ origin: "TPE", dest: "NRT", price: 8_000 }],
       typical: () => [8_000, 16_000],
     });
-    await sync("only-key");
-    expect(exploreCalls()).toBe(8);
+    await sync(EXPLORE_ONLY);
+    expect(exploreCalls()).toBe(12); // 8 short + 4 long: no area answers, so no long-haul month queries
     expect(flightsCalls).toHaveLength(0);
     expect(await stored()).toEqual([]);
   });
 
-  it("refreshes missing Baselines through google_flights when a spare key is configured, scoring the same run with them", async () => {
+  it("refreshes missing Baselines through google_flights when the Baseline key is configured, scoring the same run with them", async () => {
     const { flightsCalls } = stubSerpApi({
       explore: () => [{ origin: "TPE", dest: "NRT", price: 6_000 }],
       typical: () => [8_400, 15_500],
     });
-    await sync("key-a,key-b");
+    await sync(ALL_KEYS);
 
     expect(flightsCalls).toHaveLength(1);
     const call = flightsCalls[0];
-    expect(call).toMatchObject({ departure: "TPE", arrival: "NRT" });
+    expect(call).toMatchObject({ key: "baseline-key", departure: "TPE", arrival: "NRT" });
     expect(call?.params.get("currency")).toBe("TWD");
     expect(call?.params.get("hl")).toBe("en");
     expect(call?.params.get("gl")).toBe("tw");
@@ -208,10 +242,10 @@ describe("typical-high Baselines", () => {
       explore: () => [{ origin: "TPE", dest: "NRT", price: 6_000 }],
       typical: () => [8_400, 15_500],
     });
-    await sync("a,b");
+    await sync(ALL_KEYS);
     expect(flightsCalls).toHaveLength(1);
 
-    await sync("a,b", clock.now + 29 * DAY + 23 * 3_600_000); // a day before the 30 days are up
+    await sync(ALL_KEYS, clock.now + 29 * DAY + 23 * 3_600_000); // a day before the 30 days are up
     expect(flightsCalls).toHaveLength(1); // still fresh
 
     const later = clock.now + 30 * DAY + 1;
@@ -220,7 +254,7 @@ describe("typical-high Baselines", () => {
       explore: () => [{ origin: "TPE", dest: "NRT", price: 6_000 }],
       typical: () => [9_000, 18_000],
     });
-    await sync("a,b", later);
+    await sync(ALL_KEYS, later);
     expect(second.flightsCalls).toHaveLength(1);
     expect(await stored()).toEqual([
       { origin: "TPE", destination: "NRT", low: 9_000, high: 18_000, at: later },
@@ -234,16 +268,37 @@ describe("typical-high Baselines", () => {
       explore: () => [{ origin: "TPE", dest: "NRT", price: 6_000 }],
       typical: () => answers[n++],
     });
-    await sync("a,b");
+    await sync(ALL_KEYS);
     expect(await stored()).toEqual([]);
-    await sync("a,b", clock.now + DAY);
+    await sync(ALL_KEYS, clock.now + DAY);
     expect(await stored()).toEqual([]);
     expect(flightsCalls).toHaveLength(2);
-    // Scored against the static baseline meanwhile; the run itself still completed.
+    // No Deal Signal meanwhile; the run itself still completed.
     expect((await board()).items.length).toBeGreaterThan(0);
   });
 
-  it("bounds the refresh to 8 requests per spare key, Taipei routes first", async () => {
+  it("stops asking once the Baseline key is refused, and the run still completes without it", async () => {
+    const logged: string[] = [];
+    for (const level of ["info", "warn", "error", "log"] as const) {
+      vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+        logged.push(args.map(String).join(" "));
+      });
+    }
+    const dests = ["NRT", "KIX", "FUK"];
+    const { flightsCalls, exploreCalls } = stubSerpApi({
+      explore: () => dests.map((dest) => ({ origin: "TPE", dest, price: 5_000 })),
+      typical: () => null,
+      typicalStatus: 429,
+    });
+    await sync(ALL_KEYS);
+    expect(exploreCalls()).toBe(12); // 8 short + 4 long: no area answers, so no long-haul month queries
+    expect(flightsCalls).toHaveLength(1);
+    expect((await board()).items.length).toBe(3);
+    expect(await stored()).toEqual([]);
+    expect(logged.join("\n")).not.toMatch(/baseline-key|short-key|long-key/);
+  });
+
+  it("bounds the refresh to 8 requests a day, Taipei routes first", async () => {
     const dests = ["NRT", "KIX", "FUK", "OKA", "CTS", "NGO", "ICN", "PUS", "CJU", "BKK"];
     const { flightsCalls } = stubSerpApi({
       explore: (departure) =>
@@ -252,9 +307,65 @@ describe("typical-high Baselines", () => {
           : dests.map((dest) => ({ origin: "TPE", dest, price: 5_000 })),
       typical: () => [6_000, 12_000],
     });
-    await sync("a,b");
+    await sync(ALL_KEYS);
     expect(flightsCalls).toHaveLength(8);
     expect(flightsCalls.every((c) => c.departure === "TPE")).toBe(true);
+  });
+
+  it("refreshes Routes with no Baseline before expired ones, Taipei first, 8 a day", async () => {
+    const tpe = ["NRT", "KIX", "FUK", "OKA", "CTS"];
+    const khh = ["ICN", "PUS", "CJU", "BKK"];
+    // Missing: all TPE-* above plus KHH-ICN, KHH-PUS, KHH-CJU. Expired: TPE-NGO, KHH-NRT, KHH-KIX, KHH-BKK.
+    await seed("TPE", "NGO", 12_000, clock.now - 31 * DAY);
+    await seed("KHH", "NRT", 12_000, clock.now - 31 * DAY);
+    await seed("KHH", "KIX", 12_000, clock.now - 31 * DAY);
+    await seed("KHH", "BKK", 12_000, clock.now - 31 * DAY);
+    const { flightsCalls } = stubSerpApi({
+      explore: () => [
+        ...[...tpe, "NGO"].map((dest) => ({ origin: "TPE", dest, price: 5_000 })),
+        ...[...khh, "NRT", "KIX"].map((dest) => ({ origin: "KHH", dest, price: 5_000 })),
+      ],
+      typical: () => [6_000, 12_000],
+    });
+    await sync(ALL_KEYS);
+    // 8 missing Routes (5 TPE then 3 KHH) use the whole budget: no expired Route is asked.
+    expect(flightsCalls.map((c) => `${c.departure}-${c.arrival}`)).toEqual([
+      ...tpe.map((d) => `TPE-${d}`),
+      "KHH-ICN",
+      "KHH-PUS",
+      "KHH-CJU",
+    ]);
+    expect(flightsCalls.every((c) => c.key === "baseline-key")).toBe(true);
+
+    // Next day the missing ones are fresh: the expired ones (Taipei first) now get the budget.
+    vi.unstubAllGlobals();
+    const next = stubSerpApi({
+      explore: () => [
+        ...[...tpe, "NGO"].map((dest) => ({ origin: "TPE", dest, price: 5_000 })),
+        ...[...khh, "NRT", "KIX"].map((dest) => ({ origin: "KHH", dest, price: 5_000 })),
+      ],
+      typical: () => [6_000, 12_000],
+    });
+    await sync(ALL_KEYS, clock.now + DAY);
+    expect(next.flightsCalls.map((c) => `${c.departure}-${c.arrival}`)).toEqual([
+      "TPE-NGO", // nothing is missing any more; expired Routes follow, Taipei first
+      "KHH-BKK",
+      "KHH-NRT",
+      "KHH-KIX",
+    ]);
+  });
+
+  it("makes no Baseline request for a Route that is not on the board", async () => {
+    await seed("TPE", "KIX", 12_000, clock.now - 31 * DAY); // expired, but not on the board
+    const { flightsCalls } = stubSerpApi({
+      explore: () => [
+        { origin: "TPE", dest: "NRT", price: 6_000 },
+        { origin: "TPE", dest: "ZZZ", price: 6_000 }, // not a Curated Destination: never admitted
+      ],
+      typical: () => [8_400, 15_500],
+    });
+    await sync(ALL_KEYS);
+    expect(flightsCalls.map((c) => `${c.departure}-${c.arrival}`)).toEqual(["TPE-NRT"]);
   });
 });
 
@@ -276,7 +387,7 @@ describe("Baseline seed", () => {
     );
   });
 
-  it("fetches ranges with key rotation, skips failures, and writes SQL that D1 accepts and the daily sync reads", async () => {
+  it("fetches ranges with the Baseline key, skips failures, and writes SQL that D1 accepts and the daily sync reads", async () => {
     await env.DB.prepare("DELETE FROM flight_baselines").run();
     stubSerpApi({
       typical: (_d, arrival) =>
@@ -289,7 +400,7 @@ describe("Baseline seed", () => {
       { origin: "TPE" as const, dest: "KIX" },
       { origin: "KHH" as const, dest: "NRT" },
     ];
-    const ranges = await fetchTypicalRanges({ SERPAPI_KEYS: "k1,k2" }, routes, now);
+    const ranges = await fetchTypicalRanges({ SERPAPI_KEY_BASELINE: "baseline-key" }, routes, now);
     expect(ranges).toEqual([
       { origin: "TPE", dest: "NRT", typicalLowTwd: 8_400, typicalHighTwd: 15_500 },
       { origin: "KHH", dest: "NRT", typicalLowTwd: 8_400, typicalHighTwd: 15_500 },

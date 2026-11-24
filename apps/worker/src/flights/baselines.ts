@@ -3,16 +3,16 @@ import { z } from "zod";
 import { sqlLiteral } from "./pipeline.js";
 import {
   createSerpApiClient,
-  parseSerpApiKeys,
   type FetchFn,
   type SerpApiClient,
+  type SerpApiKeys,
 } from "./serpapi.js";
 
 const DAY_MS = 86_400_000;
 /** A stored Baseline is reused for 30 days, then fetched again (ADR 0013). */
 export const BASELINE_TTL_MS = 30 * DAY_MS;
-/** Baseline requests one spare SerpApi key may spend in a daily run, on top of the Explore queries. */
-export const BASELINE_REQUESTS_PER_SPARE_KEY = 8;
+/** Baseline requests the Baseline key may spend in a daily run (ADR 0014). */
+export const BASELINE_REQUESTS_PER_DAY = 8;
 
 export interface BaselineRoute {
   origin: FlightOrigin;
@@ -56,7 +56,7 @@ export async function fetchTypicalRange(
   digestDate: string,
 ): Promise<TypicalRange | null> {
   const parsed = googleFlightsSchema.safeParse(
-    await client.get({
+    await client.get("baseline", {
       engine: "google_flights",
       departure_id: route.origin,
       arrival_id: route.dest,
@@ -79,15 +79,15 @@ export async function fetchTypicalRange(
   };
 }
 
-/** Fetches ranges one after another over the rotating keys; Routes that got no usable answer are left out. */
+/** Fetches ranges one after another with the Baseline key; Routes that got no usable answer are left out. */
 export async function fetchTypicalRanges(
-  env: { SERPAPI_KEYS?: string },
+  env: SerpApiKeys,
   routes: readonly BaselineRoute[],
   now: number,
   upstreamFetch: FetchFn = (input, init) => fetch(input, init),
   digestDate = new Date(now + 8 * 3_600_000).toISOString().slice(0, 10),
 ): Promise<TypicalRange[]> {
-  const client = createSerpApiClient(parseSerpApiKeys(env.SERPAPI_KEYS), upstreamFetch);
+  const client = createSerpApiClient(env, upstreamFetch);
   const ranges: TypicalRange[] = [];
   for (const route of routes) {
     const found = await fetchTypicalRange(client, route, digestDate);

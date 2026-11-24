@@ -6,6 +6,8 @@ status: accepted
 
 The board had five top-level region tabs, with long-haul sub-regions and a country filter hidden behind the Long-haul tab. A rival board shows one row of destination areas with fare counts inside its filter, and nothing above the list. We now follow that: the tabs and the sort buttons are removed and the filter's destination block is one row of Flight Regions. This supersedes decision 5 of ADR 0009.
 
+> Amended by ADR 0014: decision 4 (`中東` grows from Turkey and the Emirates to Turkey, the Emirates, Qatar, Egypt and Jordan).
+
 ## Decision
 
 1. **No top-level tabs and no sort control**: the board's top bar keeps only the trip-type switch and the filter button, with the fare count below. Cards are always listed from the lowest price to the highest, each leading with its cheapest fare.
