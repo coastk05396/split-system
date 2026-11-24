@@ -13,22 +13,17 @@ function fare(
     id,
     origin: "TPE",
     region: "jp",
-    tripType: "rt",
     outDate: "2026-12-10",
     inDate: "2026-12-14",
     discountPct: 0,
     tag: "normal",
     airlines: ["CI"],
     transfers: 0,
-    returnTransfers: 0,
-    isRedEye: false,
-    outboundDep: "10:00",
-    inboundDep: "15:00",
     ...over,
   };
 }
 
-/** Round trips: Tokyo has 4 fares over two airports (cheapest is a 45% deal at NRT), KIX 1, ICN 1; one-ways: ICN, BKK. */
+/** Round trips: Tokyo has 4 fares over two airports (cheapest is a 45% deal at NRT), KIX 1, ICN 1. */
 const SAMPLE_FLIGHTS: DailyFlightItem[] = [
   fare("nrt-b", {
     dest: "NRT",
@@ -40,10 +35,8 @@ const SAMPLE_FLIGHTS: DailyFlightItem[] = [
     dest: "NRT",
     priceTwd: 5680,
     discountPct: 45,
-    tag: "steal",
+    tag: "below_market",
     airlines: ["MM"],
-    isRedEye: true,
-    outboundDep: "02:15",
   }),
   fare("nrt-c", {
     dest: "NRT",
@@ -80,31 +73,6 @@ const SAMPLE_FLIGHTS: DailyFlightItem[] = [
     airlines: ["KE"],
     outDate: "2026-12-20",
     inDate: "2026-12-24",
-  }),
-  fare("icn-ow", {
-    dest: "ICN",
-    region: "kr",
-    tripType: "ow",
-    priceTwd: 4100,
-    discountPct: 21,
-    tag: "below_market",
-    airlines: ["KE"],
-    transfers: 1,
-    returnTransfers: null,
-    outDate: "2026-12-18",
-    inDate: null,
-  }),
-  fare("bkk-ow", {
-    dest: "BKK",
-    region: "sea",
-    tripType: "ow",
-    priceTwd: 2500,
-    discountPct: 40,
-    tag: "steal",
-    airlines: ["FD"],
-    returnTransfers: null,
-    outDate: "2026-12-22",
-    inDate: null,
   }),
 ];
 
@@ -178,7 +146,7 @@ describe("daily flights page", () => {
     setup();
     await screen.findAllByRole("heading", { level: 2 });
 
-    // Default 來回 tab: 3 cities (NRT, KIX, ICN) from 6 round-trip fares, cheapest first
+    // 3 cities (NRT, KIX, ICN) from 6 round-trip fares, cheapest first
     expect(cityOrder()).toEqual(["東京", "首爾", "大阪"]);
     const nrt = cityHeadings()[0] as HTMLElement;
     // Everything on the card belongs to the cheapest NRT fare (TPE, 樂桃航空, 5,680, 省 45%)
@@ -207,10 +175,10 @@ describe("daily flights page", () => {
     expect(card.className).toContain("overflow-hidden");
     const rows = rowsOf(nrt);
     expect(rows.map((r) => r.getAttribute("href"))).toEqual([
-      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-10&tripType=rt&lang=zh-TW&inDate=2026-12-14",
-      "/api/v1/flights/go?origin=TSA&dest=HND&outDate=2027-03-05&tripType=rt&lang=zh-TW&inDate=2027-03-09",
-      "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&tripType=rt&lang=zh-TW&inDate=2027-02-07",
-      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&tripType=rt&lang=zh-TW&inDate=2027-01-16",
+      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-10&inDate=2026-12-14&lang=zh-TW",
+      "/api/v1/flights/go?origin=TSA&dest=HND&outDate=2027-03-05&inDate=2027-03-09&lang=zh-TW",
+      "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&inDate=2027-02-07&lang=zh-TW",
+      "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&inDate=2027-01-16&lang=zh-TW",
     ]);
     expect(rows[0]).toHaveTextContent("12/10–12/14");
     expect(rows[0]).toHaveTextContent("桃園出發 · 樂桃航空 · 直飛");
@@ -227,7 +195,7 @@ describe("daily flights page", () => {
     expect(rows[1]?.closest("li")).toHaveClass("bg-white", "border-dashed");
     // Footer note; 4 fares fit so there is no 看全部 button
     expect(
-      screen.getByText("點日期前往 Trip.com · 參考價每日 08:00 更新，以訂票頁為準"),
+      screen.getByText("點日期前往 Trip.com · 折扣是與此航線的典型高價相比，結帳價格以訂票頁為準"),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: /看全部/ })).toBeNull();
 
@@ -378,40 +346,103 @@ describe("daily flights page", () => {
     expect(dialog).not.toHaveTextContent(/紅眼/);
   });
 
-  it("switches between 來回 and 單程, groups one-way fares per city, and renders no region tabs", async () => {
-    const user = userEvent.setup();
-    setup();
+  it("shows round-trip fares directly, with no round-trip / one-way toggle and no region tabs", async () => {
+    const { api } = setup();
+    setItems(api, [...SAMPLE_FLIGHTS]);
     await screen.findAllByRole("heading", { level: 2 });
 
-    const trip = screen.getByRole("group", { name: "行程" });
-    expect(trip.className).toContain("bg-fl-track");
-    expect(trip.className).toContain("p-[3px]");
-    const oneWay = within(trip).getByRole("button", { name: "單程" });
-    const roundTrip = within(trip).getByRole("button", { name: "來回" });
-    expect(roundTrip).toHaveAttribute("aria-pressed", "true");
-    expect(roundTrip.className).toMatch(/bg-white.*font-bold.*shadow-\[0_1px_3px/);
-    expect(oneWay.className).not.toContain("bg-white");
-    // 44px hit areas: 38px thumbs plus a 3px ::after stretch on each side
-    expect(oneWay.className).toContain("min-h-[38px]");
-    expect(oneWay.className).toContain("after:-inset-y-[3px]");
-    await user.click(oneWay);
-    expect(oneWay).toHaveAttribute("aria-pressed", "true");
-    expect(cityHeadings()).toHaveLength(2);
-    expect(cityHeadings()[0]).toHaveTextContent("曼谷");
-    expect(cityHeadings()[0]).toHaveTextContent("TPE → BKK");
-    await user.click(within(cityHeadings()[1] as HTMLElement).getByRole("button"));
-    // One-way rows show the outbound date only; the 1-stop fare says 轉 1
-    const row = rowsOf(cityHeadings()[1] as HTMLElement)[0] as HTMLElement;
-    expect(row).toHaveTextContent("12/18");
-    expect(row).not.toHaveTextContent("–");
-    expect(row).toHaveTextContent("桃園出發 · 大韓航空 · 轉 1");
-
-    // The region tabs are gone: nothing sits above the trip-type switch
+    expect(screen.queryByRole("group", { name: /^(行程|Trip)$/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(來回|單程|Round-trip|One-way)$/ })).toBeNull();
+    expect(cityOrder()).toEqual(["東京", "首爾", "大阪"]);
+    expect(screen.getAllByText(/⇄/).length).toBe(3);
+    expect(screen.queryByText(/→/)).toBeNull();
     expect(screen.queryByTestId("flights-top-bar")).toBeNull();
     expect(screen.queryByRole("group", { name: "目的地" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^(日本|韓國|東南亞|港澳|長程)$/ })).toBeNull();
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("whitespace-nowrap");
   });
+
+  it("joins every carrier of a multi-airline fare with ' + ' on the card and rows, in both languages", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    setItems(api, [
+      fare("multi", { dest: "NRT", priceTwd: 5000, airlines: ["JQ", "MM"] }),
+      fare("solo", { dest: "NRT", priceTwd: 6000, airlines: ["IT"], outDate: "2027-01-12" }),
+    ]);
+    const card = (await screen.findAllByRole("heading", { level: 2 }))[0] as HTMLElement;
+    expect(card).toHaveTextContent("捷星航空 + 樂桃航空");
+    await user.click(within(card).getByRole("button"));
+    expect(card).toHaveTextContent("捷星航空 + 樂桃航空 · 直飛 · 2 筆");
+    expect(rowsOf(card)[0]).toHaveTextContent("桃園出發 · 捷星航空 + 樂桃航空 · 直飛");
+    expect(rowsOf(card)[1]).toHaveTextContent("桃園出發 · 台灣虎航 · 直飛");
+
+    await user.click(screen.getByRole("button", { name: "切換為英文" }));
+    await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
+    expect(cityHeadings()[0]).toHaveTextContent("Jetstar + Peach");
+    // Switching language re-collapses the card
+    await user.click(within(cityHeadings()[0] as HTMLElement).getByRole("button"));
+    expect(rowsOf(cityHeadings()[0] as HTMLElement)[0]).toHaveTextContent(
+      "From Taoyuan · Jetstar + Peach · Nonstop",
+    );
+  });
+
+  it("lists every carrier of multi-airline fares as an airline option, and filtering by any of them keeps the fare", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    setItems(api, [
+      fare("multi", { dest: "NRT", priceTwd: 5000, airlines: ["JQ", "MM", "Etihad"] }),
+      fare("peach", { dest: "KIX", priceTwd: 6000, airlines: ["MM"] }),
+      fare("tiger", { dest: "ICN", region: "kr", priceTwd: 7000, airlines: ["IT"] }),
+    ]);
+    await screen.findAllByRole("heading", { level: 2 });
+    const dialog = await openFilters(user);
+    const airlines = within(dialog).getByRole("group", { name: "航空公司" });
+    // Every carrier is an option, sorted by code; an unrecognised carrier keeps its own spelling
+    expect(
+      within(airlines)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["不限航空3", "Etihad1", "台灣虎航1", "捷星航空1", "樂桃航空2"]);
+
+    await user.click(within(airlines).getByRole("button", { name: /^樂桃航空/ }));
+    await user.click(within(dialog).getByRole("button", { name: /^查看 2 筆機票/ }));
+    expect(cityOrder()).toEqual(["東京", "大阪"]);
+    expect(cityHeadings()[0]).toHaveTextContent("捷星航空 + 樂桃航空 + Etihad");
+
+    const again = await openFilters(user);
+    const options = within(again).getByRole("group", { name: "航空公司" });
+    await user.click(within(options).getByRole("button", { name: /^Etihad/ }));
+    expect(within(again).getByRole("button", { name: "查看 1 筆機票" })).toBeVisible();
+  });
+
+  it("offers only the origins on the board in the filter sheet", async () => {
+    const user = userEvent.setup();
+    setup();
+    await screen.findAllByRole("heading", { level: 2 });
+    const dialog = await openFilters(user);
+    const origins = within(dialog).getByRole("group", { name: "出發地" });
+    expect(
+      within(origins)
+        .getAllByRole("button")
+        .map((b) => b.textContent.replace(/\d+$/, "")),
+    ).toEqual(["全部", "桃園 TPE", "松山 TSA", "高雄 KHH"]);
+    expect(within(dialog).queryByText(/RMQ|TNN|台中|台南/)).toBeNull();
+  });
+
+  it("drops an origin from the filter sheet when the board has no fare from it", async () => {
+    const user = userEvent.setup();
+    const { api } = setup();
+    setItems(api, [fare("tpe", { dest: "NRT", priceTwd: 5000 })]);
+    await screen.findAllByRole("heading", { level: 2 });
+    const origins = within(await openFilters(user)).getByRole("group", { name: "出發地" });
+    expect(
+      within(origins)
+        .getAllByRole("button")
+        .map((b) => b.textContent.replace(/\d+$/, "")),
+    ).toEqual(["全部", "桃園 TPE"]);
+  });
+
+  const flameIn = (el: HTMLElement) => el.querySelector("svg.lucide-flame");
 
   it.each([
     [14, null],
@@ -431,6 +462,9 @@ describe("daily flights page", () => {
     const badge = within(card).getByText(`省 ${String(pct)}%`);
     if (kind === "solid") {
       expect(badge.className).toMatch(/rounded-full.*bg-fl-green.*font-bold.*text-white/);
+      expect(flameIn(badge)?.getAttribute("class")).toContain("text-fl-green");
+    } else {
+      expect(flameIn(card)).toBeNull();
     }
     expect(badge.className).toContain("text-[11px]"); // smaller than the 26px price
     if (kind === "text") {
@@ -460,7 +494,10 @@ describe("daily flights page", () => {
     const badge = (row: HTMLElement | undefined, pct: number) =>
       within(row as HTMLElement).queryByText(`省 ${String(pct)}%`);
     expect(badge(rows[0], 70)?.className).toMatch(/bg-fl-green.*text-\[11px\]/);
+    expect(flameIn(badge(rows[0], 70) as HTMLElement)).not.toBeNull();
     expect(badge(rows[1], 50)?.className).toContain("bg-fl-green");
+    expect(flameIn(badge(rows[1], 50) as HTMLElement)).not.toBeNull();
+    expect(flameIn(rows[2] as HTMLElement)).toBeNull();
     expect(badge(rows[2], 49)?.className).toMatch(/text-fl-green/);
     expect(badge(rows[2], 49)?.className).not.toContain("bg-");
     expect(badge(rows[3], 15)?.className).not.toContain("bg-");
@@ -495,7 +532,7 @@ describe("daily flights page", () => {
     expect(cityHeadings()[0]).toHaveTextContent("樂桃航空 · 直飛 · 4 筆");
   });
 
-  it("formats fare dates as MM/DD–MM/DD, one-way MM/DD, and same-day MM/DD", async () => {
+  it("formats fare dates as MM/DD–MM/DD, and same-day MM/DD", async () => {
     const user = userEvent.setup();
     const { api } = setup();
     setItems(api, [
@@ -609,7 +646,7 @@ describe("daily flights page", () => {
     expect(rowsOf(nrt)[2]).toHaveTextContent("From Kaohsiung · Tigerair Taiwan · 1 stop");
     expect(
       screen.getByText(
-        "Tap a date to open Trip.com · Reference prices refresh daily at 08:00; the booking page is final",
+        "Tap a date to open Trip.com · Discounts compare against this route's typical high price; checkout prices follow the booking page",
       ),
     ).toBeVisible();
   });
@@ -844,49 +881,7 @@ describe("daily flights page", () => {
     });
   });
 
-  it("explains an empty one-way view and offers a way back to round trips", async () => {
-    const user = userEvent.setup();
-    setup();
-    await screen.findAllByRole("heading", { level: 2 });
-    const trip = screen.getByRole("group", { name: "行程" });
-    await user.click(within(trip).getByRole("button", { name: "單程" }));
-    await chooseArea(user, "日本");
-
-    // Japan has round trips on the board but no one-way fares
-    expect(
-      await screen.findByRole("heading", { level: 2, name: "這個地區目前沒有單程票" }),
-    ).toBeVisible();
-    expect(screen.getByText("單程票只有少數幾筆，改看來回票或換個地區試試。")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "重設篩選" })).toBeNull();
-    expect(pageCount()).toHaveTextContent(/^0 筆$/);
-
-    await user.click(screen.getByRole("button", { name: "改看來回" }));
-    expect(within(trip).getByRole("button", { name: "來回" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(await screen.findByRole("heading", { level: 2, name: /東京/ })).toBeVisible();
-    expect(screen.queryByText("這個地區目前沒有單程票")).toBeNull();
-  });
-
-  it("shows the one-way empty state in English", async () => {
-    const user = userEvent.setup();
-    setup();
-    await screen.findAllByRole("heading", { level: 2 });
-    await user.click(screen.getByRole("button", { name: "切換為英文" }));
-    await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
-    await user.click(
-      within(screen.getByRole("group", { name: "Trip" })).getByRole("button", { name: "One-way" }),
-    );
-    await chooseArea(user, "Japan");
-
-    expect(
-      await screen.findByRole("heading", { level: 2, name: "No one-way fares here right now" }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Show round trips" })).toBeVisible();
-  });
-
-  it("renders the empty state and no curated disclosure when the day has no Good Deal", async () => {
+  it("renders the empty state and no curated disclosure when the day has no admissible fares", async () => {
     const view = renderApp({ path: "/flights" });
     view.api.dailyFlights = {
       date: "2026-11-16",
@@ -905,7 +900,7 @@ describe("daily flights page", () => {
     await screen.findAllByRole("heading", { level: 2 });
     await user.click(screen.getByRole("button", { name: /篩選/ }));
     const dialog = await screen.findByRole("dialog", { name: "篩選條件" });
-    await user.click(within(dialog).getByRole("button", { name: /台南 TNN\s*0/ }));
+    await user.click(within(dialog).getByRole("button", { name: /\$5,000 以下\s*0/ }));
     await user.click(within(dialog).getByRole("button", { name: /查看 0 筆機票/ }));
 
     expect(await screen.findByText("目前沒有符合條件的低價機票")).toBeVisible();
@@ -1026,8 +1021,6 @@ describe("daily flights page", () => {
       "桃園 TPE",
       "松山 TSA",
       "高雄 KHH",
-      "台中 RMQ",
-      "台南 TNN",
     ]);
     const chip = within(dialog).getByRole("button", { name: /^桃園 TPE/ });
     expect(chip.className).toMatch(/min-h-10.*rounded-full.*border-\[1\.5px\]/);

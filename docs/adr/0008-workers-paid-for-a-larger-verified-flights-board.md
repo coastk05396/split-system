@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR 0013
 ---
 
 # Workers Paid for a larger, fully verified Daily Flights board

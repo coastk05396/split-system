@@ -8,23 +8,17 @@ import {
 import { asc, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { dailyFlights, dailyFlightsRuns } from "../db/schema.js";
+import { resolveBaselines } from "./baseline-store.js";
 import {
-  collectVerifiedDailyFlights,
+  collectDailyFlights,
   logDailyFlightsSummary,
-  productionFlightSource,
   taipeiDate,
   type FlightCandidate,
   type FlightSource,
-  type VerifiedFlightPrice,
 } from "./pipeline.js";
+import { parseSerpApiKeys, serpApiFlightSource } from "./serpapi.js";
 
-export {
-  productionFlightSource,
-  taipeiDate,
-  type FlightCandidate,
-  type FlightSource,
-  type VerifiedFlightPrice,
-};
+export { serpApiFlightSource, taipeiDate, type FlightCandidate, type FlightSource };
 
 const D1_INSERT_CHUNK_SIZE = 5;
 /** A run (and its stored fares) stays authoritative for 48 hours (one missed daily 08:00 run); after that the data is unavailable. */
@@ -44,36 +38,38 @@ function parseAirlinesJson(json: string): string[] {
 }
 
 /**
- * Runs Stage 2 verification: drops ghost fares (`null` or >20% & >NT$800 jump),
- * retains and tags red-eye legs, scores Deal Signals, and persists today's digest into D1.
+ * Collects today's fares and replaces the whole board in one atomic D1 batch, so a completed run never
+ * carries yesterday's fares over (ADR 0013). A run that got no answer from upstream writes nothing: the
+ * previous board stays until its 48 hours are up.
  */
 export async function refreshDailyFlights(
   db: Db,
   source: FlightSource,
   now: number,
+  env: { SERPAPI_KEYS?: string } = {},
 ): Promise<DailyFlightItem[]> {
-  const collected = await collectVerifiedDailyFlights(source, now);
+  const keys = parseSerpApiKeys(env.SERPAPI_KEYS);
+  const collected = await collectDailyFlights(source, now, (routes, digestDate) =>
+    resolveBaselines(db, routes, now, digestDate, keys),
+  );
+  logDailyFlightsSummary("daily_flights_refresh_summary", collected);
+  if (!collected.completed) return [];
   const { rows, items } = collected;
 
-  // One atomic batch: a failed run throws above and leaves the previous board and marker untouched.
-  // The marker says "completed with zero Good Deals" (empty board); no discovery clears it (fallback).
-  const marker = collected.completed
-    ? db
-        .insert(dailyFlightsRuns)
-        .values({ id: 1, digestDate: collected.digestDate, completedAt: now })
-        .onConflictDoUpdate({
-          target: dailyFlightsRuns.id,
-          set: { digestDate: collected.digestDate, completedAt: now },
-        })
-    : db.delete(dailyFlightsRuns);
-  // D1 allows at most 100 bound parameters per query (17 columns * 5 rows = 85).
+  // The marker says "completed with zero fares" (empty board) when no fare was admitted.
+  const marker = db
+    .insert(dailyFlightsRuns)
+    .values({ id: 1, digestDate: collected.digestDate, completedAt: now })
+    .onConflictDoUpdate({
+      target: dailyFlightsRuns.id,
+      set: { digestDate: collected.digestDate, completedAt: now },
+    });
+  // D1 allows at most 100 bound parameters per query (12 columns * 5 rows = 60).
   const insertStmts = [];
   for (let i = 0; i < rows.length; i += D1_INSERT_CHUNK_SIZE) {
     insertStmts.push(db.insert(dailyFlights).values(rows.slice(i, i + D1_INSERT_CHUNK_SIZE)));
   }
   await db.batch([db.delete(dailyFlights), marker, ...insertStmts]);
-
-  logDailyFlightsSummary("daily_flights_refresh_summary", collected);
 
   return items;
 }
@@ -88,7 +84,7 @@ function buildFallbackResponse(now: number): DailyFlightsResponse {
   };
 }
 
-/** Reads the latest verified daily flight digest from D1, or falls back to curated deals. */
+/** Reads the latest daily flight digest from D1, or falls back to curated deals. */
 export async function listDailyFlights(db: Db, now: number): Promise<DailyFlightsResponse> {
   const today = taipeiDate(now);
   const [latest] = await db
@@ -103,7 +99,7 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
   // One freshness rule for stored fares and the run marker (both are written together, so the
   // manual sync path is covered too): older than RUN_FRESH_MS means unavailable, never carried over.
   const isFresh = (writtenAt: number): boolean => now - writtenAt <= RUN_FRESH_MS;
-  // A completed run is an empty board, never curated fares, while it is fresh (ADR 0010).
+  // A completed run is an empty board, never curated fares, while it is fresh (ADR 0013).
   const [run] = await db.select().from(dailyFlightsRuns).limit(1);
   const emptyBoard = (): DailyFlightsResponse | null =>
     run !== undefined && isFresh(run.completedAt)
@@ -138,7 +134,6 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
       origin: row.origin,
       dest: row.destination,
       region: meta?.region ?? "jp",
-      tripType: row.tripType,
       outDate: row.outDate,
       inDate: row.inDate,
       priceTwd: row.priceTwd,
@@ -146,10 +141,6 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
       tag: row.tag,
       airlines: parseAirlinesJson(row.airlinesJson),
       transfers: row.transfers,
-      returnTransfers: row.returnTransfers,
-      isRedEye: row.isRedEye === 1,
-      outboundDep: row.outboundDep,
-      inboundDep: row.inboundDep,
     };
   });
 

@@ -19,8 +19,8 @@ export interface Bindings {
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   /** "1" enables the dev-only test sign-in route; never set in wrangler.jsonc. */
   TEST_SIGN_IN?: string;
-  /** Secret: Travelpayouts API token for daily cheap flight scans. */
-  TRAVELPAYOUTS_TOKEN?: string;
+  /** Secret: comma-separated SerpApi keys for the daily Flights sync; the next key takes over when one runs out. */
+  SERPAPI_KEYS?: string;
   /** Optional Trip.com affiliate Allianceid. */
   TRIP_COM_ALLIANCE_ID?: string;
   /** Optional Trip.com affiliate SID. */

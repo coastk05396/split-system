@@ -8,7 +8,6 @@ function fare(dest: string, priceTwd: number, discountPct: number): DailyFlightI
     origin: "TPE",
     dest,
     region: "jp",
-    tripType: "rt",
     outDate: "2026-12-10",
     inDate: "2026-12-14",
     priceTwd,
@@ -16,10 +15,6 @@ function fare(dest: string, priceTwd: number, discountPct: number): DailyFlightI
     tag: "normal",
     airlines: ["CI"],
     transfers: 0,
-    returnTransfers: 0,
-    isRedEye: false,
-    outboundDep: "10:00",
-    inboundDep: "15:00",
   };
 }
 

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { describe, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   dailyMaintenance,
   FLIGHTS_CRON,
@@ -101,62 +101,27 @@ it("runScheduled dispatches 08:00 GMT+8 (0 0 * * *) exclusively for flights and 
     const url = input instanceof Request ? input.url : input.toString();
     seenUrls.push(url);
     return Promise.resolve(
-      url.includes("travelpayouts.com")
-        ? Response.json({ success: true, data: [] })
+      url.includes("serpapi.com")
+        ? Response.json({ destinations: [] })
         : Response.json({ date: "2026-11-16", rates: { TWD: 32 } }),
     );
   });
+  const withKeys = { ...env, SERPAPI_KEYS: "test-key" };
   try {
-    await runScheduled(FLIGHTS_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
-    expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(true);
+    await runScheduled(FLIGHTS_CRON, withKeys, clock.now);
+    expect(seenUrls.some((u) => u.includes("serpapi.com"))).toBe(true);
     expect(seenUrls.some((u) => u.includes("frankfurter") || u.includes("er-api"))).toBe(false);
 
     seenUrls.length = 0;
-    await runScheduled(MAINTENANCE_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
-    expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(false);
+    await runScheduled(MAINTENANCE_CRON, withKeys, clock.now);
+    expect(seenUrls.some((u) => u.includes("serpapi.com"))).toBe(false);
     expect(seenUrls.length).toBeGreaterThan(0);
 
     seenUrls.length = 0;
-    await runScheduled("", { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
-    expect(seenUrls.some((u) => u.includes("travelpayouts.com"))).toBe(true);
-    expect(seenUrls.some((u) => !u.includes("travelpayouts.com"))).toBe(true);
+    await runScheduled("", withKeys, clock.now);
+    expect(seenUrls.some((u) => u.includes("serpapi.com"))).toBe(true);
+    expect(seenUrls.some((u) => !u.includes("serpapi.com"))).toBe(true);
   } finally {
     vi.unstubAllGlobals();
   }
-});
-
-describe("flights cron as a fallback (ADR 0012)", () => {
-  const hoursAgo = (h: number) => clock.now - h * 3_600_000;
-  async function flightsCronCalls(completedAt: number | null): Promise<number> {
-    await env.DB.prepare("DELETE FROM daily_flights_runs").run();
-    if (completedAt !== null) {
-      await env.DB.prepare(
-        "INSERT INTO daily_flights_runs (id, digest_date, completed_at) VALUES (1, '2026-11-16', ?)",
-      )
-        .bind(completedAt)
-        .run();
-    }
-    let calls = 0;
-    vi.stubGlobal("fetch", () => {
-      calls += 1;
-      return Promise.resolve(Response.json({ success: true, data: [] }));
-    });
-    try {
-      await runScheduled(FLIGHTS_CRON, { ...env, TRAVELPAYOUTS_TOKEN: "tp-test" }, clock.now);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    return calls;
-  }
-
-  it("skips when a sync completed within 20 hours", async () => {
-    expect(await flightsCronCalls(hoursAgo(1))).toBe(0);
-    expect(await flightsCronCalls(hoursAgo(19.9))).toBe(0);
-  });
-
-  it("syncs when the marker is stale or missing", async () => {
-    expect(await flightsCronCalls(hoursAgo(20))).toBeGreaterThan(0);
-    expect(await flightsCronCalls(hoursAgo(30))).toBeGreaterThan(0);
-    expect(await flightsCronCalls(null)).toBeGreaterThan(0);
-  });
 });

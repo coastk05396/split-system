@@ -1,8 +1,6 @@
 import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
-import { createDb } from "./db/client.js";
 import type { Bindings } from "./env.js";
-import { d1BaselineCache } from "./flights/baseline-cache.js";
-import { productionFlightSource, type FlightSource } from "./flights/daily.js";
+import { serpApiFlightSource, type FlightSource } from "./flights/daily.js";
 import {
   createLineReplyClient,
   type LineReplyClient,
@@ -17,7 +15,7 @@ export interface AppDeps {
   /** Reference Exchange rates: Frankfurter with the ExchangeRate-API fallback. */
   rateSource: RateSource;
   lineReplyClient: (env: Bindings) => LineReplyClient;
-  /** Optional flight discovery/verification source; defaults to productionFlightSource when omitted. */
+  /** Optional flight source; defaults to the SerpApi Explore source when omitted. */
   flightSource?: (env: Bindings) => FlightSource;
 }
 
@@ -43,6 +41,5 @@ export const productionDeps = {
     env.LINE_CHANNEL_ACCESS_TOKEN === undefined || env.LINE_CHANNEL_ACCESS_TOKEN === ""
       ? silentReplyClient
       : createLineReplyClient(env.LINE_CHANNEL_ACCESS_TOKEN),
-  flightSource: (env: Bindings) =>
-    productionFlightSource(env, undefined, d1BaselineCache(createDb(env.DB))),
+  flightSource: (env: Bindings) => serpApiFlightSource(env),
 } satisfies AppDeps;

@@ -5,7 +5,6 @@ import {
   FLIGHT_ORIGINS,
   type FlightOrigin,
   type FlightStopsFilter,
-  type FlightTripType,
   getAirlineName,
   type Language,
   ORIGIN_META,
@@ -73,17 +72,24 @@ function collectMonthOptions(items: readonly DailyFlightItem[]): string[] {
   return [...months].sort();
 }
 
+/** Origins that have a fare on the board (the filter never offers an empty origin), in `FLIGHT_ORIGINS` order. */
+function collectOriginOptions(items: readonly DailyFlightItem[]): FlightOrigin[] {
+  const present = new Set<string>(items.map((item) => item.origin));
+  return FLIGHT_ORIGINS.filter((o) => present.has(o));
+}
+
+/** Every carrier of every fare (a multi-airline fare lists all of them), one option per carrier. */
 function collectAirlineOptions(
   items: readonly DailyFlightItem[],
   lang: Language,
 ): Array<{ code: string; label: string }> {
-  const seen = new Set<string>();
+  const seen = new Map<string, string>();
   for (const item of items) {
     for (const raw of item.airlines) {
-      seen.add(raw.toUpperCase());
+      if (!seen.has(raw.toUpperCase())) seen.set(raw.toUpperCase(), getAirlineName(raw, lang));
     }
   }
-  return [...seen].sort().map((code) => ({ code, label: getAirlineName(code, lang) }));
+  return [...seen].sort(([a], [b]) => (a < b ? -1 : 1)).map(([code, label]) => ({ code, label }));
 }
 
 /** Public + authed daily cheap flights radar (SPEC §6). */
@@ -92,7 +98,6 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const query = useDailyFlights();
   const [area, setArea] = useState<FlightArea | "all">("all");
   const [origin, setOrigin] = useState<FlightOrigin | "all">("all");
-  const [tripType, setTripType] = useState<FlightTripType | null>(null);
   const [month, setMonth] = useState<string>("all");
   const [airline, setAirline] = useState<string>("all");
   const [stops, setStops] = useState<FlightStopsFilter>("all");
@@ -108,22 +113,13 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
     setMaxPriceTwd(null);
   }
 
-  function resetFilters() {
-    setTripType(null);
-    resetDrawerFilters();
-  }
-
   if (query.isPending) return <Loading />;
 
   const data = query.data;
   const items: readonly DailyFlightItem[] = data.items;
-  // 來回 is the default tab; boards with no round trips open on 單程 instead of an empty list.
-  const activeTripType: FlightTripType =
-    tripType ?? (items.some((item) => item.tripType === "rt") ? "rt" : "ow");
   const currentFilter: DailyFlightsFilter = {
     region: "all",
     origin,
-    tripType: activeTripType,
     month,
     airline,
     directOnly: false,
@@ -141,14 +137,11 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
   const groups = groupByCity(filtered);
   const monthOptions = collectMonthOptions(items);
   const airlineOptions = collectAirlineOptions(items, locale);
+  const originOptions = collectOriginOptions(items);
 
   function countWith(patch: Partial<DailyFlightsFilter>, inArea = area): number {
     return visibleWith(patch, inArea).length;
   }
-
-  // One-way fares are a small slice of the board: say so, and offer round trips, instead of a blank list.
-  const oneWayEmpty =
-    filtered.length === 0 && activeTripType === "ow" && countWith({ tripType: "rt" }) > 0;
 
   const activeDrawerCount =
     (origin !== "all" ? 1 : 0) +
@@ -166,31 +159,15 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </header>
       )}
 
-      <div className="flex items-center gap-2">
-        <div
-          role="group"
-          aria-label={t("flights.tripTypeLabel")}
-          className="flex min-w-0 flex-1 rounded-full bg-fl-track p-[3px]"
+      <div className="flex items-center justify-between gap-2">
+        <p
+          data-testid="flights-count"
+          className="text-xs whitespace-nowrap text-fl-muted tabular-nums"
         >
-          {(["rt", "ow"] as const).map((type) => (
-            <button
-              key={type}
-              type="button"
-              aria-pressed={activeTripType === type}
-              onClick={() => {
-                setTripType(type);
-              }}
-              className={`press-pill relative min-h-[38px] min-w-0 flex-1 cursor-pointer rounded-full px-3 text-sm whitespace-nowrap transition-colors after:absolute after:inset-x-0 after:-inset-y-[3px] after:content-[''] focus-visible:outline-2 focus-visible:outline-fl-green ${
-                activeTripType === type
-                  ? "bg-white font-bold text-fl-ink shadow-[0_1px_3px_rgb(16_60_42/0.14)]"
-                  : "font-medium text-fl-muted"
-              }`}
-            >
-              {t(type === "rt" ? "flights.tripType.rt" : "flights.tripType.ow")}
-            </button>
-          ))}
-        </div>
-
+          {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
+            count: filtered.length,
+          })}
+        </p>
         <Dialog.Root open={filtersOpen} onOpenChange={setFiltersOpen}>
           <Dialog.Trigger asChild>
             <button
@@ -240,7 +217,7 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
                   >
                     {t("flights.originAll")}
                   </FilterChip>
-                  {FLIGHT_ORIGINS.map((o) => {
+                  {originOptions.map((o) => {
                     const meta = ORIGIN_META[o];
                     return (
                       <FilterChip
@@ -391,37 +368,18 @@ export function FlightsPage({ standalone = false }: { standalone?: boolean }) {
         </Dialog.Root>
       </div>
 
-      <p
-        data-testid="flights-count"
-        className="text-xs whitespace-nowrap text-fl-muted tabular-nums"
-      >
-        {t(filtered.length === 1 ? "flights.count.one" : "flights.count", {
-          count: filtered.length,
-        })}
-      </p>
-
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-200/80 bg-white px-6 py-10 text-center shadow-2xs">
           <SproutMascot className="size-20" mood="happy" />
-          <h2 className="text-lg font-bold text-ink">
-            {t(oneWayEmpty ? "flights.emptyOneWay.title" : "flights.empty.title")}
-          </h2>
-          <p className="max-w-sm text-sm text-ink-muted">
-            {t(oneWayEmpty ? "flights.emptyOneWay.body" : "flights.empty.body")}
-          </p>
+          <h2 className="text-lg font-bold text-ink">{t("flights.empty.title")}</h2>
+          <p className="max-w-sm text-sm text-ink-muted">{t("flights.empty.body")}</p>
           <button
             type="button"
-            onClick={
-              oneWayEmpty
-                ? () => {
-                    setTripType("rt");
-                  }
-                : resetFilters
-            }
+            onClick={resetDrawerFilters}
             className="press-pill mt-1 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-sprout-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sprout-600"
           >
             <RotateCcw aria-hidden="true" className="size-4" />
-            {t(oneWayEmpty ? "flights.emptyOneWay.switch" : "flights.empty.reset")}
+            {t("flights.empty.reset")}
           </button>
         </div>
       ) : (
