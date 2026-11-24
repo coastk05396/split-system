@@ -138,8 +138,8 @@ export function formatDailyFlightsSyncSql(
 /**
  * Applies the board's admission rules to the source's fares (ADR 0013): a Curated Destination, a
  * round trip departing from tomorrow to 6 months out, under 3 stops, the cheapest fare per
- * origin × destination × departure date. Every survivor is admitted, whatever its discount (except `TSA`,
- * which needs a `below_market` or `steal` Deal Signal), and scored against `resolveBaselines`' typical highs. Nothing is written to D1.
+ * origin × destination × departure date. Every survivor is admitted, whatever its discount, and scored
+ * against `resolveBaselines`' typical highs. Nothing is written to D1.
  */
 export async function collectDailyFlights(
   source: FlightSource,
@@ -180,8 +180,6 @@ export async function collectDailyFlights(
     if (meta === null || c.inDate === null) continue;
     const baseline = scoringBaseline(typicalHighs, c.origin, meta.airport);
     const { discountPct, tag } = computeDealSignal(c.priceTwd, baseline);
-    // Songshan (ADR 0014, decision 6): only a real deal, so no Baseline means not admitted.
-    if (c.origin === "TSA" && tag === "normal") continue;
     rows.push({
       id: c.id,
       digestDate,

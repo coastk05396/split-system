@@ -27,14 +27,13 @@ export interface TypicalRange extends BaselineRoute {
 const range = (origin: FlightOrigin, dests: string): BaselineRoute[] =>
   dests.split(" ").map((dest) => ({ origin, dest }));
 
-/** The ~55 Routes the seed CLI covers: the busiest Curated Destinations from each active origin. */
+/** The 50 Routes the seed CLI covers: the busiest Curated Destinations from each queried origin (no `TSA`, ADR 0016). */
 export const CORE_BASELINE_ROUTES: readonly BaselineRoute[] = [
   ...range(
     "TPE",
     "NRT HND KIX FUK OKA CTS NGO KMJ KOJ HIJ SDJ ICN PUS CJU BKK CNX SIN KUL DAD SGN HAN MNL DPS HKT BKI PQC CEB HKG MFM PVG PEK CAN SZX LHR CDG LAX SFO SYD",
   ),
   ...range("KHH", "NRT KIX FUK OKA CTS ICN BKK SIN KUL HKG DAD MNL"),
-  ...range("TSA", "HND GMP SHA KIX FUK CTS"),
 ];
 
 const googleFlightsSchema = z.object({

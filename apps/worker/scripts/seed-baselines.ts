@@ -4,7 +4,7 @@
  *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --dry-run
  *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --remote
  *
- * Fetches the ~55 core Routes (one SerpApi request each, all on the Baseline key). Defaults to local D1
+ * Fetches the 50 core Routes (one SerpApi request each, all on the Baseline key). Defaults to local D1
  * unless `--remote` is passed. Never commit the key.
  */
 import { existsSync } from "node:fs";

@@ -72,8 +72,7 @@ async function main(): Promise<void> {
 
   const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
   // Score against the target D1's fresh Baselines (seed-baselines), as the cron does; a dry run may
-  // fall back to no Baselines when the target cannot be read (no Deal Signal, TSA fares dropped), a
-  // real sync must not.
+  // fall back to no Baselines when the target cannot be read (no Deal Signal), a real sync must not.
   const resolveBaselines = async (): Promise<ReadonlyMap<string, number>> => {
     try {
       const { stdout } = await execFileAsync("pnpm", [
@@ -90,9 +89,7 @@ async function main(): Promise<void> {
       return parseWranglerBaselines(stdout);
     } catch (error) {
       if (!dryRun) throw error;
-      console.warn(
-        "Could not read flight_baselines from D1; dry run has no Deal Signal, so every TSA fare is dropped.",
-      );
+      console.warn("Could not read flight_baselines from D1; dry run has no Deal Signal.");
       return new Map();
     }
   };

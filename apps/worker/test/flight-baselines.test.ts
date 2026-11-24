@@ -172,16 +172,10 @@ describe("typical-high Baselines", () => {
     expect(discountOf(items, "TPE", "NRT")).toMatchObject({ discountPct: 0, tag: "normal" });
   });
 
-  it("admits a TSA fare only when it is at least 15% under its Baseline; TPE and KHH are admitted whatever their Deal Signal", async () => {
-    await seed("TSA", "ICN", 20_000, clock.now - DAY);
-    await seed("TPE", "FUK", 12_000, clock.now - DAY);
+  it("admits TPE and KHH fares whatever their Deal Signal", async () => {
     await seed("TPE", "OKA", 10_000, clock.now - DAY);
     stubSerpApi({
       explore: () => [
-        { origin: "TSA", dest: "ICN", price: 17_000 }, // own Baseline, 15% off: admitted with its badge
-        { origin: "TSA", dest: "FUK", price: 9_000 }, // TPE Baseline fallback, 25% off: admitted
-        { origin: "TSA", dest: "OKA", price: 9_000 }, // 10% off: not admitted
-        { origin: "TSA", dest: "HND", price: 1_000 }, // no Baseline at all: not admitted, however cheap
         { origin: "KHH", dest: "HND", price: 30_000 }, // no Baseline: still admitted
         { origin: "TPE", dest: "OKA", price: 30_000 }, // above its Baseline: still admitted
       ],
@@ -189,14 +183,7 @@ describe("typical-high Baselines", () => {
     await sync(EXPLORE_ONLY);
 
     const { items } = await board();
-    expect(items.map((i) => `${i.origin}-${i.dest}`).sort()).toEqual([
-      "KHH-HND",
-      "TPE-OKA",
-      "TSA-FUK",
-      "TSA-ICN",
-    ]);
-    expect(discountOf(items, "TSA", "ICN")).toMatchObject({ discountPct: 15, tag: "below_market" });
-    expect(discountOf(items, "TSA", "FUK")).toMatchObject({ discountPct: 25, tag: "below_market" });
+    expect(items.map((i) => `${i.origin}-${i.dest}`).sort()).toEqual(["KHH-HND", "TPE-OKA"]);
     expect(discountOf(items, "KHH", "HND")).toMatchObject({ discountPct: 0, tag: "normal" });
   });
 
@@ -206,7 +193,7 @@ describe("typical-high Baselines", () => {
       typical: () => [8_000, 16_000],
     });
     await sync(EXPLORE_ONLY);
-    expect(exploreCalls()).toBe(12); // 8 short + 4 long: no area answers, so no long-haul month queries
+    expect(exploreCalls()).toBe(14); // 8 short + 6 long
     expect(flightsCalls).toHaveLength(0);
     expect(await stored()).toEqual([]);
   });
@@ -291,7 +278,7 @@ describe("typical-high Baselines", () => {
       typicalStatus: 429,
     });
     await sync(ALL_KEYS);
-    expect(exploreCalls()).toBe(12); // 8 short + 4 long: no area answers, so no long-haul month queries
+    expect(exploreCalls()).toBe(14); // 8 short + 6 long
     expect(flightsCalls).toHaveLength(1);
     expect((await board()).items.length).toBe(3);
     expect(await stored()).toEqual([]);
@@ -379,7 +366,7 @@ describe("Baseline seed", () => {
     expect(CORE_BASELINE_ROUTES.length).toBeLessThanOrEqual(60);
     const airports = new Set(DESTINATION_CATALOG.map((d) => d.airport));
     for (const r of CORE_BASELINE_ROUTES) {
-      expect(["TPE", "KHH", "TSA"]).toContain(r.origin);
+      expect(["TPE", "KHH"]).toContain(r.origin);
       expect(airports.has(r.dest)).toBe(true);
     }
     expect(new Set(CORE_BASELINE_ROUTES.map((r) => `${r.origin}-${r.dest}`)).size).toBe(
