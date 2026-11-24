@@ -348,6 +348,7 @@ describe("home", () => {
         { ...base, id: "oka", dest: "OKA", priceTwd: 4631, discountPct: 55 },
         { ...base, id: "nrt", dest: "NRT", priceTwd: 5000, discountPct: 15 },
         { ...base, id: "kix", dest: "KIX", priceTwd: 6000, discountPct: 14 },
+        { ...base, id: "fuk", dest: "FUK", priceTwd: 5500, discountPct: 49 },
       ],
     };
 
@@ -359,14 +360,22 @@ describe("home", () => {
     expect(text[0]).toContain("沖繩");
     expect(text[0]).toContain("TPE ⇄ OKA");
     expect(text[0]).toContain("省 55%");
-    expect(text[1]).toContain("東京");
-    expect(text[1]).toContain("省 15%");
-    expect(text[2]).toContain("大阪");
-    expect(text[2]).not.toMatch(/省|↓/);
+    expect(text[1]).toContain("福岡");
+    expect(text[1]).toContain("省 49%");
+    expect(text[2]).toContain("東京");
+    expect(text[2]).toContain("省 15%");
+    expect(text[3]).toContain("大阪");
+    expect(text[3]).not.toMatch(/省|↓/);
     expect(marquee.textContent).not.toMatch(/沖繩那霸|東京成田|大阪關西|直飛/);
-    // Tiles share the v3 card chips: solid pill from 30%, plain text 15-29%, single-colour route
-    expect(within(tiles[0] as HTMLElement).getByText("省 55%").className).toContain("bg-fl-green");
-    expect(within(tiles[1] as HTMLElement).getByText("省 15%").className).not.toContain("bg-");
+    // Tiles share the card chips: solid pill with a green flame from 50%, plain text 15-49%, single-colour route
+    const pill = within(tiles[0] as HTMLElement).getByText("省 55%");
+    expect(pill.className).toContain("bg-fl-green");
+    expect(pill.querySelector("svg.lucide-flame")?.getAttribute("class")).toContain(
+      "text-fl-green",
+    );
+    expect(within(tiles[1] as HTMLElement).getByText("省 49%").className).not.toContain("bg-");
+    expect(within(tiles[2] as HTMLElement).getByText("省 15%").className).not.toContain("bg-");
+    expect(marquee.querySelectorAll("svg.lucide-flame")).toHaveLength(2); // the pill and its looped clone
     expect(within(tiles[0] as HTMLElement).getByText("TPE ⇄ OKA").className).toContain(
       "bg-[#ffedd5]",
     );
