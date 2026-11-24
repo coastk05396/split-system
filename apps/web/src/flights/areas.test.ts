@@ -39,6 +39,9 @@ describe("flightAreaOf", () => {
     ["CA", "na"],
     ["AU", "anz"],
     ["NZ", "anz"],
+    ["GU", "anz"],
+    ["PW", "anz"],
+    ["MP", "anz"],
     ["TR", "me"],
     ["AE", "me"],
     ["QA", "me"],
@@ -56,6 +59,12 @@ describe("flightAreaOf", () => {
     for (const a of ["BNE", "ADL", "CBR", "OOL", "CNS", "HBA", "WLG", "ZQN"])
       expect(flightAreaOf(a), a).toBe("anz");
     expect([flightAreaOf("CUN"), flightAreaOf("MEX")]).toEqual([null, null]);
+  });
+
+  it("puts Guam, Palau and Saipan in 大洋洲, and Newark and Fort Lauderdale in 美加", () => {
+    expect(["GUM", "ROR", "SPN"].map(flightAreaOf)).toEqual(["anz", "anz", "anz"]);
+    expect(["EWR", "FLL", "YOW", "YEG"].map(flightAreaOf)).toEqual(["na", "na", "na", "na"]);
+    expect(["NAP", "KRK", "GLA", "HAM", "MLA"].map(flightAreaOf)).toEqual(Array(5).fill("europe"));
   });
 
   it("maps every catalog destination to an area, except the countries left under 全部 only", () => {

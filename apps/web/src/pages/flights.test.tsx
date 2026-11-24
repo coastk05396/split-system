@@ -754,7 +754,7 @@ describe("daily flights page", () => {
         "東南亞0",
         "歐洲2",
         "美加1",
-        "紐澳1",
+        "大洋洲1",
         "中東1",
       ]);
       expect(within(dialog).queryByText(/長程地區|^國家$/)).toBeNull();
@@ -789,15 +789,16 @@ describe("daily flights page", () => {
       expect(cityHeadings()).toHaveLength(11);
     });
 
-    it("covers 中港澳, 美加, 紐澳 and 中東, and keeps an unmapped country under 全部 only", async () => {
+    it("covers 中港澳, 美加, 大洋洲 and 中東, and keeps an unmapped country under 全部 only", async () => {
       const user = userEvent.setup();
       const { api } = setup();
-      setItems(api, [...SAMPLE_FLIGHTS, ...AREA_FLIGHTS]);
+      const islands = [far("gum", "GUM", 9000), far("spn", "SPN", 10000), far("ror", "ROR", 12000)];
+      setItems(api, [...SAMPLE_FLIGHTS, ...AREA_FLIGHTS, ...islands]);
       await screen.findAllByRole("heading", { level: 2 });
       const expected: Array<[string, string[]]> = [
         ["中港澳", ["香港", "上海"]],
         ["美加", ["洛杉磯"]],
-        ["紐澳", ["伯斯"]],
+        ["大洋洲", ["關島", "塞班", "帛琉", "伯斯"]],
         ["中東", ["杜拜"]],
       ];
       for (const [area, cities] of expected) {
@@ -832,7 +833,7 @@ describe("daily flights page", () => {
         "東南亞0",
         "歐洲0",
         "美加0",
-        "紐澳0",
+        "大洋洲0",
         "中東0",
       ]);
     });
@@ -875,7 +876,7 @@ describe("daily flights page", () => {
         "SE Asia",
         "Europe",
         "North America",
-        "Australia & NZ",
+        "Oceania",
         "Middle East",
       ]);
     });

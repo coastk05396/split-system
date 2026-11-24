@@ -14,6 +14,10 @@ const AREA_BY_COUNTRY: Readonly<Record<string, FlightArea>> = {
   CA: "na",
   AU: "anz",
   NZ: "anz",
+  // 大洋洲 also takes Guam, Palau and the Northern Mariana Islands (ADR 0016)
+  GU: "anz",
+  PW: "anz",
+  MP: "anz",
   TR: "me",
   AE: "me",
   QA: "me",
