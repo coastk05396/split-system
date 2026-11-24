@@ -32,6 +32,8 @@ export interface FlightCandidate {
   priceTwd: number;
   airlines: string[];
   transfers: number;
+  /** Came from a nonstop-only query: a Nonstop Fare candidate (ADR 0016, decision 7). */
+  nonstopOnly?: boolean;
 }
 
 export interface FlightSource {
@@ -156,9 +158,30 @@ export async function collectDailyFlights(
     if (c.outDate < window.from || c.outDate > window.to) continue;
     if (c.inDate === null || c.inDate <= c.outDate) continue;
     if (c.transfers >= MAX_STOPS_EXCLUSIVE || c.airlines.length === 0) continue;
-    const key = `${c.origin}-${c.dest}-${c.outDate}`;
+    // Nonstop-query fares are kept apart, never merged into a cheaper connecting fare that date.
+    const key = `${c.origin}-${c.dest}-${c.outDate}${c.nonstopOnly === true ? "-nonstop" : ""}`;
     const held = cheapest.get(key);
     if (held === undefined || c.priceTwd < held.priceTwd) cheapest.set(key, c);
+  }
+
+  // Nonstop Fares (ADR 0016, decision 7): within 20% of the city's cheapest fare, all origins.
+  const cityOf = (c: FlightCandidate) => getDestinationMeta(c.dest)?.cityCode ?? c.dest;
+  const cityCheapest = new Map<string, number>();
+  for (const c of cheapest.values()) {
+    const city = cityOf(c);
+    cityCheapest.set(city, Math.min(cityCheapest.get(city) ?? Infinity, c.priceTwd));
+  }
+  for (const [key, c] of cheapest) {
+    if (c.nonstopOnly !== true) continue;
+    // A connecting query that already priced this date nonstop for less makes it a repeat.
+    const sameDate = cheapest.get(`${c.origin}-${c.dest}-${c.outDate}`);
+    const repeats =
+      sameDate !== undefined && sameDate.transfers === 0 && sameDate.priceTwd <= c.priceTwd;
+    // Integer form of price > 1.2 × the city's cheapest, exact at +20%.
+    const tooDear = c.priceTwd * 5 > (cityCheapest.get(cityOf(c)) ?? 0) * 6;
+    if (repeats || tooDear) {
+      cheapest.delete(key);
+    }
   }
 
   const routes = new Map<string, { origin: FlightOrigin; dest: string }>();

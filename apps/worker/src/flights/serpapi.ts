@@ -42,16 +42,20 @@ const ROLE_KEY_VARIABLE: Record<SerpApiRole, keyof SerpApiKeys> = {
   long2: "SERPAPI_KEY_LONG2",
 };
 
-/** One `google_travel_explore` request: where from, which continent, and optionally one calendar month (1-12). */
+/**
+ * One `google_travel_explore` request: where from, which continent, optionally one calendar month (1-12),
+ * and whether it asks for nonstop fares only (Nonstop Fares, ADR 0016).
+ */
 export interface ExploreQuery {
   origin: FlightOrigin;
   arrivalAreaId?: string;
   month?: number;
+  nonstopOnly?: boolean;
 }
 
 /**
  * Europe, North America, Oceania, the Middle East and Canada are paid for by the long-haul key (the
- * long2 key's month queries name their role); everything else by the short-haul one.
+ * long2 key's queries name their role); everything else by the short-haul one.
  */
 const LONG_HAUL_AREAS: ReadonlySet<string> = new Set([
   EUROPE,
@@ -190,8 +194,9 @@ export type SerpApiClient = ReturnType<typeof createSerpApiClient>;
 /**
  * Production source backed by SerpApi `google_travel_explore` (ADR 0013, 0014, 0016). Short-haul queries
  * use the short key; Europe, North America, Oceania, the Middle East and Canada the long key, with the
- * long2 key paying for the second long-haul month queries. Queries run one after another
- * (a month-scoped one waits for its paired answer); a failed query, or one whose role is skipped, is left out.
+ * long2 key paying for the second long-haul month queries and the nonstop-only ones. Queries run one
+ * after another (a month-scoped one waits for its paired answer); a failed query, or one whose role is
+ * skipped, is left out.
  */
 export function serpApiFlightSource(
   env: SerpApiKeys,
@@ -219,7 +224,8 @@ export function serpApiFlightSource(
             engine: "google_travel_explore",
             departure_id: query.origin,
             type: "1",
-            stops: "3", // at most 2 stops (ADR 0016, decision 1)
+            // nonstop only, else at most 2 stops (ADR 0016, decisions 1 and 5)
+            stops: query.nonstopOnly === true ? "1" : "3",
             ...(query.arrivalAreaId === undefined ? {} : { arrival_area_id: query.arrivalAreaId }),
             ...(query.month === undefined ? {} : { month: String(query.month) }),
             currency: "TWD",
@@ -230,12 +236,15 @@ export function serpApiFlightSource(
         if (!parsed.success) return null;
         answered += 1;
         const fares: FlightCandidate[] = [];
+        const nonstopOnly = query.nonstopOnly === true;
+        // A nonstop-query fare can sit beside a connecting fare on the same date: its own id.
+        const idSuffix = nonstopOnly ? "-nonstop" : "";
         for (const raw of parsed.data.destinations ?? []) {
           const row = exploreDestinationSchema.safeParse(raw);
           const dest = row.success ? row.data.destination_airport?.code.toUpperCase() : undefined;
           if (!row.success || dest === undefined) continue;
           fares.push({
-            id: `${digestDate}-${query.origin}-${dest}-${row.data.start_date}`.toLowerCase(),
+            id: `${digestDate}-${query.origin}-${dest}-${row.data.start_date}${idSuffix}`.toLowerCase(),
             origin: query.origin,
             dest,
             outDate: row.data.start_date,
@@ -243,6 +252,7 @@ export function serpApiFlightSource(
             priceTwd: Math.round(row.data.flight_price),
             airlines: parseExploreAirlines(row.data.airline_code, row.data.airline),
             transfers: row.data.number_of_stops ?? 0,
+            nonstopOnly,
           });
         }
         candidates.push(...fares);
@@ -276,6 +286,10 @@ export function serpApiFlightSource(
       }
       for (const month of monthsOf(`TPE|${MIDDLE_EAST}`).slice(0, 2)) {
         await run({ origin: "TPE", arrivalAreaId: MIDDLE_EAST, month }, "long2");
+      }
+      // Nonstop Fares (ADR 0016, decision 5): long2's last 3 queries.
+      for (const area of [NORTH_AMERICA, EUROPE, OCEANIA]) {
+        await run({ origin: "TPE", arrivalAreaId: area, nonstopOnly: true }, "long2");
       }
       upstreamCalls = client.calls();
       return candidates;

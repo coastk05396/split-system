@@ -175,7 +175,8 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     expect(calls.some((c) => c.departure === "TSA")).toBe(false);
     for (const c of calls) {
       expect(c.params.get("engine")).toBe("google_travel_explore");
-      expect(c.params.get("stops")).toBe("3");
+      // The long-haul keys' stops are checked with their queries (long2's nonstop ones send 1).
+      if (c.key === "short-key") expect(c.params.get("stops")).toBe("3");
       expect(c.params.get("currency")).toBe("TWD");
       expect(c.params.get("hl")).toBe("en");
       expect(c.params.get("gl")).toBe("tw");
@@ -341,8 +342,9 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         `TPE|${OCEANIA}|12`,
         `TPE|${CANADA}|-`,
       ]);
+      // long2's stops are checked below: its month queries send 3, its nonstop queries 1.
+      for (const c of longCalls(calls)) expect(c.params.get("stops")).toBe("3");
       for (const c of [...longCalls(calls), ...long2Calls(calls)]) {
-        expect(c.params.get("stops")).toBe("3");
         expect(c.params.get("engine")).toBe("google_travel_explore");
         expect(c.params.get("type")).toBe("1");
         expect(c.params.get("currency")).toBe("TWD");
@@ -356,12 +358,29 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync();
       // Europe: Feb has the fewest cities, then Dec/Jan/Mar/Apr tie and the earliest wins. North
       // America: Mar, then Dec. Oceania and the Middle East answer nothing: Dec, then Jan.
-      expect(long2Calls(calls).map(label).sort()).toEqual([
+      expect(
+        long2Calls(calls)
+          .filter((c) => c.params.get("stops") === "3")
+          .map(label)
+          .sort(),
+      ).toEqual([
         `TPE|${EUROPE}|12`,
         `TPE|${MIDDLE_EAST}|1`,
         `TPE|${MIDDLE_EAST}|12`,
         `TPE|${NORTH_AMERICA}|12`,
         `TPE|${OCEANIA}|1`,
+      ]);
+    });
+
+    it("sends nonstop-only TPE North America, Europe and Oceania queries on the long2 key, 8 a day in total", async () => {
+      const calls = stubSerpApi(answers);
+      await sync();
+      expect(long2Calls(calls)).toHaveLength(8);
+      const nonstop = calls.filter((c) => c.params.get("stops") === "1");
+      expect(nonstop.map((c) => `${c.key}|${label(c)}`).sort()).toEqual([
+        `long2-key|TPE|${EUROPE}|-`,
+        `long2-key|TPE|${NORTH_AMERICA}|-`,
+        `long2-key|TPE|${OCEANIA}|-`,
       ]);
     });
 
@@ -416,7 +435,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       for (let day = 1; day < 7; day += 1) {
         expect(await labelsOn(clock.now + day * 86_400_000)).toEqual(first);
       }
-      expect(first).toHaveLength(13);
+      expect(first).toHaveLength(16);
     });
 
     it("breaks a tie on the fewest cities with the earlier month, and never picks the current month or one past Explore's window", async () => {
@@ -486,6 +505,61 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         "CDG:2027-02-20:25000",
         "LHR:2026-12-10:30000",
       ]);
+    });
+
+    describe("Nonstop Fares (ADR 0016, decision 7)", () => {
+      const nonstopQuery = (c: ExploreCall) => c.params.get("stops") === "1";
+      const fares = async () =>
+        (await board()).items
+          .map((i) => `${i.dest}:${i.outDate}:${i.priceTwd}:${String(i.transfers)}`)
+          .sort();
+
+      it("admits a nonstop fare at +19% over its city's cheapest fare that day and drops one at +21%", async () => {
+        // New York is one city: JFK's 1-stop NT$20,000 is its cheapest, so EWR's nonstop fares count against it.
+        stubSerpApi((c) => {
+          if (c.arrival !== NORTH_AMERICA || c.month !== null) return [];
+          return nonstopQuery(c)
+            ? [
+                { dest: "EWR", price: 23800, out: "2026-12-12" }, // +19%: admitted
+                { dest: "EWR", price: 24200, out: "2026-12-14" }, // +21%: dropped
+              ]
+            : [{ dest: "JFK", price: 20000, out: OUT, stops: 1 }];
+        });
+        await sync();
+        expect(await fares()).toEqual(["EWR:2026-12-12:23800:0", "JFK:2026-12-05:20000:1"]);
+      });
+
+      it("keeps a nonstop fare beside a cheaper connecting fare on the same date, scored on the same Baseline", async () => {
+        await env.DB.prepare("DELETE FROM flight_baselines").run();
+        await env.DB.prepare(
+          "INSERT INTO flight_baselines (origin, destination, typical_low_twd, typical_high_twd, fetched_at) VALUES ('TPE','SEA',20000,40000,?)",
+        )
+          .bind(clock.now)
+          .run();
+        stubSerpApi((c) => {
+          if (c.arrival !== NORTH_AMERICA || c.month !== null) return [];
+          return nonstopQuery(c)
+            ? [{ dest: "SEA", price: 22654, out: OUT }]
+            : [{ dest: "SEA", price: 21924, out: OUT, stops: 1 }];
+        });
+        await sync();
+        const { items } = await board();
+        await env.DB.prepare("DELETE FROM flight_baselines").run();
+        expect(
+          items.map((i) => `${i.dest}:${i.outDate}:${i.priceTwd}:${String(i.transfers)}`).sort(),
+        ).toEqual(["SEA:2026-12-05:21924:1", "SEA:2026-12-05:22654:0"]);
+        // round((40000 - price) / 40000 * 100)
+        expect(items.map((i) => i.discountPct).sort()).toEqual([43, 45]);
+        expect(new Set(items.map((i) => i.id)).size).toBe(2);
+      });
+
+      it("shows a nonstop fare once when a connecting query already priced the same nonstop fare", async () => {
+        stubSerpApi((c) =>
+          c.arrival === EUROPE && c.month === null ? [{ dest: "LHR", price: 30000, out: OUT }] : [],
+        );
+        await sync();
+        expect(await fares()).toEqual(["LHR:2026-12-05:30000:0"]);
+      });
     });
   });
 
@@ -702,14 +776,14 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync(ALL_KEYS);
 
       const explore = calls.filter((c) => c.engine === "google_travel_explore");
-      expect(explore).toHaveLength(21); // 8 short + 8 long + 5 long2
+      expect(explore).toHaveLength(24); // 8 short + 8 long + 8 long2
       for (const c of explore) {
         expect(c.key).toMatch(
           LONG_AREAS.includes(c.arrival ?? "") ? /^long2?-key$/ : /^short-key$/,
         );
       }
       expect(explore.filter((c) => c.key === "long-key")).toHaveLength(8);
-      expect(explore.filter((c) => c.key === "long2-key")).toHaveLength(5);
+      expect(explore.filter((c) => c.key === "long2-key")).toHaveLength(8);
       expect(explore.filter((c) => c.key === "short-key")).toHaveLength(8);
       const baseline = calls.filter((c) => c.engine === "google_flights");
       expect(baseline.length).toBeGreaterThan(0);
@@ -743,7 +817,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         await sync();
         expect(calls.filter((c) => c.key === "long-key")).toHaveLength(1);
         expect(calls.filter((c) => c.key === "short-key")).toHaveLength(8);
-        expect(calls.filter((c) => c.key === "long2-key")).toHaveLength(5);
+        expect(calls.filter((c) => c.key === "long2-key")).toHaveLength(8);
         expect(await dests()).toEqual(["KIX", "LHR"]); // LHR from long2's Europe month query
       },
     );
@@ -867,7 +941,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     const calls = stubSerpApi(() => []);
     await sync();
     await sync(EXPLORE_KEYS, clock.now + 3_600_000);
-    expect(calls).toHaveLength(42); // twice (8 short-haul + 8 long-haul + 5 long2)
+    expect(calls).toHaveLength(48); // twice (8 short-haul + 8 long-haul + 8 long2)
   });
 
   it("serves a completed run's fares for 48 hours, then counts them as unavailable (curated fares)", async () => {
@@ -1074,7 +1148,7 @@ describe("manual sync SQL", () => {
 
     const collected = await collectDailyFlights(source, cronNow);
     expect(collected.completed).toBe(true);
-    expect(collected.upstreamCalls).toBe(21); // 8 short + 8 long + 5 long2
+    expect(collected.upstreamCalls).toBe(24); // 8 short + 8 long + 8 long2
     expect(collected.items.map((i) => i.origin).sort()).toEqual(["KHH", "TPE"]);
     const sql = formatDailyFlightsSyncSql(collected.rows, {
       digestDate: collected.digestDate,
