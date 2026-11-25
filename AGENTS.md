@@ -1,7 +1,6 @@
 # Project guide
 
 - pnpm workspace (`apps/web`, `apps/worker`, `packages/shared`); run commands from the repository root.
-- Only one `pnpm dev` or `pnpm e2e` runs at a time on this machine, across all worktrees: both bind port 8787 (e2e also 8788).
 - Work test-first (`tdd` skill) for new logic and bug fixes: confirm the seams with the user, then one failing test (see it fail for the right reason) → smallest change to pass → repeat.
 
 ## Git and review
