@@ -3,9 +3,11 @@
  *
  *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --dry-run
  *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --remote
+ *   SERPAPI_KEY_BASELINE=... pnpm --filter @split/worker seed-baselines -- --remote --all
  *
- * Fetches the 50 core Routes (one SerpApi request each, all on the Baseline key). Defaults to local D1
- * unless `--remote` is passed. Never commit the key.
+ * Fetches the core Routes that have no Baseline under 30 days old in the target D1 (one SerpApi request
+ * each, all on the Baseline key, which the daily cron shares); `--all` fetches all 50 again. Defaults to
+ * local D1 unless `--remote` is passed. Never commit the key.
  */
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -32,8 +34,14 @@ registerHooks({
 });
 
 async function main(): Promise<void> {
-  const { CORE_BASELINE_ROUTES, fetchTypicalRanges, formatBaselineSql } =
-    await import("../src/flights/baselines.ts");
+  const {
+    CORE_BASELINE_ROUTES,
+    fetchTypicalRanges,
+    formatBaselineSql,
+    freshBaselinesSql,
+    parseWranglerBaselines,
+    staleBaselineRoutes,
+  } = await import("../src/flights/baselines.ts");
 
   const cliArgs = argv.slice(2);
   const dryRun = cliArgs.includes("--dry-run");
@@ -51,11 +59,31 @@ async function main(): Promise<void> {
   }
 
   const now = Date.now();
-  const ranges = await fetchTypicalRanges({ SERPAPI_KEY_BASELINE: key }, CORE_BASELINE_ROUTES, now);
+  const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
+  let routes = CORE_BASELINE_ROUTES;
+  if (!cliArgs.includes("--all")) {
+    const { stdout } = await execFileAsync("pnpm", [
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "DB",
+      ...targetFlags,
+      "--json",
+      "--command",
+      freshBaselinesSql(now),
+    ]);
+    routes = staleBaselineRoutes(CORE_BASELINE_ROUTES, parseWranglerBaselines(stdout));
+    if (routes.length === 0) {
+      console.info("Every core Route has a Baseline under 30 days old; nothing to fetch.");
+      return;
+    }
+  }
+  const ranges = await fetchTypicalRanges({ SERPAPI_KEY_BASELINE: key }, routes, now);
   console.info(
     JSON.stringify({
       event: "seed_baselines_fetched",
-      routes: CORE_BASELINE_ROUTES.length,
+      routes: routes.length,
       fetched: ranges.length,
     }),
   );
@@ -76,7 +104,6 @@ async function main(): Promise<void> {
   const sqlFile = join(dir, "baselines.sql");
   try {
     await writeFile(sqlFile, sql, "utf8");
-    const targetFlags = remote ? ["--remote", "--env", remoteEnv] : ["--local"];
     const { stdout, stderr } = await execFileAsync("pnpm", [
       "exec",
       "wrangler",
