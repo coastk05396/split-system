@@ -9,6 +9,7 @@ import {
   formatBaselineSql,
   freshBaselinesSql,
   parseWranglerBaselines,
+  staleBaselineRoutes,
 } from "../src/flights/baselines.js";
 import { FLIGHTS_CRON, runScheduled } from "../src/maintenance.js";
 import { silentReplyClient } from "../src/line/reply-client.js";
@@ -353,6 +354,21 @@ describe("typical-high Baselines", () => {
     });
     await sync(ALL_KEYS);
     expect(flightsCalls.map((c) => `${c.departure}-${c.arrival}`)).toEqual(["TPE-NRT"]);
+  });
+});
+
+describe("Baseline refresh selection", () => {
+  const route = (origin: "TPE" | "KHH", dest: string) => ({ origin, dest });
+
+  it("keeps only the Routes with no fresh Baseline, in the given order", () => {
+    const fresh = new Map([["TPE-NRT", 9000]]);
+    expect(
+      staleBaselineRoutes([route("TPE", "NRT"), route("TPE", "KIX"), route("KHH", "NRT")], fresh),
+    ).toEqual([route("TPE", "KIX"), route("KHH", "NRT")]);
+  });
+
+  it("selects nothing when every Route is fresh", () => {
+    expect(staleBaselineRoutes([route("TPE", "NRT")], new Map([["TPE-NRT", 9000]]))).toEqual([]);
   });
 });
 

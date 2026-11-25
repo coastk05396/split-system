@@ -108,6 +108,12 @@ export function formatBaselineSql(ranges: readonly TypicalRange[], now: number):
 
 export const baselineKey = (origin: string, dest: string): string => `${origin}-${dest}`;
 
+/** The Routes with no Baseline inside its 30 days: what a manual refresh has to fetch. */
+export const staleBaselineRoutes = (
+  routes: readonly BaselineRoute[],
+  fresh: ReadonlyMap<string, number>,
+): BaselineRoute[] => routes.filter((r) => !fresh.has(baselineKey(r.origin, r.dest)));
+
 /** The SELECT that reads the Baselines still within their 30 days, for `wrangler d1 execute --json`. */
 export const freshBaselinesSql = (now: number): string =>
   `SELECT origin, destination, typical_high_twd FROM flight_baselines WHERE fetched_at >= ${sqlLiteral(now - BASELINE_TTL_MS)}`;

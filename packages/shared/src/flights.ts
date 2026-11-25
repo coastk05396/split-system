@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { localDateSchema } from "./schemas.js";
 
-export const FLIGHT_ORIGINS = ["TPE", "TSA", "KHH"] as const;
+export const FLIGHT_ORIGINS = ["TPE", "KHH"] as const;
 export type FlightOrigin = (typeof FLIGHT_ORIGINS)[number];
 
 export const FLIGHT_REGIONS = ["jp", "kr", "sea", "hkmo", "longhaul"] as const;
@@ -45,14 +45,6 @@ export const ORIGIN_META: Readonly<Record<FlightOrigin, OriginMeta>> = {
     en: "Taipei Taoyuan",
     shortZhTW: "桃園",
     shortEn: "Taoyuan",
-  },
-  TSA: {
-    code: "TSA",
-    cityCode: "tpe",
-    zhTW: "台北松山",
-    en: "Taipei Songshan",
-    shortZhTW: "松山",
-    shortEn: "Songshan",
   },
   KHH: {
     code: "KHH",
@@ -2806,16 +2798,6 @@ const DEFAULT_SEEDS: readonly SeedSpec[] = [
     stayDays: 5,
     priceTwd: 10900,
     airlines: ["JX"],
-    transfers: 0,
-  },
-  {
-    id: "seed-tsa-hnd-nh",
-    origin: "TSA",
-    dest: "HND",
-    offsetDays: 29,
-    stayDays: 4,
-    priceTwd: 8950,
-    airlines: ["NH"],
     transfers: 0,
   },
   {

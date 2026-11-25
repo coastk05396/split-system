@@ -1,4 +1,5 @@
 import {
+  FLIGHT_ORIGINS,
   getDefaultDailyFlights,
   getDestinationMeta,
   withinDepartureWindow,
@@ -121,7 +122,12 @@ export async function listDailyFlights(db: Db, now: number): Promise<DailyFlight
     .where(eq(dailyFlights.digestDate, latest.digestDate))
     .orderBy(asc(dailyFlights.priceTwd));
 
-  const upcomingRows = withinDepartureWindow(rows, today);
+  // Rows stored before an origin was dropped (Songshan) would fail the client's parse of the whole board.
+  const served: readonly string[] = FLIGHT_ORIGINS;
+  const upcomingRows = withinDepartureWindow(
+    rows.filter((row) => served.includes(row.origin)),
+    today,
+  );
   if (upcomingRows.length === 0) {
     return emptyBoard() ?? buildFallbackResponse(now);
   }

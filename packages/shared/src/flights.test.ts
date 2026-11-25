@@ -105,7 +105,7 @@ describe("flights domain helpers", () => {
 
     const enUrl = buildTripComUrl(
       {
-        origin: "TSA",
+        origin: "KHH",
         dest: "HND",
         outDate: "2026-12-05",
         inDate: "2026-12-09",
@@ -116,8 +116,8 @@ describe("flights domain helpers", () => {
     const parsed = new URL(enUrl);
     expect(parsed.origin).toBe("https://www.trip.com");
     expect(parsed.pathname).toBe("/flights/showfarefirst");
-    expect(parsed.searchParams.get("dcity")).toBe("tpe");
-    expect(parsed.searchParams.get("dairport")).toBe("TSA");
+    expect(parsed.searchParams.get("dcity")).toBe("khh");
+    expect(parsed.searchParams.get("dairport")).toBeNull();
     expect(parsed.searchParams.get("acity")).toBe("tyo");
     expect(parsed.searchParams.get("aairport")).toBe("HND");
     expect(parsed.searchParams.get("ddate")).toBe("2026-12-05");
@@ -701,6 +701,8 @@ describe("Trip.com redirect query", () => {
     expect(flightGoQuerySchema.safeParse({ ...ok, inDate: "" }).success).toBe(false);
     expect(flightGoQuerySchema.safeParse({ ...ok, inDate: "2026-11-30" }).success).toBe(false);
     expect(flightGoQuerySchema.safeParse({ ...ok, origin: "RMQ" }).success).toBe(false);
+    // Songshan is no longer queried (ADR 0016), so a link from it is not a Daily Flights link.
+    expect(flightGoQuerySchema.safeParse({ ...ok, origin: "TSA" }).success).toBe(false);
     expect(flightGoQuerySchema.safeParse({ ...ok, origin: "https://evil.com" }).success).toBe(
       false,
     );
