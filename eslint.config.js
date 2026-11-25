@@ -22,6 +22,20 @@ export default tseslint.config(
     },
   },
   {
+    files: ["**/*.test.ts", "**/*.test.tsx", "e2e/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name=/^(toContain|toMatch)$/] > Literal.arguments[value=/^https?:\\/\\//]",
+          message:
+            "Parse the URL: new URL(value), then check origin and pathname (CODING_STANDARDS.md).",
+        },
+      ],
+    },
+  },
+  {
     files: ["**/*.js"],
     extends: [tseslint.configs.disableTypeChecked],
   },

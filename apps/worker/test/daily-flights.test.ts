@@ -819,7 +819,9 @@ describe("daily flights API", () => {
     expect(zhRes.status).toBe(302);
     expect(zhRes.headers.get("Cache-Control")).toBe("no-store");
     const zhLocation = zhRes.headers.get("Location");
-    expect(zhLocation).toContain("https://tw.trip.com/flights/showfarefirst");
+    const zhLocationUrl = new URL(zhLocation ?? "");
+    expect(zhLocationUrl.origin).toBe("https://tw.trip.com");
+    expect(zhLocationUrl.pathname).toBe("/flights/showfarefirst");
     expect(zhLocation).toContain("dcity=tpe");
     expect(zhLocation).toContain("acity=tyo");
     expect(zhLocation).toContain("aairport=NRT");
@@ -836,7 +838,9 @@ describe("daily flights API", () => {
     );
     expect(enRes.status).toBe(302);
     const enLocation = enRes.headers.get("Location");
-    expect(enLocation).toContain("https://www.trip.com/flights/showfarefirst");
+    const enLocationUrl = new URL(enLocation ?? "");
+    expect(enLocationUrl.origin).toBe("https://www.trip.com");
+    expect(enLocationUrl.pathname).toBe("/flights/showfarefirst");
     expect(enLocation).toContain("dairport=TSA");
     expect(enLocation).toContain("aairport=HND");
     expect(enLocation).toContain("locale=en-US");

@@ -7,8 +7,8 @@
 ## Run and check
 
 - Start the local app with `pnpm dev`. Open the web UI at `http://localhost:5173`.
-- Before opening a PR that changes `apps/` or `packages/`, run `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm e2e` and open it only when all four are green. Lint is left to the pre-commit hook and CI. A docs-only change needs none of them.
-- `pnpm e2e` must not run while `pnpm dev` is running; they use the same local ports.
+- Before opening a PR that changes `apps/` or `packages/`, run `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm e2e` and open it only when all four are green; on later commits to an open PR, green CI stands in for them. Lint is left to the pre-commit hook and CI. A docs-only change needs none of them.
+- Only one `pnpm dev` or `pnpm e2e` runs at a time on this machine, across all worktrees: both bind port 8787 (e2e also 8788).
 
 ## Tests
 
@@ -18,7 +18,6 @@
 ## Git, CI and deploys
 
 - Never push to `main` without the user's approval: a push to `main` deploys production.
-- Put `[skip ci]` in the commit message of a docs-only change. GitHub reads only the newest commit, so a PR that holds code keeps it off its newest commit.
 - One piece of work, one pull request: when it spans several branches (parallel workers, stacked refactors), combine them on one branch and open a single PR.
 
 ## Staging
@@ -29,7 +28,7 @@
 ## Spec and review
 
 - Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.
-- Another agent reviews in a fresh context, read-only (no file edits, no git writes). The author fixes findings and never signs off on their own change.
+- Another agent reviews in a fresh context, read-only (no file edits, no git writes); it runs `pnpm typecheck` and the changed packages' tests and reports a failure as a finding. The author fixes findings and never signs off on their own change.
 - Review arguments: `origin/main docs/SPEC.md`. The reviewer also applies `CODING_STANDARDS.md`.
 
 ## Agent skills
