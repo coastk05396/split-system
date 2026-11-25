@@ -2395,6 +2395,10 @@ export const flightGoQuerySchema = z
     outDate: localDateSchema,
     inDate: localDateSchema,
     lang: z.enum(["zh-TW", "en"]).default("zh-TW"),
+    nonstopOnly: z
+      .literal("1")
+      .optional()
+      .transform((v) => v === "1"),
   })
   .superRefine((val, ctx) => {
     if (val.inDate < val.outDate) {
@@ -2584,6 +2588,8 @@ export function buildTripComUrl(
     outDate: string;
     inDate: string;
     lang: "zh-TW" | "en";
+    /** A Nonstop Fare's link: Trip.com opens filtered to nonstop flights. */
+    nonstopOnly?: boolean;
   },
   affiliate?: TripComAffiliateConfig,
 ): string {
@@ -2603,7 +2609,7 @@ export function buildTripComUrl(
   url.searchParams.set("triptype", "rt");
   url.searchParams.set("class", "ys");
   url.searchParams.set("quantity", "1");
-  url.searchParams.set("nonstoponly", "off");
+  url.searchParams.set("nonstoponly", params.nonstopOnly === true ? "on" : "off");
   url.searchParams.set("locale", isEn ? "en-US" : "zh-TW");
   url.searchParams.set("curr", "TWD");
   url.searchParams.set("searchboxarg", "t");

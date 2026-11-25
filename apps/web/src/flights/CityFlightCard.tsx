@@ -169,6 +169,7 @@ export function CityFlightCard({
 
   return (
     <div
+      data-open={open ? "" : undefined}
       className={`flight-card overflow-hidden rounded-[22px] border bg-white ${
         open
           ? "border-[#c4e3d3] shadow-[0_1px_2px_rgb(16_60_42/0.05),0_12px_26px_-10px_rgb(4_120_87/0.24)]"
@@ -232,6 +233,7 @@ export function CityFlightCard({
           item={nonstop}
           lang={lang}
           affiliate={affiliate}
+          nonstopOnly
           className="-mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pr-4 pb-3.5 pl-[72px] text-[13px] leading-[18px] transition-colors hover:bg-fl-ink/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-fl-green"
         >
           <span className="font-bold whitespace-nowrap text-fl-green">

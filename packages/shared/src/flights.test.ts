@@ -57,6 +57,22 @@ describe("flights domain helpers", () => {
     expect(matchTaiwanHoliday("2026-11-18", "2026-11-22")).toBeNull();
   });
 
+  it("asks Trip.com for nonstop flights only when the fare is a Nonstop Fare", () => {
+    const base = {
+      origin: "TPE",
+      dest: "SEA",
+      outDate: "2027-01-12",
+      inDate: "2027-01-19",
+      lang: "en",
+    } as const;
+    const url = (nonstopOnly?: boolean) =>
+      new URL(buildTripComUrl(nonstopOnly === undefined ? base : { ...base, nonstopOnly }));
+    expect(url(true).pathname).toBe("/flights/showfarefirst");
+    expect(url(true).searchParams.get("nonstoponly")).toBe("on");
+    expect(url(false).searchParams.get("nonstoponly")).toBe("off");
+    expect(url().searchParams.get("nonstoponly")).toBe("off");
+  });
+
   it("sends Fort Lauderdale to Trip.com as its own city while its City Card stays Miami's", () => {
     const parsed = new URL(
       buildTripComUrl({
@@ -673,7 +689,10 @@ describe("Trip.com redirect query", () => {
       outDate: "2026-12-01",
       inDate: "2026-12-06",
       lang: "zh-TW",
+      nonstopOnly: false,
     });
+    expect(flightGoQuerySchema.parse({ ...ok, nonstopOnly: "1" }).nonstopOnly).toBe(true);
+    expect(flightGoQuerySchema.safeParse({ ...ok, nonstopOnly: "yes" }).success).toBe(false);
   });
 
   it("requires the return date, a return not before departure, and an active origin", () => {

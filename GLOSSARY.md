@@ -41,7 +41,7 @@ One collapsed row on the Daily Flights board per destination city, summarising t
 _Avoid_: Fare card, destination tile
 
 **Nonstop Fare**:
-The cheapest nonstop round trip from `TPE` to a long-haul city (North America, Europe, Oceania), shown as a second line on its City Card only when it costs at most 20% more than the card's cheapest fare; tapping it opens Trip.com on its own dates. Its Deal Signal uses the same Baseline and formula as any other fare.
+The cheapest nonstop round trip from `TPE` to a long-haul city (North America, Europe, Oceania), shown as a second line on its City Card only when it costs at most 20% more than the card's cheapest fare; tapping it opens Trip.com on its own dates, filtered to nonstop flights. Its Deal Signal uses the same Baseline and formula as any other fare.
 _Avoid_: Direct flight price, non-stop line
 
 **Route**:

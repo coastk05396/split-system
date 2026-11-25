@@ -1085,6 +1085,19 @@ describe("daily flights API", () => {
     expect(enLocation).toContain("aairport=HND");
     expect(enLocation).toContain("locale=en-US");
     expect(enLocation).toContain("rdate=2026-12-09");
+    expect(new URL(enLocation ?? "").searchParams.get("nonstoponly")).toBe("off");
+
+    // A Nonstop Fare's link opens Trip.com filtered to nonstop flights.
+    const nonstopRes = await app.request(
+      "https://split.test/api/v1/flights/go?origin=TPE&dest=SEA&outDate=2027-01-12&inDate=2027-01-19&lang=en&nonstopOnly=1",
+      {},
+      env,
+    );
+    expect(nonstopRes.status).toBe(302);
+    const nonstopLocation = new URL(nonstopRes.headers.get("Location") ?? "");
+    expect(nonstopLocation.origin).toBe("https://www.trip.com");
+    expect(nonstopLocation.pathname).toBe("/flights/showfarefirst");
+    expect(nonstopLocation.searchParams.get("nonstoponly")).toBe("on");
 
     const badRes = await app.request(
       "https://split.test/api/v1/flights/go?origin=https://evil.com&dest=NRT&outDate=2026-12-01&inDate=2026-12-06",

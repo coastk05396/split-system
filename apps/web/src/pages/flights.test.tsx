@@ -723,6 +723,8 @@ describe("daily flights page", () => {
         outDate: "2027-01-12",
         inDate: "2027-01-19",
         lang: "zh-TW",
+        // Trip.com opens filtered to nonstop flights; the card's other fare links stay unfiltered.
+        nonstopOnly: "1",
       });
     });
 
