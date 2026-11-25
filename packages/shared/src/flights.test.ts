@@ -68,6 +68,7 @@ describe("flights domain helpers", () => {
       }),
     );
     expect(parsed.origin).toBe("https://www.trip.com");
+    expect(parsed.pathname).toBe("/flights/showfarefirst");
     expect(parsed.searchParams.get("acity")).toBe("fll");
     expect(parsed.searchParams.has("aairport")).toBe(false);
     expect(getDestinationMeta("FLL")?.cityCode).toBe("mia");
