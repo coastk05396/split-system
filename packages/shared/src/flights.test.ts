@@ -57,6 +57,22 @@ describe("flights domain helpers", () => {
     expect(matchTaiwanHoliday("2026-11-18", "2026-11-22")).toBeNull();
   });
 
+  it("sends Fort Lauderdale to Trip.com as its own city while its City Card stays Miami's", () => {
+    const parsed = new URL(
+      buildTripComUrl({
+        origin: "TPE",
+        dest: "FLL",
+        outDate: "2027-02-11",
+        inDate: "2027-02-18",
+        lang: "en",
+      }),
+    );
+    expect(parsed.origin).toBe("https://www.trip.com");
+    expect(parsed.searchParams.get("acity")).toBe("fll");
+    expect(parsed.searchParams.has("aairport")).toBe(false);
+    expect(getDestinationMeta("FLL")?.cityCode).toBe("mia");
+  });
+
   it("builds bilingual Trip.com showfarefirst URLs with city mapping and optional affiliate tags", () => {
     const zhUrl = buildTripComUrl({
       origin: "TPE",

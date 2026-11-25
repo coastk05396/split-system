@@ -2051,6 +2051,8 @@ const AIRPORT_CITY_MAP = new Map<string, string>([
   ["LGA", "nyc"],
   ["IAD", "was"],
   ["DCA", "was"],
+  // Trip.com lists Fort Lauderdale as its own city, though its City Card groups it with Miami.
+  ["FLL", "fll"],
 ]);
 
 /** Looks up rich metadata for a destination IATA code, returning null if unknown. */
