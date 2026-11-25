@@ -224,10 +224,12 @@ export function serpApiFlightSource(
             engine: "google_travel_explore",
             departure_id: query.origin,
             type: "1",
-            // nonstop only, else at most 2 stops (ADR 0016, decisions 1 and 5)
-            stops: query.nonstopOnly === true ? "1" : "3",
             ...(query.arrivalAreaId === undefined ? {} : { arrival_area_id: query.arrivalAreaId }),
-            ...(query.month === undefined ? {} : { month: String(query.month) }),
+            // Explore answers `stops` with `month` with empty results (probed 2026-11-26), so a month
+            // query relies on admission's 3-stop guard; else nonstop only or at most 2 stops (ADR 0016).
+            ...(query.month === undefined
+              ? { stops: query.nonstopOnly === true ? "1" : "3" }
+              : { month: String(query.month) }),
             currency: "TWD",
             hl: "en",
             gl: "tw",

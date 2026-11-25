@@ -8,7 +8,7 @@ ADR 0014 left long-haul cities with 1-2 fares, never showed a nonstop fare when 
 
 ## Decision
 
-1. **Max 2 stops in the query**: every Explore query sends `stops=3`, so Google picks the cheapest fare of at most 2 stops instead of one the board then drops.
+1. **Max 2 stops in the query**: every Explore query without a month sends `stops=3`, so Google picks the cheapest fare of at most 2 stops instead of one the board then drops. A month-scoped query sends no `stops`: Explore answers `stops` together with `month` with empty results (probed 2026-11-26), so those fares rely on admission's 3-stop guard.
 2. **No Songshan**: the `TSA` Asia query and the `TSA` admission gate go. Its short-haul slot runs a second month-scoped `TPE` Asia query.
 3. **Short-haul, 8 queries a day**: `TPE` and `KHH` Asia; `TPE` Asia scoped to two months; `TPE` Japan and `KHH` Japan; `KHH` Korea; `TPE` Korea scoped to a month. The `TPE` Japan month query goes: Japan's large cities are in the Asia queries, and its smaller cities keep 2 fares (`TPE` and `KHH` Japan).
 4. **Long-haul, 8 queries a day** on `SERPAPI_KEY_LONG`: `TPE` Europe, North America, Oceania, Middle East and Canada (`/m/0d060g`); one month-scoped query each for Europe, North America and Oceania.

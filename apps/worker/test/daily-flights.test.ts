@@ -176,7 +176,8 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     for (const c of calls) {
       expect(c.params.get("engine")).toBe("google_travel_explore");
       // The long-haul keys' stops are checked with their queries (long2's nonstop ones send 1).
-      if (c.key === "short-key") expect(c.params.get("stops")).toBe("3");
+      // A month query sends no `stops`: Explore answers `stops` with `month` with empty results.
+      if (c.key === "short-key") expect(c.params.get("stops")).toBe(c.month === null ? "3" : null);
       expect(c.params.get("currency")).toBe("TWD");
       expect(c.params.get("hl")).toBe("en");
       expect(c.params.get("gl")).toBe("tw");
@@ -342,8 +343,9 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         `TPE|${OCEANIA}|12`,
         `TPE|${CANADA}|-`,
       ]);
-      // long2's stops are checked below: its month queries send 3, its nonstop queries 1.
-      for (const c of longCalls(calls)) expect(c.params.get("stops")).toBe("3");
+      // long2's stops are checked below: its month queries send none, its nonstop queries 1.
+      for (const c of longCalls(calls))
+        expect(c.params.get("stops")).toBe(c.month === null ? "3" : null);
       for (const c of [...longCalls(calls), ...long2Calls(calls)]) {
         expect(c.params.get("engine")).toBe("google_travel_explore");
         expect(c.params.get("type")).toBe("1");
@@ -360,7 +362,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       // America: Mar, then Dec. Oceania and the Middle East answer nothing: Dec, then Jan.
       expect(
         long2Calls(calls)
-          .filter((c) => c.params.get("stops") === "3")
+          .filter((c) => c.month !== null && !c.params.has("stops"))
           .map(label)
           .sort(),
       ).toEqual([
