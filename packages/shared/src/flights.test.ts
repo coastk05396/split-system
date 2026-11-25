@@ -67,6 +67,7 @@ describe("flights domain helpers", () => {
     } as const;
     const url = (nonstopOnly?: boolean) =>
       new URL(buildTripComUrl(nonstopOnly === undefined ? base : { ...base, nonstopOnly }));
+    expect(url(true).origin).toBe("https://www.trip.com");
     expect(url(true).pathname).toBe("/flights/showfarefirst");
     expect(url(true).searchParams.get("nonstoponly")).toBe("on");
     expect(url(false).searchParams.get("nonstoponly")).toBe("off");
