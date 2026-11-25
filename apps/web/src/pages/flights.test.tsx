@@ -682,6 +682,88 @@ describe("daily flights page", () => {
     expect(rowsOf(cityHeadings()[0] as HTMLElement)[0]).toHaveTextContent("1 stop");
   });
 
+  describe("Nonstop Fare line on a City Card", () => {
+    const sea = (id: string, over: Partial<DailyFlightItem> & Pick<DailyFlightItem, "priceTwd">) =>
+      fare(id, { dest: "SEA", region: "longhaul", ...over });
+    /** Seattle's cheapest has a stop; its nonstop fare is NT$730 dearer, on dates of its own. */
+    const SEATTLE = [
+      sea("sea-1stop", {
+        priceTwd: 21924,
+        transfers: 1,
+        outDate: "2026-12-10",
+        inDate: "2026-12-15",
+      }),
+      sea("sea-nonstop", {
+        priceTwd: 22654,
+        discountPct: 20,
+        tag: "below_market",
+        outDate: "2027-01-12",
+        inDate: "2027-01-19",
+      }),
+      sea("sea-nonstop-dearer", { priceTwd: 23000, outDate: "2027-02-01", inDate: "2027-02-08" }),
+    ];
+    const cardOf = (heading: HTMLElement) => heading.closest(".flight-card") as HTMLElement;
+    const nonstopLink = (card: HTMLElement) =>
+      within(card).queryByRole("link", { name: /^(直飛|Nonstop) NT\$/ });
+
+    it("shows 直飛 NT$x with its Deal Signal on a collapsed card whose cheapest fare has stops, opening Trip.com on that fare's own dates", async () => {
+      const { api } = setup();
+      setItems(api, SEATTLE);
+      const card = cardOf((await screen.findAllByRole("heading", { level: 2 }))[0] as HTMLElement);
+      const link = nonstopLink(card);
+      expect(link).not.toBeNull();
+      expect(link).toHaveTextContent(/^直飛 NT\$22,654 ?省 20%$/);
+      // Outside the header toggle: a link of its own, not nested in the button
+      expect(link?.closest("button")).toBeNull();
+      const url = new URL(link?.getAttribute("href") ?? "", "https://split.test");
+      expect(url.pathname).toBe("/api/v1/flights/go");
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        origin: "TPE",
+        dest: "SEA",
+        outDate: "2027-01-12",
+        inDate: "2027-01-19",
+        lang: "zh-TW",
+        // Trip.com opens filtered to nonstop flights; the card's other fare links stay unfiltered.
+        nonstopOnly: "1",
+      });
+    });
+
+    it.each([
+      [
+        "the cheapest fare is already nonstop",
+        [sea("a", { priceTwd: 20000 }), sea("b", { priceTwd: 21000 })],
+      ],
+      [
+        "no fare is nonstop",
+        [sea("a", { priceTwd: 20000, transfers: 1 }), sea("b", { priceTwd: 21000, transfers: 2 })],
+      ],
+      [
+        "the nonstop fare costs over 20% more",
+        [sea("a", { priceTwd: 20000, transfers: 1 }), sea("b", { priceTwd: 24001 })],
+      ],
+    ])("shows no nonstop line when %s", async (_, items) => {
+      const { api } = setup();
+      setItems(api, items);
+      const card = cardOf((await screen.findAllByRole("heading", { level: 2 }))[0] as HTMLElement);
+      expect(nonstopLink(card)).toBeNull();
+      expect(card).not.toHaveTextContent(/直飛|Nonstop/);
+    });
+
+    it("labels the line Nonstop NT$x in English", async () => {
+      const user = userEvent.setup();
+      const { api } = setup();
+      setItems(api, SEATTLE);
+      await screen.findAllByRole("heading", { level: 2 });
+      await user.click(screen.getByRole("button", { name: "切換為英文" }));
+      await screen.findByRole("heading", { level: 1, name: "Where to fly today?" });
+      const link = nonstopLink(cardOf(cityHeadings()[0] as HTMLElement));
+      expect(link).toHaveTextContent(/^Nonstop NT\$22,654 ?Save 20%$/);
+      expect(
+        new URL(link?.getAttribute("href") ?? "", "https://split.test").searchParams.get("lang"),
+      ).toBe("en");
+    });
+  });
+
   it("renders inside AppShell when signed in with the title and note only, and resets an empty area from the empty state", async () => {
     const user = userEvent.setup();
     setup("/flights", makeUser("小宇"));
@@ -754,7 +836,7 @@ describe("daily flights page", () => {
         "東南亞0",
         "歐洲2",
         "美加1",
-        "紐澳1",
+        "大洋洲1",
         "中東1",
       ]);
       expect(within(dialog).queryByText(/長程地區|^國家$/)).toBeNull();
@@ -789,15 +871,16 @@ describe("daily flights page", () => {
       expect(cityHeadings()).toHaveLength(11);
     });
 
-    it("covers 中港澳, 美加, 紐澳 and 中東, and keeps an unmapped country under 全部 only", async () => {
+    it("covers 中港澳, 美加, 大洋洲 and 中東, and keeps an unmapped country under 全部 only", async () => {
       const user = userEvent.setup();
       const { api } = setup();
-      setItems(api, [...SAMPLE_FLIGHTS, ...AREA_FLIGHTS]);
+      const islands = [far("gum", "GUM", 9000), far("spn", "SPN", 10000), far("ror", "ROR", 12000)];
+      setItems(api, [...SAMPLE_FLIGHTS, ...AREA_FLIGHTS, ...islands]);
       await screen.findAllByRole("heading", { level: 2 });
       const expected: Array<[string, string[]]> = [
         ["中港澳", ["香港", "上海"]],
         ["美加", ["洛杉磯"]],
-        ["紐澳", ["伯斯"]],
+        ["大洋洲", ["關島", "塞班", "帛琉", "伯斯"]],
         ["中東", ["杜拜"]],
       ];
       for (const [area, cities] of expected) {
@@ -832,7 +915,7 @@ describe("daily flights page", () => {
         "東南亞0",
         "歐洲0",
         "美加0",
-        "紐澳0",
+        "大洋洲0",
         "中東0",
       ]);
     });
@@ -875,7 +958,7 @@ describe("daily flights page", () => {
         "SE Asia",
         "Europe",
         "North America",
-        "Australia & NZ",
+        "Oceania",
         "Middle East",
       ]);
     });

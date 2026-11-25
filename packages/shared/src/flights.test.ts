@@ -57,6 +57,40 @@ describe("flights domain helpers", () => {
     expect(matchTaiwanHoliday("2026-11-18", "2026-11-22")).toBeNull();
   });
 
+  it("asks Trip.com for nonstop flights only when the fare is a Nonstop Fare", () => {
+    const base = {
+      origin: "TPE",
+      dest: "SEA",
+      outDate: "2027-01-12",
+      inDate: "2027-01-19",
+      lang: "en",
+    } as const;
+    const url = (nonstopOnly?: boolean) =>
+      new URL(buildTripComUrl(nonstopOnly === undefined ? base : { ...base, nonstopOnly }));
+    expect(url(true).origin).toBe("https://www.trip.com");
+    expect(url(true).pathname).toBe("/flights/showfarefirst");
+    expect(url(true).searchParams.get("nonstoponly")).toBe("on");
+    expect(url(false).searchParams.get("nonstoponly")).toBe("off");
+    expect(url().searchParams.get("nonstoponly")).toBe("off");
+  });
+
+  it("sends Fort Lauderdale to Trip.com as its own city while its City Card stays Miami's", () => {
+    const parsed = new URL(
+      buildTripComUrl({
+        origin: "TPE",
+        dest: "FLL",
+        outDate: "2027-02-11",
+        inDate: "2027-02-18",
+        lang: "en",
+      }),
+    );
+    expect(parsed.origin).toBe("https://www.trip.com");
+    expect(parsed.pathname).toBe("/flights/showfarefirst");
+    expect(parsed.searchParams.get("acity")).toBe("fll");
+    expect(parsed.searchParams.has("aairport")).toBe(false);
+    expect(getDestinationMeta("FLL")?.cityCode).toBe("mia");
+  });
+
   it("builds bilingual Trip.com showfarefirst URLs with city mapping and optional affiliate tags", () => {
     const zhUrl = buildTripComUrl({
       origin: "TPE",
@@ -579,6 +613,71 @@ describe("Curated Destination catalog integrity", () => {
     expect(getDestinationMeta("SYD")).toMatchObject({ zhTW: "雪梨", baselineTwd: 25500 });
     expect(getAirlineName("BA", "zh-TW")).toBe("英國航空");
   });
+
+  it("resolves the nonstop-catalog airports (#220) to their city, country, region and timezone", () => {
+    // airport: [country, flag, subRegion, timezone, City Card zh-TW, City Card en, city code]
+    const added: Record<string, [string, string, string, string, string, string, string]> = {
+      EWR: ["US", "🇺🇸", "north_america", "America/New_York", "紐約", "New York", "nyc"],
+      KOA: ["US", "🇺🇸", "north_america", "Pacific/Honolulu", "科納", "Kona", "koa"],
+      SLC: ["US", "🇺🇸", "north_america", "America/Denver", "鹽湖城", "Salt Lake City", "slc"],
+      AUS: ["US", "🇺🇸", "north_america", "America/Chicago", "奧斯汀", "Austin", "aus"],
+      SAT: ["US", "🇺🇸", "north_america", "America/Chicago", "聖安東尼奧", "San Antonio", "sat"],
+      MSP: ["US", "🇺🇸", "north_america", "America/Chicago", "明尼亞波利斯", "Minneapolis", "msp"],
+      PHL: ["US", "🇺🇸", "north_america", "America/New_York", "費城", "Philadelphia", "phl"],
+      BNA: ["US", "🇺🇸", "north_america", "America/Chicago", "納什維爾", "Nashville", "bna"],
+      PIT: ["US", "🇺🇸", "north_america", "America/New_York", "匹茲堡", "Pittsburgh", "pit"],
+      FLL: ["US", "🇺🇸", "north_america", "America/New_York", "邁阿密", "Miami", "mia"],
+      MSY: ["US", "🇺🇸", "north_america", "America/Chicago", "紐奧良", "New Orleans", "msy"],
+      DTW: ["US", "🇺🇸", "north_america", "America/Detroit", "底特律", "Detroit", "dtt"],
+      TPA: ["US", "🇺🇸", "north_america", "America/New_York", "坦帕", "Tampa", "tpa"],
+      STL: ["US", "🇺🇸", "north_america", "America/Chicago", "聖路易", "St. Louis", "stl"],
+      YOW: ["CA", "🇨🇦", "north_america", "America/Toronto", "渥太華", "Ottawa", "yow"],
+      YHZ: ["CA", "🇨🇦", "north_america", "America/Halifax", "哈利法克斯", "Halifax", "yhz"],
+      YWG: ["CA", "🇨🇦", "north_america", "America/Winnipeg", "溫尼伯", "Winnipeg", "ywg"],
+      YEG: ["CA", "🇨🇦", "north_america", "America/Edmonton", "艾德蒙頓", "Edmonton", "yea"],
+      NAP: ["IT", "🇮🇹", "europe", "Europe/Rome", "拿坡里", "Naples", "nap"],
+      KRK: ["PL", "🇵🇱", "europe", "Europe/Warsaw", "克拉科夫", "Kraków", "krk"],
+      GLA: ["GB", "🇬🇧", "europe", "Europe/London", "格拉斯哥", "Glasgow", "gla"],
+      HAM: ["DE", "🇩🇪", "europe", "Europe/Berlin", "漢堡", "Hamburg", "ham"],
+      MLA: ["MT", "🇲🇹", "europe", "Europe/Malta", "馬爾他", "Malta", "mla"],
+      GUM: ["GU", "🇬🇺", "oceania", "Pacific/Guam", "關島", "Guam", "gum"],
+      ROR: ["PW", "🇵🇼", "oceania", "Pacific/Palau", "帛琉", "Palau", "ror"],
+      SPN: ["MP", "🇲🇵", "oceania", "Pacific/Saipan", "塞班", "Saipan", "spn"],
+    };
+    expect(Object.keys(added)).toHaveLength(26);
+    for (const [airport, [country, flag, sub, zone, zh, en, city]] of Object.entries(added)) {
+      const meta = getDestinationMeta(airport);
+      expect(meta, airport).toMatchObject({
+        region: "longhaul",
+        subRegion: sub,
+        countryCode: country,
+        flag,
+        cityCode: city,
+      });
+      expect(meta?.baselineTwd, `${airport} needs no static price`).toBeUndefined();
+      expect(getAirportTimeZone(airport), airport).toBe(zone);
+      expect([getCityName(airport, "zh-TW"), getCityName(airport, "en")], airport).toEqual([
+        zh,
+        en,
+      ]);
+    }
+    // Newark shares New York's City Card, Fort Lauderdale shares Miami's
+    expect(getDestinationMeta("EWR")?.cityCode).toBe(getDestinationMeta("JFK")?.cityCode);
+    expect(getDestinationMeta("FLL")?.cityCode).toBe(getDestinationMeta("MIA")?.cityCode);
+    expect(getCityName("MIA", "zh-TW")).toBe("邁阿密");
+    expect(
+      ["GUM", "ROR", "SPN"].map((a) => [
+        getDestinationMeta(a)?.countryZhTW,
+        getDestinationMeta(a)?.countryEn,
+      ]),
+    ).toEqual([
+      ["關島", "Guam"],
+      ["帛琉", "Palau"],
+      ["北馬里亞納群島", "Northern Mariana Islands"],
+    ]);
+    expect(getDestinationMeta("MLA")).toMatchObject({ countryZhTW: "馬爾他", countryEn: "Malta" });
+    expect(getDestinationMeta("SVO")).toBeNull(); // no Moscow
+  });
 });
 
 describe("Trip.com redirect query", () => {
@@ -591,7 +690,10 @@ describe("Trip.com redirect query", () => {
       outDate: "2026-12-01",
       inDate: "2026-12-06",
       lang: "zh-TW",
+      nonstopOnly: false,
     });
+    expect(flightGoQuerySchema.parse({ ...ok, nonstopOnly: "1" }).nonstopOnly).toBe(true);
+    expect(flightGoQuerySchema.safeParse({ ...ok, nonstopOnly: "yes" }).success).toBe(false);
   });
 
   it("requires the return date, a return not before departure, and an active origin", () => {

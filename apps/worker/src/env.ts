@@ -23,8 +23,10 @@ export interface Bindings {
   SERPAPI_KEY_BASELINE?: string;
   /** Secret: SerpApi key for the short-haul (Asia, Japan and Korea) Explore queries. */
   SERPAPI_KEY_SHORT?: string;
-  /** Secret: SerpApi key for the Europe, North America, Oceania and Middle East Explore queries. */
+  /** Secret: SerpApi key for the Europe, North America, Oceania, Middle East and Canada Explore queries. */
   SERPAPI_KEY_LONG?: string;
+  /** Secret: the second long-haul SerpApi key (ADR 0016): the extra long-haul month queries. */
+  SERPAPI_KEY_LONG2?: string;
   /** Optional Trip.com affiliate Allianceid. */
   TRIP_COM_ALLIANCE_ID?: string;
   /** Optional Trip.com affiliate SID. */

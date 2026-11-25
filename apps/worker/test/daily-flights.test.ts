@@ -1,4 +1,5 @@
 import { getDefaultDailyFlights, type DailyFlightsResponse } from "@split/shared";
+import { DESTINATION_CATALOG, getDestinationMeta } from "@split/shared/flights";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
@@ -103,6 +104,15 @@ function stubSerpApi(handler: (call: ExploreCall) => readonly FakeDest[] | Respo
 
 /** A date inside Explore month `m` (Dec 2026 .. Apr 2027) for the 2026-11-16 run. */
 const dateInMonth = (m: number) => `${m === 12 ? 2026 : 2027}-${String(m).padStart(2, "0")}-10`;
+/** An Explore answer pricing the listed airports in each month (11 is the run's own month, 5 is past Explore's window). */
+const answerByMonth = (byMonth: Record<number, readonly string[]>): FakeDest[] =>
+  Object.entries(byMonth).flatMap(([m, dests]) =>
+    dests.map((dest) => ({
+      dest,
+      price: 10000,
+      out: m === "11" ? "2026-11-25" : dateInMonth(Number(m)),
+    })),
+  );
 const OUT = "2026-12-05"; // inside the 2026-11-17..2027-05-16 window of the 2026-11-16 run
 const tpeAsiaNrt = (c: ExploreCall) =>
   c.departure === "TPE" && c.arrival === null && c.month === null
@@ -112,7 +122,11 @@ const exhausted = () =>
   Response.json({ error: "Your account has run out of searches." }, { status: 429 });
 
 /** The Explore roles' keys; the Baseline key is left out so these runs make no Baseline requests. */
-const EXPLORE_KEYS: SerpApiKeys = { SERPAPI_KEY_SHORT: "short-key", SERPAPI_KEY_LONG: "long-key" };
+const EXPLORE_KEYS: SerpApiKeys = {
+  SERPAPI_KEY_SHORT: "short-key",
+  SERPAPI_KEY_LONG: "long-key",
+  SERPAPI_KEY_LONG2: "long2-key",
+};
 const ALL_KEYS: SerpApiKeys = { ...EXPLORE_KEYS, SERPAPI_KEY_BASELINE: "baseline-key" };
 
 async function sync(keys: SerpApiKeys = EXPLORE_KEYS, now = clock.now) {
@@ -138,15 +152,14 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends exactly the 8 short-haul queries a day on the short key, plus the 4 unscoped long-haul ones on the long key", async () => {
+  it("sends exactly the 8 short-haul queries a day on the short key, at most 2 stops each and none from Songshan", async () => {
     const calls = stubSerpApi(() => []);
     await sync();
 
-    const short = calls.filter((c) => c.key === "short-key");
-    const [tpeJapanMonth, tpeKoreaMonth] = short.filter((c) => c.month !== null);
+    // Every answer is empty, so every month query takes the earliest upcoming months: Dec, then Jan.
     expect(
-      short
-        .filter((c) => c.month === null)
+      calls
+        .filter((c) => c.key === "short-key")
         .map(label)
         .sort(),
     ).toEqual([
@@ -154,20 +167,17 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       "KHH|/m/03_3d|-",
       "KHH|/m/06qd3|-",
       "TPE|-|-",
+      "TPE|-|1",
+      "TPE|-|12",
       "TPE|/m/03_3d|-",
-      "TSA|-|-",
+      "TPE|/m/06qd3|12",
     ]);
-    expect(short).toHaveLength(8);
-    expect(tpeJapanMonth).toMatchObject({ departure: "TPE", arrival: "/m/03_3d" });
-    expect(tpeKoreaMonth).toMatchObject({ departure: "TPE", arrival: "/m/06qd3" });
-    // Nothing known yet: a rotating month of Dec 2026 .. Apr 2027, never the current one (11).
-    for (const c of [tpeJapanMonth, tpeKoreaMonth]) {
-      expect(["12", "1", "2", "3", "4"]).toContain(c?.month);
-    }
-    // No answer yet, so no month to scope Europe or North America to: those two are skipped.
-    expect(calls.filter((c) => c.key === "long-key")).toHaveLength(4);
+    expect(calls.some((c) => c.departure === "TSA")).toBe(false);
     for (const c of calls) {
       expect(c.params.get("engine")).toBe("google_travel_explore");
+      // The long-haul keys' stops are checked with their queries (long2's nonstop ones send 1).
+      // A month query sends no `stops`: Explore answers `stops` with `month` with empty results.
+      if (c.key === "short-key") expect(c.params.get("stops")).toBe(c.month === null ? "3" : null);
       expect(c.params.get("currency")).toBe("TWD");
       expect(c.params.get("hl")).toBe("en");
       expect(c.params.get("gl")).toBe("tw");
@@ -176,67 +186,86 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     }
   });
 
-  it("rotates the fallback months from day to day", async () => {
-    const monthsOn = async (now: number) => {
-      const calls = stubSerpApi(() => []);
-      await sync(EXPLORE_KEYS, now);
-      vi.unstubAllGlobals();
-      return calls.filter((c) => c.month !== null).map((c) => `${c.arrival}:${c.month}`);
-    };
-    const day1 = await monthsOn(clock.now);
-    const day2 = await monthsOn(clock.now + 86_400_000);
-    expect(day1).toHaveLength(2);
-    expect(day1).not.toEqual(day2);
+  it("gives every Southeast Asia and China/HK/Macau city 4 fares: TPE and KHH Asia, and TPE Asia on two months", async () => {
+    const cities = DESTINATION_CATALOG.filter((d) => d.region === "sea" || d.region === "hkmo");
+    const dates = new Map<string, string>();
+    // Explore's Asia viewport (no area) prices every one of these cities, on a date of its own per query.
+    stubSerpApi((c) => {
+      if (c.arrival !== null) return [];
+      const key = `${c.departure}|${c.month ?? "-"}`;
+      const out =
+        c.month === null
+          ? `2026-12-${c.departure === "TPE" ? "01" : "02"}`
+          : dateInMonth(Number(c.month));
+      dates.set(key, out);
+      return cities.map((d) => ({ dest: d.airport, price: 5000, out }));
+    });
+    await sync();
+
+    const fares = new Map<string, number>();
+    for (const item of (await board()).items) {
+      const city = getDestinationMeta(item.dest)?.cityCode ?? item.dest;
+      fares.set(city, (fares.get(city) ?? 0) + 1);
+    }
+    expect(dates.size).toBe(4);
+    for (const d of cities) expect(fares.get(d.cityCode)).toBeGreaterThanOrEqual(4);
   });
 
   describe("month-scoped queries", () => {
-    const JAPAN = "/m/03_3d";
     const KOREA = "/m/06qd3";
     const monthCall = (calls: ExploreCall[], area: string) =>
       calls.find((c) => c.arrival === area && c.month !== null);
+    const tpeAsiaMonths = (calls: ExploreCall[]) =>
+      calls
+        .filter((c) => c.departure === "TPE" && c.arrival === null && c.month !== null)
+        .map((c) => c.month);
+    const tpeAsia = (c: ExploreCall) => c.departure === "TPE" && c.arrival === null;
 
-    it("scopes TPE Japan to the cheapest month of the same day's unscoped TPE Japan answer, never the current month", async () => {
+    it("scopes TPE Asia to the upcoming month with the fewest cities in the unscoped TPE Asia answer, then the next fewest", async () => {
       const calls = stubSerpApi((c) =>
-        c.departure === "TPE" && c.arrival === JAPAN && c.month === null
-          ? [
-              { dest: "NRT", price: 9000, out: dateInMonth(12) },
-              { dest: "KIX", price: 6000, out: dateInMonth(2) },
-              { dest: "FUK", price: 7000, out: dateInMonth(3) },
-              { dest: "OKA", price: 2000, out: "2026-11-25" }, // cheapest, but this month
-            ]
+        tpeAsia(c) && c.month === null
+          ? answerByMonth({
+              11: [], // the run's own month: never chosen
+              12: ["NRT", "KIX", "BKK"],
+              1: ["NRT", "HND"], // two airports, one city (Tokyo)
+              2: ["SIN", "HKG"],
+              3: ["BKK", "SIN", "HKG"],
+              4: ["KIX", "OKA", "ICN", "FUK"],
+              // 5: none, but May is past Explore's 6-month window: never chosen
+            })
           : [],
       );
       await sync();
-      expect(monthCall(calls, JAPAN)).toMatchObject({ departure: "TPE", month: "2" });
+      expect(tpeAsiaMonths(calls)).toEqual(["1", "2"]);
     });
 
-    it("scopes TPE Korea to the cheapest month of the KHH Korea answer", async () => {
+    it("scopes TPE Korea to the month with the fewest cities in the KHH Korea answer", async () => {
       const calls = stubSerpApi((c) =>
         c.departure === "KHH" && c.arrival === KOREA
-          ? [
-              { dest: "PUS", price: 5000, out: dateInMonth(12) },
-              { dest: "CJU", price: 3000, out: dateInMonth(4) },
-            ]
+          ? answerByMonth({
+              12: ["PUS", "CJU", "TAE"],
+              1: ["PUS", "CJU"],
+              2: ["PUS"],
+              3: ["PUS", "CJU"],
+              4: ["PUS", "CJU", "TAE"],
+            })
           : [],
       );
       await sync();
-      expect(monthCall(calls, KOREA)).toMatchObject({ departure: "TPE", month: "4" });
+      expect(monthCall(calls, KOREA)).toMatchObject({ departure: "TPE", month: "2" });
     });
 
-    it.each([
-      ["fails", () => new Response("down", { status: 503 })],
-      ["is empty", () => []],
-      ["has only current-month fares", () => [{ dest: "PUS", price: 3000, out: "2026-11-25" }]],
-    ])(
-      "falls back to a rotating upcoming month when the KHH Korea answer %s",
-      async (_, answer) => {
-        const calls = stubSerpApi((c) =>
-          c.departure === "KHH" && c.arrival === KOREA ? answer() : [],
-        );
-        await sync();
-        expect(["12", "1", "2", "3", "4"]).toContain(monthCall(calls, KOREA)?.month);
-      },
-    );
+    it("still sends the month queries on the earliest upcoming months when their paired answer fails", async () => {
+      const down = () => new Response("down", { status: 503 });
+      const calls = stubSerpApi((c) =>
+        (tpeAsia(c) || (c.departure === "KHH" && c.arrival === KOREA)) && c.month === null
+          ? down()
+          : [],
+      );
+      await sync();
+      expect(tpeAsiaMonths(calls)).toEqual(["12", "1"]);
+      expect(monthCall(calls, KOREA)?.month).toBe("12");
+    });
 
     it("puts Busan, Jeju and Daegu on the board with their TPE and KHH fares", async () => {
       stubSerpApi((c) => {
@@ -251,7 +280,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
 
     it("merges month-scoped answers with unscoped ones: the cheapest fare per origin, destination and departure date wins", async () => {
       stubSerpApi((c) => {
-        if (c.departure !== "TPE" || c.arrival !== JAPAN) return [];
+        if (!tpeAsia(c)) return [];
         return c.month === null
           ? [
               { dest: "NRT", price: 9000, out: dateInMonth(12) },
@@ -269,33 +298,41 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     });
   });
 
-  describe("long-haul queries on the long key (ADR 0014, decision 3)", () => {
+  describe("long-haul queries on the long and long2 keys (ADR 0016, decisions 4 and 5)", () => {
     const EUROPE = "/m/02j9z";
     const NORTH_AMERICA = "/m/059g4";
     const OCEANIA = "/m/05nrg";
     const MIDDLE_EAST = "/m/04wsz";
+    const CANADA = "/m/0d060g";
     const longCalls = (calls: ExploreCall[]) => calls.filter((c) => c.key === "long-key");
+    const long2Calls = (calls: ExploreCall[]) => calls.filter((c) => c.key === "long2-key");
     const monthCall = (calls: ExploreCall[], area: string) =>
       calls.find((c) => c.arrival === area && c.month !== null);
-    /** Europe's cheapest month is Feb, North America's is Mar; the current month (11) is cheaper still. */
+    /** Europe's month with the fewest cities is Feb, North America's is Mar. */
     const answers = (c: ExploreCall) => {
       if (c.arrival === EUROPE && c.month === null)
-        return [
-          { dest: "LHR", price: 30000, out: dateInMonth(12) },
-          { dest: "CDG", price: 24000, out: dateInMonth(2) },
-          { dest: "FCO", price: 9000, out: "2026-11-25" },
-        ];
+        return answerByMonth({
+          12: ["LHR", "CDG"],
+          1: ["LHR", "CDG"],
+          2: ["CDG"],
+          3: ["LHR", "CDG"],
+          4: ["LHR", "CDG"],
+        });
       if (c.arrival === NORTH_AMERICA && c.month === null)
-        return [
-          { dest: "LAX", price: 26000, out: dateInMonth(12) },
-          { dest: "JFK", price: 21000, out: dateInMonth(3) },
-        ];
+        return answerByMonth({
+          12: ["LAX", "JFK"],
+          1: ["LAX", "JFK"],
+          2: ["LAX", "JFK"],
+          3: ["JFK"],
+          4: ["LAX", "JFK"],
+        });
       return [];
     };
 
-    it("sends exactly 6 requests a day with the listed parameters", async () => {
+    it("sends exactly 8 requests a day on the long key with the listed parameters", async () => {
       const calls = stubSerpApi(answers);
       await sync();
+      // Oceania's answer is empty, so its month 1 is the earliest upcoming month, December.
       expect(longCalls(calls).map(label).sort()).toEqual([
         `TPE|${EUROPE}|-`,
         `TPE|${EUROPE}|2`,
@@ -303,8 +340,13 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         `TPE|${NORTH_AMERICA}|-`,
         `TPE|${NORTH_AMERICA}|3`,
         `TPE|${OCEANIA}|-`,
+        `TPE|${OCEANIA}|12`,
+        `TPE|${CANADA}|-`,
       ]);
-      for (const c of longCalls(calls)) {
+      // long2's stops are checked below: its month queries send none, its nonstop queries 1.
+      for (const c of longCalls(calls))
+        expect(c.params.get("stops")).toBe(c.month === null ? "3" : null);
+      for (const c of [...longCalls(calls), ...long2Calls(calls)]) {
         expect(c.params.get("engine")).toBe("google_travel_explore");
         expect(c.params.get("type")).toBe("1");
         expect(c.params.get("currency")).toBe("TWD");
@@ -313,43 +355,122 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       }
     });
 
+    it("sends month 2 of Europe, North America and Oceania and months 1 and 2 of the Middle East on the long2 key", async () => {
+      const calls = stubSerpApi(answers);
+      await sync();
+      // Europe: Feb has the fewest cities, then Dec/Jan/Mar/Apr tie and the earliest wins. North
+      // America: Mar, then Dec. Oceania and the Middle East answer nothing: Dec, then Jan.
+      expect(
+        long2Calls(calls)
+          .filter((c) => c.month !== null && !c.params.has("stops"))
+          .map(label)
+          .sort(),
+      ).toEqual([
+        `TPE|${EUROPE}|12`,
+        `TPE|${MIDDLE_EAST}|1`,
+        `TPE|${MIDDLE_EAST}|12`,
+        `TPE|${NORTH_AMERICA}|12`,
+        `TPE|${OCEANIA}|1`,
+      ]);
+    });
+
+    it("sends nonstop-only TPE North America, Europe and Oceania queries on the long2 key, 8 a day in total", async () => {
+      const calls = stubSerpApi(answers);
+      await sync();
+      expect(long2Calls(calls)).toHaveLength(8);
+      const nonstop = calls.filter((c) => c.params.get("stops") === "1");
+      expect(nonstop.map((c) => `${c.key}|${label(c)}`).sort()).toEqual([
+        `long2-key|TPE|${EUROPE}|-`,
+        `long2-key|TPE|${NORTH_AMERICA}|-`,
+        `long2-key|TPE|${OCEANIA}|-`,
+      ]);
+    });
+
+    it("reaches every long-haul city with at least 3 queries, and Canada's with 4", async () => {
+      const longhaul = DESTINATION_CATALOG.filter((d) => d.region === "longhaul");
+      const AREA_SUBREGION: Record<string, string> = {
+        [EUROPE]: "europe",
+        [NORTH_AMERICA]: "north_america",
+        [OCEANIA]: "oceania",
+        [MIDDLE_EAST]: "middle_east_islands",
+      };
+      // Each area query prices every city of its area on a date of its own: the unscoped answer in
+      // December (so its month queries pick January and February), Canada's on 3 December.
+      stubSerpApi((c) => {
+        const inArea =
+          c.arrival === CANADA
+            ? longhaul.filter((d) => d.countryCode === "CA")
+            : longhaul.filter((d) => d.subRegion === AREA_SUBREGION[c.arrival ?? ""]);
+        const out =
+          c.month !== null
+            ? dateInMonth(Number(c.month))
+            : c.arrival === CANADA
+              ? "2026-12-03"
+              : "2026-12-01";
+        return inArea.map((d) => ({ dest: d.airport, price: 20000, out }));
+      });
+      await sync();
+
+      const fares = new Map<string, number>();
+      for (const item of (await board()).items) {
+        fares.set(item.dest, (fares.get(item.dest) ?? 0) + 1);
+      }
+      expect(longhaul.length).toBeGreaterThan(0);
+      for (const d of longhaul) {
+        expect([d.airport, fares.get(d.airport)]).toEqual([
+          d.airport,
+          d.countryCode === "CA" ? 4 : 3,
+        ]);
+      }
+    });
+
     it("sends the same long-haul queries on every day of the week", async () => {
       const labelsOn = async (now: number) => {
         const calls = stubSerpApi(answers);
         await sync(EXPLORE_KEYS, now);
         vi.unstubAllGlobals();
-        return longCalls(calls).map(label).sort();
+        return [...longCalls(calls), ...long2Calls(calls)]
+          .map((c) => `${c.key}|${label(c)}`)
+          .sort();
       };
       const first = await labelsOn(clock.now);
       for (let day = 1; day < 7; day += 1) {
         expect(await labelsOn(clock.now + day * 86_400_000)).toEqual(first);
       }
-      expect(first).toHaveLength(6);
+      expect(first).toHaveLength(16);
     });
 
-    it("never scopes a month query to the current month, even when it holds the cheapest fare", async () => {
+    it("breaks a tie on the fewest cities with the earlier month, and never picks the current month or one past Explore's window", async () => {
       const calls = stubSerpApi((c) =>
         c.arrival === EUROPE && c.month === null
-          ? [
-              { dest: "FCO", price: 1000, out: "2026-11-25" },
-              { dest: "LHR", price: 30000, out: dateInMonth(1) },
-            ]
+          ? answerByMonth({
+              11: [], // fewest of all, but the run's own month
+              12: ["LHR"], // tied with Jan, and earlier
+              1: ["CDG"],
+              2: ["LHR", "CDG"],
+              3: ["LHR", "CDG"],
+              4: ["LHR", "CDG"],
+              // 5: none, but past the window
+            })
           : [],
       );
       await sync();
-      expect(monthCall(calls, EUROPE)?.month).toBe("1");
+      expect(monthCall(calls, EUROPE)?.month).toBe("12");
     });
 
     it.each([
       ["fails", () => new Response("down", { status: 503 })],
       ["is empty", () => []],
-      ["has only current-month fares", () => [{ dest: "FCO", price: 9000, out: "2026-11-25" }]],
-    ])("skips a month query when its unscoped answer %s", async (_, answer) => {
-      const calls = stubSerpApi((c) => (c.arrival === EUROPE ? answer() : []));
-      await sync();
-      expect(monthCall(calls, EUROPE)).toBeUndefined();
-      expect(longCalls(calls)).toHaveLength(4); // North America's month query is skipped too
-    });
+    ])(
+      "still sends a month query, on the earliest upcoming month, when its unscoped answer %s",
+      async (_, answer) => {
+        const calls = stubSerpApi((c) => (c.arrival === EUROPE ? answer() : []));
+        await sync();
+        expect(monthCall(calls, EUROPE)?.month).toBe("12");
+        expect(longCalls(calls)).toHaveLength(8);
+        expect(long2Calls(calls).find((c) => c.arrival === EUROPE)?.month).toBe("1");
+      },
+    );
 
     it("puts Istanbul and Dubai from one Middle East answer on the board", async () => {
       stubSerpApi((c) =>
@@ -387,6 +508,61 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         "LHR:2026-12-10:30000",
       ]);
     });
+
+    describe("Nonstop Fares (ADR 0016, decision 7)", () => {
+      const nonstopQuery = (c: ExploreCall) => c.params.get("stops") === "1";
+      const fares = async () =>
+        (await board()).items
+          .map((i) => `${i.dest}:${i.outDate}:${i.priceTwd}:${String(i.transfers)}`)
+          .sort();
+
+      it("admits a nonstop fare at +19% over its city's cheapest fare that day and drops one at +21%", async () => {
+        // New York is one city: JFK's 1-stop NT$20,000 is its cheapest, so EWR's nonstop fares count against it.
+        stubSerpApi((c) => {
+          if (c.arrival !== NORTH_AMERICA || c.month !== null) return [];
+          return nonstopQuery(c)
+            ? [
+                { dest: "EWR", price: 23800, out: "2026-12-12" }, // +19%: admitted
+                { dest: "EWR", price: 24200, out: "2026-12-14" }, // +21%: dropped
+              ]
+            : [{ dest: "JFK", price: 20000, out: OUT, stops: 1 }];
+        });
+        await sync();
+        expect(await fares()).toEqual(["EWR:2026-12-12:23800:0", "JFK:2026-12-05:20000:1"]);
+      });
+
+      it("keeps a nonstop fare beside a cheaper connecting fare on the same date, scored on the same Baseline", async () => {
+        await env.DB.prepare("DELETE FROM flight_baselines").run();
+        await env.DB.prepare(
+          "INSERT INTO flight_baselines (origin, destination, typical_low_twd, typical_high_twd, fetched_at) VALUES ('TPE','SEA',20000,40000,?)",
+        )
+          .bind(clock.now)
+          .run();
+        stubSerpApi((c) => {
+          if (c.arrival !== NORTH_AMERICA || c.month !== null) return [];
+          return nonstopQuery(c)
+            ? [{ dest: "SEA", price: 22654, out: OUT }]
+            : [{ dest: "SEA", price: 21924, out: OUT, stops: 1 }];
+        });
+        await sync();
+        const { items } = await board();
+        await env.DB.prepare("DELETE FROM flight_baselines").run();
+        expect(
+          items.map((i) => `${i.dest}:${i.outDate}:${i.priceTwd}:${String(i.transfers)}`).sort(),
+        ).toEqual(["SEA:2026-12-05:21924:1", "SEA:2026-12-05:22654:0"]);
+        // round((40000 - price) / 40000 * 100)
+        expect(items.map((i) => i.discountPct).sort()).toEqual([43, 45]);
+        expect(new Set(items.map((i) => i.id)).size).toBe(2);
+      });
+
+      it("shows a nonstop fare once when a connecting query already priced the same nonstop fare", async () => {
+        stubSerpApi((c) =>
+          c.arrival === EUROPE && c.month === null ? [{ dest: "LHR", price: 30000, out: OUT }] : [],
+        );
+        await sync();
+        expect(await fares()).toEqual(["LHR:2026-12-05:30000:0"]);
+      });
+    });
   });
 
   it("admits every in-catalog round-trip fare from tomorrow to 6 months out under 3 stops, whatever its discount", async () => {
@@ -415,13 +591,12 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     expect(nrt?.inDate).toBe(addDaysIso(OUT, 5));
   });
 
-  it("covers TPE, KHH and every long-haul region in one board, leaving out a TSA fare with no Baseline", async () => {
+  it("covers TPE, KHH and every long-haul region in one board", async () => {
     stubSerpApi((c) => {
       if (c.arrival === "/m/02j9z") return [{ dest: "LHR", price: 25000, out: OUT }];
       if (c.arrival === "/m/059g4") return [{ dest: "LAX", price: 22000, out: OUT }];
       if (c.arrival === "/m/05nrg") return [{ dest: "SYD", price: 18000, out: OUT }];
       if (c.departure === "KHH") return [{ dest: "KIX", price: 6000, out: OUT }];
-      if (c.departure === "TSA") return [{ dest: "HND", price: 7000, out: OUT }];
       return c.month === null ? [{ dest: "NRT", price: 8000, out: OUT }] : [];
     });
     await sync();
@@ -485,6 +660,27 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     expect(new Set(items.map((i) => i.region))).toEqual(new Set(["longhaul"]));
     // no Baseline, so no discount, but every fare is still served
     expect(items.every((i) => i.discountPct === 0)).toBe(true);
+  });
+
+  it("puts fares to the nonstop-catalog airports (#220) on the board as long-haul fares", async () => {
+    const answers: Record<string, string[]> = {
+      "/m/059g4": [
+        ...["EWR", "KOA", "SLC", "AUS", "SAT", "MSP", "PHL", "BNA", "PIT", "FLL"],
+        ...["MSY", "DTW", "TPA", "STL", "YOW", "YHZ", "YWG", "YEG"],
+      ],
+      "/m/02j9z": ["NAP", "KRK", "GLA", "HAM", "MLA"],
+      "/m/05nrg": ["GUM", "ROR", "SPN"],
+    };
+    stubSerpApi((c) =>
+      // only the unscoped area queries answer (never a nonstop-only one), so each airport has one fare
+      c.month === null && c.arrival !== null && c.params.get("stops") !== "1"
+        ? (answers[c.arrival] ?? []).map((dest) => ({ dest, price: 20000, out: OUT }))
+        : [],
+    );
+    await sync();
+    const { items } = await board();
+    expect(items.map((i) => i.dest).sort()).toEqual(Object.values(answers).flat().sort());
+    expect(new Set(items.map((i) => i.region))).toEqual(new Set(["longhaul"]));
   });
 
   it("replaces yesterday's fares on a completed run, even when today has none", async () => {
@@ -557,7 +753,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
   });
 
   describe("one SerpApi key per role (ADR 0014)", () => {
-    const SECRETS = /baseline-key|short-key|long-key/;
+    const SECRETS = /baseline-key|short-key|long-key|long2-key/;
     const captureLogs = () => {
       const logged: string[] = [];
       for (const level of ["info", "warn", "error", "log"] as const) {
@@ -567,7 +763,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       }
       return logged;
     };
-    const LONG_AREAS = ["/m/02j9z", "/m/059g4", "/m/05nrg", "/m/04wsz"];
+    const LONG_AREAS = ["/m/02j9z", "/m/059g4", "/m/05nrg", "/m/04wsz", "/m/0d060g"];
     /** Short-haul fares answer KIX from KHH; long-haul areas answer LHR from Europe only. */
     const bothRoles = (c: ExploreCall) =>
       c.arrival === "/m/02j9z"
@@ -582,11 +778,14 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync(ALL_KEYS);
 
       const explore = calls.filter((c) => c.engine === "google_travel_explore");
-      expect(explore).toHaveLength(13); // 8 short + 4 long + Europe's month query (the fake answers LHR)
+      expect(explore).toHaveLength(24); // 8 short + 8 long + 8 long2
       for (const c of explore) {
-        expect(c.key).toBe(LONG_AREAS.includes(c.arrival ?? "") ? "long-key" : "short-key");
+        expect(c.key).toMatch(
+          LONG_AREAS.includes(c.arrival ?? "") ? /^long2?-key$/ : /^short-key$/,
+        );
       }
-      expect(explore.filter((c) => c.key === "long-key")).toHaveLength(5);
+      expect(explore.filter((c) => c.key === "long-key")).toHaveLength(8);
+      expect(explore.filter((c) => c.key === "long2-key")).toHaveLength(8);
       expect(explore.filter((c) => c.key === "short-key")).toHaveLength(8);
       const baseline = calls.filter((c) => c.engine === "google_flights");
       expect(baseline.length).toBeGreaterThan(0);
@@ -605,7 +804,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync(EXPLORE_KEYS, clock.now + 3_600_000);
 
       expect(calls.filter((c) => c.key === "short-key")).toHaveLength(1); // not asked again
-      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(5);
+      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(8);
       expect(await dests()).toEqual(["LHR"]);
       expect(logged.some((line) => line.includes("serpapi_key_refused"))).toBe(true);
       expect(logged.join("\n")).not.toMatch(SECRETS);
@@ -620,9 +819,45 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
         await sync();
         expect(calls.filter((c) => c.key === "long-key")).toHaveLength(1);
         expect(calls.filter((c) => c.key === "short-key")).toHaveLength(8);
-        expect(await dests()).toEqual(["KIX"]);
+        expect(calls.filter((c) => c.key === "long2-key")).toHaveLength(8);
+        expect(await dests()).toEqual(["KIX", "LHR"]); // LHR from long2's Europe month query
       },
     );
+
+    it("drops only long2's fares when its key is missing, logging the skipped role and no key", async () => {
+      // short answers KIX, long answers LHR, long2 answers CDG.
+      const byKey = (c: ExploreCall) =>
+        c.key === "long2-key" ? [{ dest: "CDG", price: 22000, out: OUT }] : bothRoles(c);
+      stubSerpApi(byKey);
+      await sync();
+      expect(await dests()).toEqual(["CDG", "KIX", "LHR"]);
+      vi.unstubAllGlobals();
+
+      const logged = captureLogs();
+      const calls = stubSerpApi(byKey);
+      await sync(
+        { SERPAPI_KEY_SHORT: "short-key", SERPAPI_KEY_LONG: "long-key" },
+        clock.now + 3_600_000,
+      );
+      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(8);
+      expect(calls.filter((c) => c.key === "short-key")).toHaveLength(8);
+      expect(await dests()).toEqual(["KIX", "LHR"]);
+      expect(
+        logged.some((line) => line.includes("serpapi_role_skipped") && line.includes("long2")),
+      ).toBe(true);
+      expect(logged.join("\n")).not.toMatch(SECRETS);
+      expect(logged.join("\n")).not.toContain("serpapi.com");
+    });
+
+    it.each([401, 429])("skips only the long2 role when its key answers %i", async (status) => {
+      const calls = stubSerpApi((c) =>
+        c.key === "long2-key" ? Response.json({ error: "no" }, { status }) : bothRoles(c),
+      );
+      await sync();
+      expect(calls.filter((c) => c.key === "long2-key")).toHaveLength(1);
+      expect(calls.filter((c) => c.key === "long-key")).toHaveLength(8);
+      expect(await dests()).toEqual(["KIX", "LHR"]);
+    });
 
     it("skips only a role whose key is missing or blank, logging the role and no key", async () => {
       const logged = captureLogs();
@@ -630,7 +865,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
       await sync({ SERPAPI_KEY_SHORT: "  ", SERPAPI_KEY_LONG: "long-key" });
 
       expect(calls.every((c) => c.key === "long-key")).toBe(true);
-      expect(calls).toHaveLength(5);
+      expect(calls).toHaveLength(8);
       expect(await dests()).toEqual(["LHR"]);
       expect(logged.some((line) => line.includes("serpapi_role_skipped"))).toBe(true);
       expect(logged.join("\n")).not.toMatch(SECRETS);
@@ -644,7 +879,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
 
       const calls = stubSerpApi(() => exhausted());
       await sync(EXPLORE_KEYS, clock.now + 3_600_000);
-      expect(calls.map((c) => c.key)).toEqual(["short-key", "long-key"]); // one ask per role
+      expect(calls.map((c) => c.key)).toEqual(["short-key", "long-key", "long2-key"]); // one ask per role
       expect(await dests()).toEqual(["NRT"]);
 
       await env.DB.prepare("DELETE FROM daily_flights").run();
@@ -708,7 +943,7 @@ describe("SerpApi Explore daily sync through the Worker cron", () => {
     const calls = stubSerpApi(() => []);
     await sync();
     await sync(EXPLORE_KEYS, clock.now + 3_600_000);
-    expect(calls).toHaveLength(24); // twice (8 short-haul + 4 unscoped long-haul)
+    expect(calls).toHaveLength(48); // twice (8 short-haul + 8 long-haul + 8 long2)
   });
 
   it("serves a completed run's fares for 48 hours, then counts them as unavailable (curated fares)", async () => {
@@ -778,6 +1013,15 @@ describe("daily flights API", () => {
     expect(nextDay.isFallback).toBe(false);
   });
 
+  it("admits a TSA fare like any other, with no Deal Signal gate (Songshan is no longer queried)", async () => {
+    const source: FlightSource = {
+      fetchCandidates: () =>
+        Promise.resolve([candidate("tsa", "2026-12-10", { origin: "TSA", dest: "HND" })]),
+    };
+    const collected = await collectDailyFlights(source, clock.now);
+    expect(collected.items).toMatchObject([{ origin: "TSA", dest: "HND", tag: "normal" }]);
+  });
+
   it("serves curated fallback deals when D1 has no digest", async () => {
     const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
     const body = await res.json<DailyFlightsResponse>();
@@ -841,6 +1085,19 @@ describe("daily flights API", () => {
     expect(enLocation).toContain("aairport=HND");
     expect(enLocation).toContain("locale=en-US");
     expect(enLocation).toContain("rdate=2026-12-09");
+    expect(new URL(enLocation ?? "").searchParams.get("nonstoponly")).toBe("off");
+
+    // A Nonstop Fare's link opens Trip.com filtered to nonstop flights.
+    const nonstopRes = await app.request(
+      "https://split.test/api/v1/flights/go?origin=TPE&dest=SEA&outDate=2027-01-12&inDate=2027-01-19&lang=en&nonstopOnly=1",
+      {},
+      env,
+    );
+    expect(nonstopRes.status).toBe(302);
+    const nonstopLocation = new URL(nonstopRes.headers.get("Location") ?? "");
+    expect(nonstopLocation.origin).toBe("https://www.trip.com");
+    expect(nonstopLocation.pathname).toBe("/flights/showfarefirst");
+    expect(nonstopLocation.searchParams.get("nonstoponly")).toBe("on");
 
     const badRes = await app.request(
       "https://split.test/api/v1/flights/go?origin=https://evil.com&dest=NRT&outDate=2026-12-01&inDate=2026-12-06",
@@ -906,7 +1163,7 @@ describe("manual sync SQL", () => {
 
     const collected = await collectDailyFlights(source, cronNow);
     expect(collected.completed).toBe(true);
-    expect(collected.upstreamCalls).toBe(14); // 8 short + 4 long + Europe and North America month queries
+    expect(collected.upstreamCalls).toBe(24); // 8 short + 8 long + 8 long2
     expect(collected.items.map((i) => i.origin).sort()).toEqual(["KHH", "TPE"]);
     const sql = formatDailyFlightsSyncSql(collected.rows, {
       digestDate: collected.digestDate,

@@ -14,7 +14,7 @@ import { useDeps } from "../app/AppProviders.js";
 import { t } from "../i18n/messages.js";
 
 /** Builds our stateless same-origin redirect path to localized booking search results. */
-export function tripGoHref(item: DailyFlightItem, lang: Language): string {
+export function tripGoHref(item: DailyFlightItem, lang: Language, nonstopOnly = false): string {
   const params = new URLSearchParams({
     origin: item.origin,
     dest: item.dest,
@@ -22,6 +22,7 @@ export function tripGoHref(item: DailyFlightItem, lang: Language): string {
     inDate: item.inDate,
     lang,
   });
+  if (nonstopOnly) params.set("nonstopOnly", "1");
   return `/api/v1/flights/go?${params.toString()}`;
 }
 
@@ -54,6 +55,7 @@ export function FlightBookAnchor({
   ariaLabel,
   affiliate,
   tabIndex,
+  nonstopOnly = false,
   children,
 }: {
   item: DailyFlightItem;
@@ -63,10 +65,12 @@ export function FlightBookAnchor({
   /** Public affiliate parameters from the daily payload, for the direct URL inside LINE. */
   affiliate?: TripComAffiliateConfig | undefined;
   tabIndex?: number | undefined;
+  /** A Nonstop Fare's link: Trip.com opens filtered to nonstop flights. */
+  nonstopOnly?: boolean;
   children?: ReactNode;
 }) {
   const { line } = useDeps();
-  const href = tripGoHref(item, lang);
+  const href = tripGoHref(item, lang, nonstopOnly);
 
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     if (!line.isInClient()) return;
@@ -80,7 +84,7 @@ export function FlightBookAnchor({
     const target =
       affiliate === undefined
         ? new URL(href, window.location.origin).toString()
-        : buildTripComUrl({ ...item, lang }, affiliate);
+        : buildTripComUrl({ ...item, lang, nonstopOnly }, affiliate);
     void line.openExternal(target).catch(() => {
       window.open(href, "_blank", "noopener,noreferrer");
     });

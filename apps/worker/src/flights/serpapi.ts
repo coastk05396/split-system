@@ -1,4 +1,4 @@
-import { parseExploreAirlines, type FlightOrigin } from "@split/shared/flights";
+import { getDestinationMeta, parseExploreAirlines, type FlightOrigin } from "@split/shared/flights";
 import { z } from "zod";
 import type { FlightCandidate, FlightSource } from "./pipeline.js";
 
@@ -9,9 +9,10 @@ const NORTH_AMERICA = "/m/059g4";
 const OCEANIA = "/m/05nrg";
 /** West Asia (Turkey, the Gulf, Egypt, Jordan) as one Explore area, verified live (ADR 0014). */
 const MIDDLE_EAST = "/m/04wsz";
-/** Country Knowledge Graph ids (ADR 0014), verified live. */
+/** Country Knowledge Graph ids (ADR 0014, 0016), verified live. */
 const JAPAN = "/m/03_3d";
 const SOUTH_KOREA = "/m/06qd3";
+const CANADA = "/m/0d060g";
 const QUERY_TIMEOUT_MS = 20_000;
 /** HTTP statuses that mean a role's key is spent or refused: that role is skipped for the run. */
 const KEY_REFUSED_STATUSES: ReadonlySet<number> = new Set([401, 403, 429]);
@@ -25,42 +26,56 @@ export type FetchFn = (
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /** Which Worker secret pays for a request (ADR 0014): roles never borrow each other's key. */
-export type SerpApiRole = "baseline" | "short" | "long";
+export type SerpApiRole = "baseline" | "short" | "long" | "long2";
 
 export interface SerpApiKeys {
   SERPAPI_KEY_BASELINE?: string;
   SERPAPI_KEY_SHORT?: string;
   SERPAPI_KEY_LONG?: string;
+  SERPAPI_KEY_LONG2?: string;
 }
 
 const ROLE_KEY_VARIABLE: Record<SerpApiRole, keyof SerpApiKeys> = {
   baseline: "SERPAPI_KEY_BASELINE",
   short: "SERPAPI_KEY_SHORT",
   long: "SERPAPI_KEY_LONG",
+  long2: "SERPAPI_KEY_LONG2",
 };
 
-/** One `google_travel_explore` request: where from, which continent, and optionally one calendar month (1-12). */
+/**
+ * One `google_travel_explore` request: where from, which continent, optionally one calendar month (1-12),
+ * and whether it asks for nonstop fares only (Nonstop Fares, ADR 0016).
+ */
 export interface ExploreQuery {
   origin: FlightOrigin;
   arrivalAreaId?: string;
   month?: number;
+  nonstopOnly?: boolean;
 }
 
-/** Europe, North America, Oceania and the Middle East are paid for by the long-haul key; everything else by the short-haul one. */
-const LONG_HAUL_AREAS: ReadonlySet<string> = new Set([EUROPE, NORTH_AMERICA, OCEANIA, MIDDLE_EAST]);
+/**
+ * Europe, North America, Oceania, the Middle East and Canada are paid for by the long-haul key (the
+ * long2 key's queries name their role); everything else by the short-haul one.
+ */
+const LONG_HAUL_AREAS: ReadonlySet<string> = new Set([
+  EUROPE,
+  NORTH_AMERICA,
+  OCEANIA,
+  MIDDLE_EAST,
+  CANADA,
+]);
 const exploreRole = (query: ExploreQuery): SerpApiRole =>
   query.arrivalAreaId !== undefined && LONG_HAUL_AREAS.has(query.arrivalAreaId) ? "long" : "short";
 
 /**
- * The daily Explore queries whose answers do not depend on another (ADR 0013, 0014): Asia from `TPE`,
- * `KHH` and `TSA`, Japan from `TPE` and `KHH`, South Korea from `KHH` (short-haul key, 6 of its 8), and
- * Europe, North America, Oceania and the Middle East from `TPE` (long-haul key, 4 of its 6). The
- * month-scoped queries follow, once their paired answer has named a month.
+ * The daily Explore queries whose answers do not depend on another (ADR 0013, 0014, 0016): Asia from
+ * `TPE` and `KHH`, Japan from `TPE` and `KHH`, South Korea from `KHH` (short-haul key, 5 of its 8), and
+ * Europe, North America, Oceania, the Middle East and Canada from `TPE` (long-haul key, 5 of its 8).
+ * Songshan (`TSA`) is never queried. The month-scoped queries follow, once their paired answer is in.
  */
 const BASE_QUERIES: readonly ExploreQuery[] = [
   { origin: "TPE" },
   { origin: "KHH" },
-  { origin: "TSA" },
   { origin: "TPE", arrivalAreaId: JAPAN },
   { origin: "KHH", arrivalAreaId: JAPAN },
   { origin: "KHH", arrivalAreaId: SOUTH_KOREA },
@@ -68,25 +83,31 @@ const BASE_QUERIES: readonly ExploreQuery[] = [
   { origin: "TPE", arrivalAreaId: NORTH_AMERICA },
   { origin: "TPE", arrivalAreaId: OCEANIA },
   { origin: "TPE", arrivalAreaId: MIDDLE_EAST },
+  { origin: "TPE", arrivalAreaId: CANADA },
 ];
 
-/** The `slot`-th rotating upcoming calendar month (1-12) of the day, never the current month. */
-function rotatingMonth(digestDate: string, slot: number): number {
+/**
+ * The upcoming calendar months (1-12) inside Explore's window, never the current one, ordered by how few
+ * cities `fares` prices in each (ADR 0016, decision 6); a tie keeps the earlier month. A failed or empty
+ * answer counts 0 everywhere, so the earliest months come first.
+ */
+function monthsByFewestCities(
+  fares: readonly FlightCandidate[],
+  digestDate: string,
+): [number, number, ...number[]] {
   const [year, month] = digestDate.split("-").map(Number) as [number, number];
-  const dayIndex = Math.floor(Date.parse(`${digestDate}T00:00:00Z`) / 86_400_000);
-  const offset = 1 + ((dayIndex + slot) % MONTH_POOL_SIZE);
-  return new Date(Date.UTC(year, month - 1 + offset, 1)).getUTCMonth() + 1;
-}
-
-/** The calendar month of the cheapest fare departing outside the current month, or `null` when there is none. */
-function cheapestMonth(fares: readonly FlightCandidate[], digestDate: string): number | null {
-  const current = digestDate.slice(0, 7);
-  let best: FlightCandidate | undefined;
+  // `YYYY-MM` of next month onwards (Date.UTC's month is 0-based, so `month + i` is i+1 months ahead).
+  const upcoming = Array.from({ length: MONTH_POOL_SIZE }, (_, i) =>
+    new Date(Date.UTC(year, month + i, 1)).toISOString().slice(0, 7),
+  );
+  const cities = new Map(upcoming.map((ym) => [ym, new Set<string>()]));
   for (const fare of fares) {
-    if (fare.outDate.startsWith(current)) continue;
-    if (best === undefined || fare.priceTwd < best.priceTwd) best = fare;
+    cities.get(fare.outDate.slice(0, 7))?.add(getDestinationMeta(fare.dest)?.cityCode ?? fare.dest);
   }
-  return best === undefined ? null : Number(best.outDate.slice(5, 7));
+  // `sort` is stable: equal counts keep `upcoming`'s chronological order.
+  return upcoming
+    .sort((a, b) => (cities.get(a)?.size ?? 0) - (cities.get(b)?.size ?? 0))
+    .map((ym) => Number(ym.slice(5, 7))) as [number, number, ...number[]]; // MONTH_POOL_SIZE >= 2
 }
 
 const exploreDestinationSchema = z.object({
@@ -171,9 +192,11 @@ export function createSerpApiClient(env: SerpApiKeys, upstreamFetch: FetchFn) {
 export type SerpApiClient = ReturnType<typeof createSerpApiClient>;
 
 /**
- * Production source backed by SerpApi `google_travel_explore` (ADR 0013, 0014). Short-haul queries use
- * the short key and Europe, North America, Oceania and the Middle East the long key. Queries run one after another
- * (a month-scoped one waits for its paired answer); a failed query, or one whose role is skipped, is left out.
+ * Production source backed by SerpApi `google_travel_explore` (ADR 0013, 0014, 0016). Short-haul queries
+ * use the short key; Europe, North America, Oceania, the Middle East and Canada the long key, with the
+ * long2 key paying for the second long-haul month queries and the nonstop-only ones. Queries run one
+ * after another (a month-scoped one waits for its paired answer); a failed query, or one whose role is
+ * skipped, is left out.
  */
 export function serpApiFlightSource(
   env: SerpApiKeys,
@@ -192,14 +215,21 @@ export function serpApiFlightSource(
       const candidates: FlightCandidate[] = [];
 
       // One Explore query; its fares join `candidates`. `null` when it failed or its role is skipped.
-      const run = async (query: ExploreQuery): Promise<FlightCandidate[] | null> => {
+      const run = async (
+        query: ExploreQuery,
+        role: SerpApiRole = exploreRole(query),
+      ): Promise<FlightCandidate[] | null> => {
         const parsed = exploreResponseSchema.safeParse(
-          await client.get(exploreRole(query), {
+          await client.get(role, {
             engine: "google_travel_explore",
             departure_id: query.origin,
             type: "1",
             ...(query.arrivalAreaId === undefined ? {} : { arrival_area_id: query.arrivalAreaId }),
-            ...(query.month === undefined ? {} : { month: String(query.month) }),
+            // Explore answers `stops` with `month` with empty results (probed 2026-11-26), so a month
+            // query relies on admission's 3-stop guard; else nonstop only or at most 2 stops (ADR 0016).
+            ...(query.month === undefined
+              ? { stops: query.nonstopOnly === true ? "1" : "3" }
+              : { month: String(query.month) }),
             currency: "TWD",
             hl: "en",
             gl: "tw",
@@ -208,12 +238,15 @@ export function serpApiFlightSource(
         if (!parsed.success) return null;
         answered += 1;
         const fares: FlightCandidate[] = [];
+        const nonstopOnly = query.nonstopOnly === true;
+        // A nonstop-query fare can sit beside a connecting fare on the same date: its own id.
+        const idSuffix = nonstopOnly ? "-nonstop" : "";
         for (const raw of parsed.data.destinations ?? []) {
           const row = exploreDestinationSchema.safeParse(raw);
           const dest = row.success ? row.data.destination_airport?.code.toUpperCase() : undefined;
           if (!row.success || dest === undefined) continue;
           fares.push({
-            id: `${digestDate}-${query.origin}-${dest}-${row.data.start_date}`.toLowerCase(),
+            id: `${digestDate}-${query.origin}-${dest}-${row.data.start_date}${idSuffix}`.toLowerCase(),
             origin: query.origin,
             dest,
             outDate: row.data.start_date,
@@ -221,6 +254,7 @@ export function serpApiFlightSource(
             priceTwd: Math.round(row.data.flight_price),
             airlines: parseExploreAirlines(row.data.airline_code, row.data.airline),
             transfers: row.data.number_of_stops ?? 0,
+            nonstopOnly,
           });
         }
         candidates.push(...fares);
@@ -231,24 +265,33 @@ export function serpApiFlightSource(
       for (const query of BASE_QUERIES) {
         answers.set(`${query.origin}|${query.arrivalAreaId ?? ""}`, await run(query));
       }
-      // Japan: the cheapest month of today's unscoped TPE answer. Korea returns nothing from TPE
-      // without a month: the cheapest month of the KHH Korea answer.
-      const monthOf = (key: string, slot: number): number =>
-        cheapestMonth(answers.get(key) ?? [], digestDate) ?? rotatingMonth(digestDate, slot);
-      await run({
-        origin: "TPE",
-        arrivalAreaId: JAPAN,
-        month: monthOf(`TPE|${JAPAN}`, 0),
-      });
+      // Each month query takes the months its paired unscoped answer covered least, and runs even when
+      // that answer failed. TPE Korea reads the KHH Korea answer.
+      const monthsOf = (key: string) => monthsByFewestCities(answers.get(key) ?? [], digestDate);
+      const [asiaA, asiaB] = monthsOf("TPE|");
+      await run({ origin: "TPE", month: asiaA });
+      await run({ origin: "TPE", month: asiaB });
       await run({
         origin: "TPE",
         arrivalAreaId: SOUTH_KOREA,
-        month: monthOf(`KHH|${SOUTH_KOREA}`, 1),
+        month: monthsOf(`KHH|${SOUTH_KOREA}`)[0],
       });
-      // Europe and North America: the cheapest month of today's unscoped answer, or no query at all.
-      for (const area of [EUROPE, NORTH_AMERICA]) {
-        const month = cheapestMonth(answers.get(`TPE|${area}`) ?? [], digestDate);
-        if (month !== null) await run({ origin: "TPE", arrivalAreaId: area, month });
+      // Long-haul: month 1 on the long key; month 2, and both Middle East months, on the long2 key.
+      const longMonths = [EUROPE, NORTH_AMERICA, OCEANIA].map(
+        (area) => [area, monthsOf(`TPE|${area}`)] as const,
+      );
+      for (const [area, [month1]] of longMonths) {
+        await run({ origin: "TPE", arrivalAreaId: area, month: month1 });
+      }
+      for (const [area, [, month2]] of longMonths) {
+        await run({ origin: "TPE", arrivalAreaId: area, month: month2 }, "long2");
+      }
+      for (const month of monthsOf(`TPE|${MIDDLE_EAST}`).slice(0, 2)) {
+        await run({ origin: "TPE", arrivalAreaId: MIDDLE_EAST, month }, "long2");
+      }
+      // Nonstop Fares (ADR 0016, decision 5): long2's last 3 queries.
+      for (const area of [NORTH_AMERICA, EUROPE, OCEANIA]) {
+        await run({ origin: "TPE", arrivalAreaId: area, nonstopOnly: true }, "long2");
       }
       upstreamCalls = client.calls();
       return candidates;

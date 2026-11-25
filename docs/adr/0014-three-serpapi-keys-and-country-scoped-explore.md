@@ -22,3 +22,7 @@ The board under-covered Japan, Korea and the long-haul areas, and showed expensi
 - A run where one role's key is refused still replaces the whole board, so that role's fares disappear that day; the long-haul key runs near 180 of its 250 monthly searches to leave room.
 - Quota assumes 250 searches a month per free key (ADR 0013).
 - Southeast Asia has no country queries: the Asia query already returns about 15 of its airports.
+
+## Amendments (2026-11-25)
+
+- Decisions 2, 3, 4 and 6 are amended by ADR 0016: no `TSA` query or gate, `stops=3` on every query, a fourth key for nonstop and extra month queries, and months chosen by the fewest cities. The "Southeast Asia 4-5" consequence was a miscount: these queries give it 2-3.

@@ -1462,3 +1462,19 @@ body::before {
     transform: none;
   }
 }
+
+/* Desktop: City Cards in a row share the taller one's height (a Nonstop Fare line adds one), except
+   beside an open card, which would leave its neighbour a tall empty box. */
+@media (min-width: 48rem) {
+  .flight-city-grid > li {
+    display: flex;
+    flex-direction: column;
+  }
+  .flight-city-grid > li > .flight-card {
+    flex: 1;
+  }
+  .flight-city-grid > li:nth-child(odd):has(+ li > .flight-card[data-open]),
+  .flight-city-grid > li:nth-child(odd):has(> .flight-card[data-open]) + li {
+    align-self: start;
+  }
+}

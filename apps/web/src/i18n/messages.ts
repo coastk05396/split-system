@@ -548,7 +548,7 @@ const zhTW = {
   "flights.area.sea": "東南亞",
   "flights.area.europe": "歐洲",
   "flights.area.na": "美加",
-  "flights.area.anz": "紐澳",
+  "flights.area.anz": "大洋洲",
   "flights.area.me": "中東",
   "flights.betaBadge": "BETA",
   "flights.region.all": "全部",
