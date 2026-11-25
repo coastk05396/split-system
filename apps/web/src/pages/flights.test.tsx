@@ -51,7 +51,7 @@ const SAMPLE_FLIGHTS: DailyFlightItem[] = [
   }),
   fare("hnd-a", {
     dest: "HND",
-    origin: "TSA",
+    origin: "TPE",
     priceTwd: 6200,
     outDate: "2027-03-05",
     inDate: "2027-03-09",
@@ -176,7 +176,7 @@ describe("daily flights page", () => {
     const rows = rowsOf(nrt);
     expect(rows.map((r) => r.getAttribute("href"))).toEqual([
       "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2026-12-10&inDate=2026-12-14&lang=zh-TW",
-      "/api/v1/flights/go?origin=TSA&dest=HND&outDate=2027-03-05&inDate=2027-03-09&lang=zh-TW",
+      "/api/v1/flights/go?origin=TPE&dest=HND&outDate=2027-03-05&inDate=2027-03-09&lang=zh-TW",
       "/api/v1/flights/go?origin=KHH&dest=NRT&outDate=2027-02-03&inDate=2027-02-07&lang=zh-TW",
       "/api/v1/flights/go?origin=TPE&dest=NRT&outDate=2027-01-12&inDate=2027-01-16&lang=zh-TW",
     ]);
@@ -184,7 +184,7 @@ describe("daily flights page", () => {
     expect(rows[0]).toHaveTextContent("桃園出發 · 樂桃航空 · 直飛");
     expect(rows[0]).toHaveTextContent("NT$5,680");
     expect(rows[1]).toHaveTextContent("03/05–03/09");
-    expect(rows[1]).toHaveTextContent("松山出發 · 中華航空 · 直飛");
+    expect(rows[1]).toHaveTextContent("桃園出發 · 中華航空 · 直飛");
     expect(rows[2]).toHaveTextContent("高雄出發 · 台灣虎航 · 轉 1");
     expect(rows[3]).toHaveTextContent("01/12–01/16");
     expect(rows[3]).toHaveTextContent("桃園出發");
@@ -425,7 +425,7 @@ describe("daily flights page", () => {
       within(origins)
         .getAllByRole("button")
         .map((b) => b.textContent.replace(/\d+$/, "")),
-    ).toEqual(["全部", "桃園 TPE", "松山 TSA", "高雄 KHH"]);
+    ).toEqual(["全部", "桃園 TPE", "高雄 KHH"]);
     expect(within(dialog).queryByText(/RMQ|TNN|台中|台南/)).toBeNull();
   });
 
@@ -1102,7 +1102,6 @@ describe("daily flights page", () => {
     expect(origins.map((b) => b.textContent.replace(/\d+$/, ""))).toEqual([
       "全部",
       "桃園 TPE",
-      "松山 TSA",
       "高雄 KHH",
     ]);
     const chip = within(dialog).getByRole("button", { name: /^桃園 TPE/ });

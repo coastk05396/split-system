@@ -1013,15 +1013,6 @@ describe("daily flights API", () => {
     expect(nextDay.isFallback).toBe(false);
   });
 
-  it("admits a TSA fare like any other, with no Deal Signal gate (Songshan is no longer queried)", async () => {
-    const source: FlightSource = {
-      fetchCandidates: () =>
-        Promise.resolve([candidate("tsa", "2026-12-10", { origin: "TSA", dest: "HND" })]),
-    };
-    const collected = await collectDailyFlights(source, clock.now);
-    expect(collected.items).toMatchObject([{ origin: "TSA", dest: "HND", tag: "normal" }]);
-  });
-
   it("serves curated fallback deals when D1 has no digest", async () => {
     const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
     const body = await res.json<DailyFlightsResponse>();
@@ -1076,7 +1067,7 @@ describe("daily flights API", () => {
     expect(zhLocation).toContain("trip_sub3=333");
 
     const enRes = await app.request(
-      "https://split.test/api/v1/flights/go?origin=TSA&dest=HND&outDate=2026-12-05&inDate=2026-12-09&lang=en",
+      "https://split.test/api/v1/flights/go?origin=KHH&dest=HND&outDate=2026-12-05&inDate=2026-12-09&lang=en",
       {},
       env,
     );
@@ -1085,7 +1076,7 @@ describe("daily flights API", () => {
     const enLocationUrl = new URL(enLocation ?? "");
     expect(enLocationUrl.origin).toBe("https://www.trip.com");
     expect(enLocationUrl.pathname).toBe("/flights/showfarefirst");
-    expect(enLocation).toContain("dairport=TSA");
+    expect(enLocation).toContain("dcity=khh");
     expect(enLocation).toContain("aairport=HND");
     expect(enLocation).toContain("locale=en-US");
     expect(enLocation).toContain("rdate=2026-12-09");
