@@ -1,5 +1,5 @@
-// `pnpm e2e` deletes its local D1 state before Playwright checks ports, so check them first:
-// a second run (any worktree) or a `pnpm dev` on 8787 would otherwise lose its database mid-run.
+// Run by e2e/run.sh before it wipes local D1 state: a `pnpm dev` on 8787 would lose nothing but
+// Playwright would only fail later, after a full build; this names the cause at once.
 import { createServer } from "node:net";
 
 const taken = await Promise.all(
