@@ -64,7 +64,8 @@ test.describe("Daily Flights board (desktop)", () => {
     page,
   }) => {
     const href = await page.getByRole("link", { name: /^直飛 NT\$22,654/ }).getAttribute("href");
-    const url = new URL(href ?? "", "http://localhost");
+    const url = new URL(href ?? "", page.url());
+    expect(url.origin).toBe(new URL(page.url()).origin);
     expect(url.pathname).toBe("/api/v1/flights/go");
     expect(Object.fromEntries(url.searchParams)).toEqual({
       origin: "TPE",
