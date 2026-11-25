@@ -1013,6 +1013,24 @@ describe("daily flights API", () => {
     expect(nextDay.isFallback).toBe(false);
   });
 
+  it("leaves out a stored fare from an origin that is no longer served (legacy Songshan rows)", async () => {
+    const now = Date.parse("2026-11-16T00:00:00Z");
+    clock.now = now;
+    const source: FlightSource = {
+      fetchCandidates: () =>
+        Promise.resolve([
+          candidate("a", "2026-11-20"),
+          candidate("b", "2026-12-10", { dest: "KIX" }),
+        ]),
+    };
+    await refreshDailyFlights(createDb(env.DB), source, now);
+    await env.DB.prepare("UPDATE daily_flights SET origin = 'TSA' WHERE id = 'b'").run();
+    const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
+    expect(res.status).toBe(200);
+    const body = await res.json<DailyFlightsResponse>();
+    expect(body.items.map((i) => i.id)).toEqual(["a"]);
+  });
+
   it("serves curated fallback deals when D1 has no digest", async () => {
     const res = await setupApp().request("https://split.test/api/v1/flights/daily", {}, env);
     const body = await res.json<DailyFlightsResponse>();
