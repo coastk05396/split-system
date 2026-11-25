@@ -2,6 +2,11 @@
 
 The production hostname is `https://split.rickchen.si`. Keep staging and production resources separate. This document prepares a release. Creating resources does not deploy the app; merging to `main` deploys production (see Release gate).
 
+## Staging
+
+- Domain: `https://split-stag.rickchen.si` (Cloudflare tunnel `split-stag` to the local `pnpm dev`; Vite `allowedHosts` must list it).
+- Google's authorized redirect URI there is `/google-return` on that domain.
+
 ## Values to collect
 
 | Service | Public identifier or setting | Store privately |

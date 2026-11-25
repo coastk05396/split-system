@@ -4,7 +4,7 @@ Read during code review. Anything a linter or the type checker can catch lives i
 
 ## Tests
 
-- Assert on a URL by parsing it: `new URL(value)`, then check `origin` and `pathname`. A `toMatch` on the path also accepts a relative URL, which a caller that needs an absolute one then rejects.
+- Assert on a URL by parsing it: `new URL(value)`, then check both `origin` and `pathname`. A `toMatch` on the path also accepts a relative URL, which a caller that needs an absolute one then rejects. ESLint rejects a `toContain`/`toMatch` on an absolute URL string; pairing `origin` with `pathname` is the reviewer's check.
 
 ## Logging
 

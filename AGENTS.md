@@ -1,39 +1,18 @@
 # Project guide
 
-## Layout
-
-- `apps/web` (React UI), `apps/worker` (Hono API on Cloudflare), `packages/shared` (code both use). pnpm workspace; run commands from the repository root.
-
-## Run and check
-
-- Start the local app with `pnpm dev`. Open the web UI at `http://localhost:5173`.
-- Before opening a PR that changes `apps/` or `packages/`, run `pnpm typecheck`, `pnpm test`, `pnpm build` and `pnpm e2e` and open it only when all four are green. Lint is left to the pre-commit hook and CI. A docs-only change needs none of them.
-- `pnpm e2e` must not run while `pnpm dev` is running; they use the same local ports.
-
-## Tests
-
+- pnpm workspace (`apps/web`, `apps/worker`, `packages/shared`); run commands from the repository root.
 - Work test-first (`tdd` skill) for new logic and bug fixes: confirm the seams with the user, then one failing test (see it fail for the right reason) → smallest change to pass → repeat.
-- No new test needed for: deleting dead code, pure refactors, docs/comments, styling-only changes. Existing tests must still pass.
 
-## Git, CI and deploys
+## Git and review
 
 - Never push to `main` without the user's approval: a push to `main` deploys production.
-- Put `[skip ci]` in the commit message of a docs-only change. GitHub reads only the newest commit, so a PR that holds code keeps it off its newest commit.
-- One piece of work, one pull request: when it spans several branches (parallel workers, stacked refactors), combine them on one branch and open a single PR.
-
-## Staging
-
-- Domain: `https://split-stag.rickchen.si` (Cloudflare tunnel `split-stag` to the local `pnpm dev`; Vite `allowedHosts` must list it).
-- Google's authorized redirect URI there is `/google-return` on that domain.
-
-## Spec and review
-
-- Record user-visible behaviour and rules in `docs/SPEC.md` in the same change, so code review has a written spec to check against.
-- Another agent reviews in a fresh context, read-only (no file edits, no git writes). The author fixes findings and never signs off on their own change.
-- Review arguments: `origin/main docs/SPEC.md`. The reviewer also applies `CODING_STANDARDS.md`.
+- One piece of work, one pull request: combine parallel or stacked branches on one branch.
+- Record user-visible behaviour and rules in `docs/SPEC.md` in the same change.
+- Another agent reviews in a fresh context against `origin/main`, `docs/SPEC.md` and `CODING_STANDARDS.md`, read-only (no file edits, no git writes); it runs `pnpm typecheck` and the changed packages' tests and reports a failure as a finding. The author fixes findings and never signs off on their own change.
 
 ## Agent skills
 
 - Issue tracker: GitHub issues on `coastk05396/split-system` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 - Triage labels: see `docs/agents/triage-labels.md`.
 - Domain docs: single-context, `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
+- Staging, secrets and releases: `docs/RELEASE.md`.
