@@ -92,15 +92,31 @@ export async function listGroups(db: Db, userId: string): Promise<Group[]> {
     balance: number;
     preview: string;
     merging: number;
-  }>(sql`SELECT d.group_id AS id, d.name, d.settlement_currency AS settlementCurrency,
+  }>(sql`WITH visible AS (
+      SELECT group_id, member_id, role, net_balance
+      FROM group_member_summary
+      WHERE user_id = ${userId}
+      UNION ALL
+      SELECT m.group_id, m.member_id, m.role, m.net_balance
+      FROM merge_cleanups mc
+      JOIN group_member_summary m
+        ON m.group_id = mc.group_id AND m.user_id = mc.other_user_id
+      WHERE mc.kept_user_id = ${userId}
+        AND NOT EXISTS (
+          SELECT 1 FROM group_member_summary m2
+          WHERE m2.group_id = mc.group_id AND m2.user_id = ${userId}
+        )
+      GROUP BY m.group_id
+    )
+    SELECT d.group_id AS id, d.name, d.settlement_currency AS settlementCurrency,
     d.is_trip AS isTrip, d.trip_destination AS tripDestination, d.trip_start_date AS tripStartDate,
     d.trip_end_date AS tripEndDate, d.trip_notes AS tripNotes, d.created_at AS createdAt,
     d.updated_at AS updatedAt, d.settlement_currency_locked AS locked,
     d.member_count AS memberCount, d.member_preview AS preview,
     m.member_id AS memberId, m.role, m.net_balance AS balance,
     EXISTS (SELECT 1 FROM merge_cleanups mc WHERE mc.group_id = d.group_id) AS merging
-    FROM group_directory d JOIN group_member_summary m ON m.group_id=d.group_id
-    WHERE m.user_id=${userId} AND d.deleted=0
+    FROM group_directory d JOIN visible m ON m.group_id=d.group_id
+    WHERE d.deleted=0
     ORDER BY d.created_at DESC, d.group_id DESC`);
   const previewSchema = z.array(
     z.object({ userId: z.string().nullable(), placeholderName: z.string().nullable().optional() }),
@@ -140,7 +156,16 @@ export async function listGroups(db: Db, userId: string): Promise<Group[]> {
 /** Active Groups of a User, the count the 20-Group cap applies to. */
 export async function activeGroupCount(db: Db, userId: string): Promise<number> {
   const [row] = await db.all<{ n: number }>(
-    sql`SELECT count(*) AS n FROM group_member_summary s JOIN group_directory d ON d.group_id=s.group_id WHERE s.user_id=${userId} AND d.deleted=0`,
+    sql`WITH visible AS (
+        SELECT group_id FROM group_member_summary WHERE user_id=${userId}
+        UNION
+        SELECT m.group_id
+        FROM merge_cleanups mc
+        JOIN group_member_summary m
+          ON m.group_id = mc.group_id AND m.user_id = mc.other_user_id
+        WHERE mc.kept_user_id=${userId}
+      )
+      SELECT count(*) AS n FROM visible s JOIN group_directory d ON d.group_id=s.group_id WHERE d.deleted=0`,
   );
   return row?.n ?? 0;
 }

@@ -162,5 +162,4 @@ export interface AccountDeletionValues {
 export interface MergeUserOperation {
   keptUserId: string;
   otherUserId: string;
-  now: number;
 }

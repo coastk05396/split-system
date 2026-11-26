@@ -16,6 +16,26 @@ export interface MemberRow {
   createdAt: number;
 }
 
+function toMemberRow(
+  me: {
+    memberId: string;
+    groupId: string;
+    role: "admin" | "member";
+    netBalance: number;
+  },
+  userId: string,
+): MemberRow {
+  return {
+    id: me.memberId,
+    groupId: me.groupId,
+    userId,
+    role: me.role,
+    status: "active",
+    netBalance: me.netBalance,
+    createdAt: 0,
+  };
+}
+
 /** The signed-in User's active Member row in a Group, or undefined when they are not seated. */
 export async function findMembership(
   db: Db,
@@ -26,22 +46,30 @@ export async function findMembership(
     .select({
       memberId: groupMemberSummary.memberId,
       groupId: groupMemberSummary.groupId,
-      userId: groupMemberSummary.userId,
       role: groupMemberSummary.role,
       netBalance: groupMemberSummary.netBalance,
     })
     .from(groupMemberSummary)
     .where(and(eq(groupMemberSummary.groupId, groupId), eq(groupMemberSummary.userId, userId)));
-  if (me === undefined) return undefined;
-  return {
-    id: me.memberId,
-    groupId: me.groupId,
-    userId: me.userId,
-    role: me.role,
-    status: "active",
-    netBalance: me.netBalance,
-    createdAt: 0,
-  };
+  if (me !== undefined) return toMemberRow(me, userId);
+  const [pending] = await db
+    .select({
+      memberId: groupMemberSummary.memberId,
+      groupId: groupMemberSummary.groupId,
+      role: groupMemberSummary.role,
+      netBalance: groupMemberSummary.netBalance,
+    })
+    .from(groupMemberSummary)
+    .innerJoin(
+      mergeCleanups,
+      and(
+        eq(mergeCleanups.groupId, groupMemberSummary.groupId),
+        eq(mergeCleanups.otherUserId, groupMemberSummary.userId),
+      ),
+    )
+    .where(and(eq(groupMemberSummary.groupId, groupId), eq(mergeCleanups.keptUserId, userId)))
+    .limit(1);
+  return pending === undefined ? undefined : toMemberRow(pending, userId);
 }
 
 /**

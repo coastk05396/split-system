@@ -156,6 +156,7 @@ export function groupRoutes(deps: AppDeps) {
           // VALIDATION_FAILED carries the invalid Trip dates; a missing Group was INTERNAL.
           if (
             error.code === "FORBIDDEN" ||
+            error.code === "GROUP_MERGING" ||
             error.code === "SETTLEMENT_CURRENCY_LOCKED" ||
             error.code === "VALIDATION_FAILED"
           )
@@ -173,7 +174,8 @@ export function groupRoutes(deps: AppDeps) {
       const { rev } = await groupLedger(c.env, me.groupId)
         .delete({ actorMemberId: me.id })
         .catch((error: unknown) => {
-          throw error instanceof ApiError && error.code === "FORBIDDEN"
+          throw error instanceof ApiError &&
+            (error.code === "FORBIDDEN" || error.code === "GROUP_MERGING")
             ? error
             : new ApiError("INTERNAL");
         });

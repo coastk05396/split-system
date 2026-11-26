@@ -69,6 +69,7 @@ export const identities = sqliteTable(
   },
   (t) => [
     uniqueIndex("identities_provider_sub_unique").on(t.provider, t.providerSub),
+    uniqueIndex("identities_user_provider_unique").on(t.userId, t.provider),
     check("identities_provider_check", oneOf(t.provider, PROVIDERS)),
   ],
 );
@@ -126,11 +127,12 @@ export const mergeCleanups = sqliteTable(
     keptUserId: text("kept_user_id").notNull(),
     otherUserId: text("other_user_id").notNull(),
     groupId: text("group_id").notNull(),
-    expiresAt: integer("expires_at").notNull(),
+    nextRetryAt: integer("next_retry_at").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.otherUserId, t.groupId] }),
     index("merge_cleanups_group_idx").on(t.groupId),
+    index("merge_cleanups_retry_idx").on(t.nextRetryAt),
   ],
 );
 
@@ -228,6 +230,16 @@ export const groupReservations = sqliteTable(
       .notNull()
       .default("pending"),
     createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.groupId] })],
+);
+
+/** Ledger-maintained membership index (active and Former Members) for Merge discovery. */
+export const groupMemberships = sqliteTable(
+  "group_memberships",
+  {
+    userId: text("user_id").notNull(),
+    groupId: text("group_id").notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.groupId] })],
 );

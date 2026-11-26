@@ -8,9 +8,15 @@ import {
 import { env } from "cloudflare:workers";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { AccountDeletionOperation } from "../src/ledger-types.js";
+import type {
+  AccountDeletionOperation,
+  CreateGroup,
+  ExpenseOperation,
+  MemberOperation,
+} from "../src/ledger-types.js";
 import { dailyMaintenance, MAINTENANCE_CRON, runScheduled } from "../src/maintenance.js";
 import { bearer, call, clock, json, signIn, uniqueSub, withCookie } from "./auth-harness.js";
+import { failDirectoryWrites } from "./d1-faults.js";
 import {
   createGroup,
   errorCode,
@@ -217,6 +223,42 @@ describe("User Merge on the Link code path", () => {
     );
     expect(confirmRes.status).toBe(409);
     expect(await confirmRes.json()).toEqual({ error: { code: "MERGE_SAME_PROVIDER" } });
+  });
+
+  it("refuses a concurrent confirmation when another Merge already attached the same provider", async () => {
+    const kept = await signIn("line", uniqueSub("line"), "LINE一");
+    const googleSub1 = uniqueSub("google-1");
+    const googleSub2 = uniqueSub("google-2");
+    await signIn("google", googleSub1, "Google一", "g1@example.com");
+    await signIn("google", googleSub2, "Google二", "g2@example.com");
+
+    const redeem1 = await (
+      await redeem(await issueLinkCode(kept.accessToken), googleSub1)
+    ).json<RedeemMergeBody>();
+    const redeem2 = await (
+      await redeem(await issueLinkCode(kept.accessToken), googleSub2)
+    ).json<RedeemMergeBody>();
+    if (!redeem1.merge || !redeem2.merge) throw new Error("expected merge previews");
+
+    const [res1, res2] = await Promise.all([
+      call(
+        "/auth/merge/confirm",
+        json({ mergeId: redeem1.merge.mergeId }, bearer(redeem1.accessToken)),
+      ),
+      call(
+        "/auth/merge/confirm",
+        json({ mergeId: redeem2.merge.mergeId }, bearer(redeem2.accessToken)),
+      ),
+    ]);
+    const statuses = [res1.status, res2.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([200, 409]);
+    const loser = res1.status === 409 ? res1 : res2;
+    expect(await loser.json()).toEqual({ error: { code: "MERGE_SAME_PROVIDER" } });
+
+    const me = await (
+      await call("/me", { headers: bearer(kept.accessToken) })
+    ).json<{ identities: { provider: string }[] }>();
+    expect(me.identities.map((i) => i.provider).sort()).toEqual(["google", "line"]);
   });
 
   it("refuses confirm while either User has a pending account deletion", async () => {
@@ -490,14 +532,6 @@ describe("User Merge on the Link code path", () => {
       expect.objectContaining({ userId: kept.userId, status: "active" }),
     );
 
-    // Durable Merge cleanup record keeps only the unfinished Group.
-    const pendingCleanups = await env.DB.prepare(
-      "SELECT group_id FROM merge_cleanups WHERE other_user_id=?",
-    )
-      .bind(other.userId)
-      .all<{ group_id: string }>();
-    expect(pendingCleanups.results.map((r) => r.group_id)).toEqual([flakyGroup.id]);
-
     // Group list and Group detail show the failing Group as merging.
     const groupsList = await (
       await send(kept, "GET", "/groups")
@@ -575,15 +609,8 @@ describe("User Merge on the Link code path", () => {
     expect(deleteMeWhileMerging.status).toBe(409);
     expect(await errorCode(deleteMeWhileMerging)).toBe("GROUP_MERGING");
 
-    // Next maintenance run finishes the Group, removes the durable record, and clears merging state.
+    // Next maintenance run finishes the Group and clears merging state.
     await dailyMaintenance(env, clock.now);
-
-    const remainingCleanups = await env.DB.prepare(
-      "SELECT group_id FROM merge_cleanups WHERE other_user_id=?",
-    )
-      .bind(other.userId)
-      .all<{ group_id: string }>();
-    expect(remainingCleanups.results).toEqual([]);
 
     const groupsAfter = await (
       await send(kept, "GET", "/groups")
@@ -609,7 +636,7 @@ describe("User Merge on the Link code path", () => {
       twdExpense(flakyGroup.me.memberId, [flakyGroup.me.memberId], 200),
     );
     expect(writeAfter.status).toBe(201);
-  });
+  }, 60_000);
 
   it("re-running a Group's merge after it finished is idempotent (revision and Balances unchanged)", async () => {
     const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
@@ -631,37 +658,71 @@ describe("User Merge on the Link code path", () => {
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
     const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
     if (merge === undefined) throw new Error("expected merge preview");
-    expect(
-      (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
-        .status,
-    ).toBe(200);
+
+    // Simulate a lost RPC reply after the ledger already committed the merge.
+    const groupDoId = env.GROUP_LEDGER.idFromName(group.id);
+    const lostReplyLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "mergeUser" && id.equals(groupDoId)) {
+                return async (op: Parameters<typeof targetStub.mergeUser>[0]) => {
+                  await targetStub.mergeUser(op);
+                  throw new Error("lost RPC reply");
+                };
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const confirmRes = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      { GROUP_LEDGER: lostReplyLedger },
+    );
+    expect(confirmRes.status).toBe(200);
+    expect(await confirmRes.json<{ mergingGroupIds?: string[] }>()).toMatchObject({
+      mergingGroupIds: [group.id],
+    });
 
     const beforeRes = await send(kept, "GET", `/groups/${group.id}`);
     expect(beforeRes.status).toBe(200);
+    expect(await beforeRes.json<{ merging?: boolean }>()).toMatchObject({ merging: true });
     const revBefore = beforeRes.headers.get("X-Group-Rev");
     const balancesBefore = await balances(kept, group.id);
     expect(balancesBefore.get(group.me.memberId)).toBe(300);
     expect(balancesBefore.get(aliceMemberId)).toBe(-300);
-
-    // Simulate a retry (e.g. lost RPC reply after ledger committed) via maintenance.
-    await env.DB.prepare(
-      "INSERT INTO merge_cleanups(kept_user_id,other_user_id,group_id,expires_at) VALUES (?,?,?,?)",
-    )
-      .bind(kept.userId, other.userId, group.id, clock.now + 60_000)
-      .run();
-    await runScheduled(MAINTENANCE_CRON, env, clock.now);
-
     expect(
-      await env.DB.prepare("SELECT group_id FROM merge_cleanups WHERE other_user_id=?")
-        .bind(other.userId)
-        .all(),
-    ).toMatchObject({ results: [] });
+      (await postExpense(kept, group.id, twdExpense(group.me.memberId, [group.me.memberId], 50)))
+        .status,
+    ).toBe(409);
+
+    await runScheduled(MAINTENANCE_CRON, env, clock.now);
 
     const afterRes = await send(kept, "GET", `/groups/${group.id}`);
     expect(afterRes.status).toBe(200);
+    expect((await afterRes.json<{ merging?: boolean }>()).merging).not.toBe(true);
     expect(afterRes.headers.get("X-Group-Rev")).toBe(revBefore);
     expect(await balances(kept, group.id)).toEqual(balancesBefore);
-  });
+    expect(
+      (await postExpense(kept, group.id, twdExpense(group.me.memberId, [group.me.memberId], 50)))
+        .status,
+    ).toBe(201);
+  }, 60_000);
 
   it("marks any Group that is still merging in a pending Merge preview", async () => {
     const googleSub = uniqueSub("google-2");
@@ -669,7 +730,7 @@ describe("User Merge on the Link code path", () => {
     const kept = await signIn("line", uniqueSub("line-2"), "LINE二");
     const keptGroup = await createGroup(kept, { name: "合併中測試群" });
     await env.DB.prepare(
-      "INSERT INTO merge_cleanups(kept_user_id,other_user_id,group_id,expires_at) VALUES (?,?,?,?)",
+      "INSERT INTO merge_cleanups(kept_user_id,other_user_id,group_id,next_retry_at) VALUES (?,?,?,?)",
     )
       .bind(kept.userId, "u-prev", keptGroup.id, clock.now + 60_000)
       .run();
@@ -694,6 +755,217 @@ describe("User Merge on the Link code path", () => {
     } finally {
       await env.DB.prepare("DELETE FROM merge_cleanups WHERE other_user_id='u-prev'").run();
     }
+  });
+
+  it("keeps the Group merging until D1 projection succeeds and reprojects transferred Personal spending from the ledger", async () => {
+    const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
+    const googleSub = uniqueSub("google");
+    const other = await signIn("google", googleSub, "Google小宇");
+    const otherGroup = await createGroup(other, { name: "投影失敗群" });
+    await createExpense(
+      other,
+      otherGroup.id,
+      twdExpense(otherGroup.me.memberId, [otherGroup.me.memberId], 450, {
+        description: "拉麵",
+        category: "food",
+      }),
+    );
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined) throw new Error("expected merge preview");
+
+    const restore = await failDirectoryWrites();
+    try {
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      );
+      expect(confirmRes.status).toBe(200);
+      expect(await confirmRes.json<{ mergingGroupIds?: string[] }>()).toMatchObject({
+        mergingGroupIds: [otherGroup.id],
+      });
+
+      const listWhileMerging = await (
+        await send(kept, "GET", "/groups")
+      ).json<{ id: string; merging?: boolean }[]>();
+      expect(listWhileMerging.find((g) => g.id === otherGroup.id)?.merging).toBe(true);
+
+      const detailWhileMerging = await send(kept, "GET", `/groups/${otherGroup.id}`);
+      expect(detailWhileMerging.status).toBe(200);
+      expect(await detailWhileMerging.json<{ merging?: boolean }>()).toMatchObject({
+        merging: true,
+      });
+
+      const writeWhileMerging = await postExpense(
+        kept,
+        otherGroup.id,
+        twdExpense(otherGroup.me.memberId, [otherGroup.me.memberId], 100),
+      );
+      expect(writeWhileMerging.status).toBe(409);
+      expect(await errorCode(writeWhileMerging)).toBe("GROUP_MERGING");
+    } finally {
+      await restore();
+    }
+
+    await runScheduled(MAINTENANCE_CRON, env, clock.now);
+
+    const detailAfter = await send(kept, "GET", `/groups/${otherGroup.id}`);
+    expect(detailAfter.status).toBe(200);
+    expect((await detailAfter.json<{ merging?: boolean }>()).merging).not.toBe(true);
+
+    const spending = await (
+      await send(kept, "GET", "/stats/spending")
+    ).json<{ amount: number }[]>();
+    expect(spending).toEqual([
+      { month: "2026-06", category: "food", currency: "TWD", amount: 450 },
+    ]);
+
+    expect(
+      (
+        await postExpense(
+          kept,
+          otherGroup.id,
+          twdExpense(otherGroup.me.memberId, [otherGroup.me.memberId], 100),
+        )
+      ).status,
+    ).toBe(201);
+  }, 60_000);
+
+  it("fences an in-flight join or create so a deleted User is never seated after confirm reports the Merge done", async () => {
+    const admin = await person("團長");
+    const group = await createGroup(admin, { name: "並行加入群" });
+    const token = await inviteToken(admin, group.id);
+
+    const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
+    const googleSub = uniqueSub("google");
+    const other = await signIn("google", googleSub, "Google小宇");
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined) throw new Error("expected merge preview");
+
+    let releaseJoin: () => void = () => {};
+    const holdJoin = new Promise<void>((resolve) => {
+      releaseJoin = resolve;
+    });
+    let observedJoin: () => void = () => {};
+    const joining = new Promise<void>((resolve) => {
+      observedJoin = resolve;
+    });
+
+    const holdingLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "member") {
+                return async (op: MemberOperation) => {
+                  if (op.action === "join" && op.userId === other.userId) {
+                    observedJoin();
+                    await holdJoin;
+                  }
+                  return targetStub.member(op);
+                };
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const joinPromise = call(
+      `/invites/${token}/join`,
+      { method: "POST", headers: bearer(other.accessToken) },
+      { GROUP_LEDGER: holdingLedger },
+    );
+    try {
+      await joining;
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      );
+      expect(confirmRes.status).toBe(200);
+    } finally {
+      releaseJoin();
+    }
+    const joinRes = await joinPromise;
+    expect([200, 403, 404, 409]).toContain(joinRes.status);
+    expect((await listMembers(admin, group.id)).some((m) => m.userId === other.userId)).toBe(false);
+
+    // Concurrent createGroup after reserveGroup committed must also never seat the deleted User.
+    const kept2 = await signIn("line", uniqueSub("line-create"), "LINE二");
+    const googleSub2 = uniqueSub("google-create");
+    const other2 = await signIn("google", googleSub2, "Google二");
+    const redeem2 = await redeem(await issueLinkCode(kept2.accessToken), googleSub2);
+    const { accessToken: confirmToken2, merge: merge2 } = await redeem2.json<RedeemMergeBody>();
+    if (merge2 === undefined) throw new Error("expected merge2");
+
+    let releaseCreate: () => void = () => {};
+    const holdCreate = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    let observedCreate: () => void = () => {};
+    const creating = new Promise<void>((resolve) => {
+      observedCreate = resolve;
+    });
+    const holdingCreateLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "createGroup") {
+                return async (input: CreateGroup) => {
+                  observedCreate();
+                  await holdCreate;
+                  return targetStub.createGroup(input);
+                };
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+    const createPromise = call("/groups", json({ name: "並行建群" }, bearer(other2.accessToken)), {
+      GROUP_LEDGER: holdingCreateLedger,
+    });
+    try {
+      await creating;
+      expect(
+        (
+          await call(
+            "/auth/merge/confirm",
+            json({ mergeId: merge2.mergeId }, bearer(confirmToken2)),
+          )
+        ).status,
+      ).toBe(200);
+    } finally {
+      releaseCreate();
+    }
+    const createRes = await createPromise;
+    expect(createRes.status).not.toBe(201);
   });
 });
 
@@ -1173,6 +1445,68 @@ describe("User Merge in a shared Group", () => {
     );
   });
 
+  it("absorbs a Former Member's Expense history and removes their former seat", async () => {
+    const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
+    const googleSub = uniqueSub("google");
+    const other = await signIn("google", googleSub, "Google大明");
+    const admin = await person("團長");
+
+    // Group 1: `kept` is active, `other` creates an Expense and leaves (`former`).
+    const group1 = await createGroup(kept, { name: "單方退群" });
+    const token1 = await inviteToken(kept, group1.id);
+    expect((await send(other, "POST", `/invites/${token1}/join`)).status).toBe(200);
+    const members1 = await listMembers(kept, group1.id);
+    const keptM1 = members1.find((m) => m.userId === kept.userId)?.id;
+    const otherM1 = members1.find((m) => m.userId === other.userId)?.id;
+    if (!keptM1 || !otherM1) throw new Error("missing members in group 1");
+
+    const otherExpense = await createExpense(
+      other,
+      group1.id,
+      twdExpense(otherM1, [otherM1], 120, { description: "退群前早餐", category: "food" }),
+    );
+    expect((await send(other, "POST", `/groups/${group1.id}/leave`)).status).toBe(204);
+
+    // Group 2: both `kept` and `other` joined and left (`former`), and `kept` rejoins after Merge.
+    const group2 = await createGroup(admin, { name: "雙方退群" });
+    const token2 = await inviteToken(admin, group2.id);
+    expect((await send(kept, "POST", `/invites/${token2}/join`)).status).toBe(200);
+    expect((await send(other, "POST", `/invites/${token2}/join`)).status).toBe(200);
+    expect((await send(kept, "POST", `/groups/${group2.id}/leave`)).status).toBe(204);
+    expect((await send(other, "POST", `/groups/${group2.id}/leave`)).status).toBe(204);
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined) throw new Error("expected merge preview");
+    expect(
+      (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
+        .status,
+    ).toBe(200);
+
+    // Group 1: `other`'s former Member row is removed, and its Expense now belongs to `kept`.
+    const after1 = await listMembers(kept, group1.id);
+    expect(after1).toHaveLength(1);
+    expect(after1[0]).toMatchObject({ id: keptM1, userId: kept.userId, status: "active" });
+
+    const fetched = await (
+      await send(kept, "GET", `/groups/${group1.id}/expenses/${otherExpense.id}`)
+    ).json<Expense>();
+    expect(fetched.creatorMemberId).toBe(keptM1);
+    expect(fetched.payers).toEqual([{ memberId: keptM1, amountMinor: 120, settlementAmount: 120 }]);
+    expect(fetched.splits).toEqual([
+      { memberId: keptM1, shares: null, amountMinor: 120, settlementAmount: 120 },
+    ]);
+    expect(await (await send(kept, "GET", "/stats/spending")).json<{ amount: number }[]>()).toEqual(
+      [{ month: "2026-06", category: "food", currency: "TWD", amount: 120 }],
+    );
+
+    // Group 2: rejoining reactivates `kept`'s single seat and leaves no former row for `other`.
+    expect((await send(kept, "POST", `/invites/${token2}/join`)).status).toBe(200);
+    const after2 = await listMembers(admin, group2.id);
+    expect(after2.filter((m) => m.userId === other.userId || m.status === "former")).toEqual([]);
+    expect(after2.filter((m) => m.userId === kept.userId)).toHaveLength(1);
+  });
+
   it("preserves every other Member's Balance across random Expenses and Settlements", async () => {
     type RandomOp =
       | {
@@ -1539,13 +1873,17 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
     expect(writeWhileMerging.status).toBe(409);
     expect(await errorCode(writeWhileMerging)).toBe("GROUP_MERGING");
 
+    // A third active Member cannot delete their account while this Group is merging.
+    const thirdDeleteWhileMerging = await send(third, "DELETE", "/me");
+    expect(thirdDeleteWhileMerging.status).toBe(409);
+    expect(await errorCode(thirdDeleteWhileMerging)).toBe("GROUP_MERGING");
+    expect((await call("/me", { headers: bearer(third.accessToken) })).status).toBe(200);
+
     await runScheduled(MAINTENANCE_CRON, env, clock.now);
 
-    expect(
-      await env.DB.prepare("SELECT group_id FROM merge_cleanups WHERE other_user_id=?")
-        .bind(other.userId)
-        .all(),
-    ).toMatchObject({ results: [] });
+    const detailAfter = await send(kept, "GET", `/groups/${sharedGroup.id}`);
+    expect(detailAfter.status).toBe(200);
+    expect((await detailAfter.json<{ merging?: boolean }>()).merging).not.toBe(true);
 
     const afterMembers = await listMembers(kept, sharedGroup.id);
     expect(afterMembers).toHaveLength(2);
@@ -1557,20 +1895,22 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
       ]),
     );
 
-    const revAfter = (await send(kept, "GET", `/groups/${sharedGroup.id}`)).headers.get(
-      "X-Group-Rev",
-    );
+    const revAfter = detailAfter.headers.get("X-Group-Rev");
     await env.DB.prepare(
-      "INSERT INTO merge_cleanups(kept_user_id,other_user_id,group_id,expires_at) VALUES (?,?,?,?)",
+      "INSERT INTO merge_cleanups(kept_user_id,other_user_id,group_id,next_retry_at) VALUES (?,?,?,?)",
     )
       .bind(kept.userId, other.userId, sharedGroup.id, clock.now + 60_000)
       .run();
     await runScheduled(MAINTENANCE_CRON, env, clock.now);
-    expect((await send(kept, "GET", `/groups/${sharedGroup.id}`)).headers.get("X-Group-Rev")).toBe(
-      revAfter,
-    );
+    const detailRetry = await send(kept, "GET", `/groups/${sharedGroup.id}`);
+    expect((await detailRetry.json<{ merging?: boolean }>()).merging).not.toBe(true);
+    expect(detailRetry.headers.get("X-Group-Rev")).toBe(revAfter);
     expect(await balances(kept, sharedGroup.id)).toEqual(afterBalances);
-  });
+    expect(
+      (await postExpense(kept, sharedGroup.id, twdExpense(keptMemberId, [keptMemberId], 25)))
+        .status,
+    ).toBe(201);
+  }, 60_000);
 
   it("handles a failing Group on the Settings connect-LINE path (#230): refuses writes and finishes on maintenance", async () => {
     const lineSub = uniqueSub("line");
@@ -1645,5 +1985,272 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
         )
       ).status,
     ).toBe(201);
-  });
+  }, 60_000);
+
+  it("refuses an Expense write and account deletion at the ledger boundary when Merge starts mid-flight", async () => {
+    const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
+    const googleSub = uniqueSub("google");
+    const other = await signIn("google", googleSub, "Google小宇");
+    const third = await person("阿明");
+
+    const group = await createGroup(kept, { name: "帳本寫入閘門" });
+    const token = await inviteToken(kept, group.id);
+    expect((await send(other, "POST", `/invites/${token}/join`)).status).toBe(200);
+    expect((await send(third, "POST", `/invites/${token}/join`)).status).toBe(200);
+
+    const members = await listMembers(kept, group.id);
+    const thirdMemberId = members.find((m) => m.userId === third.userId)?.id;
+    if (!thirdMemberId) throw new Error("missing third member");
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined) throw new Error("expected merge preview");
+
+    let releaseExpense: () => void = () => {};
+    const holdExpense = new Promise<void>((resolve) => {
+      releaseExpense = resolve;
+    });
+    let observedExpense: () => void = () => {};
+    const expenseAtLedger = new Promise<void>((resolve) => {
+      observedExpense = resolve;
+    });
+    let releaseDeletion: () => void = () => {};
+    const holdDeletion = new Promise<void>((resolve) => {
+      releaseDeletion = resolve;
+    });
+    let observedDeletion: () => void = () => {};
+    const deletionAtFinalize = new Promise<void>((resolve) => {
+      observedDeletion = resolve;
+    });
+
+    const groupDoId = env.GROUP_LEDGER.idFromName(group.id);
+    const racingLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "expense" && id.equals(groupDoId)) {
+                return async (op: ExpenseOperation) => {
+                  if (op.action === "create") {
+                    observedExpense();
+                    await holdExpense;
+                  }
+                  return targetStub.expense(op);
+                };
+              }
+              if (prop === "accountDeletion" && id.equals(groupDoId)) {
+                return async (op: AccountDeletionOperation) => {
+                  if (op.action === "finalize") {
+                    observedDeletion();
+                    await holdDeletion;
+                  }
+                  return targetStub.accountDeletion(op);
+                };
+              }
+              if (prop === "mergeUser" && id.equals(groupDoId)) {
+                return () => Promise.reject(new Error("ledger unreachable during race"));
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const racingExpense = call(
+      `/groups/${group.id}/expenses`,
+      json(twdExpense(thirdMemberId, [thirdMemberId], 100), {
+        ...bearer(third.accessToken),
+        "Idempotency-Key": newKey(),
+      }),
+      { GROUP_LEDGER: racingLedger },
+    );
+    const racingDelete = call(
+      "/me",
+      { method: "DELETE", headers: bearer(third.accessToken) },
+      { GROUP_LEDGER: racingLedger },
+    );
+    try {
+      await Promise.all([expenseAtLedger, deletionAtFinalize]);
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+        { GROUP_LEDGER: racingLedger },
+      );
+      expect(confirmRes.status).toBe(200);
+      expect(await confirmRes.json<{ mergingGroupIds?: string[] }>()).toMatchObject({
+        mergingGroupIds: [group.id],
+      });
+    } finally {
+      releaseExpense();
+      releaseDeletion();
+    }
+
+    const expenseRes = await racingExpense;
+    expect(expenseRes.status).toBe(409);
+    expect(await errorCode(expenseRes)).toBe("GROUP_MERGING");
+
+    const deleteRes = await racingDelete;
+    expect(deleteRes.status).toBe(409);
+    expect(await errorCode(deleteRes)).toBe("GROUP_MERGING");
+    expect((await call("/me", { headers: bearer(third.accessToken) })).status).toBe(200);
+
+    // Maintenance finishes the Merge and leaves the Group usable.
+    await runScheduled(MAINTENANCE_CRON, env, clock.now);
+    expect(
+      (await postExpense(third, group.id, twdExpense(thirdMemberId, [thirdMemberId], 100))).status,
+    ).toBe(201);
+  }, 60_000);
+
+  it("does not let 100 older failed tasks starve a newly confirmed Merge or healthy tasks further down the maintenance queue", async () => {
+    const kept = await signIn("line", uniqueSub("line-starve"), "LINE不餓");
+    const googleSub = uniqueSub("google-starve");
+    const other = await signIn("google", googleSub, "Google不餓");
+    const freshGroup = await createGroup(other, { name: "新確認群" });
+
+    // Create a healthy Group that failed on its own confirm and sits behind 101 old failing tasks.
+    const queuedKept = await signIn("line", uniqueSub("line-queued"), "LINE排隊");
+    const queuedGoogleSub = uniqueSub("google-queued");
+    const queuedOther = await signIn("google", queuedGoogleSub, "Google排隊");
+    const queuedGroup = await createGroup(queuedOther, { name: "後方健康群" });
+    const queuedRedeem = await redeem(await issueLinkCode(queuedKept.accessToken), queuedGoogleSub);
+    const { accessToken: queuedConfirmToken, merge: queuedMerge } =
+      await queuedRedeem.json<RedeemMergeBody>();
+    if (queuedMerge === undefined) throw new Error("expected queued merge");
+
+    const oldFailingGroup = await createGroup(await person("舊卡住"), { name: "百筆卡住群" });
+    const oldDoId = env.GROUP_LEDGER.idFromName(oldFailingGroup.id);
+    const queuedDoId = env.GROUP_LEDGER.idFromName(queuedGroup.id);
+    const failOldAndQueued = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "mergeUser" && (id.equals(oldDoId) || id.equals(queuedDoId))) {
+                return () => Promise.reject(new Error("unreachable"));
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+    const failOnlyOld = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "mergeUser" && id.equals(oldDoId)) {
+                return () => Promise.reject(new Error("old group permanently unreachable"));
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    // Confirm queuedGroup while unreachable so it enters the queue.
+    const queuedConfirm = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: queuedMerge.mergeId }, bearer(queuedConfirmToken)),
+      { GROUP_LEDGER: failOldAndQueued },
+    );
+    expect(queuedConfirm.status).toBe(200);
+    expect(await queuedConfirm.json<{ mergingGroupIds?: string[] }>()).toMatchObject({
+      mergingGroupIds: [queuedGroup.id],
+    });
+
+    // Seed 101 older failing tasks ahead of queuedGroup.
+    const oldIds = Array.from({ length: 101 }, (_, i) => `old-starve-${String(i)}`);
+    try {
+      await env.DB.batch(
+        oldIds.map((oldId, i) =>
+          env.DB.prepare(
+            "INSERT INTO merge_cleanups(kept_user_id,other_user_id,group_id,next_retry_at) VALUES (?,?,?,?)",
+          ).bind("kept-old", oldId, oldFailingGroup.id, clock.now - 200_000 + i),
+        ),
+      );
+
+      // A newly confirmed Merge is NOT starved by the 101 older failed tasks.
+      const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+      const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+      if (merge === undefined) throw new Error("expected merge preview");
+
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      );
+      expect(confirmRes.status).toBe(200);
+      expect(
+        (await confirmRes.json<{ mergingGroupIds?: string[] }>()).mergingGroupIds,
+      ).toBeUndefined();
+      expect(
+        (
+          await postExpense(
+            kept,
+            freshGroup.id,
+            twdExpense(freshGroup.me.memberId, [freshGroup.me.memberId], 50),
+          )
+        ).status,
+      ).toBe(201);
+
+      // Maintenance advances failed tasks' retry times so queuedGroup gets a turn on the next pass.
+      await runScheduled(
+        MAINTENANCE_CRON,
+        { ...env, GROUP_LEDGER: failOnlyOld },
+        clock.now + 1_000,
+      );
+      await runScheduled(
+        MAINTENANCE_CRON,
+        { ...env, GROUP_LEDGER: failOnlyOld },
+        clock.now + 2_000,
+      );
+
+      const detail = await send(queuedKept, "GET", `/groups/${queuedGroup.id}`);
+      expect(detail.status).toBe(200);
+      expect((await detail.json<{ merging?: boolean }>()).merging).not.toBe(true);
+      expect(
+        (
+          await postExpense(
+            queuedKept,
+            queuedGroup.id,
+            twdExpense(queuedGroup.me.memberId, [queuedGroup.me.memberId], 75),
+          )
+        ).status,
+      ).toBe(201);
+    } finally {
+      await env.DB.prepare("DELETE FROM merge_cleanups WHERE kept_user_id='kept-old'").run();
+    }
+  }, 60_000);
 });

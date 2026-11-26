@@ -272,6 +272,7 @@ export async function linkIdentity(
         };
       }
       if (winner !== undefined) return { mergeNeeded: false };
+      throw new ApiError("PROVIDER_ALREADY_LINKED");
     }
     throw error;
   }
@@ -353,11 +354,20 @@ async function loadMergeUserSide(
     .where(eq(identities.userId, userId))
     .orderBy(asc(identities.createdAt), asc(identities.provider));
   const groups = await db.all<{ id: string; name: string; merging: number }>(
-    sql`SELECT d.group_id AS id, d.name,
+    sql`WITH visible AS (
+          SELECT group_id FROM group_member_summary WHERE user_id = ${userId}
+          UNION
+          SELECT m.group_id
+          FROM merge_cleanups mc
+          JOIN group_member_summary m
+            ON m.group_id = mc.group_id AND m.user_id = mc.other_user_id
+          WHERE mc.kept_user_id = ${userId}
+        )
+        SELECT d.group_id AS id, d.name,
         EXISTS (SELECT 1 FROM merge_cleanups mc WHERE mc.group_id = d.group_id) AS merging
         FROM group_directory d
-        JOIN group_member_summary m ON m.group_id = d.group_id
-        WHERE m.user_id = ${userId} AND d.deleted = 0
+        JOIN visible m ON m.group_id = d.group_id
+        WHERE d.deleted = 0
         ORDER BY d.created_at DESC, d.group_id DESC`,
   );
   return {
@@ -378,10 +388,19 @@ async function loadMergeUserSide(
 
 async function userGroupIds(db: Db, userId: string): Promise<Set<string>> {
   const rows = await db.all<{ id: string }>(
-    sql`SELECT d.group_id AS id
+    sql`WITH visible AS (
+          SELECT group_id FROM group_member_summary WHERE user_id = ${userId}
+          UNION
+          SELECT m.group_id
+          FROM merge_cleanups mc
+          JOIN group_member_summary m
+            ON m.group_id = mc.group_id AND m.user_id = mc.other_user_id
+          WHERE mc.kept_user_id = ${userId}
+        )
+        SELECT d.group_id AS id
         FROM group_directory d
-        JOIN group_member_summary m ON m.group_id = d.group_id
-        WHERE m.user_id = ${userId} AND d.deleted = 0`,
+        JOIN visible m ON m.group_id = d.group_id
+        WHERE d.deleted = 0`,
   );
   return new Set(rows.map((r) => r.id));
 }
@@ -523,17 +542,17 @@ export async function confirmMerge(
   if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
   const { keptUserId, otherUserId, otherProvider, otherEmail } = claimed;
 
-  const affected = await env.DB.prepare(
-    "SELECT group_id FROM group_reservations WHERE user_id=? UNION SELECT group_id FROM group_member_summary WHERE user_id=?",
-  )
-    .bind(otherUserId, otherUserId)
-    .all<{ group_id: string }>();
-  const groupIds = affected.results.map((r) => r.group_id);
-
   const guard =
-    "EXISTS (SELECT 1 FROM users WHERE id=?) AND EXISTS (SELECT 1 FROM users WHERE id=?) AND NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id IN (?,?) AND expires_at>?)";
-  const guardArgs = [keptUserId, otherUserId, keptUserId, otherUserId, now];
-  const expires = now + MERGE_PENDING_TTL_MS;
+    "EXISTS (SELECT 1 FROM users WHERE id=?) AND EXISTS (SELECT 1 FROM users WHERE id=?) AND NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id IN (?,?) AND expires_at>?) AND NOT EXISTS (SELECT 1 FROM identities k JOIN identities o ON k.provider = o.provider WHERE k.user_id=? AND o.user_id=?)";
+  const guardArgs = [
+    keptUserId,
+    otherUserId,
+    keptUserId,
+    otherUserId,
+    now,
+    keptUserId,
+    otherUserId,
+  ];
 
   const statements = [
     // Keep moved Identities strictly newer than keptUser's existing ones so Profile source never shifts.
@@ -567,13 +586,33 @@ export async function confirmMerge(
       otherUserId,
       ...guardArgs,
     ),
+    // Capture every affected Group inside the commit transaction before moving reservations.
     env.DB.prepare(
-      `UPDATE OR IGNORE personal_spending SET user_id=? WHERE user_id=? AND ${guard}`,
-    ).bind(keptUserId, otherUserId, ...guardArgs),
-    env.DB.prepare(`DELETE FROM personal_spending WHERE user_id=? AND ${guard}`).bind(
+      `INSERT OR IGNORE INTO merge_cleanups(kept_user_id,other_user_id,group_id,next_retry_at)
+       SELECT ?,?,g.group_id,?
+       FROM (
+         SELECT group_id FROM group_reservations WHERE user_id=?
+         UNION
+         SELECT group_id FROM group_member_summary WHERE user_id=?
+         UNION
+         SELECT group_id FROM group_memberships WHERE user_id=?
+         UNION
+         SELECT group_id FROM merge_cleanups WHERE kept_user_id=?
+       ) g
+       WHERE ${guard}`,
+    ).bind(
+      keptUserId,
+      otherUserId,
+      now,
+      otherUserId,
+      otherUserId,
+      otherUserId,
       otherUserId,
       ...guardArgs,
     ),
+    env.DB.prepare(
+      `UPDATE merge_cleanups SET kept_user_id=? WHERE kept_user_id=? AND ${guard}`,
+    ).bind(keptUserId, otherUserId, ...guardArgs),
     env.DB.prepare(
       `UPDATE OR IGNORE group_reservations SET user_id=? WHERE user_id=? AND ${guard}`,
     ).bind(keptUserId, otherUserId, ...guardArgs),
@@ -581,28 +620,33 @@ export async function confirmMerge(
       otherUserId,
       ...guardArgs,
     ),
-    env.DB.prepare(
-      `UPDATE OR IGNORE group_member_summary SET user_id=? WHERE user_id=? AND ${guard}`,
-    ).bind(keptUserId, otherUserId, ...guardArgs),
-    env.DB.prepare(`DELETE FROM group_member_summary WHERE user_id=? AND ${guard}`).bind(
-      otherUserId,
-      ...guardArgs,
-    ),
     env.DB.prepare(`DELETE FROM users WHERE id=? AND ${guard}`).bind(otherUserId, ...guardArgs),
   ];
   const deleteUserIndex = statements.length - 1;
-  const cleanups = groupIds.map((groupId) =>
-    env.DB.prepare(
-      "INSERT OR IGNORE INTO merge_cleanups(kept_user_id,other_user_id,group_id,expires_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM users WHERE id=?)",
-    ).bind(keptUserId, otherUserId, groupId, expires, otherUserId),
-  );
-  const results = await env.DB.batch([...statements, ...cleanups]);
+  let results: D1Result[];
+  try {
+    results = await env.DB.batch(statements);
+  } catch (error) {
+    if (isConstraintError(error, "UNIQUE", "identities.user_id, identities.provider")) {
+      throw new ApiError("MERGE_SAME_PROVIDER");
+    }
+    throw error;
+  }
   if ((results[deleteUserIndex]?.meta.changes ?? 0) < 1) {
+    const overlap = await env.DB.prepare(
+      "SELECT 1 AS found FROM identities k JOIN identities o ON k.provider=o.provider WHERE k.user_id=? AND o.user_id=? LIMIT 1",
+    )
+      .bind(keptUserId, otherUserId)
+      .first();
+    if (overlap !== null) throw new ApiError("MERGE_SAME_PROVIDER");
     throw new ApiError("MERGE_ACCOUNT_DELETION_PENDING");
   }
-  await commitMergeCleanups(env, now);
+  const enqueued = await env.DB.prepare("SELECT group_id FROM merge_cleanups WHERE other_user_id=?")
+    .bind(otherUserId)
+    .all<{ group_id: string }>();
+  if (enqueued.results.length > 0) await commitMergeCleanups(env, now, otherUserId);
   const remaining =
-    groupIds.length === 0
+    enqueued.results.length === 0
       ? []
       : (
           await env.DB.prepare("SELECT group_id FROM merge_cleanups WHERE other_user_id=?")
@@ -656,9 +700,13 @@ export async function deleteAccount(
   clock: () => number,
 ): Promise<void> {
   const merging = await env.DB.prepare(
-    "SELECT 1 AS found FROM merge_cleanups WHERE kept_user_id=? LIMIT 1",
+    `SELECT 1 AS found FROM merge_cleanups
+     WHERE kept_user_id=?
+        OR group_id IN (SELECT group_id FROM group_reservations WHERE user_id=?)
+        OR group_id IN (SELECT group_id FROM group_member_summary WHERE user_id=?)
+     LIMIT 1`,
   )
-    .bind(userId)
+    .bind(userId, userId, userId)
     .first();
   if (merging !== null) throw new ApiError("GROUP_MERGING");
   const now = clock();
@@ -681,6 +729,7 @@ export async function deleteAccount(
         await groupLedger(env, groupId).accountDeletion({ action, userId, now: clock(), expires })
       ).value;
     } catch (error) {
+      if (error instanceof ApiError && error.code === "GROUP_MERGING") throw error;
       if (
         action === "finalize" &&
         error instanceof ApiError &&

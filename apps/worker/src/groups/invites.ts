@@ -48,7 +48,10 @@ async function ledgerInvite(
     })
     .catch((error: unknown) => {
       if (!(error instanceof ApiError)) throw error;
-      const kept = error.code === "INVITE_EXPIRED" || error.code === "FORBIDDEN";
+      const kept =
+        error.code === "INVITE_EXPIRED" ||
+        error.code === "FORBIDDEN" ||
+        error.code === "GROUP_MERGING";
       throw new ApiError(kept ? error.code : "NOT_FOUND");
     });
   setRev?.(String(rev));

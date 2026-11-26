@@ -47,6 +47,19 @@ describe("POST /auth/link/:provider", () => {
     expect(await res.json()).toEqual({ error: { code: "PROVIDER_ALREADY_LINKED" } });
   });
 
+  it("refuses concurrent ordinary linking of two distinct Identities from the same provider", async () => {
+    const session = await signIn("line", uniqueSub("l-race"));
+    const [res1, res2] = await Promise.all([
+      link("google", session.accessToken, uniqueSub("g-race-1")),
+      link("google", session.accessToken, uniqueSub("g-race-2")),
+    ]);
+    expect([res1.status, res2.status].sort((a, b) => a - b)).toEqual([200, 409]);
+    const loser = res1.status === 409 ? res1 : res2;
+    expect(await loser.json()).toEqual({ error: { code: "PROVIDER_ALREADY_LINKED" } });
+    const me = (await meOf(session.accessToken)) as { identities: { provider: string }[] };
+    expect(me.identities.map((i) => i.provider).sort()).toEqual(["google", "line"]);
+  });
+
   it("requires a signed-in User", async () => {
     expect((await call("/auth/link/line", json({ idToken: "fake|x|y" }))).status).toBe(401);
   });

@@ -243,7 +243,17 @@ export function mergeLedgerUser(
     .toArray();
   if (keptRows.length === 0) {
     sql.exec("UPDATE ledger_members SET user_id=? WHERE user_id=?", keptUserId, otherUserId);
-    return { changed: true, dirty: ["group"], leaving: otherUserId };
+    const expenseDirty = sql
+      .exec<{ id: string }>(
+        `SELECT id FROM ledger_expenses WHERE deleted=0 AND (
+          EXISTS (SELECT 1 FROM json_each(data,'$.payers') WHERE json_extract(value,'$.memberId')=?) OR
+          EXISTS (SELECT 1 FROM json_each(data,'$.splits') WHERE json_extract(value,'$.memberId')=?))`,
+        other.id,
+        other.id,
+      )
+      .toArray()
+      .map((row) => `expense:${row.id}`);
+    return { changed: true, dirty: [...expenseDirty, "group"], leaving: otherUserId };
   }
   const kept = keptRows[0];
   if (kept === undefined) return { changed: false };
