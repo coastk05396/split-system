@@ -524,9 +524,21 @@ export class GroupLedger extends DurableObject<Bindings> {
     }
   }
 
-  private broadcastSyncNeeded(rev: number, closeAll?: true): void {
+  private async broadcastSyncNeeded(rev: number, closeAll?: true): Promise<void> {
+    const sockets = this.ctx.getWebSockets();
+    if (sockets.length === 0) return;
+    const deadUserIds = await this.missingOrMergingUsers(sockets);
     const message: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
-    for (const socket of this.ctx.getWebSockets()) {
+    for (const socket of sockets) {
+      const userId = this.ctx.getTags(socket)[0];
+      if (userId !== undefined && deadUserIds.has(userId)) {
+        try {
+          socket.close(4003, "Membership ended");
+        } catch {
+          /* socket closed */
+        }
+        continue;
+      }
       try {
         socket.send(JSON.stringify(message));
         if (closeAll) socket.close(4003, "Group deleted");
@@ -617,10 +629,8 @@ export class GroupLedger extends DurableObject<Bindings> {
     });
     if (dirty === undefined) return { value, rev };
     if (leaving) this.closeSocketsFor(leaving);
-    const signal = (): void => {
-      this.broadcastSyncNeeded(rev, options.closeAll);
-    };
-    if (options.signal === undefined) signal();
+    const signal = (): Promise<void> => this.broadcastSyncNeeded(rev, options.closeAll);
+    if (options.signal === undefined) await signal();
     await this.drain();
     if (options.signal === "after push")
       // Finish projection before signaling, without holding the request for every batch.
@@ -630,10 +640,34 @@ export class GroupLedger extends DurableObject<Bindings> {
             .exec<{ retry_count: number }>("SELECT retry_count FROM ledger_meta")
             .one().retry_count;
           if (retries === 0) await this.drainAll();
-          signal();
+          await signal();
         })(),
       );
     return { value, rev };
+  }
+
+  /** Connected socket User IDs that are already deleted or awaiting Merge cleanup in D1. */
+  private async missingOrMergingUsers(sockets: readonly WebSocket[]): Promise<Set<string>> {
+    const userIds = [
+      ...new Set(
+        sockets.flatMap((socket) => this.ctx.getTags(socket)).filter((id) => id.length > 0),
+      ),
+    ];
+    if (userIds.length === 0) return new Set();
+    const placeholders = userIds.map(() => "?").join(",");
+    const [existingRows, mergingRows] = await Promise.all([
+      this.env.DB.prepare(`SELECT id FROM users WHERE id IN (${placeholders})`)
+        .bind(...userIds)
+        .all<{ id: string }>(),
+      this.env.DB.prepare(
+        `SELECT other_user_id FROM merge_cleanups WHERE other_user_id IN (${placeholders})`,
+      )
+        .bind(...userIds)
+        .all<{ other_user_id: string }>(),
+    ]);
+    const existing = new Set(existingRows.results.map((row) => row.id));
+    const merging = new Set(mergingRows.results.map((row) => row.other_user_id));
+    return new Set(userIds.filter((id) => !existing.has(id) || merging.has(id)));
   }
 
   /** Whether the Group has been deleted (its tombstone is kept, with its rows). */
@@ -866,7 +900,7 @@ export class GroupLedger extends DurableObject<Bindings> {
           await this.drainAll();
           if (this.dirtyCount() > 0) return { ok: false, code: "SERVICE_UNAVAILABLE" };
         }
-        if (dirty !== undefined || hadDirty) this.broadcastSyncNeeded(rev);
+        if (dirty !== undefined || hadDirty) await this.broadcastSyncNeeded(rev);
         return { ok: true, value: null, rev };
       } catch (error) {
         return failure(error);

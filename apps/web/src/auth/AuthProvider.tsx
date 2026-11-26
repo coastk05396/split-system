@@ -121,6 +121,11 @@ export function AuthProvider({
           settle({ status: "signedIn", user: restored });
           return;
         }
+        if (line.hasPendingLink()) {
+          line.cancelLink();
+          settle({ status: "signedOut", error: "UNAUTHORIZED" });
+          return;
+        }
         const lineToken = await line.autoSignIn();
         settle(
           lineToken === null
@@ -176,7 +181,7 @@ export function AuthProvider({
       redeemLinkCode: async (code, idToken) => {
         try {
           const result = await session.redeemLinkCode(code, idToken);
-          setState({ status: "signedIn", user: result.user });
+          if (result.merge === null) setState({ status: "signedIn", user: result.user });
           return { merge: result.merge };
         } catch (error) {
           setState({ status: "signedOut", error: failureCode(error) });
@@ -186,9 +191,7 @@ export function AuthProvider({
       getPendingMerge: () => session.getPendingMerge(),
       confirmMerge: async (mergeId) => {
         const result = await session.confirmMerge(mergeId);
-        setState((current) =>
-          current.status === "signedIn" ? { status: "signedIn", user: result.user } : current,
-        );
+        setState({ status: "signedIn", user: result.user });
         void queryClient.invalidateQueries();
         return result;
       },

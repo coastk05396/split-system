@@ -86,6 +86,7 @@ export function createFakeApi(): FakeApi {
   let cookieUser: Me | null = null;
   let tokenSeq = 0;
   const liveTokens = new Map<string, Me>();
+  const confirmTokens = new Map<string, { kept: Me; mergeId: string }>();
   const pendingMerges = new Map<string, { preview: MergePreview; kept: Me; other: Me }>();
   const calls: string[] = [];
   const failing = new Map<string, { code: string; status: number }>();
@@ -283,16 +284,13 @@ export function createFakeApi(): FakeApi {
         const existingOwner = api.googleOwners.get(sub);
         if (existingOwner !== undefined && existingOwner.id !== owner.id) {
           const preview = createPendingMerge(owner, existingOwner, "linkCode");
-          cookieUser = owner;
           tokenSeq += 1;
-          const accessToken = `access-${tokenSeq}`;
-          liveTokens.set(accessToken, owner);
+          const confirmationToken = `confirm-${tokenSeq}`;
+          confirmTokens.set(confirmationToken, { kept: owner, mergeId: preview.mergeId });
           return json({
-            accessToken,
-            expiresIn: 3600,
-            user: owner,
             mergeNeeded: true,
             merge: preview,
+            confirmationToken,
           });
         }
         const linked = {
@@ -305,17 +303,39 @@ export function createFakeApi(): FakeApi {
         return issue(linked);
       }
       case "GET /api/v1/auth/merge": {
-        if (authed === undefined) return error("UNAUTHORIZED", 401);
-        const match = [...pendingMerges.values()].find((m) => m.kept.id === authed.id);
-        return match === undefined ? error("MERGE_PENDING_INVALID", 422) : json(match.preview);
+        const confirm = bearer === undefined ? undefined : confirmTokens.get(bearer);
+        const actor = authed ?? confirm?.kept;
+        if (actor === undefined) return error("UNAUTHORIZED", 401);
+        const match = [...pendingMerges.values()].find(
+          (m) =>
+            m.kept.id === actor.id &&
+            (confirm === undefined || m.preview.mergeId === confirm.mergeId),
+        );
+        if (match === undefined) {
+          return error(
+            confirm !== undefined ? "UNAUTHORIZED" : "MERGE_PENDING_INVALID",
+            confirm !== undefined ? 401 : 422,
+          );
+        }
+        return json(match.preview);
       }
       case "POST /api/v1/auth/merge/confirm": {
-        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const confirm = bearer === undefined ? undefined : confirmTokens.get(bearer);
+        const actor = authed ?? confirm?.kept;
+        if (actor === undefined) return error("UNAUTHORIZED", 401);
         const { mergeId } = await readJson(init);
         const match = typeof mergeId === "string" ? pendingMerges.get(mergeId) : undefined;
-        if (match === undefined || match.kept.id !== authed.id) {
-          return error("MERGE_PENDING_INVALID", 422);
+        if (
+          match === undefined ||
+          match.kept.id !== actor.id ||
+          (confirm !== undefined && confirm.mergeId !== mergeId)
+        ) {
+          return error(
+            confirm !== undefined ? "UNAUTHORIZED" : "MERGE_PENDING_INVALID",
+            confirm !== undefined ? 401 : 422,
+          );
         }
+        if (bearer !== undefined) confirmTokens.delete(bearer);
         pendingMerges.delete(String(mergeId));
         api.groups.repointUser(match.other.id, match.kept.id, api.failMergeGroups);
         const mergingGroupIds = api.groups
@@ -339,8 +359,14 @@ export function createFakeApi(): FakeApi {
         });
       }
       case "POST /api/v1/auth/merge/cancel": {
-        if (authed === undefined) return error("UNAUTHORIZED", 401);
+        const confirm = bearer === undefined ? undefined : confirmTokens.get(bearer);
+        const actor = authed ?? confirm?.kept;
+        if (actor === undefined) return error("UNAUTHORIZED", 401);
         const { mergeId } = await readJson(init);
+        if (confirm !== undefined && bearer !== undefined) {
+          if (confirm.mergeId !== mergeId) return error("MERGE_PENDING_INVALID", 422);
+          confirmTokens.delete(bearer);
+        }
         if (typeof mergeId === "string") pendingMerges.delete(mergeId);
         return new Response(null, { status: 204 });
       }

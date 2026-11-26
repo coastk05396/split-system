@@ -9,10 +9,7 @@ import type {
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 
-export interface RedeemLinkCodeResult {
-  user: Me;
-  merge: MergePreview | null;
-}
+export type RedeemLinkCodeResult = { user: Me; merge: null } | { user: null; merge: MergePreview };
 
 export interface ConfirmMergeResult {
   user: Me;
@@ -30,6 +27,7 @@ export interface Session {
   signIn(provider: Provider, idToken: string): Promise<Me>;
   /** Spends a link code with a Google ID token: joins the code's User and signs in as them, or returns a Merge preview. */
   redeemLinkCode(code: string, idToken: string): Promise<RedeemLinkCodeResult>;
+  hasPendingMerge(): boolean;
   getPendingMerge(): Promise<MergePreview>;
   confirmMerge(mergeId: string): Promise<ConfirmMergeResult>;
   cancelMerge(mergeId: string): Promise<void>;
@@ -60,6 +58,7 @@ export interface SessionOptions {
 export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions): Session {
   const api = createApiClient(baseFetch);
   let accessToken: string | null = null;
+  let mergeToken: string | null = null;
   let refreshing: Promise<Me | null> | null = null;
   // Bumped by sign-out, so a refresh already in flight cannot hand the token back afterwards.
   let generation = 0;
@@ -116,6 +115,9 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
 
   // These calls need the session's refresh-and-retry fetch, just like other signed-in calls.
   const authenticated = createApiClient((input, init) => session.fetch(input, init));
+  const mergeApi = createApiClient((input, init) =>
+    mergeToken !== null ? send(input, init, mergeToken) : session.fetch(input, init),
+  );
   async function readUser(res: Response): Promise<Me> {
     if (!res.ok) throw await toApiFailure(res);
     return (await res.json()) as Me;
@@ -124,6 +126,10 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
   const session: Session = {
     getAccessToken() {
       return accessToken;
+    },
+
+    hasPendingMerge() {
+      return mergeToken !== null;
     },
 
     restore: refresh,
@@ -140,42 +146,56 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
         withJson({ code, idToken }),
       );
       if (!res.ok) throw await toApiFailure(res);
-      const body = (await res.json()) as {
-        accessToken: string;
-        user: Me;
-        merge?: MergePreview;
-      };
+      const body = (await res.json()) as
+        | { mergeNeeded: true; merge: MergePreview; confirmationToken: string }
+        | { accessToken: string; user: Me };
+      if ("mergeNeeded" in body) {
+        mergeToken = body.confirmationToken;
+        return { user: null, merge: body.merge };
+      }
+      mergeToken = null;
       accessToken = body.accessToken;
-      return { user: body.user, merge: body.merge ?? null };
+      return { user: body.user, merge: null };
     },
 
     async getPendingMerge() {
-      const res: Response = await authenticated.auth.merge.$get();
-      if (!res.ok) throw await toApiFailure(res);
+      const res: Response = await mergeApi.auth.merge.$get();
+      if (!res.ok) {
+        if (res.status === 401 && mergeToken !== null) mergeToken = null;
+        throw await toApiFailure(res);
+      }
       return (await res.json()) as MergePreview;
     },
 
     async confirmMerge(mergeId) {
-      const res: Response = await authenticated.auth.merge.confirm.$post(
+      const res: Response = await mergeApi.auth.merge.confirm.$post(
         undefined,
         withJson({ mergeId }),
       );
-      if (!res.ok) throw await toApiFailure(res);
+      if (!res.ok) {
+        if (res.status === 401 && mergeToken !== null) mergeToken = null;
+        throw await toApiFailure(res);
+      }
       const body = (await res.json()) as {
         accessToken: string;
         user: Me;
         mergingGroupIds?: string[];
       };
+      mergeToken = null;
       accessToken = body.accessToken;
       return { user: body.user, mergingGroupIds: body.mergingGroupIds ?? [] };
     },
 
     async cancelMerge(mergeId) {
-      const res: Response = await authenticated.auth.merge.cancel.$post(
+      const res: Response = await mergeApi.auth.merge.cancel.$post(
         undefined,
         withJson({ mergeId }),
       );
-      if (!res.ok) throw await toApiFailure(res);
+      if (!res.ok) {
+        if (res.status === 401 && mergeToken !== null) mergeToken = null;
+        throw await toApiFailure(res);
+      }
+      mergeToken = null;
     },
 
     async link(provider, idToken) {
@@ -204,6 +224,7 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
       if (!res.ok) throw await toApiFailure(res);
       generation += 1;
       accessToken = null;
+      mergeToken = null;
     },
 
     async testSignIn(request) {
@@ -213,6 +234,7 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     async signOut() {
       generation += 1;
       accessToken = null;
+      mergeToken = null;
       // Behind any refresh in flight, so the cookie it rotated is the one logout presents.
       await oneAtATime(async () => {
         await api.auth.logout.$post();

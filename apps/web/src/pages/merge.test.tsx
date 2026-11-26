@@ -55,7 +55,7 @@ describe("/merge (confirming a Merge on the Link code path)", () => {
     expect(api.calls).toContain("POST /api/v1/auth/merge/confirm");
   });
 
-  it("cancelling returns to Settings with no confirm-merge call", async () => {
+  it("does not sign in as the kept User before confirmation on the Link code path, and cancelling goes to sign-in", async () => {
     const user = userEvent.setup();
     const kept = makeUser("LINE小宇", "line");
     const other = makeUser("Google小宇", "google");
@@ -67,12 +67,61 @@ describe("/merge (confirming a Merge on the Link code path)", () => {
     api.googleOwners = new Map([["g-1", other]]);
 
     await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
+    expect(screen.queryByRole("navigation")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(await screen.findByRole("button", { name: "使用 LINE 快速登入" })).toBeVisible();
+    expect(api.calls).not.toContain("POST /api/v1/auth/merge/confirm");
+    expect(screen.queryByRole("heading", { level: 1, name: "我的設定" })).toBeNull();
+  });
+
+  it("cancelling on the Settings path returns to Settings with no confirm-merge call", async () => {
+    const user = userEvent.setup();
+    const kept = makeUser("Google小宇", "google");
+    const other = makeUser("LINE小宇", "line");
+    const { api } = renderApp({
+      path: "/settings",
+      cookieUser: kept,
+      lineLink: { idToken: "fake|l-other|LINE小宇" },
+    });
+    api.lineOwners.set("l-other", other);
+
+    const list = await screen.findByRole("list", { name: "已連結的帳號" });
+    await user.click(within(accountRow(list, "LINE")).getByRole("button", { name: "連接" }));
+    await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
     await user.click(screen.getByRole("button", { name: "取消" }));
 
     await screen.findByRole("heading", { level: 1, name: "我的設定" });
     expect(api.calls).not.toContain("POST /api/v1/auth/merge/confirm");
     const accounts = within(screen.getByRole("list", { name: "已連結的帳號" }));
-    expect(accounts.getByText("Google").closest("li")).not.toHaveTextContent("已連結");
+    expect(accounts.getByText("LINE").closest("li")).not.toHaveTextContent("已連結");
+  });
+
+  it("shows the translated error and stays on MergePage when cancel fails, then navigates after retry succeeds", async () => {
+    const user = userEvent.setup();
+    const kept = makeUser("Google小宇", "google");
+    const other = makeUser("LINE小宇", "line");
+    const { api } = renderApp({
+      path: "/settings",
+      cookieUser: kept,
+      lineLink: { idToken: "fake|l-other|LINE小宇" },
+    });
+    api.lineOwners.set("l-other", other);
+
+    const list = await screen.findByRole("list", { name: "已連結的帳號" });
+    await user.click(within(accountRow(list, "LINE")).getByRole("button", { name: "連接" }));
+    await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
+
+    api.failNext("POST /api/v1/auth/merge/cancel", "INTERNAL", 500);
+    await user.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("出了點狀況");
+    expect(screen.getByRole("heading", { level: 1, name: "確認合併帳號" })).toBeVisible();
+    const cancelButton = screen.getByRole("button", { name: "取消" });
+    expect(cancelButton).toBeEnabled();
+
+    await user.click(cancelButton);
+    await screen.findByRole("heading", { level: 1, name: "我的設定" });
   });
 
   it("shows a translated message when the pending Merge is missing or expired", async () => {

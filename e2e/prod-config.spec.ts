@@ -19,8 +19,12 @@ test.describe("Production configuration safeguards (SPEC §7.3)", () => {
   });
 
   test("rejects fake ID tokens in the production environment", async ({ request }) => {
+    const payload = Buffer.from(
+      JSON.stringify({ sub: "prod-attacker", name: "駭客" }),
+      "utf8",
+    ).toString("base64url");
     const res = await request.post("http://[::1]:8788/api/v1/auth/google", {
-      data: { idToken: "fake|prod-attacker|駭客" },
+      data: { idToken: `fake.${payload}.sig` },
     });
     expect(res.status()).toBe(401);
   });

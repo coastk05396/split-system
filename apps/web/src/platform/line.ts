@@ -1,5 +1,6 @@
 import type liff from "@line/liff";
 
+export type LineLinkResult = { idToken: string } | { idToken: null; mismatch?: true };
 /** A message the LIFF share picker or `sendMessages` takes: text or a Flex card. */
 export type LineMessage = Parameters<typeof liff.sendMessages>[0][number];
 
@@ -20,11 +21,13 @@ export interface LineSignIn {
   /** Outside LINE: send the browser to LINE Login (email or QR), returning here. */
   login(): Promise<void>;
   /** Outside LINE on Settings: send the browser to LINE Login to link LINE to the signed-in User. */
-  startLink(): Promise<void>;
-  /** On return from `startLink`: the LINE ID token (or null when cancelled/failed), or null when none is pending. */
-  takeLinkResult(): Promise<{ idToken: string | null } | null>;
-  /** Clears a pending `startLink` marker when the browser restores the page via back-forward cache. */
-  cancelLink(): void;
+  startLink(userId: string): Promise<void>;
+  /** True when a LINE link round trip is pending and has not yet completed or been cancelled. */
+  hasPendingLink(): boolean;
+  /** On return from `startLink`: the LINE ID token (or null when cancelled/failed/mismatched), or null when none is pending. */
+  takeLinkResult(expectedUserId: string): Promise<LineLinkResult | null>;
+  /** Clears a pending `startLink` marker; returns true if a link round trip was pending. */
+  cancelLink(): boolean;
   /** Inside LINE: open `url` in the phone's own browser (Google refuses LINE's in-app one). */
   openExternal(url: string): Promise<void>;
   /**
@@ -103,17 +106,36 @@ function clearReturning(): void {
   storage()?.removeItem(RETURNING_KEY);
 }
 
-function markLink(): void {
-  storage()?.setItem(LINK_KEY, String(Date.now()));
+function markLink(userId: string): void {
+  storage()?.setItem(LINK_KEY, JSON.stringify({ userId, startedAt: Date.now() }));
 }
 
 function clearLink(): void {
   storage()?.removeItem(LINK_KEY);
 }
 
+function readLinkMarker(): { userId: string; startedAt: number } | null {
+  const raw = storage()?.getItem(LINK_KEY);
+  if (raw === null || raw === undefined) return null;
+  try {
+    const parsed = JSON.parse(raw) as { userId?: unknown; startedAt?: unknown };
+    if (
+      typeof parsed.userId !== "string" ||
+      parsed.userId === "" ||
+      typeof parsed.startedAt !== "number" ||
+      !Number.isFinite(parsed.startedAt) ||
+      Date.now() - parsed.startedAt >= RETURNING_TTL_MS
+    ) {
+      return null;
+    }
+    return { userId: parsed.userId, startedAt: parsed.startedAt };
+  } catch {
+    return null;
+  }
+}
+
 function hasPendingLink(): boolean {
-  const started = Number(storage()?.getItem(LINK_KEY));
-  return Number.isFinite(started) && Date.now() - started < RETURNING_TTL_MS;
+  return readLinkMarker() !== null;
 }
 
 function stripOAuthParams(): void {
@@ -187,7 +209,7 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
 
   // Started once per page load: React may mount the auth provider twice in dev.
   let autoSignIn: Promise<string | null> | null = null;
-  let linkResult: Promise<{ idToken: string | null } | null> | null = null;
+  let linkResult: Promise<LineLinkResult | null> | null = null;
 
   async function beginLogin(redirectUri: string): Promise<void> {
     markReturning();
@@ -203,8 +225,15 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     liff.login({ redirectUri });
   }
 
-  async function readLinkResult(): Promise<{ idToken: string | null } | null> {
-    if (!hasPendingLink()) return null;
+  async function readLinkResult(expectedUserId: string): Promise<LineLinkResult | null> {
+    const pending = readLinkMarker();
+    if (pending === null) return null;
+    if (pending.userId !== expectedUserId) {
+      clearLink();
+      clearReturning();
+      stripOAuthParams();
+      return { idToken: null, mismatch: true };
+    }
     if (new URLSearchParams(window.location.search).has("error")) {
       clearLink();
       clearReturning();
@@ -214,7 +243,8 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     try {
       const liff = await loadLiff();
       if (liff === null || !liff.isLoggedIn()) return { idToken: null };
-      return { idToken: liff.getIDToken() };
+      const idToken = liff.getIDToken();
+      return idToken === null ? { idToken: null } : { idToken };
     } catch {
       return { idToken: null };
     } finally {
@@ -225,6 +255,12 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
   }
 
   async function startAutoSignIn(): Promise<string | null> {
+    if (hasPendingLink()) {
+      clearLink();
+      clearReturning();
+      stripOAuthParams();
+      return null;
+    }
     if (!isReturning() && !looksLikeLineApp(navigator.userAgent)) return null;
     const liff = await loadLiff();
     if (liff === null) {
@@ -276,9 +312,9 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
 
     login: () => beginLogin(window.location.href),
 
-    async startLink() {
+    async startLink(userId) {
       linkResult = null;
-      markLink();
+      markLink(userId);
       try {
         await beginLogin(`${window.location.origin}${window.location.pathname}`);
       } catch (error) {
@@ -288,8 +324,10 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       }
     },
 
-    takeLinkResult() {
-      linkResult ??= readLinkResult().finally(() => {
+    hasPendingLink,
+
+    takeLinkResult(expectedUserId) {
+      linkResult ??= readLinkResult(expectedUserId).finally(() => {
         queueMicrotask(() => {
           linkResult = null;
         });
@@ -298,9 +336,12 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
     },
 
     cancelLink() {
+      const wasPending = hasPendingLink();
       linkResult = null;
       clearLink();
       clearReturning();
+      stripOAuthParams();
+      return wasPending;
     },
 
     // Inside LIFF, LINE ignores the openExternalBrowser parameter, so use LIFF's own external

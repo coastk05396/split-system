@@ -118,7 +118,7 @@ function UserSideCard({
  * path warns and requires ticking "both are me" before Merge becomes enabled.
  */
 export function MergePage() {
-  const { getPendingMerge, confirmMerge, cancelMerge } = useAuth();
+  const { state, getPendingMerge, confirmMerge, cancelMerge } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const initial = (location.state as { merge?: MergePreview } | null)?.merge ?? null;
@@ -159,7 +159,11 @@ export function MergePage() {
         <p role="alert" className="w-full rounded-2xl bg-peach px-4 py-3 text-sm">
           {errorMessage(loadError ?? "MERGE_PENDING_INVALID")}
         </p>
-        <Link to="/settings" replace className={`${secondaryButton} py-3`}>
+        <Link
+          to={state.status === "signedIn" ? "/settings" : "/sign-in"}
+          replace
+          className={`${secondaryButton} py-3`}
+        >
           {t("merge.backToSettings")}
         </Link>
       </div>
@@ -193,9 +197,15 @@ export function MergePage() {
 
   async function onCancel() {
     if (preview === null) return;
+    setSubmitError(null);
     setWorking(true);
-    await cancelMerge(preview.mergeId).catch(() => undefined);
-    void navigate("/settings", { replace: true });
+    try {
+      await cancelMerge(preview.mergeId);
+      void navigate(state.status === "signedIn" ? "/settings" : "/sign-in", { replace: true });
+    } catch (error) {
+      setSubmitError(error instanceof ApiFailure ? error.code : "INTERNAL");
+      setWorking(false);
+    }
   }
 
   return (
