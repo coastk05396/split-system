@@ -19,6 +19,8 @@ export const ERROR_STATUS = {
   PROVIDER_ALREADY_LINKED: 409,
   MERGE_ACCOUNT_DELETION_PENDING: 409,
   MERGE_SAME_PROVIDER: 409,
+  /** A User Merge is still finishing in this Group's ledger, so writes wait until it completes. */
+  GROUP_MERGING: 409,
   LAST_ADMIN: 409,
   GROUP_LIMIT_REACHED: 409,
   SETTLEMENT_CURRENCY_LOCKED: 409,

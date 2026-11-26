@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { groupMemberSummary } from "../db/schema.js";
+import { groupMemberSummary, mergeCleanups } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 
 export interface MemberRow {
@@ -51,6 +51,32 @@ export async function findMembership(
 export async function requireMember(db: Db, groupId: string, userId: string): Promise<MemberRow> {
   const me = await findMembership(db, groupId, userId);
   if (me === undefined) throw new ApiError("NOT_FOUND");
+  return me;
+}
+
+/** True while any User Merge has not yet completed on this Group's ledger. */
+export async function isGroupMerging(db: Db, groupId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ groupId: mergeCleanups.groupId })
+    .from(mergeCleanups)
+    .where(eq(mergeCleanups.groupId, groupId))
+    .limit(1);
+  return row !== undefined;
+}
+
+/** Refuses writes while a Group's ledger is still finishing a User Merge. */
+export async function assertGroupNotMerging(db: Db, groupId: string): Promise<void> {
+  if (await isGroupMerging(db, groupId)) throw new ApiError("GROUP_MERGING");
+}
+
+/** Active Member check for write routes: 404 to non-Members, 409 GROUP_MERGING while merging. */
+export async function requireWritableMember(
+  db: Db,
+  groupId: string,
+  userId: string,
+): Promise<MemberRow> {
+  const me = await requireMember(db, groupId, userId);
+  await assertGroupNotMerging(db, me.groupId);
   return me;
 }
 

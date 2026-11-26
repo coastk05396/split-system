@@ -128,7 +128,10 @@ export const mergeCleanups = sqliteTable(
     groupId: text("group_id").notNull(),
     expiresAt: integer("expires_at").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.otherUserId, t.groupId] })],
+  (t) => [
+    primaryKey({ columns: [t.otherUserId, t.groupId] }),
+    index("merge_cleanups_group_idx").on(t.groupId),
+  ],
 );
 
 /** Invite token lookup (retained). */

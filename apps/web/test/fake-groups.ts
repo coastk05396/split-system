@@ -44,6 +44,7 @@ interface FakeGroup {
   settlementCurrency: CurrencyCode;
   isTrip: boolean;
   locked: boolean;
+  merging: boolean;
   members: FakeMember[];
   invite: Invite | null;
   trip: FakeTrip;
@@ -81,6 +82,7 @@ export interface SeedGroup {
   name: string;
   settlementCurrency?: CurrencyCode;
   isTrip?: boolean;
+  merging?: boolean;
   role?: MemberRole;
   myBalance?: number;
   /** Other Members; `userId: null` with status "placeholder" makes a Placeholder Member. */
@@ -102,9 +104,11 @@ export interface FakeGroups {
   /** Seeds a Group with `user` as a Member (Admin by default); returns its id. */
   add(user: Me | null, seed: SeedGroup): string;
   /** Lists active Groups belonging to `userId`. */
-  forUser(userId: string): { id: string; name: string }[];
+  forUser(userId: string): { id: string; name: string; merging?: boolean }[];
+  /** Marks or clears the merging state on a Group. */
+  setMerging(groupId: string, merging: boolean): void;
   /** Repoints non-shared Groups of `fromUserId` to `toUserId`. */
-  repointUser(fromUserId: string, toUserId: string): void;
+  repointUser(fromUserId: string, toUserId: string, skipGroupIds?: ReadonlySet<string>): void;
   /** A seeded Group's members, for assertions. */
   members(groupId: string): readonly FakeMember[];
   exists(groupId: string): boolean;
@@ -224,6 +228,7 @@ export function createFakeGroups(): FakeGroups {
       isTrip: g.isTrip,
       ...g.trip,
       settlementCurrencyLocked: g.locked,
+      ...(g.merging ? { merging: true } : {}),
       memberCount: seated(g).length,
       memberPreview: seated(g)
         .slice(0, MAX_MEMBER_PREVIEW)
@@ -338,6 +343,7 @@ export function createFakeGroups(): FakeGroups {
         settlementCurrency: seed.settlementCurrency ?? "TWD",
         isTrip: seed.isTrip ?? false,
         locked: false,
+        merging: seed.merging ?? false,
         members,
         invite:
           seed.invite == null
@@ -355,22 +361,28 @@ export function createFakeGroups(): FakeGroups {
     },
 
     forUser(userId) {
-      const result: { id: string; name: string }[] = [];
+      const result: { id: string; name: string; merging?: boolean }[] = [];
       for (const g of groups.values()) {
         if (g.members.some((m) => m.userId === userId && m.status === "active")) {
-          result.push({ id: g.id, name: g.name });
+          result.push({ id: g.id, name: g.name, ...(g.merging ? { merging: true } : {}) });
         }
       }
       return result;
     },
 
-    repointUser(fromUserId, toUserId) {
+    setMerging(groupId, merging) {
+      const g = groups.get(groupId);
+      if (g !== undefined) g.merging = merging;
+    },
+
+    repointUser(fromUserId, toUserId, skipGroupIds) {
       for (const g of groups.values()) {
         const hasTarget = g.members.some((m) => m.userId === toUserId);
         if (hasTarget) continue;
         for (const m of g.members) {
           if (m.userId === fromUserId) m.userId = toUserId;
         }
+        if (skipGroupIds?.has(g.id)) g.merging = true;
       }
     },
 

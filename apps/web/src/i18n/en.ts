@@ -90,6 +90,7 @@ export const en: Record<MessageId, string> = {
   "groups.people": "{count} people",
   "groups.memberCount": "{count} members",
   "groups.settled": "Settled",
+  "groups.merging": "Merging",
   "groups.owe": "Your share {amount}",
   "groups.owed": "You get {amount}",
   "usage.tab": "Quick split",
@@ -125,6 +126,8 @@ export const en: Record<MessageId, string> = {
   "group.alone.title": "Just you so far",
   "group.alone.body": "Invite friends, or add a member who has not joined yet, to start splitting.",
   "group.alone.invite": "Invite friends",
+  "group.mergingBanner":
+    "This group is still finishing an account merge. It will complete automatically; new entries are paused until then.",
   "group.delete.title": "Delete “{name}”?",
   "group.delete.body":
     "The group, every expense, the settlement history and the invite link are deleted for good and cannot be restored.",
@@ -603,6 +606,10 @@ export const en: Record<MessageId, string> = {
   "merge.groupsHeading": "Groups ({count})",
   "merge.noGroups": "No groups",
   "merge.sharedGroup": "Will become one member",
+  "merge.mergingGroup": "Merging",
+  "merge.partialNotice":
+    "Your accounts are merged. Groups marked Merging will finish automatically; new entries are paused until then.",
+  "merge.viewGroups": "View my groups",
   "merge.irreversible":
     "This merge cannot be undone. The other account's sessions will end and it will be deleted.",
   "merge.linkCodeWarning":
@@ -634,6 +641,7 @@ export const enErrors: Record<ErrorCode, string> = {
     "One of the accounts has a deletion in progress, so they cannot be merged.",
   MERGE_SAME_PROVIDER:
     "Both accounts already have the same sign-in method linked, so they cannot be merged.",
+  GROUP_MERGING: "This group is still finishing an account merge. Please try again shortly.",
   PROVIDER_ALREADY_LINKED: "You have already linked this kind of account.",
   LAST_ADMIN: "A group needs at least one admin.",
   GROUP_LIMIT_REACHED: "You can be in at most 20 groups.",

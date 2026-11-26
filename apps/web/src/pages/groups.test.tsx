@@ -74,4 +74,22 @@ describe("group list", () => {
 
     expect(await screen.findByRole("heading", { name: "從第一個小隊開始吧！" })).toBeVisible();
   });
+
+  it("shows a merging badge on Groups whose ledger merge is still pending", async () => {
+    renderApp({
+      path: "/groups",
+      cookieUser: me,
+      seed: (groups) => {
+        groups.add(me, { name: "一般群組" });
+        groups.add(me, { name: "卡住群組", merging: true });
+      },
+    });
+
+    const list = await screen.findByRole("list", { name: "我的群組" });
+    const items = within(list).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("卡住群組");
+    expect(items[0]).toHaveTextContent("合併中");
+    expect(items[1]).toHaveTextContent("一般群組");
+    expect(items[1]).not.toHaveTextContent("合併中");
+  });
 });

@@ -8,7 +8,7 @@ import { groupReservations, settlementRoutes as settlementRoutesTable } from "..
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import type { Bindings } from "../env.js";
-import { requireMember } from "../groups/membership.js";
+import { requireMember, requireWritableMember } from "../groups/membership.js";
 import { groupLedger } from "../ledger-client.js";
 import { consumeRateLimit, rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey } from "../request-guards.js";
@@ -79,7 +79,7 @@ export function settlementRoutes(deps: AppDeps) {
       return c.json(result.value, 200);
     })
     .post("/groups/:id/settlements", signedIn, limited, async (c) => {
-      const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const key = requireIdempotencyKey(c),
         input = await parseBody(c, settlementInputSchema);
       const result = await groupLedger(c.env, me.groupId).settlement({
@@ -101,7 +101,7 @@ export function settlementRoutes(deps: AppDeps) {
         c.env,
         deps.now(),
       );
-      const me = await requireMember(db, groupId, c.var.userId);
+      const me = await requireWritableMember(db, groupId, c.var.userId);
       const result = await groupLedger(c.env, groupId).settlement({
         action: "undo",
         actorId: me.id,

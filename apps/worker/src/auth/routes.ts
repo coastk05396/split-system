@@ -203,7 +203,17 @@ export function authRoutes(deps: AppDeps) {
           merged.provider,
           c.var.sessionId ?? undefined,
         );
-        return c.json({ accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, user: me }, 200);
+        return c.json(
+          {
+            accessToken,
+            expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+            user: me,
+            ...(merged.mergingGroupIds.length > 0
+              ? { mergingGroupIds: merged.mergingGroupIds }
+              : {}),
+          },
+          200,
+        );
       })
       .get("/me", signedIn, async (c) =>
         c.json(await requireMe(createDb(c.env.DB), c.var.userId, c.var.signedInWith), 200),

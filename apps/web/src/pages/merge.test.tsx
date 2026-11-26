@@ -109,4 +109,49 @@ describe("/merge (confirming a Merge on the Link code path)", () => {
     expect(screen.getByRole("button", { name: "Merge accounts" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
   });
+
+  it("marks a Group that is already merging in the Merge screen preview", async () => {
+    const kept = makeUser("LINE小宇", "line");
+    const other = makeUser("Google小宇", "google");
+    const { api } = renderApp({
+      path: "/link?code=code-1",
+      seed: (groups) => {
+        groups.add(kept, { name: "卡住群組", merging: true });
+        groups.add(other, { name: "Google旅遊" });
+      },
+    });
+    api.linkCodes.set("code-1", kept);
+    api.googleOwners = new Map([["g-1", other]]);
+
+    await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
+    const keptCard = screen.getByRole("region", { name: "保留的帳號" });
+    expect(within(keptCard).getByText("合併中")).toBeVisible();
+  });
+
+  it("keeps Groups that failed during confirm marked as merging on the Merge screen", async () => {
+    const user = userEvent.setup();
+    const kept = makeUser("LINE小宇", "line");
+    const other = makeUser("Google小宇", "google");
+    let flakyGroupId = "";
+    const { api } = renderApp({
+      path: "/link?code=code-1",
+      seed: (groups) => {
+        groups.add(other, { name: "順利群組" });
+        flakyGroupId = groups.add(other, { name: "卡住群組" });
+      },
+    });
+    api.linkCodes.set("code-1", kept);
+    api.googleOwners = new Map([["g-1", other]]);
+    api.failMergeGroups.add(flakyGroupId);
+
+    await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
+    await user.click(screen.getByRole("checkbox", { name: "這兩個帳號都是我本人" }));
+    await user.click(screen.getByRole("button", { name: "合併帳號" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/合併中/);
+    const otherCard = screen.getByRole("region", { name: "將被合併的帳號" });
+    expect(within(otherCard).getByText("合併中")).toBeVisible();
+    expect(screen.getByRole("link", { name: "前往我的群組" })).toHaveAttribute("href", "/groups");
+    expect(screen.getByRole("link", { name: "回到設定" })).toHaveAttribute("href", "/settings");
+  });
 });

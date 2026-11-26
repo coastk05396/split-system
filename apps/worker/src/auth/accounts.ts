@@ -326,8 +326,9 @@ async function loadMergeUserSide(
     .from(identities)
     .where(eq(identities.userId, userId))
     .orderBy(asc(identities.createdAt), asc(identities.provider));
-  const groups = await db.all<{ id: string; name: string }>(
-    sql`SELECT d.group_id AS id, d.name
+  const groups = await db.all<{ id: string; name: string; merging: number }>(
+    sql`SELECT d.group_id AS id, d.name,
+        EXISTS (SELECT 1 FROM merge_cleanups mc WHERE mc.group_id = d.group_id) AS merging
         FROM group_directory d
         JOIN group_member_summary m ON m.group_id = d.group_id
         WHERE m.user_id = ${userId} AND d.deleted = 0
@@ -340,7 +341,12 @@ async function loadMergeUserSide(
     providers: linked.map((l) => l.provider),
     profileProvider: linked[0]?.provider ?? "line",
     groupCount: groups.length,
-    groups: groups.map((g) => ({ id: g.id, name: g.name, shared: otherGroupIds.has(g.id) })),
+    groups: groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      shared: otherGroupIds.has(g.id),
+      ...(g.merging === 1 ? { merging: true } : {}),
+    })),
   };
 }
 
@@ -485,7 +491,7 @@ export async function confirmMerge(
   sessionId: string | null,
   mergeId: string,
   now: number,
-): Promise<{ userId: string; provider: Provider }> {
+): Promise<{ userId: string; provider: Provider; mergingGroupIds: string[] }> {
   const claimed = await claimPendingMerge(env, db, userId, sessionId, mergeId, now);
   if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
   const { keptUserId, otherUserId, otherProvider, otherEmail } = claimed;
@@ -566,8 +572,16 @@ export async function confirmMerge(
   if ((results[deleteUserIndex]?.meta.changes ?? 0) < 1) {
     throw new ApiError("MERGE_ACCOUNT_DELETION_PENDING");
   }
-  await commitMergeCleanups(env);
-  return { userId: keptUserId, provider: otherProvider };
+  await commitMergeCleanups(env, now);
+  const remaining =
+    groupIds.length === 0
+      ? []
+      : (
+          await env.DB.prepare("SELECT group_id FROM merge_cleanups WHERE other_user_id=?")
+            .bind(otherUserId)
+            .all<{ group_id: string }>()
+        ).results.map((r) => r.group_id);
+  return { userId: keptUserId, provider: otherProvider, mergingGroupIds: remaining };
 }
 
 /** Reads the current Session's active pending Merge preview without consuming it. */
@@ -609,6 +623,12 @@ export async function deleteAccount(
   userId: string,
   clock: () => number,
 ): Promise<void> {
+  const merging = await env.DB.prepare(
+    "SELECT 1 AS found FROM merge_cleanups WHERE kept_user_id=? LIMIT 1",
+  )
+    .bind(userId)
+    .first();
+  if (merging !== null) throw new ApiError("GROUP_MERGING");
   const now = clock();
   const expires = now + 10 * 60 * 1000;
   const mark = await env.DB.prepare(

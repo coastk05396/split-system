@@ -6,7 +6,7 @@ import { requireUser } from "../auth/require-user.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
-import { requireMember } from "../groups/membership.js";
+import { requireMember, requireWritableMember } from "../groups/membership.js";
 import { groupLedger } from "../ledger-client.js";
 import { parseBody, requireIfMatch } from "../request-guards.js";
 
@@ -28,7 +28,7 @@ export function stopRoutes(deps: AppDeps) {
       return c.json(result.value, 200);
     })
     .post("/groups/:id/stops", signedIn, writeLimit, async (c) => {
-      const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const input = await parseBody(c, stopInputSchema);
       const result = await groupLedger(c.env, me.groupId).stop({
         action: "create",
@@ -40,7 +40,7 @@ export function stopRoutes(deps: AppDeps) {
       return c.json(result.value, 201);
     })
     .patch("/groups/:id/stops/:sid", signedIn, writeLimit, async (c) => {
-      const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const expected = requireIfMatch(c);
       const input = await parseBody(c, stopPatchSchema);
       const result = await groupLedger(c.env, me.groupId).stop({
@@ -55,7 +55,7 @@ export function stopRoutes(deps: AppDeps) {
       return c.json(result.value, 200);
     })
     .delete("/groups/:id/stops/:sid", signedIn, writeLimit, async (c) => {
-      const me = await requireMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(createDb(c.env.DB), c.req.param("id"), c.var.userId);
       const result = await groupLedger(c.env, me.groupId).stop({
         action: "delete",
         actorId: me.id,

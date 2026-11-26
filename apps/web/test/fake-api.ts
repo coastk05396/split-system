@@ -35,6 +35,8 @@ export interface FakeApi {
   linkCodes: Map<string, Me>;
   /** Existing Users keyed by Google `sub`, to trigger a Merge on link-code redemption. */
   googleOwners: Map<string, Me>;
+  /** Group IDs whose ledger merge fails during confirm, leaving them marked as merging. */
+  failMergeGroups: Set<string>;
   /** The next request to "METHOD /path" reaches the server, but its answer is lost (network error). */
   dropNextResponse(route: string): void;
   /** Every request seen, with its headers and body text. */
@@ -140,6 +142,7 @@ export function createFakeApi(): FakeApi {
     refuseLink: null,
     linkCodes: new Map(),
     googleOwners: new Map(),
+    failMergeGroups: new Set(),
     requests,
     spendingStats: [],
     spendingDetails: [],
@@ -306,13 +309,26 @@ export function createFakeApi(): FakeApi {
           return error("MERGE_PENDING_INVALID", 422);
         }
         pendingMerges.delete(String(mergeId));
-        api.groups.repointUser(match.other.id, match.kept.id);
+        api.groups.repointUser(match.other.id, match.kept.id, api.failMergeGroups);
+        const mergingGroupIds = api.groups
+          .forUser(match.kept.id)
+          .filter((g) => g.merging === true)
+          .map((g) => g.id);
         const merged: Me = {
           ...match.kept,
           signedInWith: "google",
           identities: [...match.kept.identities, ...match.other.identities],
         };
-        return issue(merged);
+        cookieUser = merged;
+        tokenSeq += 1;
+        const accessToken = `access-${tokenSeq}`;
+        liveTokens.set(accessToken, merged);
+        return json({
+          accessToken,
+          expiresIn: 3600,
+          user: merged,
+          ...(mergingGroupIds.length > 0 ? { mergingGroupIds } : {}),
+        });
       }
       case "POST /api/v1/auth/merge/cancel": {
         if (authed === undefined) return error("UNAUTHORIZED", 401);

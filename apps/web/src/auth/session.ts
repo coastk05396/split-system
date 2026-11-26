@@ -7,6 +7,11 @@ export interface RedeemLinkCodeResult {
   merge: MergePreview | null;
 }
 
+export interface ConfirmMergeResult {
+  user: Me;
+  mergingGroupIds: string[];
+}
+
 /**
  * The browser side of a session (decision 09): the access token lives only in memory,
  * the rotating refresh token only in the Worker's httpOnly cookie.
@@ -19,7 +24,7 @@ export interface Session {
   /** Spends a link code with a Google ID token: joins the code's User and signs in as them, or returns a Merge preview. */
   redeemLinkCode(code: string, idToken: string): Promise<RedeemLinkCodeResult>;
   getPendingMerge(): Promise<MergePreview>;
-  confirmMerge(mergeId: string): Promise<Me>;
+  confirmMerge(mergeId: string): Promise<ConfirmMergeResult>;
   cancelMerge(mergeId: string): Promise<void>;
   link(provider: Provider, idToken: string): Promise<Me>;
   createLinkCode(): Promise<string>;
@@ -141,7 +146,18 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     },
 
     async confirmMerge(mergeId) {
-      return accept(await authenticated.auth.merge.confirm.$post(undefined, withJson({ mergeId })));
+      const res: Response = await authenticated.auth.merge.confirm.$post(
+        undefined,
+        withJson({ mergeId }),
+      );
+      if (!res.ok) throw await toApiFailure(res);
+      const body = (await res.json()) as {
+        accessToken: string;
+        user: Me;
+        mergingGroupIds?: string[];
+      };
+      accessToken = body.accessToken;
+      return { user: body.user, mergingGroupIds: body.mergingGroupIds ?? [] };
     },
 
     async cancelMerge(mergeId) {

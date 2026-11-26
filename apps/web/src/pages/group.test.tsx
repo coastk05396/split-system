@@ -4,6 +4,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeUser } from "../../test/fake-api.js";
 import { renderApp } from "../../test/render-app.js";
+import { setLocale } from "../i18n/messages.js";
 
 // The Trip module is under maintenance in the app; these tests run it switched on.
 const trip = vi.hoisted(() => ({ enabled: true }));
@@ -14,6 +15,7 @@ vi.mock("../trip/enabled.js", () => ({
 }));
 afterEach(() => {
   trip.enabled = true;
+  setLocale("zh-TW");
 });
 
 const me = makeUser("小宇");
@@ -205,5 +207,19 @@ describe("group detail", () => {
     const settleTab = within(tablist).getByRole("tab", { name: "結算" });
     await user.click(settleTab);
     expect(vibrateMock).toHaveBeenCalledWith(10);
+  });
+
+  it("shows a merging banner on a Group that is still finishing a User Merge", async () => {
+    let id = "";
+    renderApp({
+      cookieUser: me,
+      seed: (groups) => {
+        id = groups.add(me, { name: "卡住群組", merging: true });
+      },
+      pathFor: () => `/groups/${id}`,
+    });
+
+    expect(await screen.findByRole("heading", { level: 1, name: "卡住群組" })).toBeVisible();
+    expect(screen.getByText(/合併帳號中/)).toBeVisible();
   });
 });

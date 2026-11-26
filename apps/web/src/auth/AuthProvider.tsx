@@ -22,7 +22,7 @@ import { voidMutationsInFlight } from "./void-mutations.js";
 import { clearExpenseWrites } from "../expenses/writes.js";
 import { cancelStatsInvalidation } from "../groups/data.js";
 import type { LineSignIn } from "../platform/line.js";
-import { createSession, type Session } from "./session.js";
+import { type ConfirmMergeResult, createSession, type Session } from "./session.js";
 
 export type AuthState =
   | { status: "loading" }
@@ -39,7 +39,7 @@ export interface Auth {
     idToken: string,
   ) => Promise<{ merge: MergePreview | null } | false>;
   getPendingMerge: () => Promise<MergePreview>;
-  confirmMerge: (mergeId: string) => Promise<Me>;
+  confirmMerge: (mergeId: string) => Promise<ConfirmMergeResult>;
   cancelMerge: (mergeId: string) => Promise<void>;
   link: (provider: Provider, idToken: string) => Promise<void>;
   createLinkCode: () => Promise<string>;
@@ -185,12 +185,12 @@ export function AuthProvider({
       },
       getPendingMerge: () => session.getPendingMerge(),
       confirmMerge: async (mergeId) => {
-        const user = await session.confirmMerge(mergeId);
+        const result = await session.confirmMerge(mergeId);
         setState((current) =>
-          current.status === "signedIn" ? { status: "signedIn", user } : current,
+          current.status === "signedIn" ? { status: "signedIn", user: result.user } : current,
         );
         void queryClient.invalidateQueries();
-        return user;
+        return result;
       },
       cancelMerge: (mergeId) => session.cancelMerge(mergeId),
       link: async (provider, idToken) => {

@@ -14,7 +14,12 @@ import { groupDirectory, invites } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
 import { listMembers } from "./members.js";
-import { findMembership, type MemberRow, requireAdmin } from "./membership.js";
+import {
+  assertGroupNotMerging,
+  findMembership,
+  type MemberRow,
+  requireAdmin,
+} from "./membership.js";
 
 /** 256 random bits, base64url: unguessable, and the whole secret of the link. */
 function newToken(): string {
@@ -161,6 +166,7 @@ export async function joinGroup(
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
+  await assertGroupNotMerging(db, group.id);
   const result = await withReservation(
     env.DB,
     userId,
@@ -193,6 +199,7 @@ export async function claimPlaceholder(
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
   const { group } = await openInvite(db, token, now, env);
+  await assertGroupNotMerging(db, group.id);
   if ((await findMembership(db, group.id, userId)) !== undefined)
     throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);

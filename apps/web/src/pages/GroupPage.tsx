@@ -81,6 +81,14 @@ function GroupDetail({ group }: { group: Group }) {
           ) : undefined
         }
       />
+      {group.merging && (
+        <p
+          role="status"
+          className="rounded-2xl border border-amber-300/80 bg-amber-50/80 px-4 py-3 text-sm font-medium text-amber-950"
+        >
+          {t("group.mergingBanner")}
+        </p>
+      )}
       {group.memberCount === 1 && (
         <section className="flex items-center gap-3 rounded-2xl bg-sprout-150 px-4 py-3">
           <span className="sprout-greet inline-flex">

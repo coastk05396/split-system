@@ -60,6 +60,11 @@ function GroupRow({ group }: { group: Group }) {
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex items-center gap-2">
             <span className="truncate text-base font-bold text-ink">{group.name}</span>
+            {group.merging && (
+              <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900">
+                {t("groups.merging")}
+              </span>
+            )}
           </div>
           <span className="whitespace-nowrap text-xs text-ink-muted">
             {t("groups.memberCount", { count: group.memberCount })}

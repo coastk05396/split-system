@@ -102,7 +102,7 @@ async function runAccountAndRateMaintenance(env: Bindings, now: number): Promise
   const db = createDb(env.DB);
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
-  await commitMergeCleanups(env);
+  await commitMergeCleanups(env, now);
   await refreshRates(db, productionDeps.rateSource, now);
 }
 

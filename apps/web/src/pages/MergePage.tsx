@@ -37,11 +37,13 @@ function UserSideCard({
   label,
   badge,
   kept,
+  mergingIds,
 }: {
   side: MergeUserPreview;
   label: string;
   badge: string;
   kept: boolean;
+  mergingIds: ReadonlySet<string>;
 }) {
   return (
     <section
@@ -91,6 +93,11 @@ function UserSideCard({
                   className="size-7 text-xs"
                 />
                 <span className="min-w-0 flex-1 truncate font-medium">{group.name}</span>
+                {(group.merging === true || mergingIds.has(group.id)) && (
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                    {t("merge.mergingGroup")}
+                  </span>
+                )}
                 {group.shared && (
                   <span className="shrink-0 rounded-full bg-sprout-100 px-2 py-0.5 text-[10px] font-bold text-sprout-700">
                     {t("merge.sharedGroup")}
@@ -121,6 +128,7 @@ export function MergePage() {
   const [confirmed, setConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [submitError, setSubmitError] = useState<ErrorCode | null>(null);
+  const [mergingGroupIds, setMergingGroupIds] = useState<string[] | null>(null);
   const tickId = useId();
 
   useEffect(() => {
@@ -160,14 +168,20 @@ export function MergePage() {
 
   const requiresTick = preview.path === "linkCode";
   const canConfirm = !working && (!requiresTick || confirmed);
+  const mergingIds = new Set(mergingGroupIds ?? []);
 
   async function onConfirm() {
     if (preview === null) return;
     setSubmitError(null);
     setWorking(true);
     try {
-      await confirmMerge(preview.mergeId);
-      void navigate("/settings", { replace: true, state: { linked: "google" } });
+      const result = await confirmMerge(preview.mergeId);
+      if (result.mergingGroupIds.length === 0) {
+        void navigate("/settings", { replace: true, state: { linked: "google" } });
+        return;
+      }
+      setMergingGroupIds(result.mergingGroupIds);
+      setWorking(false);
     } catch (error) {
       setSubmitError(error instanceof ApiFailure ? error.code : "INTERNAL");
       setWorking(false);
@@ -191,6 +205,7 @@ export function MergePage() {
           label={t("merge.keptCard")}
           badge={t("merge.keptBadge")}
           kept={true}
+          mergingIds={mergingIds}
         />
         <div
           aria-hidden="true"
@@ -203,61 +218,88 @@ export function MergePage() {
           label={t("merge.otherCard")}
           badge={t("merge.otherBadge")}
           kept={false}
+          mergingIds={mergingIds}
         />
       </div>
 
-      <p className="text-sm font-bold text-red-700">{t("merge.irreversible")}</p>
-
-      {requiresTick && (
-        <div className={`${card} flex flex-col gap-3 border-amber-300/80 bg-amber-50/70 p-4`}>
-          <p className="text-sm font-medium text-amber-950">{t("merge.linkCodeWarning")}</p>
-          <label
-            htmlFor={tickId}
-            className="flex cursor-pointer items-center gap-3 text-sm font-bold select-none"
+      {mergingGroupIds !== null ? (
+        <>
+          <p
+            role="status"
+            className="rounded-2xl border border-amber-300/80 bg-amber-50/80 px-4 py-3 text-sm font-medium text-amber-950"
           >
-            <input
-              id={tickId}
-              type="checkbox"
-              checked={confirmed}
+            {t("merge.partialNotice")}
+          </p>
+          <div className="flex gap-3">
+            <Link
+              to="/settings"
+              replace
+              state={{ linked: "google" }}
+              className={`${secondaryButton} flex-1 py-3.5 text-center`}
+            >
+              {t("merge.backToSettings")}
+            </Link>
+            <Link to="/groups" replace className={`${primaryButton} flex-1 py-3.5 text-center`}>
+              {t("merge.viewGroups")}
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm font-bold text-red-700">{t("merge.irreversible")}</p>
+
+          {requiresTick && (
+            <div className={`${card} flex flex-col gap-3 border-amber-300/80 bg-amber-50/70 p-4`}>
+              <p className="text-sm font-medium text-amber-950">{t("merge.linkCodeWarning")}</p>
+              <label
+                htmlFor={tickId}
+                className="flex cursor-pointer items-center gap-3 text-sm font-bold select-none"
+              >
+                <input
+                  id={tickId}
+                  type="checkbox"
+                  checked={confirmed}
+                  disabled={working}
+                  onChange={(event) => {
+                    setConfirmed(event.target.checked);
+                  }}
+                  className="size-4 accent-sprout-600"
+                />
+                {t("merge.bothAreMe")}
+              </label>
+            </div>
+          )}
+
+          {submitError !== null && (
+            <p role="alert" className="rounded-2xl bg-peach px-4 py-3 text-sm">
+              {errorMessage(submitError)}
+            </p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
               disabled={working}
-              onChange={(event) => {
-                setConfirmed(event.target.checked);
+              onClick={() => {
+                void onCancel();
               }}
-              className="size-4 accent-sprout-600"
-            />
-            {t("merge.bothAreMe")}
-          </label>
-        </div>
+              className={`${secondaryButton} flex-1 py-3.5`}
+            >
+              {t("merge.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={!canConfirm}
+              onClick={() => {
+                void onConfirm();
+              }}
+              className={`${primaryButton} flex-1 py-3.5`}
+            >
+              {working ? t("merge.confirming") : t("merge.confirm")}
+            </button>
+          </div>
+        </>
       )}
-
-      {submitError !== null && (
-        <p role="alert" className="rounded-2xl bg-peach px-4 py-3 text-sm">
-          {errorMessage(submitError)}
-        </p>
-      )}
-
-      <div className="flex gap-3">
-        <button
-          type="button"
-          disabled={working}
-          onClick={() => {
-            void onCancel();
-          }}
-          className={`${secondaryButton} flex-1 py-3.5`}
-        >
-          {t("merge.cancel")}
-        </button>
-        <button
-          type="button"
-          disabled={!canConfirm}
-          onClick={() => {
-            void onConfirm();
-          }}
-          className={`${primaryButton} flex-1 py-3.5`}
-        >
-          {working ? t("merge.confirming") : t("merge.confirm")}
-        </button>
-      </div>
     </div>
   );
 }

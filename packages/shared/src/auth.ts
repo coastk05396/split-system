@@ -37,6 +37,7 @@ export const mergeGroupPreviewSchema = z.object({
   id: z.string(),
   name: z.string(),
   shared: z.boolean(),
+  merging: z.boolean().optional(),
 });
 export type MergeGroupPreview = z.infer<typeof mergeGroupPreviewSchema>;
 
@@ -64,6 +65,14 @@ export const confirmMergeRequestSchema = z.object({
   mergeId: z.string().min(1).max(128),
 });
 export type ConfirmMergeRequest = z.infer<typeof confirmMergeRequestSchema>;
+
+export const confirmMergeResponseSchema = z.object({
+  accessToken: z.string(),
+  expiresIn: z.literal(ACCESS_TOKEN_TTL_SECONDS),
+  user: z.lazy(() => meSchema),
+  mergingGroupIds: z.array(z.string()).optional(),
+});
+export type ConfirmMergeResponse = z.infer<typeof confirmMergeResponseSchema>;
 
 /** Dev-only `POST /auth/test-sign-in`, present only when the test flag is set. */
 export const testSignInRequestSchema = z.object({
