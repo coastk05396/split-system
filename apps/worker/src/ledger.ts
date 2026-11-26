@@ -44,6 +44,7 @@ import type {
   LedgerState,
   MemberOperation,
   MemberOutcome,
+  MergeUserOperation,
   PatchGroup,
   SeatedMember,
   SettlementOperation,
@@ -726,6 +727,33 @@ export class GroupLedger extends DurableObject<Bindings> {
       return failure(error);
     }
     return done(null);
+  }
+
+  async mergeUser(op: MergeUserOperation): Promise<LedgerResult<null>> {
+    if (!this.hasTable("ledger_members") || this.isDeleted()) {
+      return { ok: true, value: null, rev: this.hasTable("ledger_meta") ? this.rev() : 0 };
+    }
+    try {
+      const { rev } = await this.commit((sql) => {
+        const otherRows = sql
+          .exec<MemberRow>("SELECT * FROM ledger_members WHERE user_id=?", op.otherUserId)
+          .toArray();
+        if (otherRows.length === 0) return { value: null };
+        const keptRows = sql
+          .exec<MemberRow>("SELECT * FROM ledger_members WHERE user_id=?", op.keptUserId)
+          .toArray();
+        if (keptRows.length > 0) throw new ApiError("INTERNAL");
+        sql.exec(
+          "UPDATE ledger_members SET user_id=? WHERE user_id=?",
+          op.keptUserId,
+          op.otherUserId,
+        );
+        return { value: null, dirty: ["group"], leaving: op.otherUserId };
+      });
+      return { ok: true, value: null, rev };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   async member(op: MemberOperation): Promise<LedgerResult<MemberOutcome>> {

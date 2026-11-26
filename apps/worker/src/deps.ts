@@ -1,4 +1,10 @@
-import { createJoseVerifier, fetchJwks, type IdentityVerifier } from "./auth/identity-verifier.js";
+import {
+  createJoseVerifier,
+  fetchJwks,
+  type IdentityVerifier,
+  type Provider,
+  type VerifiedIdentity,
+} from "./auth/identity-verifier.js";
 import type { Bindings } from "./env.js";
 import { serpApiFlightSource, type FlightSource } from "./flights/daily.js";
 import {
@@ -21,17 +27,73 @@ export interface AppDeps {
 
 const verifiers = new WeakMap<Bindings, IdentityVerifier>();
 
+function parseTestToken(provider: Provider, idToken: string): VerifiedIdentity | null {
+  if (idToken.startsWith("fake|")) {
+    const [, sub, name, email] = idToken.split("|");
+    if (sub === undefined || sub === "" || name === undefined || name === "") return null;
+    return {
+      provider,
+      sub,
+      displayName: name,
+      pictureUrl: `https://pic/${sub}`,
+      email: provider === "google" && email !== undefined && email !== "" ? email : null,
+    };
+  }
+  if (idToken.startsWith("fake.")) {
+    const payloadPart = idToken.split(".")[1];
+    if (payloadPart === undefined) return null;
+    try {
+      const padded = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+      const raw = JSON.parse(atob(padded)) as {
+        sub?: unknown;
+        name?: unknown;
+        email?: unknown;
+      };
+      if (
+        typeof raw.sub !== "string" ||
+        raw.sub === "" ||
+        typeof raw.name !== "string" ||
+        raw.name === ""
+      ) {
+        return null;
+      }
+      return {
+        provider,
+        sub: raw.sub,
+        displayName: raw.name,
+        pictureUrl: null,
+        email:
+          provider === "google" && typeof raw.email === "string" && raw.email !== ""
+            ? raw.email
+            : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export const productionDeps = {
   verifier: (env: Bindings) => {
     const existing = verifiers.get(env);
     if (existing !== undefined) return existing;
-    const verifier = createJoseVerifier({
+    const jose = createJoseVerifier({
       cache: env.JWKS_CACHE,
       fetchJwks,
       googleClientId: env.GOOGLE_CLIENT_ID,
       lineChannelId: env.LINE_LOGIN_CHANNEL_ID,
       now: Date.now,
     });
+    const verifier: IdentityVerifier =
+      env.TEST_SIGN_IN === "1"
+        ? {
+            verify: (provider, idToken) => {
+              const fake = parseTestToken(provider, idToken);
+              return fake !== null ? Promise.resolve(fake) : jose.verify(provider, idToken);
+            },
+          }
+        : jose;
     verifiers.set(env, verifier);
     return verifier;
   },

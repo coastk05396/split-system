@@ -21,6 +21,13 @@ describe("POST /auth/test-sign-in", () => {
     expect(res.status).toBe(404);
   });
 
+  it("rejects fake Google ID tokens in the deployed configuration", async () => {
+    const res = await exports.default.fetch("https://split.test/api/v1/auth/google", {
+      ...json({ idToken: "fake|prod-attacker|駭客" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
   it("signs in without a provider token when the flag is 1", async () => {
     const res = await call("/auth/test-sign-in", json(body(uniqueSub("on"))), {
       TEST_SIGN_IN: "1",

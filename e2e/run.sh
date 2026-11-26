@@ -9,7 +9,7 @@ if ! flock -n 9; then
 fi
 node e2e/ports-free.mjs
 rm -rf /tmp/wrangler-e2e-8787 /tmp/wrangler-e2e-8788
-VITE_TEST_SIGN_IN=1 pnpm build
+VITE_TEST_SIGN_IN=1 VITE_GOOGLE_CLIENT_ID=test-google-client-id pnpm build
 (
   cd apps/worker
   echo y | pnpm exec wrangler d1 migrations apply DB --local --persist-to /tmp/wrangler-e2e-8787

@@ -17,4 +17,11 @@ test.describe("Production configuration safeguards (SPEC §7.3)", () => {
     const body = (await res.json()) as unknown;
     expect(body).toEqual({ error: { code: "NOT_FOUND" } });
   });
+
+  test("rejects fake ID tokens in the production environment", async ({ request }) => {
+    const res = await request.post("http://[::1]:8788/api/v1/auth/google", {
+      data: { idToken: "fake|prod-attacker|駭客" },
+    });
+    expect(res.status()).toBe(401);
+  });
 });

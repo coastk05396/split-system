@@ -1,5 +1,6 @@
 import {
   ACCESS_TOKEN_TTL_SECONDS,
+  confirmMergeRequestSchema,
   idTokenRequestSchema,
   mePatchSchema,
   providerSchema,
@@ -16,10 +17,14 @@ import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { parseBody, sameOriginWrites } from "../request-guards.js";
 import {
+  cancelMerge,
+  confirmMerge,
   createLinkCode,
+  createPendingMerge,
   createSession,
   deleteAccount,
   endSession,
+  getPendingMerge,
   linkIdentity,
   loadMe,
   redeemLinkCode,
@@ -72,6 +77,7 @@ export function authRoutes(deps: AppDeps) {
       c.env.SESSION_SIGNING_KEY,
       deps.now(),
       provider,
+      refresh.sessionId,
     );
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, user: me };
   }
@@ -146,9 +152,59 @@ export function authRoutes(deps: AppDeps) {
         const identity = await deps.verifier(c.env).verify("google", idToken);
         const db = createDb(c.env.DB);
         const now = deps.now();
-        const userId = await redeemLinkCode(db, code, identity, now);
-        const refresh = await createSession(db, userId, "google", c.req.header("User-Agent"), now);
-        return c.json(await issueSession(c, userId, "google", refresh), 200);
+        const ua = c.req.header("User-Agent");
+        const outcome = await redeemLinkCode(db, code, identity, now);
+        if (!outcome.mergeNeeded) {
+          const refresh = await createSession(db, outcome.userId, "google", ua, now);
+          return c.json(await issueSession(c, outcome.userId, "google", refresh), 200);
+        }
+        const refresh = await createSession(db, outcome.keptUserId, outcome.keptProvider, ua, now);
+        const merge = await createPendingMerge(db, {
+          keptUserId: outcome.keptUserId,
+          otherUserId: outcome.otherUserId,
+          sessionId: refresh.sessionId,
+          path: "linkCode",
+          otherProvider: outcome.otherProvider,
+          otherEmail: outcome.otherEmail,
+          now,
+        });
+        const session = await issueSession(c, outcome.keptUserId, outcome.keptProvider, refresh);
+        return c.json({ ...session, mergeNeeded: true as const, merge }, 200);
+      })
+      .get("/auth/merge", signedIn, async (c) => {
+        const preview = await getPendingMerge(
+          createDb(c.env.DB),
+          c.var.userId,
+          c.var.sessionId,
+          deps.now(),
+        );
+        return c.json(preview, 200);
+      })
+      .post("/auth/merge/cancel", signedIn, async (c) => {
+        const { mergeId } = await parseBody(c, confirmMergeRequestSchema);
+        await cancelMerge(createDb(c.env.DB), c.var.userId, c.var.sessionId, mergeId);
+        return c.body(null, 204);
+      })
+      .post("/auth/merge/confirm", signedIn, async (c) => {
+        const { mergeId } = await parseBody(c, confirmMergeRequestSchema);
+        const db = createDb(c.env.DB);
+        const merged = await confirmMerge(
+          c.env,
+          db,
+          c.var.userId,
+          c.var.sessionId,
+          mergeId,
+          deps.now(),
+        );
+        const me = await requireMe(db, merged.userId, merged.provider);
+        const accessToken = await signAccessToken(
+          merged.userId,
+          c.env.SESSION_SIGNING_KEY,
+          deps.now(),
+          merged.provider,
+          c.var.sessionId ?? undefined,
+        );
+        return c.json({ accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, user: me }, 200);
       })
       .delete("/auth/identities/:provider", signedIn, async (c) => {
         const provider = readProvider(c.req.param("provider"));

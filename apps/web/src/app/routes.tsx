@@ -199,6 +199,7 @@ export const routes: RouteObject[] = [
       { path: "new", lazy: page(() => import("../pages/NewEntryPage.js"), "NewEntryPage") },
       { path: "stats", lazy: page(() => import("../pages/StatsPage.js"), "StatsPage") },
       { path: "settings", lazy: page(() => import("../pages/SettingsPage.js"), "SettingsPage") },
+      { path: "merge", lazy: page(() => import("../pages/MergePage.js"), "MergePage") },
     ],
   },
   { path: "*", Component: NotFoundPage },

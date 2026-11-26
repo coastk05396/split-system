@@ -2,16 +2,20 @@ import {
   type MePatch,
   type Me,
   LINK_CODE_TTL_MS,
+  MERGE_PENDING_TTL_MS,
+  type MergePath,
+  type MergePreview,
+  type MergeUserPreview,
   type Provider,
   REFRESH_TOKEN_TTL_SECONDS,
   SESSION_MAX_AGE_SECONDS,
 } from "@split/shared";
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
-import { identities, linkCodes, sessions, users } from "../db/schema.js";
+import { identities, linkCodes, pendingMerges, sessions, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
-import { commitAccountCleanups } from "./account-cleanup.js";
+import { commitAccountCleanups, commitMergeCleanups } from "./account-cleanup.js";
 import type { Bindings } from "../env.js";
 import { groupLedger } from "../ledger-client.js";
 import type { VerifiedIdentity } from "./identity-verifier.js";
@@ -174,7 +178,12 @@ export async function rotateSession(
   db: Db,
   presented: string,
   now: number,
-): Promise<{ userId: string; provider: Provider | null; refresh: RefreshToken } | null> {
+): Promise<{
+  userId: string;
+  provider: Provider | null;
+  sessionId: string;
+  refresh: RefreshToken;
+} | null> {
   const parsed = await readRefreshToken(presented);
   if (parsed === null) return null;
   const [session] = await db.select().from(sessions).where(eq(sessions.id, parsed.sessionId));
@@ -198,7 +207,7 @@ export async function rotateSession(
     await db.delete(sessions).where(eq(sessions.id, session.id));
     return null;
   }
-  return { userId: rotated.userId, provider: rotated.provider, refresh };
+  return { userId: rotated.userId, provider: rotated.provider, sessionId: session.id, refresh };
 }
 
 /** Ends the session a refresh token belongs to, if the token is still its current one. */
@@ -253,8 +262,20 @@ export async function createLinkCode(db: Db, userId: string, now: number): Promi
   return code;
 }
 
+export type RedeemLinkCodeOutcome =
+  | { mergeNeeded: false; userId: string }
+  | {
+      mergeNeeded: true;
+      keptUserId: string;
+      keptProvider: Provider;
+      otherUserId: string;
+      otherProvider: Provider;
+      otherEmail: string | null;
+    };
+
 /**
- * Spends a link code and attaches the verified Identity to its User; returns that User.
+ * Spends a link code and attaches the verified Identity to its User, or detects when that
+ * Identity already belongs to another User so the caller can confirm a Merge.
  * The code is spent even when linking then fails, so a retry needs a fresh code.
  */
 export async function redeemLinkCode(
@@ -262,15 +283,324 @@ export async function redeemLinkCode(
   code: string,
   identity: VerifiedIdentity,
   now: number,
-): Promise<string> {
+): Promise<RedeemLinkCodeOutcome> {
   const [spent] = await db
     .delete(linkCodes)
     .where(and(eq(linkCodes.codeHash, await hashSecret(code)), gt(linkCodes.expiresAt, now)))
     .returning({ userId: linkCodes.userId });
   if (spent === undefined) throw new ApiError("LINK_CODE_INVALID");
+  const existing = await findIdentity(db, identity.provider, identity.sub);
+  if (existing !== undefined && existing.userId !== spent.userId) {
+    const [primary] = await db
+      .select({ provider: identities.provider })
+      .from(identities)
+      .where(eq(identities.userId, spent.userId))
+      .orderBy(asc(identities.createdAt), asc(identities.provider))
+      .limit(1);
+    return {
+      mergeNeeded: true,
+      keptUserId: spent.userId,
+      keptProvider: primary?.provider ?? "line",
+      otherUserId: existing.userId,
+      otherProvider: identity.provider,
+      otherEmail: identity.email,
+    };
+  }
   await linkIdentity(db, spent.userId, identity, now);
   // The redeeming Google sign-in is the User's latest, so the profile follows it.
-  return signInIdentity(db, identity, now);
+  return { mergeNeeded: false, userId: await signInIdentity(db, identity, now) };
+}
+
+async function loadMergeUserSide(
+  db: Db,
+  userId: string,
+  otherGroupIds: ReadonlySet<string>,
+): Promise<MergeUserPreview | null> {
+  const [user] = await db
+    .select({ id: users.id, displayName: users.displayName, pictureUrl: users.pictureUrl })
+    .from(users)
+    .where(eq(users.id, userId));
+  if (user === undefined) return null;
+  const linked = await db
+    .select({ provider: identities.provider })
+    .from(identities)
+    .where(eq(identities.userId, userId))
+    .orderBy(asc(identities.createdAt), asc(identities.provider));
+  const groups = await db.all<{ id: string; name: string }>(
+    sql`SELECT d.group_id AS id, d.name
+        FROM group_directory d
+        JOIN group_member_summary m ON m.group_id = d.group_id
+        WHERE m.user_id = ${userId} AND d.deleted = 0
+        ORDER BY d.created_at DESC, d.group_id DESC`,
+  );
+  return {
+    id: user.id,
+    displayName: user.displayName,
+    pictureUrl: user.pictureUrl,
+    providers: linked.map((l) => l.provider),
+    profileProvider: linked[0]?.provider ?? "line",
+    groupCount: groups.length,
+    groups: groups.map((g) => ({ id: g.id, name: g.name, shared: otherGroupIds.has(g.id) })),
+  };
+}
+
+async function userGroupIds(db: Db, userId: string): Promise<Set<string>> {
+  const rows = await db.all<{ id: string }>(
+    sql`SELECT d.group_id AS id
+        FROM group_directory d
+        JOIN group_member_summary m ON m.group_id = d.group_id
+        WHERE m.user_id = ${userId} AND d.deleted = 0`,
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
+async function buildMergePreview(
+  db: Db,
+  mergeId: string,
+  path: MergePath,
+  keptUserId: string,
+  otherUserId: string,
+  expiresAt: number,
+): Promise<MergePreview | null> {
+  const [keptIds, otherIds] = await Promise.all([
+    userGroupIds(db, keptUserId),
+    userGroupIds(db, otherUserId),
+  ]);
+  const [kept, other] = await Promise.all([
+    loadMergeUserSide(db, keptUserId, otherIds),
+    loadMergeUserSide(db, otherUserId, keptIds),
+  ]);
+  if (kept === null || other === null) return null;
+  return { mergeId, path, expiresAt, kept, other };
+}
+
+/** Records a short-lived, single-use pending Merge bound to the confirming Session. */
+export async function createPendingMerge(
+  db: Db,
+  params: {
+    keptUserId: string;
+    otherUserId: string;
+    sessionId: string;
+    path: MergePath;
+    otherProvider: Provider;
+    otherEmail: string | null;
+    now: number;
+  },
+): Promise<MergePreview> {
+  const mergeId = crypto.randomUUID();
+  const expiresAt = params.now + MERGE_PENDING_TTL_MS;
+  await db.insert(pendingMerges).values({
+    id: mergeId,
+    keptUserId: params.keptUserId,
+    otherUserId: params.otherUserId,
+    sessionId: params.sessionId,
+    path: params.path,
+    otherProvider: params.otherProvider,
+    otherEmail: params.otherEmail,
+    expiresAt,
+    createdAt: params.now,
+  });
+  const preview = await buildMergePreview(
+    db,
+    mergeId,
+    params.path,
+    params.keptUserId,
+    params.otherUserId,
+    expiresAt,
+  );
+  if (preview === null) throw new ApiError("MERGE_PENDING_INVALID");
+  return preview;
+}
+
+/** Cancels and deletes a pending Merge belonging to the confirming Session. */
+export async function cancelMerge(
+  db: Db,
+  userId: string,
+  sessionId: string | null,
+  mergeId: string,
+): Promise<void> {
+  if (sessionId === null) return;
+  await db
+    .delete(pendingMerges)
+    .where(
+      and(
+        eq(pendingMerges.id, mergeId),
+        eq(pendingMerges.keptUserId, userId),
+        eq(pendingMerges.sessionId, sessionId),
+      ),
+    );
+}
+
+/** Claims a single-use pending Merge for this Session and checks refusal preconditions. */
+export async function claimPendingMerge(
+  env: Bindings,
+  db: Db,
+  userId: string,
+  sessionId: string | null,
+  mergeId: string,
+  now: number,
+) {
+  if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
+  const [claimed] = await db
+    .delete(pendingMerges)
+    .where(
+      and(
+        eq(pendingMerges.id, mergeId),
+        eq(pendingMerges.keptUserId, userId),
+        eq(pendingMerges.sessionId, sessionId),
+        gt(pendingMerges.expiresAt, now),
+      ),
+    )
+    .returning();
+  if (claimed === undefined) throw new ApiError("MERGE_PENDING_INVALID");
+  const deleting = await env.DB.prepare(
+    "SELECT 1 AS found FROM account_deletions WHERE user_id IN (?,?) AND expires_at > ? LIMIT 1",
+  )
+    .bind(claimed.keptUserId, claimed.otherUserId, now)
+    .first();
+  if (deleting !== null) throw new ApiError("MERGE_ACCOUNT_DELETION_PENDING");
+  const [keptRows, otherRows] = await Promise.all([
+    db
+      .select({ provider: identities.provider })
+      .from(identities)
+      .where(eq(identities.userId, claimed.keptUserId)),
+    db
+      .select({ provider: identities.provider })
+      .from(identities)
+      .where(eq(identities.userId, claimed.otherUserId)),
+  ]);
+  if (keptRows.length === 0 || otherRows.length === 0) throw new ApiError("MERGE_PENDING_INVALID");
+  const keptSet = new Set(keptRows.map((r) => r.provider));
+  if (otherRows.some((r) => keptSet.has(r.provider))) {
+    throw new ApiError("MERGE_SAME_PROVIDER");
+  }
+  return claimed;
+}
+
+/** Folds `otherUser` into `keptUser` in D1, ends `otherUser`'s Sessions, and repoints each Group ledger. */
+export async function confirmMerge(
+  env: Bindings,
+  db: Db,
+  userId: string,
+  sessionId: string | null,
+  mergeId: string,
+  now: number,
+): Promise<{ userId: string; provider: Provider }> {
+  const claimed = await claimPendingMerge(env, db, userId, sessionId, mergeId, now);
+  if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
+  const { keptUserId, otherUserId, otherProvider, otherEmail } = claimed;
+
+  const affected = await env.DB.prepare(
+    "SELECT group_id FROM group_reservations WHERE user_id=? UNION SELECT group_id FROM group_member_summary WHERE user_id=?",
+  )
+    .bind(otherUserId, otherUserId)
+    .all<{ group_id: string }>();
+  const groupIds = affected.results.map((r) => r.group_id);
+
+  const guard =
+    "EXISTS (SELECT 1 FROM users WHERE id=?) AND EXISTS (SELECT 1 FROM users WHERE id=?) AND NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id IN (?,?) AND expires_at>?)";
+  const guardArgs = [keptUserId, otherUserId, keptUserId, otherUserId, now];
+  const expires = now + MERGE_PENDING_TTL_MS;
+
+  const statements = [
+    // Keep moved Identities strictly newer than keptUser's existing ones so Profile source never shifts.
+    env.DB.prepare(
+      `UPDATE identities SET user_id=?, created_at=MAX(created_at, COALESCE((SELECT MAX(created_at) FROM identities WHERE user_id=?), 0) + 1), email=CASE WHEN provider=? AND ? IS NOT NULL THEN ? ELSE email END WHERE user_id=? AND ${guard}`,
+    ).bind(
+      keptUserId,
+      keptUserId,
+      otherProvider,
+      otherEmail,
+      otherEmail,
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(`UPDATE sessions SET provider=? WHERE id=? AND user_id=? AND ${guard}`).bind(
+      otherProvider,
+      sessionId,
+      keptUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(`DELETE FROM sessions WHERE user_id=? AND ${guard}`).bind(
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(`DELETE FROM link_codes WHERE user_id=? AND ${guard}`).bind(
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(`DELETE FROM account_deletions WHERE user_id=? AND ${guard}`).bind(
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(
+      `UPDATE OR IGNORE personal_spending SET user_id=? WHERE user_id=? AND ${guard}`,
+    ).bind(keptUserId, otherUserId, ...guardArgs),
+    env.DB.prepare(`DELETE FROM personal_spending WHERE user_id=? AND ${guard}`).bind(
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(
+      `UPDATE OR IGNORE group_reservations SET user_id=? WHERE user_id=? AND ${guard}`,
+    ).bind(keptUserId, otherUserId, ...guardArgs),
+    env.DB.prepare(`DELETE FROM group_reservations WHERE user_id=? AND ${guard}`).bind(
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(
+      `UPDATE OR IGNORE group_member_summary SET user_id=? WHERE user_id=? AND ${guard}`,
+    ).bind(keptUserId, otherUserId, ...guardArgs),
+    env.DB.prepare(`DELETE FROM group_member_summary WHERE user_id=? AND ${guard}`).bind(
+      otherUserId,
+      ...guardArgs,
+    ),
+    env.DB.prepare(`DELETE FROM users WHERE id=? AND ${guard}`).bind(otherUserId, ...guardArgs),
+  ];
+  const deleteUserIndex = statements.length - 1;
+  const cleanups = groupIds.map((groupId) =>
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO merge_cleanups(kept_user_id,other_user_id,group_id,expires_at) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM users WHERE id=?)",
+    ).bind(keptUserId, otherUserId, groupId, expires, otherUserId),
+  );
+  const results = await env.DB.batch([...statements, ...cleanups]);
+  if ((results[deleteUserIndex]?.meta.changes ?? 0) < 1) {
+    throw new ApiError("MERGE_ACCOUNT_DELETION_PENDING");
+  }
+  await commitMergeCleanups(env);
+  return { userId: keptUserId, provider: otherProvider };
+}
+
+/** Reads the current Session's active pending Merge preview without consuming it. */
+export async function getPendingMerge(
+  db: Db,
+  userId: string,
+  sessionId: string | null,
+  now: number,
+): Promise<MergePreview> {
+  if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
+  const [row] = await db
+    .select()
+    .from(pendingMerges)
+    .where(
+      and(
+        eq(pendingMerges.keptUserId, userId),
+        eq(pendingMerges.sessionId, sessionId),
+        gt(pendingMerges.expiresAt, now),
+      ),
+    )
+    .orderBy(desc(pendingMerges.createdAt))
+    .limit(1);
+  if (row === undefined) throw new ApiError("MERGE_PENDING_INVALID");
+  const preview = await buildMergePreview(
+    db,
+    row.id,
+    row.path,
+    row.keptUserId,
+    row.otherUserId,
+    row.expiresAt,
+  );
+  if (preview === null) throw new ApiError("MERGE_PENDING_INVALID");
+  return preview;
 }
 
 /** Removes one Identity, refusing when it is the User's last; checked in the same statement. */

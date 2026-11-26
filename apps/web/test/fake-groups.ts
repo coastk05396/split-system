@@ -101,6 +101,10 @@ export interface SeedGroup {
 export interface FakeGroups {
   /** Seeds a Group with `user` as a Member (Admin by default); returns its id. */
   add(user: Me | null, seed: SeedGroup): string;
+  /** Lists active Groups belonging to `userId`. */
+  forUser(userId: string): { id: string; name: string }[];
+  /** Repoints non-shared Groups of `fromUserId` to `toUserId`. */
+  repointUser(fromUserId: string, toUserId: string): void;
   /** A seeded Group's members, for assertions. */
   members(groupId: string): readonly FakeMember[];
   exists(groupId: string): boolean;
@@ -348,6 +352,26 @@ export function createFakeGroups(): FakeGroups {
 
     members(groupId) {
       return groups.get(groupId)?.members ?? [];
+    },
+
+    forUser(userId) {
+      const result: { id: string; name: string }[] = [];
+      for (const g of groups.values()) {
+        if (g.members.some((m) => m.userId === userId && m.status === "active")) {
+          result.push({ id: g.id, name: g.name });
+        }
+      }
+      return result;
+    },
+
+    repointUser(fromUserId, toUserId) {
+      for (const g of groups.values()) {
+        const hasTarget = g.members.some((m) => m.userId === toUserId);
+        if (hasTarget) continue;
+        for (const m of g.members) {
+          if (m.userId === fromUserId) m.userId = toUserId;
+        }
+      }
     },
 
     addExpense(groupId, body, creator = 0) {

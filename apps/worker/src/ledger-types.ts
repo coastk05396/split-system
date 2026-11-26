@@ -158,3 +158,9 @@ export interface AccountDeletionValues {
   restore: boolean;
   commit: null;
 }
+
+export interface MergeUserOperation {
+  keptUserId: string;
+  otherUserId: string;
+  now: number;
+}

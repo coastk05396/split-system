@@ -1,4 +1,4 @@
-import type { Me, MePatch, Provider, TestSignInRequest } from "@split/shared";
+import type { Me, MePatch, MergePreview, Provider, TestSignInRequest } from "@split/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -34,7 +34,13 @@ export interface Auth {
   state: AuthState;
   session: Session;
   signIn: (provider: Provider, idToken: string) => Promise<boolean>;
-  redeemLinkCode: (code: string, idToken: string) => Promise<boolean>;
+  redeemLinkCode: (
+    code: string,
+    idToken: string,
+  ) => Promise<{ merge: MergePreview | null } | false>;
+  getPendingMerge: () => Promise<MergePreview>;
+  confirmMerge: (mergeId: string) => Promise<Me>;
+  cancelMerge: (mergeId: string) => Promise<void>;
   link: (provider: Provider, idToken: string) => Promise<void>;
   unlink: (provider: Provider) => Promise<void>;
   createLinkCode: () => Promise<string>;
@@ -168,7 +174,26 @@ export function AuthProvider({
       state,
       session,
       signIn: (provider, idToken) => enter(session.signIn(provider, idToken)),
-      redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
+      redeemLinkCode: async (code, idToken) => {
+        try {
+          const result = await session.redeemLinkCode(code, idToken);
+          setState({ status: "signedIn", user: result.user });
+          return { merge: result.merge };
+        } catch (error) {
+          setState({ status: "signedOut", error: failureCode(error) });
+          return false;
+        }
+      },
+      getPendingMerge: () => session.getPendingMerge(),
+      confirmMerge: async (mergeId) => {
+        const user = await session.confirmMerge(mergeId);
+        setState((current) =>
+          current.status === "signedIn" ? { status: "signedIn", user } : current,
+        );
+        void queryClient.invalidateQueries();
+        return user;
+      },
+      cancelMerge: (mergeId) => session.cancelMerge(mergeId),
       link: async (provider, idToken) => {
         syncUser(await session.link(provider, idToken));
       },

@@ -81,13 +81,21 @@ describe("link codes (Google linked from inside LINE)", () => {
     expect(created?.n).toBe(0);
   });
 
-  it("refuses a Google account that already belongs to another User, and creates nothing", async () => {
+  it("returns mergeNeeded without linking when a Google account already belongs to another User", async () => {
     const taken = uniqueSub("taken");
-    await signIn("google", taken);
+    const other = await signIn("google", taken);
     const line = await signIn("line", uniqueSub("line"));
     const res = await redeem(await issue(line.accessToken), taken);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: { code: "IDENTITY_LINKED_ELSEWHERE" } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      mergeNeeded: true,
+      merge: {
+        path: "linkCode",
+        kept: { id: line.userId },
+        other: { id: other.userId },
+      },
+    });
+    expect((await signIn("google", taken)).userId).toBe(other.userId);
   });
 
   it("refuses a bad Google ID token and keeps the code usable", async () => {

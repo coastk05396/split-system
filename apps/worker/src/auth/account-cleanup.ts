@@ -35,3 +35,33 @@ export async function commitAccountCleanups(env: Bindings): Promise<void> {
     console.error(JSON.stringify({ event: "account_cleanup_failed", error: String(error) }));
   }
 }
+
+/**
+ * Applies any pending per-Group User repoints from a completed Merge to each Group's ledger,
+ * then forgets each completed task. Never throws: the D1 merge is already committed.
+ */
+export async function commitMergeCleanups(env: Bindings): Promise<void> {
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT kept_user_id,other_user_id,group_id FROM merge_cleanups LIMIT ?",
+    )
+      .bind(BATCH)
+      .all<{ kept_user_id: string; other_user_id: string; group_id: string }>();
+    for (const task of results) {
+      try {
+        await groupLedger(env, task.group_id).mergeUser({
+          keptUserId: task.kept_user_id,
+          otherUserId: task.other_user_id,
+          now: Date.now(),
+        });
+        await env.DB.prepare("DELETE FROM merge_cleanups WHERE other_user_id=? AND group_id=?")
+          .bind(task.other_user_id, task.group_id)
+          .run();
+      } catch (error) {
+        console.error(JSON.stringify({ event: "merge_cleanup_failed", error: String(error) }));
+      }
+    }
+  } catch (error) {
+    console.error(JSON.stringify({ event: "merge_cleanup_failed", error: String(error) }));
+  }
+}

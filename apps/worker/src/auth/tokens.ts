@@ -15,9 +15,13 @@ export function signAccessToken(
   secret: string,
   now: number,
   provider: Provider | null,
+  sessionId?: string,
 ): Promise<string> {
   const iat = Math.floor(now / 1000);
-  return new SignJWT(provider === null ? {} : { prv: provider })
+  const claims: Record<string, string> = {};
+  if (provider !== null) claims["prv"] = provider;
+  if (sessionId !== undefined) claims["sid"] = sessionId;
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: ALGORITHM })
     .setIssuer(ISSUER)
     .setSubject(userId)
@@ -35,12 +39,12 @@ export async function verifyAccessToken(
   return (await verifyAccess(token, secret, now))?.userId ?? null;
 }
 
-/** Like `verifyAccessToken`, plus the provider the session signed in with (null on older tokens). */
+/** Like `verifyAccessToken`, plus the provider and session ID the session signed in with. */
 export async function verifyAccess(
   token: string,
   secret: string,
   now: number,
-): Promise<{ userId: string; provider: Provider | null } | null> {
+): Promise<{ userId: string; provider: Provider | null; sessionId: string | null } | null> {
   try {
     const { payload } = await jwtVerify(token, signingKey(secret), {
       issuer: ISSUER,
@@ -50,7 +54,12 @@ export async function verifyAccess(
     });
     if (payload.sub === undefined) return null;
     const provider = providerSchema.safeParse(payload["prv"]);
-    return { userId: payload.sub, provider: provider.success ? provider.data : null };
+    const sid = typeof payload["sid"] === "string" ? payload["sid"] : null;
+    return {
+      userId: payload.sub,
+      provider: provider.success ? provider.data : null,
+      sessionId: sid,
+    };
   } catch (error) {
     if (error instanceof errors.JOSEError) return null;
     throw error;

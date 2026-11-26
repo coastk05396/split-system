@@ -27,6 +27,44 @@ export const redeemLinkCodeRequestSchema = z.object({
 /** How long a link code lives. */
 export const LINK_CODE_TTL_MS = 5 * 60 * 1000;
 
+/** How long a pending Merge confirmation stays valid. */
+export const MERGE_PENDING_TTL_MS = 10 * 60 * 1000;
+
+export const mergePathSchema = z.enum(["linkCode", "settings"]);
+export type MergePath = z.infer<typeof mergePathSchema>;
+
+export const mergeGroupPreviewSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  shared: z.boolean(),
+});
+export type MergeGroupPreview = z.infer<typeof mergeGroupPreviewSchema>;
+
+export const mergeUserPreviewSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  pictureUrl: z.string().nullable(),
+  providers: z.array(providerSchema),
+  profileProvider: providerSchema,
+  groupCount: z.number().int().nonnegative(),
+  groups: z.array(mergeGroupPreviewSchema),
+});
+export type MergeUserPreview = z.infer<typeof mergeUserPreviewSchema>;
+
+export const mergePreviewSchema = z.object({
+  mergeId: z.string(),
+  path: mergePathSchema,
+  expiresAt: z.number(),
+  kept: mergeUserPreviewSchema,
+  other: mergeUserPreviewSchema,
+});
+export type MergePreview = z.infer<typeof mergePreviewSchema>;
+
+export const confirmMergeRequestSchema = z.object({
+  mergeId: z.string().min(1).max(128),
+});
+export type ConfirmMergeRequest = z.infer<typeof confirmMergeRequestSchema>;
+
 /** Dev-only `POST /auth/test-sign-in`, present only when the test flag is set. */
 export const testSignInRequestSchema = z.object({
   provider: providerSchema,
@@ -66,3 +104,9 @@ export const sessionResponseSchema = z.object({
   user: meSchema,
 });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
+
+export const redeemLinkCodeResponseSchema = sessionResponseSchema.extend({
+  mergeNeeded: z.literal(true).optional(),
+  merge: mergePreviewSchema.optional(),
+});
+export type RedeemLinkCodeResponse = z.infer<typeof redeemLinkCodeResponseSchema>;

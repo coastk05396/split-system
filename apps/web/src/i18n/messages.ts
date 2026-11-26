@@ -585,6 +585,22 @@ const zhTW = {
   "flights.bookCta": "查看",
   "flights.refreshSchedule": "每日 08:00（台灣時間）更新",
   "flights.fallbackNote": "顯示精選參考票價，每日 08:00（台灣時間）更新最新行情。",
+
+  "merge.title": "確認合併帳號",
+  "merge.keptBadge": "保留",
+  "merge.keptCard": "保留的帳號",
+  "merge.otherBadge": "合併並刪除",
+  "merge.otherCard": "將被合併的帳號",
+  "merge.groupsHeading": "帶入的群組（{count}）",
+  "merge.noGroups": "沒有群組",
+  "merge.sharedGroup": "將合併為同一位成員",
+  "merge.irreversible": "合併後無法復原，被合併帳號的所有登入紀錄都會結束並刪除。",
+  "merge.linkCodeWarning": "如果保留的帳號不是你本人，請按取消，否則你的群組會轉移到該帳號。",
+  "merge.bothAreMe": "這兩個帳號都是我本人",
+  "merge.confirm": "合併帳號",
+  "merge.confirming": "合併中…",
+  "merge.cancel": "取消",
+  "merge.backToSettings": "回到設定",
 } as const;
 
 export type MessageId = keyof typeof zhTW;
@@ -635,6 +651,9 @@ const zhErrors: Record<ErrorCode, string> = {
   IDENTITY_LINKED_ELSEWHERE:
     "這個 Google 已經是另一個小芽帳號的登入方式，無法合併。請改用別的 Google 帳號再連結一次。",
   LINK_CODE_INVALID: "這個連結已經失效，請回到 LINE 重新按一次「連接」。",
+  MERGE_PENDING_INVALID: "這個合併確認已經失效或過期，請回到設定重新連結。",
+  MERGE_ACCOUNT_DELETION_PENDING: "其中一個帳號正在刪除中，暫時無法合併。",
+  MERGE_SAME_PROVIDER: "兩個帳號都已經綁定同一種登入方式，無法合併。",
   PROVIDER_ALREADY_LINKED: "你已經連結過這種帳號了。",
   LAST_IDENTITY: "至少要保留一種登入方式。",
   LAST_ADMIN: "群組至少要有一位管理員。",

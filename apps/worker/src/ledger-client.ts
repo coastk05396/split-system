@@ -14,6 +14,7 @@ import type {
   LedgerState,
   MemberOperation,
   MemberOutcome,
+  MergeUserOperation,
   PatchGroup,
   SettlementOperation,
   SettlementValues,
@@ -78,6 +79,7 @@ export function groupLedger(env: Bindings, groupId: string) {
       decode<unknown>(stub.accountDeletion(op)) as Promise<
         Revised<AccountDeletionValues[O["action"]]>
       >,
+    mergeUser: (op: MergeUserOperation): Promise<Revised<null>> => decode<null>(stub.mergeUser(op)),
     /** Opens the User's live-update WebSocket; the ledger answers 404 to a non-Member. */
     live: (userId: string, protocol?: string): Promise<Response> => {
       const headers = new Headers({ Upgrade: "websocket", "X-User-Id": userId });

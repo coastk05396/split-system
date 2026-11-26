@@ -1,6 +1,11 @@
-import type { Me, MePatch, Provider, TestSignInRequest } from "@split/shared";
+import type { Me, MePatch, MergePreview, Provider, TestSignInRequest } from "@split/shared";
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
+
+export interface RedeemLinkCodeResult {
+  user: Me;
+  merge: MergePreview | null;
+}
 
 /**
  * The browser side of a session (decision 09): the access token lives only in memory,
@@ -11,8 +16,11 @@ export interface Session {
   restore(): Promise<Me | null>;
   /** Exchanges a Google or LINE ID token for a session. Throws ApiFailure. */
   signIn(provider: Provider, idToken: string): Promise<Me>;
-  /** Spends a link code with a Google ID token: joins the code's User and signs in as them. */
-  redeemLinkCode(code: string, idToken: string): Promise<Me>;
+  /** Spends a link code with a Google ID token: joins the code's User and signs in as them, or returns a Merge preview. */
+  redeemLinkCode(code: string, idToken: string): Promise<RedeemLinkCodeResult>;
+  getPendingMerge(): Promise<MergePreview>;
+  confirmMerge(mergeId: string): Promise<Me>;
+  cancelMerge(mergeId: string): Promise<void>;
   link(provider: Provider, idToken: string): Promise<Me>;
   unlink(provider: Provider): Promise<Me>;
   createLinkCode(): Promise<string>;
@@ -112,9 +120,37 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     },
 
     async redeemLinkCode(code, idToken) {
-      return accept(
-        await api.auth["link-code"].redeem.$post(undefined, withJson({ code, idToken })),
+      // Widened: the typed client only describes the 200 answer.
+      const res: Response = await api.auth["link-code"].redeem.$post(
+        undefined,
+        withJson({ code, idToken }),
       );
+      if (!res.ok) throw await toApiFailure(res);
+      const body = (await res.json()) as {
+        accessToken: string;
+        user: Me;
+        merge?: MergePreview;
+      };
+      accessToken = body.accessToken;
+      return { user: body.user, merge: body.merge ?? null };
+    },
+
+    async getPendingMerge() {
+      const res: Response = await authenticated.auth.merge.$get();
+      if (!res.ok) throw await toApiFailure(res);
+      return (await res.json()) as MergePreview;
+    },
+
+    async confirmMerge(mergeId) {
+      return accept(await authenticated.auth.merge.confirm.$post(undefined, withJson({ mergeId })));
+    },
+
+    async cancelMerge(mergeId) {
+      const res: Response = await authenticated.auth.merge.cancel.$post(
+        undefined,
+        withJson({ mergeId }),
+      );
+      if (!res.ok) throw await toApiFailure(res);
     },
 
     async link(provider, idToken) {

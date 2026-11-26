@@ -96,6 +96,41 @@ export const linkCodes = sqliteTable("link_codes", {
   expiresAt: integer("expires_at").notNull(),
 });
 
+/** Short-lived, single-use pending Merge bound to the confirming Session. */
+export const pendingMerges = sqliteTable(
+  "pending_merges",
+  {
+    id: text("id").primaryKey(),
+    keptUserId: text("kept_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    otherUserId: text("other_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    path: text("path", { enum: ["linkCode", "settings"] }).notNull(),
+    otherProvider: text("other_provider", { enum: PROVIDERS }).notNull(),
+    otherEmail: text("other_email"),
+    expiresAt: integer("expires_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("pending_merges_expires_idx").on(t.expiresAt)],
+);
+
+/** Durable per-Group Merge cleanup tasks pushed to each GroupLedger DO. */
+export const mergeCleanups = sqliteTable(
+  "merge_cleanups",
+  {
+    keptUserId: text("kept_user_id").notNull(),
+    otherUserId: text("other_user_id").notNull(),
+    groupId: text("group_id").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.otherUserId, t.groupId] })],
+);
+
 /** Invite token lookup (retained). */
 export const invites = sqliteTable("invites", {
   id: text("id").primaryKey(),
