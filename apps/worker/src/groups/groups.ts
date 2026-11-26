@@ -6,7 +6,7 @@ import { users } from "../db/schema.js";
 import type { Bindings } from "../env.js";
 import { ApiError } from "../errors.js";
 import { groupLedger } from "../ledger-client.js";
-import { isGroupMerging, type MemberRow } from "./membership.js";
+import { isGroupMerging, type MemberRow, userExists } from "./membership.js";
 
 export { readBalances } from "./members.js";
 
@@ -74,6 +74,7 @@ export async function readLedgerGroup(
 
 /** The Groups the User is an active Member of, newest first. */
 export async function listGroups(db: Db, userId: string): Promise<Group[]> {
+  if (!(await userExists(db, userId))) throw new ApiError("UNAUTHORIZED");
   const rows = await db.all<{
     id: string;
     name: string;

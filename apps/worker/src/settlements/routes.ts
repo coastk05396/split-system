@@ -8,7 +8,7 @@ import { groupReservations, settlementRoutes as settlementRoutesTable } from "..
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import type { Bindings } from "../env.js";
-import { requireMember, requireWritableMember } from "../groups/membership.js";
+import { requireMember, requireWritableMember, userExists } from "../groups/membership.js";
 import { groupLedger } from "../ledger-client.js";
 import { consumeRateLimit, rateLimit } from "../rate-limit.js";
 import { parseBody, requireIdempotencyKey } from "../request-guards.js";
@@ -94,6 +94,7 @@ export function settlementRoutes(deps: AppDeps) {
     })
     .post("/settlements/:sid/undo", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
       const groupId = await resolveSettlementGroup(
         db,
         c.req.param("sid"),

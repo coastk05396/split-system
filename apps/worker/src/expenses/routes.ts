@@ -6,7 +6,7 @@ import { requireUser } from "../auth/require-user.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
-import { requireMember, requireWritableMember } from "../groups/membership.js";
+import { requireMember, requireWritableMember, userExists } from "../groups/membership.js";
 import { groupLedger } from "../ledger-client.js";
 import { fxRates } from "../db/schema.js";
 import { rateLimit } from "../rate-limit.js";
@@ -32,6 +32,7 @@ export function expenseRoutes(deps: AppDeps) {
       )
         throw new ApiError("VALIDATION_FAILED");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
       const spending = personalSpending(db, c.var.userId);
       const month = sql<string>`substr(${spending.date}, 1, 7)`;
       const rows = await db
@@ -63,6 +64,7 @@ export function expenseRoutes(deps: AppDeps) {
       )
         throw new ApiError("VALIDATION_FAILED");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
       const spending = personalSpending(db, c.var.userId);
       const rows = await db
         .select({

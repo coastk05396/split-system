@@ -39,7 +39,7 @@ export interface Auth {
     idToken: string,
   ) => Promise<{ merge: MergePreview | null } | false>;
   getPendingMerge: () => Promise<MergePreview>;
-  confirmMerge: (mergeId: string) => Promise<ConfirmMergeResult>;
+  confirmMerge: (mergeId: string) => Promise<ConfirmMergeResult | null>;
   cancelMerge: (mergeId: string) => Promise<void>;
   link: (provider: Provider, idToken: string) => Promise<{ merge: MergePreview | null }>;
   createLinkCode: () => Promise<string>;
@@ -191,6 +191,7 @@ export function AuthProvider({
       getPendingMerge: () => session.getPendingMerge(),
       confirmMerge: async (mergeId) => {
         const result = await session.confirmMerge(mergeId);
+        if (result === null) return null;
         setState({ status: "signedIn", user: result.user });
         void queryClient.invalidateQueries();
         return result;

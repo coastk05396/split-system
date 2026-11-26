@@ -620,6 +620,7 @@ export const en: Record<MessageId, string> = {
   "merge.confirming": "Merging…",
   "merge.cancel": "Cancel",
   "merge.backToSettings": "Back to Settings",
+  "merge.backToSignIn": "Back to sign-in",
 };
 
 export const enErrors: Record<ErrorCode, string> = {

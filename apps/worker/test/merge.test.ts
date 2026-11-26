@@ -754,11 +754,43 @@ describe("User Merge on the Link code path", () => {
     expect(writeAfter.status).toBe(201);
   }, 60_000);
 
-  it("refuses a merged-away User at Group detail and live WebSocket while cleanup is pending, including tokens without sid, and silences/closes existing sockets", async () => {
+  it("refuses a merged-away User across all Group, Stop, Settlement and spending reads while cleanup is pending, including tokens without sid, and silences/closes existing sockets", async () => {
     const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
     const googleSub = uniqueSub("google");
     const other = await signIn("google", googleSub, "Google小宇");
-    const flakyGroup = await createGroup(other, { name: "未完成群組" });
+    const bob = await person("Bob");
+    const flakyGroup = await createGroup(other, { name: "未完成群組", isTrip: true });
+    const invite = await inviteToken(other, flakyGroup.id);
+    expect((await send(bob, "POST", `/invites/${invite}/join`)).status).toBe(200);
+    const bobMemberId = (await listMembers(other, flakyGroup.id)).find(
+      (m) => m.userId === bob.userId,
+    )?.id;
+    if (bobMemberId === undefined) throw new Error("expected bob member");
+    const expense = await createExpense(other, flakyGroup.id, {
+      ...twdExpense(flakyGroup.me.memberId, [flakyGroup.me.memberId, bobMemberId], 400),
+      expenseDate: "2026-06-15",
+      category: "food",
+    });
+    expect(
+      (
+        await send(
+          other,
+          "POST",
+          `/groups/${flakyGroup.id}/settlements`,
+          { payerMemberId: bobMemberId, receiverMemberId: flakyGroup.me.memberId, amount: 100 },
+          { "Idempotency-Key": newKey() },
+        )
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await send(other, "POST", `/groups/${flakyGroup.id}/stops`, {
+          dayDate: "2026-06-15",
+          title: "車站",
+          category: "transport",
+        })
+      ).status,
+    ).toBe(201);
 
     const legacyNoSidToken = await signAccessToken(
       other.userId,
@@ -827,10 +859,21 @@ describe("User Merge on the Link code path", () => {
     expect(await confirmRes.json()).toMatchObject({ mergingGroupIds: [flakyGroup.id] });
 
     for (const tok of [other.accessToken, legacyNoSidToken]) {
-      expect((await call(`/groups/${flakyGroup.id}`, { headers: bearer(tok) })).status).toBe(401);
-      expect((await call(`/groups/${flakyGroup.id}/live`, { headers: bearer(tok) })).status).toBe(
-        401,
-      );
+      for (const path of [
+        "/groups",
+        `/groups/${flakyGroup.id}`,
+        `/groups/${flakyGroup.id}/live`,
+        `/groups/${flakyGroup.id}/members`,
+        `/groups/${flakyGroup.id}/expenses`,
+        `/groups/${flakyGroup.id}/expenses/${expense.id}`,
+        `/groups/${flakyGroup.id}/balances`,
+        `/groups/${flakyGroup.id}/settlements`,
+        `/groups/${flakyGroup.id}/stops`,
+        "/stats/spending",
+        "/stats/expenses?month=2026-06&category=food",
+      ]) {
+        expect((await call(path, { headers: bearer(tok) })).status, path).toBe(401);
+      }
       expect(
         (
           await call(`/groups/${flakyGroup.id}/live`, {
