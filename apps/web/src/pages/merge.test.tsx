@@ -109,4 +109,37 @@ describe("/merge (confirming a Merge on the Link code path)", () => {
     expect(screen.getByRole("button", { name: "Merge accounts" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
   });
+
+  it("marks shared Groups on both User cards", async () => {
+    const kept = makeUser("LINE小宇", "line");
+    const other = makeUser("Google小宇", "google");
+    const { api } = renderApp({
+      path: "/link?code=code-1",
+      seed: (groups) => {
+        groups.add(kept, { name: "共同旅遊", others: [{ name: "Google小宇" }] });
+        groups.add(kept, { name: "LINE聚餐" });
+        groups.add(other, { name: "Google單獨" });
+      },
+    });
+    api.linkCodes.set("code-1", kept);
+    api.googleOwners = new Map([["g-1", other]]);
+
+    await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
+
+    const keptCard = screen.getByRole("region", { name: "保留的帳號" });
+    const otherCard = screen.getByRole("region", { name: "將被合併的帳號" });
+
+    expect(within(keptCard).getByText("共同旅遊").closest("li")).toHaveTextContent(
+      "將合併為同一位成員",
+    );
+    expect(within(keptCard).getByText("LINE聚餐").closest("li")).not.toHaveTextContent(
+      "將合併為同一位成員",
+    );
+    expect(within(otherCard).getByText("共同旅遊").closest("li")).toHaveTextContent(
+      "將合併為同一位成員",
+    );
+    expect(within(otherCard).getByText("Google單獨").closest("li")).not.toHaveTextContent(
+      "將合併為同一位成員",
+    );
+  });
 });
