@@ -26,7 +26,6 @@ import {
   rotateSession,
   updateSettings,
   signInIdentity,
-  unlinkIdentity,
 } from "./accounts.js";
 import type { Provider, VerifiedIdentity } from "./identity-verifier.js";
 import { requireUser } from "./require-user.js";
@@ -149,12 +148,6 @@ export function authRoutes(deps: AppDeps) {
         const userId = await redeemLinkCode(db, code, identity, now);
         const refresh = await createSession(db, userId, "google", c.req.header("User-Agent"), now);
         return c.json(await issueSession(c, userId, "google", refresh), 200);
-      })
-      .delete("/auth/identities/:provider", signedIn, async (c) => {
-        const provider = readProvider(c.req.param("provider"));
-        const db = createDb(c.env.DB);
-        await unlinkIdentity(db, c.var.userId, provider);
-        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
       })
       .get("/me", signedIn, async (c) =>
         c.json(await requireMe(createDb(c.env.DB), c.var.userId, c.var.signedInWith), 200),

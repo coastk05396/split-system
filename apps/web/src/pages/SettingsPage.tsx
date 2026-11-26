@@ -80,11 +80,11 @@ const pickerSelect = "absolute inset-0 size-full cursor-pointer opacity-0";
 
 /**
  * Screen 11 (設定與帳號) as changed by docs/design-changes.md: no 通知提醒; the 偏好幣別
- * (Preferred currency) and 語言 sit under the profile, then 登入與安全 (linked Identities with
+ * (Preferred currency) and 語言 sit under the profile, then 登入與安全 (linked Identities, no
  * unlink), the policy links, 登出 and 刪除帳號. No hint text, no 登出所有裝置.
  */
 export function SettingsPage() {
-  const { state, signOut, updateMe, deleteAccount, unlink } = useAuth();
+  const { state, signOut, updateMe, deleteAccount } = useAuth();
   const { line, google } = useDeps();
   const [error, setError] = useState<ErrorCode | null>(null);
   const [working, setWorking] = useState(false);
@@ -258,19 +258,6 @@ export function SettingsPage() {
                     <Check aria-hidden="true" className="size-4" strokeWidth={3} />
                     {t("settings.linked")}
                   </span>
-                )}
-                {isLinked && linked.size > 1 && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    aria-label={t("settings.unlink", { provider: name })}
-                    onClick={() => {
-                      void runAuth(() => unlink(provider));
-                    }}
-                    className="press-pill rounded-full border border-sprout-200 px-2 py-0.5 text-xs text-ink-muted hover:border-sprout-500"
-                  >
-                    {t("settings.unlinkShort")}
-                  </button>
                 )}
                 {!isLinked && provider === "line" && (
                   <span className="ml-auto text-xs text-ink-muted">{t("settings.comingSoon")}</span>

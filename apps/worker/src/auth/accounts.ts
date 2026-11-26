@@ -6,7 +6,7 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
   SESSION_MAX_AGE_SECONDS,
 } from "@split/shared";
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { isConstraintError } from "../db/errors.js";
 import { identities, linkCodes, sessions, users } from "../db/schema.js";
@@ -271,26 +271,6 @@ export async function redeemLinkCode(
   await linkIdentity(db, spent.userId, identity, now);
   // The redeeming Google sign-in is the User's latest, so the profile follows it.
   return signInIdentity(db, identity, now);
-}
-
-/** Removes one Identity, refusing when it is the User's last; checked in the same statement. */
-export async function unlinkIdentity(db: Db, userId: string, provider: Provider): Promise<void> {
-  const removed = await db
-    .delete(identities)
-    .where(
-      and(
-        eq(identities.userId, userId),
-        eq(identities.provider, provider),
-        sql`(SELECT count(*) FROM ${identities} WHERE ${identities.userId} = ${userId}) > 1`,
-      ),
-    )
-    .returning({ id: identities.id });
-  if (removed.length > 0) return;
-  const [kept] = await db
-    .select({ id: identities.id })
-    .from(identities)
-    .where(and(eq(identities.userId, userId), eq(identities.provider, provider)));
-  throw new ApiError(kept === undefined ? "NOT_FOUND" : "LAST_IDENTITY");
 }
 
 /** Freeze every reserved ledger before checking authoritative balances and admin roles. */

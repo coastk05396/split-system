@@ -14,7 +14,6 @@ export interface Session {
   /** Spends a link code with a Google ID token: joins the code's User and signs in as them. */
   redeemLinkCode(code: string, idToken: string): Promise<Me>;
   link(provider: Provider, idToken: string): Promise<Me>;
-  unlink(provider: Provider): Promise<Me>;
   createLinkCode(): Promise<string>;
   getMe(): Promise<Me>;
   updateMe(patch: MePatch): Promise<Me>;
@@ -123,12 +122,6 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
           { param: { provider } },
           withJson({ idToken }),
         ),
-      );
-    },
-
-    async unlink(provider) {
-      return readUser(
-        await authenticated.auth.identities[":provider"].$delete({ param: { provider } }),
       );
     },
 

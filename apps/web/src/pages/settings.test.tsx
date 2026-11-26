@@ -46,7 +46,7 @@ describe("settings (screen 11)", () => {
     // Google is listed with no "linked" mark, so it can be connected from the row.
     expect(await row("Google")).not.toHaveTextContent("已連結");
     expect(screen.getByRole("button", { name: "連接" })).toBeVisible();
-    // The only Identity cannot be unlinked.
+    // Unlink is never offered.
     expect((await accounts()).queryByRole("button", { name: /解除連結/ })).toBeNull();
   });
 
@@ -226,16 +226,12 @@ describe("settings (screen 11)", () => {
     expect(screen.queryByRole("button", { name: /連結 LINE|連接/ })).toBeNull();
   });
 
-  it("unlinks one of two accounts", async () => {
-    const user = userEvent.setup();
+  it("shows only linked rows with no Unlink button when both accounts are linked", async () => {
     renderApp({ path: "/settings", cookieUser: bothLinked("小宇") });
 
-    await user.click(await (await accounts()).findByRole("button", { name: "解除連結 Google" }));
-
-    await waitFor(async () => {
-      expect(await row("Google")).not.toHaveTextContent("已連結");
-    });
-    expect((await accounts()).queryByRole("button", { name: /解除連結/ })).toBeNull();
+    expect(await row("LINE")).toHaveTextContent("已連結");
+    expect(await row("Google")).toHaveTextContent("已連結");
+    expect((await accounts()).queryAllByRole("button")).toEqual([]);
   });
 
   it("signs out and returns to the landing page, with no sign-out-everywhere row", async () => {

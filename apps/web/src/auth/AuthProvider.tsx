@@ -36,7 +36,6 @@ export interface Auth {
   signIn: (provider: Provider, idToken: string) => Promise<boolean>;
   redeemLinkCode: (code: string, idToken: string) => Promise<boolean>;
   link: (provider: Provider, idToken: string) => Promise<void>;
-  unlink: (provider: Provider) => Promise<void>;
   createLinkCode: () => Promise<string>;
   refreshIdentities: (signal: AbortSignal) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
@@ -171,9 +170,6 @@ export function AuthProvider({
       redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
       link: async (provider, idToken) => {
         syncUser(await session.link(provider, idToken));
-      },
-      unlink: async (provider) => {
-        syncUser(await session.unlink(provider));
       },
       createLinkCode: () => session.createLinkCode(),
       async refreshIdentities(signal) {
