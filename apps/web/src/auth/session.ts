@@ -1,4 +1,11 @@
-import type { Me, MePatch, MergePreview, Provider, TestSignInRequest } from "@split/shared";
+import type {
+  LinkMergeResponse,
+  Me,
+  MePatch,
+  MergePreview,
+  Provider,
+  TestSignInRequest,
+} from "@split/shared";
 import { createApiClient, withJson } from "../api/client.js";
 import { toApiFailure } from "../api/errors.js";
 
@@ -21,7 +28,10 @@ export interface Session {
   getPendingMerge(): Promise<MergePreview>;
   confirmMerge(mergeId: string): Promise<Me>;
   cancelMerge(mergeId: string): Promise<void>;
-  link(provider: Provider, idToken: string): Promise<Me>;
+  link(
+    provider: Provider,
+    idToken: string,
+  ): Promise<{ user: Me; merge: null } | { user: null; merge: MergePreview }>;
   createLinkCode(): Promise<string>;
   getMe(): Promise<Me>;
   updateMe(patch: MePatch): Promise<Me>;
@@ -153,12 +163,14 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     },
 
     async link(provider, idToken) {
-      return readUser(
-        await authenticated.auth.link[":provider"].$post(
-          { param: { provider } },
-          withJson({ idToken }),
-        ),
+      const res: Response = await authenticated.auth.link[":provider"].$post(
+        { param: { provider } },
+        withJson({ idToken }),
       );
+      if (!res.ok) throw await toApiFailure(res);
+      const body = (await res.json()) as Me | LinkMergeResponse;
+      if ("mergeNeeded" in body) return { user: null, merge: body.merge };
+      return { user: body, merge: null };
     },
 
     async createLinkCode() {

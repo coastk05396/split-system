@@ -41,7 +41,7 @@ export interface Auth {
   getPendingMerge: () => Promise<MergePreview>;
   confirmMerge: (mergeId: string) => Promise<Me>;
   cancelMerge: (mergeId: string) => Promise<void>;
-  link: (provider: Provider, idToken: string) => Promise<void>;
+  link: (provider: Provider, idToken: string) => Promise<{ merge: MergePreview | null }>;
   createLinkCode: () => Promise<string>;
   refreshIdentities: (signal: AbortSignal) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
@@ -194,7 +194,9 @@ export function AuthProvider({
       },
       cancelMerge: (mergeId) => session.cancelMerge(mergeId),
       link: async (provider, idToken) => {
-        syncUser(await session.link(provider, idToken));
+        const result = await session.link(provider, idToken);
+        if (result.merge === null) syncUser(result.user);
+        return { merge: result.merge };
       },
       createLinkCode: () => session.createLinkCode(),
       async refreshIdentities(signal) {

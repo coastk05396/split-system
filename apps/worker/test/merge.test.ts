@@ -411,3 +411,102 @@ describe("User Merge on the Link code path", () => {
     }
   });
 });
+
+describe("User Merge on the Settings path (connect LINE from browser)", () => {
+  it("returns mergeNeeded when linking a LINE owned by another User, and confirms into the Google User while keeping signedInWith", async () => {
+    const baseTime = clock.now;
+    const lineSub = uniqueSub("line");
+    const googleSub = uniqueSub("google");
+    const other = await signIn("line", lineSub, "LINE小宇");
+    const otherGroup = await createGroup(other, { name: "LINE聚餐" });
+    await createExpense(
+      other,
+      otherGroup.id,
+      twdExpense(otherGroup.me.memberId, [otherGroup.me.memberId], 200, {
+        description: "早餐",
+        category: "food",
+      }),
+    );
+
+    clock.now = baseTime + 5_000;
+    try {
+      const kept = await signIn("google", googleSub, "Google小宇", "g@example.com");
+      const keptGroup = await createGroup(kept, { name: "Google出遊" });
+
+      const linkRes = await call(
+        "/auth/link/line",
+        json({ idToken: `fake|${lineSub}|LINE小宇` }, bearer(kept.accessToken)),
+      );
+      expect(linkRes.status).toBe(200);
+      const linkBody = await linkRes.json<{
+        mergeNeeded?: boolean;
+        merge?: {
+          mergeId: string;
+          path: string;
+          kept: { id: string; providers: string[]; groups: { id: string }[] };
+          other: { id: string; providers: string[]; groups: { id: string }[] };
+        };
+      }>();
+      expect(linkBody.mergeNeeded).toBe(true);
+      expect(linkBody.merge).toMatchObject({
+        path: "settings",
+        kept: {
+          id: kept.userId,
+          providers: ["google"],
+          groups: [{ id: keptGroup.id }],
+        },
+        other: {
+          id: other.userId,
+          providers: ["line"],
+          groups: [{ id: otherGroup.id }],
+        },
+      });
+      const mergeId = linkBody.merge?.mergeId;
+      if (mergeId === undefined) throw new Error("expected mergeId");
+
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId }, bearer(kept.accessToken)),
+      );
+      expect(confirmRes.status).toBe(200);
+      const confirmed = await confirmRes.json<{
+        accessToken: string;
+        user: {
+          id: string;
+          displayName: string;
+          signedInWith: string;
+          identities: { provider: string; email: string | null }[];
+        };
+      }>();
+      expect(confirmed.user).toMatchObject({
+        id: kept.userId,
+        displayName: "Google小宇",
+        signedInWith: "google",
+        identities: [
+          { provider: "google", email: "g@example.com" },
+          { provider: "line", email: null },
+        ],
+      });
+
+      expect(
+        await (await call("/me", { headers: bearer(confirmed.accessToken) })).json(),
+      ).toMatchObject({
+        id: kept.userId,
+        signedInWith: "google",
+        identities: [
+          { provider: "google", email: "g@example.com" },
+          { provider: "line", email: null },
+        ],
+      });
+
+      expect((await signIn("line", lineSub)).userId).toBe(kept.userId);
+      const groups = await (await send(kept, "GET", "/groups")).json<{ id: string }[]>();
+      expect(groups.map((g) => g.id).sort()).toEqual([keptGroup.id, otherGroup.id].sort());
+
+      expect((await call("/me", { headers: bearer(other.accessToken) })).status).toBe(401);
+      expect((await call("/auth/refresh", withCookie(other.refresh))).status).toBe(401);
+    } finally {
+      clock.now = baseTime;
+    }
+  });
+});

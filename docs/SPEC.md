@@ -368,7 +368,7 @@ CREATE TABLE flight_baselines (
 * **W-9 設定頁的人物卡與登入方式**：
   - 名稱與頭像固定跟著 User 最早綁定的 Identity（Profile source），與群組裡看到的一致。只有 Profile source 登入時才更新 `users.display_name`／`picture_url`；用另一個方式登入只更新該方式自己的信箱。`GET /me` 的 `signedInWith` 是「這個 session 登入時用的方式」：登入時寫進 `sessions.provider` 與 access token 的 `prv`，refresh 換發新 token 時沿用，所以別的瀏覽器或裝置用另一種方式登入，不會改變這個 session 看到的值；LINE 與 Google 可以各在不同瀏覽器同時登入。遷移（0012）之前建立的 session 沒有這個值，`signedInWith` 退回 `users.last_provider`，再沒有就用最早的 Identity，下次重新登入才有自己的值。`users.last_provider` 不再寫入。已被舊版覆蓋的帳號，等 Profile source 下次登入才換回。
   - 設定頁人物卡：名稱與頭像同上；旁邊的標籤跟著這個 session 的登入方式（綠色「LINE」或有彩色 G 的「Google」）；這個 session 是 Google 登入時，信箱以小字顯示在名稱下方，LINE 登入不顯示。Profile source 是 Google 且沒有頭像時，頭像位置顯示 Gmail 信封標誌。
-  - 「登入與安全」永遠列出 LINE 與 Google 兩列，LINE 為綠點、Google 為小的 G 標誌，這一區不顯示信箱。已連結：顯示淡綠膠囊「✓ 已連結」，剛完成連結的那一刻打勾彈出一次（頁面打開時就已連結的不動）。未連結的 Google：右邊顯示「連接」按鈕（W-8）。未連結的 LINE：顯示「即將推出」，不提供按鈕。
+  - 「登入與安全」永遠列出 LINE 與 Google 兩列，LINE 為綠點、Google 為小的 G 標誌，這一區不顯示信箱。已連結：顯示淡綠膠囊「✓ 已連結」，剛完成連結的那一刻打勾彈出一次（頁面打開時就已連結的不動）。未連結的 Google：右邊顯示「連接」按鈕（W-8）。未連結的 LINE：在外部瀏覽器右邊顯示「連接」按鈕，按下後進行 LINE Login 並返回設定頁（不使用連結碼）；若該 LINE 尚無 `User`，直接透過 `POST /auth/link/line` 綁定（`GET /me` 的 `signedInWith` 保持原本的登入方式）；若該 LINE 已屬於另一位 `User`，`POST /auth/link/:provider` 回傳需要 **Merge** 的預覽並建立 `path: "settings"` 的待確認 `Merge`，導向 `/merge` 確認頁（保留原本已登入的 Google `User` 在左，無連結碼警語與「這兩個帳號都是我本人」勾選框，「合併帳號」鈕立即可按）；若 LINE Login 失敗或取消，返回設定頁顯示翻譯錯誤訊息且不做任何變更。在 LINE app 內，LINE 那列維持不變。
   - 信箱：只有 Google 的 ID token 帶 `email` 且 `email_verified` 為真時才存入 `identities.email`；LINE 一律不存。每次登入若取得信箱就更新，沒取得時保留原值。刪除帳號時隨登入方式一併刪除。不給群組其他成員看，也不用來寄信。
   - 資料遷移（0011）：刪除所有既有的 Google 綁定，這些人下次用 Google 登入時重新綁定；只靠 Google 登入的人會得到新帳號，原帳號的群組紀錄不會合併。
 * **W-8 在 LINE 內連結 Google（連結碼）**：Google 不接受 LINE 內建瀏覽器登入，所以設定頁依環境分兩種。
@@ -385,7 +385,7 @@ CREATE TABLE flight_baselines (
   - 先驗 Google ID token，再消耗連結碼；ID token 無效時連結碼保留可再用。連結碼消耗後若使用者已有 Google 且未進入 Merge 流程（`PROVIDER_ALREADY_LINKED`），連結碼仍已作廢，需回 LINE 重新取得；任何失敗都不建立新使用者。
   - 登入頁在 LINE 內且有設定 Google 時，Google 按鈕外觀與 LINE 外相同（白底「使用 Google 登入」）。按下去不啟動 Google 登入，而是跳出提示框：標題「請用外部瀏覽器登入 Google」，說明 Google 不允許在 LINE 內建瀏覽器登入，按鈕「取消」（關閉）與「用瀏覽器開啟」（依上方「開啟外部瀏覽器」規則，在手機瀏覽器開啟目前這一頁，網址多帶 `google=1`）。外部瀏覽器（不在 LINE 內、有設定 Google）看到登入頁的 `google=1` 時，不先畫出登入頁，直接顯示 Google 過場並前往 Google 的帳號選擇頁（不必再按一次 Google 按鈕），登入後回到網址中的 `next`（只接受同站路徑）；同一個 `next` 在同一個分頁只自動跳轉一次，Google 拒絕或按返回後停在有 LINE 與 Google 兩顆按鈕的登入頁；在 LINE 內或沒設定 Google 時忽略 `google=1`。提示框用專案的 Radix 對話框：Tab 不會跑到背景、按 Esc 或「取消」關閉，關閉後焦點回到 Google 按鈕。不在 LINE 內時按鈕行為不變，不出現提示框。
   - 在外部瀏覽器綁定完成後，回到 LINE 內的設定頁（頁面重新變成可見）時，重新讀取 `GET /me`，只更新「登入與安全」的已連結清單；人物卡不變（仍是這個畫面這次登入的方式）。只在設定頁生效、不輪詢，沒有額外提示；讀取失敗就保持原樣，下次切回來再試。
-  - 範圍：目前只支援 LINE 使用者連結 Google；從 Google 連結 LINE 尚未實作。過期連結碼由每日清理刪除（M-1）。
+  - 範圍：過期連結碼與過期待確認 Merge 由每日清理刪除（M-1）。
 
 ---
 
