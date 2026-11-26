@@ -363,18 +363,13 @@ export function createFakeApi(): FakeApi {
       }
     }
 
-    const identity =
-      /^(POST \/api\/v1\/auth\/link|DELETE \/api\/v1\/auth\/identities)\/(line|google)$/.exec(
-        `${method} ${url.pathname}`,
-      );
+    const identity = /^POST \/api\/v1\/auth\/link\/(line|google)$/.exec(
+      `${method} ${url.pathname}`,
+    );
     if (identity !== null) {
       if (authed === undefined) return error("UNAUTHORIZED", 401);
-      const provider = identity[2] === "line" ? "line" : "google";
+      const provider = identity[1] === "line" ? "line" : "google";
       const others = authed.identities.filter((i) => i.provider !== provider);
-      if (method === "DELETE") {
-        if (others.length === 0) return error("LAST_IDENTITY", 409);
-        return update({ ...authed, identities: others });
-      }
       const { idToken } = await readJson(init);
       if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
         return error("ID_TOKEN_INVALID", 401);

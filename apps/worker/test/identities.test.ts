@@ -9,10 +9,6 @@ function meOf(accessToken: string) {
   return call("/me", { headers: bearer(accessToken) }).then((res) => res.json());
 }
 
-function unlink(provider: string, accessToken: string) {
-  return call(`/auth/identities/${provider}`, { method: "DELETE", headers: bearer(accessToken) });
-}
-
 describe("POST /auth/link/:provider", () => {
   it("adds a second Identity, after which either one signs into the same User", async () => {
     const lineSub = uniqueSub("line");
@@ -143,21 +139,6 @@ describe("Profile source: the first Identity's name and picture stay", () => {
     expect(await meOf(session.accessToken)).toMatchObject({ displayName: "新名" });
   });
 
-  it("passes to the remaining Identity once the source is unlinked", async () => {
-    const lineSub = uniqueSub("l");
-    const googleSub = uniqueSub("g");
-    const session = await signIn("line", lineSub, "LINE名");
-    await linkLater("google", session.accessToken, googleSub);
-    await unlink("line", session.accessToken);
-    // Nothing is fetched at unlink time: the old name stays until the next sign-in.
-    expect(await meOf(session.accessToken)).toMatchObject({ displayName: "LINE名" });
-    await signIn("google", googleSub, "Google名");
-    expect(await meOf(session.accessToken)).toMatchObject({
-      displayName: "Google名",
-      pictureUrl: `https://pic/${googleSub}`,
-    });
-  });
-
   it("still refreshes a non-source Google email at sign-in", async () => {
     const googleSub = uniqueSub("g");
     const session = await signIn("line", uniqueSub("l"), "LINE名");
@@ -170,26 +151,20 @@ describe("Profile source: the first Identity's name and picture stay", () => {
 });
 
 describe("DELETE /auth/identities/:provider", () => {
-  it("refuses to unlink the last Identity", async () => {
-    const session = await signIn("line", uniqueSub("only"));
-    const res = await unlink("line", session.accessToken);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: { code: "LAST_IDENTITY" } });
-  });
-
-  it("unlinks one of two Identities, which then no longer signs in to this User", async () => {
-    const lineSub = uniqueSub("drop");
-    const session = await signIn("google", uniqueSub("keep"));
+  it("is removed (404) and leaves both Identities linked", async () => {
+    const lineSub = uniqueSub("keep-l");
+    const googleSub = uniqueSub("keep-g");
+    const session = await signIn("google", googleSub);
     await link("line", session.accessToken, lineSub);
 
-    const res = await unlink("line", session.accessToken);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ identities: [{ provider: "google" }] });
-    expect((await signIn("line", lineSub)).userId).not.toBe(session.userId);
-  });
-
-  it("answers 404 for a provider the User has not linked", async () => {
-    const session = await signIn("google", uniqueSub("none"));
-    expect((await unlink("line", session.accessToken)).status).toBe(404);
+    const res = await call("/auth/identities/line", {
+      method: "DELETE",
+      headers: bearer(session.accessToken),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: { code: "NOT_FOUND" } });
+    expect(await meOf(session.accessToken)).toMatchObject({
+      identities: [{ provider: "google" }, { provider: "line" }],
+    });
   });
 });

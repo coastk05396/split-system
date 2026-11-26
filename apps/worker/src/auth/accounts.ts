@@ -603,26 +603,6 @@ export async function getPendingMerge(
   return preview;
 }
 
-/** Removes one Identity, refusing when it is the User's last; checked in the same statement. */
-export async function unlinkIdentity(db: Db, userId: string, provider: Provider): Promise<void> {
-  const removed = await db
-    .delete(identities)
-    .where(
-      and(
-        eq(identities.userId, userId),
-        eq(identities.provider, provider),
-        sql`(SELECT count(*) FROM ${identities} WHERE ${identities.userId} = ${userId}) > 1`,
-      ),
-    )
-    .returning({ id: identities.id });
-  if (removed.length > 0) return;
-  const [kept] = await db
-    .select({ id: identities.id })
-    .from(identities)
-    .where(and(eq(identities.userId, userId), eq(identities.provider, provider)));
-  throw new ApiError(kept === undefined ? "NOT_FOUND" : "LAST_IDENTITY");
-}
-
 /** Freeze every reserved ledger before checking authoritative balances and admin roles. */
 export async function deleteAccount(
   env: Bindings,

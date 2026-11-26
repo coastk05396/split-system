@@ -42,7 +42,6 @@ export interface Auth {
   confirmMerge: (mergeId: string) => Promise<Me>;
   cancelMerge: (mergeId: string) => Promise<void>;
   link: (provider: Provider, idToken: string) => Promise<void>;
-  unlink: (provider: Provider) => Promise<void>;
   createLinkCode: () => Promise<string>;
   refreshIdentities: (signal: AbortSignal) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
@@ -196,9 +195,6 @@ export function AuthProvider({
       cancelMerge: (mergeId) => session.cancelMerge(mergeId),
       link: async (provider, idToken) => {
         syncUser(await session.link(provider, idToken));
-      },
-      unlink: async (provider) => {
-        syncUser(await session.unlink(provider));
       },
       createLinkCode: () => session.createLinkCode(),
       async refreshIdentities(signal) {

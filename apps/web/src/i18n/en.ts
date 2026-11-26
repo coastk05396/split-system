@@ -469,8 +469,6 @@ export const en: Record<MessageId, string> = {
   "settings.securitySection": "Sign-in and security",
   "settings.accounts": "Linked accounts",
   "settings.linked": "Linked",
-  "settings.unlink": "Unlink {provider}",
-  "settings.unlinkShort": "Unlink",
   "settings.linkGoogle": "Connect",
   "settings.linkingGoogle": "Opening Google…",
   "google.signingIn": "Signing in…",
@@ -637,7 +635,6 @@ export const enErrors: Record<ErrorCode, string> = {
   MERGE_SAME_PROVIDER:
     "Both accounts already have the same sign-in method linked, so they cannot be merged.",
   PROVIDER_ALREADY_LINKED: "You have already linked this kind of account.",
-  LAST_IDENTITY: "You must keep at least one way to sign in.",
   LAST_ADMIN: "A group needs at least one admin.",
   GROUP_LIMIT_REACHED: "You can be in at most 20 groups.",
   SETTLEMENT_CURRENCY_LOCKED:

@@ -22,7 +22,6 @@ export interface Session {
   confirmMerge(mergeId: string): Promise<Me>;
   cancelMerge(mergeId: string): Promise<void>;
   link(provider: Provider, idToken: string): Promise<Me>;
-  unlink(provider: Provider): Promise<Me>;
   createLinkCode(): Promise<string>;
   getMe(): Promise<Me>;
   updateMe(patch: MePatch): Promise<Me>;
@@ -159,12 +158,6 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
           { param: { provider } },
           withJson({ idToken }),
         ),
-      );
-    },
-
-    async unlink(provider) {
-      return readUser(
-        await authenticated.auth.identities[":provider"].$delete({ param: { provider } }),
       );
     },
 
