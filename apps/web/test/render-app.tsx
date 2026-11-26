@@ -17,6 +17,8 @@ export interface RenderAppOptions {
   strictMode?: boolean;
   webSocket?: typeof WebSocket;
   path?: string;
+  /** Optional React Router history state for the initial entry. */
+  initialState?: unknown;
   /** A User whose refresh cookie the browser already holds. */
   cookieUser?: Me;
   /** Opened inside the LINE app, where LIFF hands over this ID token. */
@@ -88,8 +90,13 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     cacheStorage: options.cacheStorage,
   };
   if (options.webSocket !== undefined) deps.webSocket = options.webSocket;
+  const initialPath = options.pathFor?.() ?? options.path ?? "/";
   const router = createMemoryRouter(routes, {
-    initialEntries: [options.pathFor?.() ?? options.path ?? "/"],
+    initialEntries: [
+      options.initialState === undefined
+        ? initialPath
+        : { pathname: initialPath, state: options.initialState },
+    ],
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const app = (

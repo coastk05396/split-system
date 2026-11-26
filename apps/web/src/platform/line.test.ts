@@ -367,6 +367,40 @@ describe("connecting LINE from Settings (startLink / takeLinkResult)", () => {
     expect(localStorage.getItem("split.lineLogin")).toBeNull();
   });
 
+  it("refuses an expired LINE link callback instead of falling back to ordinary LINE sign-in", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_750_000_000_000);
+      const line = createLineSignIn("liff-id");
+      await line.startLink("user-a");
+
+      // Advance past the 10-minute link TTL, then arrive with LIFF return parameters.
+      vi.setSystemTime(1_750_000_000_000 + 11 * 60 * 1000);
+      window.history.replaceState(null, "", "/settings?code=abc&state=xyz&liffClientId=123");
+
+      const returning = createLineSignIn("liff-id");
+      expect(returning.hasPendingLink()).toBe(true);
+      await expect(returning.autoSignIn()).resolves.toBeNull();
+      expect(liff.getIDToken).not.toHaveBeenCalled();
+      expect(window.location.search).toBe("");
+      expect(localStorage.getItem("split.lineLink")).toBeNull();
+      expect(localStorage.getItem("split.lineLogin")).toBeNull();
+
+      // Same-user expired callback also refuses without linking.
+      await line.startLink("user-a");
+      vi.setSystemTime(1_750_000_000_000 + 25 * 60 * 1000);
+      window.history.replaceState(null, "", "/settings?code=abc&state=xyz&liffClientId=123");
+      await expect(createLineSignIn("liff-id").takeLinkResult("user-a")).resolves.toEqual({
+        idToken: null,
+        mismatch: true,
+      });
+      expect(liff.getIDToken).not.toHaveBeenCalled();
+      expect(localStorage.getItem("split.lineLink")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns null idToken and strips OAuth error params when LINE Login is cancelled", async () => {
     const line = createLineSignIn("liff-id");
     await line.startLink("user-1");

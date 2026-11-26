@@ -118,13 +118,18 @@ function UserSideCard({
  * path warns and requires ticking "both are me" before Merge becomes enabled.
  */
 export function MergePage() {
-  const { state, getPendingMerge, confirmMerge, cancelMerge } = useAuth();
+  const { state, session, getPendingMerge, confirmMerge, cancelMerge } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const initial = (location.state as { merge?: MergePreview } | null)?.merge ?? null;
+  const hasProof = state.status === "signedIn" || session.hasPendingMerge();
+  const initial = hasProof
+    ? ((location.state as { merge?: MergePreview } | null)?.merge ?? null)
+    : null;
   const [preview, setPreview] = useState<MergePreview | null>(initial);
-  const [loading, setLoading] = useState(initial === null);
-  const [loadError, setLoadError] = useState<ErrorCode | null>(null);
+  const [loading, setLoading] = useState(hasProof && initial === null);
+  const [loadError, setLoadError] = useState<ErrorCode | null>(
+    hasProof ? null : "MERGE_PENDING_INVALID",
+  );
   const [confirmed, setConfirmed] = useState(false);
   const [working, setWorking] = useState(false);
   const [submitError, setSubmitError] = useState<ErrorCode | null>(null);
@@ -132,7 +137,7 @@ export function MergePage() {
   const tickId = useId();
 
   useEffect(() => {
-    if (preview !== null) return;
+    if (!hasProof || preview !== null) return;
     let active = true;
     setLoading(true);
     void getPendingMerge()
@@ -148,11 +153,11 @@ export function MergePage() {
     return () => {
       active = false;
     };
-  }, [preview, getPendingMerge]);
+  }, [hasProof, preview, getPendingMerge]);
 
   if (loading) return <Loading />;
 
-  if (preview === null) {
+  if ((!hasProof && mergingGroupIds === null) || preview === null) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-start gap-4">
         <h1 className="text-2xl font-bold md:text-3xl">{t("merge.title")}</h1>
@@ -164,7 +169,7 @@ export function MergePage() {
           replace
           className={`${secondaryButton} py-3`}
         >
-          {t("merge.backToSettings")}
+          {t(state.status === "signedIn" ? "merge.backToSettings" : "merge.backToSignIn")}
         </Link>
       </div>
     );
@@ -183,6 +188,7 @@ export function MergePage() {
     setWorking(true);
     try {
       const result = await confirmMerge(preview.mergeId);
+      if (result === null) return;
       if (result.mergingGroupIds.length === 0) {
         void navigate("/settings", { replace: true, state: { linked: linkedProvider } });
         return;
@@ -190,7 +196,13 @@ export function MergePage() {
       setMergingGroupIds(result.mergingGroupIds);
       setWorking(false);
     } catch (error) {
-      setSubmitError(error instanceof ApiFailure ? error.code : "INTERNAL");
+      const code = error instanceof ApiFailure ? error.code : "INTERNAL";
+      if (code === "MERGE_PENDING_INVALID") {
+        setPreview(null);
+        setLoadError(code);
+      } else {
+        setSubmitError(code);
+      }
       setWorking(false);
     }
   }
@@ -203,7 +215,13 @@ export function MergePage() {
       await cancelMerge(preview.mergeId);
       void navigate(state.status === "signedIn" ? "/settings" : "/sign-in", { replace: true });
     } catch (error) {
-      setSubmitError(error instanceof ApiFailure ? error.code : "INTERNAL");
+      const code = error instanceof ApiFailure ? error.code : "INTERNAL";
+      if (code === "MERGE_PENDING_INVALID") {
+        setPreview(null);
+        setLoadError(code);
+      } else {
+        setSubmitError(code);
+      }
       setWorking(false);
     }
   }

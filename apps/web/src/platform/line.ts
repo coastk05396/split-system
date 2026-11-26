@@ -114,7 +114,7 @@ function clearLink(): void {
   storage()?.removeItem(LINK_KEY);
 }
 
-function readLinkMarker(): { userId: string; startedAt: number } | null {
+function readLinkMarker(): { userId: string; startedAt: number; expired: boolean } | null {
   const raw = storage()?.getItem(LINK_KEY);
   if (raw === null || raw === undefined) return null;
   try {
@@ -123,14 +123,17 @@ function readLinkMarker(): { userId: string; startedAt: number } | null {
       typeof parsed.userId !== "string" ||
       parsed.userId === "" ||
       typeof parsed.startedAt !== "number" ||
-      !Number.isFinite(parsed.startedAt) ||
-      Date.now() - parsed.startedAt >= RETURNING_TTL_MS
+      !Number.isFinite(parsed.startedAt)
     ) {
-      return null;
+      return { userId: "", startedAt: 0, expired: true };
     }
-    return { userId: parsed.userId, startedAt: parsed.startedAt };
+    return {
+      userId: parsed.userId,
+      startedAt: parsed.startedAt,
+      expired: Date.now() - parsed.startedAt >= RETURNING_TTL_MS,
+    };
   } catch {
-    return null;
+    return { userId: "", startedAt: 0, expired: true };
   }
 }
 
@@ -228,7 +231,7 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
   async function readLinkResult(expectedUserId: string): Promise<LineLinkResult | null> {
     const pending = readLinkMarker();
     if (pending === null) return null;
-    if (pending.userId !== expectedUserId) {
+    if (pending.expired || pending.userId !== expectedUserId) {
       clearLink();
       clearReturning();
       stripOAuthParams();

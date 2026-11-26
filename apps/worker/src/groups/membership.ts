@@ -83,6 +83,7 @@ export async function findMembership(
  * Member, gets 404 so a Group's existence is never revealed to outsiders.
  */
 export async function requireMember(db: Db, groupId: string, userId: string): Promise<MemberRow> {
+  if (!(await userExists(db, userId))) throw new ApiError("UNAUTHORIZED");
   const me = await findMembership(db, groupId, userId);
   if (me === undefined) throw new ApiError("NOT_FOUND");
   return me;

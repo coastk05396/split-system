@@ -100,13 +100,8 @@ function MergeFrame({ signedIn }: { signedIn: boolean }) {
 }
 
 function MergeRoute() {
-  const { state, session } = useAuth();
-  const location = useLocation();
+  const { state } = useAuth();
   if (state.status === "loading") return <Splash />;
-  const hasState = (location.state as { merge?: unknown } | null)?.merge !== undefined;
-  if (state.status !== "signedIn" && !hasState && !session.hasPendingMerge()) {
-    return <Navigate to="/sign-in?next=%2Fmerge" replace />;
-  }
   return <MergeFrame signedIn={state.status === "signedIn"} />;
 }
 

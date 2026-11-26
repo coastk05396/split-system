@@ -7,7 +7,7 @@ import type {
   TestSignInRequest,
 } from "@split/shared";
 import { createApiClient, withJson } from "../api/client.js";
-import { toApiFailure } from "../api/errors.js";
+import { ApiFailure, toApiFailure } from "../api/errors.js";
 
 export type RedeemLinkCodeResult = { user: Me; merge: null } | { user: null; merge: MergePreview };
 
@@ -29,7 +29,7 @@ export interface Session {
   redeemLinkCode(code: string, idToken: string): Promise<RedeemLinkCodeResult>;
   hasPendingMerge(): boolean;
   getPendingMerge(): Promise<MergePreview>;
-  confirmMerge(mergeId: string): Promise<ConfirmMergeResult>;
+  confirmMerge(mergeId: string): Promise<ConfirmMergeResult | null>;
   cancelMerge(mergeId: string): Promise<void>;
   link(
     provider: Provider,
@@ -123,6 +123,14 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     return (await res.json()) as Me;
   }
 
+  async function failMerge(res: Response, usingMergeToken: boolean): Promise<never> {
+    if (res.status === 401 && usingMergeToken) {
+      mergeToken = null;
+      throw new ApiFailure("MERGE_PENDING_INVALID", 422);
+    }
+    throw await toApiFailure(res);
+  }
+
   const session: Session = {
     getAccessToken() {
       return accessToken;
@@ -159,42 +167,40 @@ export function createSession({ fetch: baseFetch, onSignedOut }: SessionOptions)
     },
 
     async getPendingMerge() {
+      const usingMergeToken = mergeToken !== null;
       const res: Response = await mergeApi.auth.merge.$get();
-      if (!res.ok) {
-        if (res.status === 401 && mergeToken !== null) mergeToken = null;
-        throw await toApiFailure(res);
-      }
+      if (!res.ok) return failMerge(res, usingMergeToken);
       return (await res.json()) as MergePreview;
     },
 
     async confirmMerge(mergeId) {
+      // Capture generation so a confirm still in flight cannot undo an explicit sign-out.
+      const asked = generation;
+      const usingMergeToken = mergeToken !== null;
       const res: Response = await mergeApi.auth.merge.confirm.$post(
         undefined,
         withJson({ mergeId }),
       );
-      if (!res.ok) {
-        if (res.status === 401 && mergeToken !== null) mergeToken = null;
-        throw await toApiFailure(res);
-      }
+      if (asked !== generation) return null;
+      if (!res.ok) return failMerge(res, usingMergeToken);
       const body = (await res.json()) as {
         accessToken: string;
         user: Me;
         mergingGroupIds?: string[];
       };
+      if (asked !== generation) return null;
       mergeToken = null;
       accessToken = body.accessToken;
       return { user: body.user, mergingGroupIds: body.mergingGroupIds ?? [] };
     },
 
     async cancelMerge(mergeId) {
+      const usingMergeToken = mergeToken !== null;
       const res: Response = await mergeApi.auth.merge.cancel.$post(
         undefined,
         withJson({ mergeId }),
       );
-      if (!res.ok) {
-        if (res.status === 401 && mergeToken !== null) mergeToken = null;
-        throw await toApiFailure(res);
-      }
+      if (!res.ok) return failMerge(res, usingMergeToken);
       mergeToken = null;
     },
 

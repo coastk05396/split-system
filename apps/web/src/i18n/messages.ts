@@ -606,6 +606,7 @@ const zhTW = {
   "merge.confirming": "合併中…",
   "merge.cancel": "取消",
   "merge.backToSettings": "回到設定",
+  "merge.backToSignIn": "回到登入",
 } as const;
 
 export type MessageId = keyof typeof zhTW;

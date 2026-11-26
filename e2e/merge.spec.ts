@@ -4,6 +4,16 @@ function base64urlJson(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
+function hasUrl(expectedOrigin: string, pathname: string | RegExp) {
+  return (url: URL) => {
+    const parsed = new URL(url.href);
+    return (
+      parsed.origin === expectedOrigin &&
+      (typeof pathname === "string" ? parsed.pathname === pathname : pathname.test(parsed.pathname))
+    );
+  };
+}
+
 test.describe("User Merge on Link code path E2E (#227)", () => {
   test("LINE User redeems Link code with a Google that owns another User, confirms Merge, and lands in Settings with both linked", async ({
     browser,
@@ -33,6 +43,7 @@ test.describe("User Merge on Link code path E2E (#227)", () => {
     // 2. Test-signed-in LINE User creates a Group and issues a Link code.
     const lineName = `LINE小宇-${suffix}`;
     await page.goto("/sign-in");
+    const expectedOrigin = new URL(baseURL ?? page.url()).origin;
     const testForm = page.locator('form[aria-label="測試登入（僅限本機）"]');
     await testForm.getByLabel("顯示名稱").fill(lineName);
     await testForm.getByLabel("身分來源").selectOption("line");
@@ -40,10 +51,10 @@ test.describe("User Merge on Link code path E2E (#227)", () => {
     await expect(page.getByRole("heading", { name: new RegExp(lineName) })).toBeVisible();
 
     await page.getByRole("link", { name: /^快速分帳/ }).click();
-    await expect(page).toHaveURL(/\/groups\/new/);
+    await expect(page).toHaveURL(hasUrl(expectedOrigin, "/groups/new"));
     await page.getByLabel("群組名稱").fill("LINE吃飯群");
     await page.getByRole("button", { name: "建立群組，繼續" }).click();
-    await expect(page).toHaveURL(/\/groups\/[^/]+\/members/);
+    await expect(page).toHaveURL(hasUrl(expectedOrigin, /^\/groups\/[^/]+\/members$/));
 
     const lineContext = await browser.newContext({
       locale: "zh-TW",
@@ -101,7 +112,7 @@ test.describe("User Merge on Link code path E2E (#227)", () => {
     await expect(mergeButton).toBeEnabled();
     await mergeButton.click();
 
-    await expect(outsidePage).toHaveURL(/\/settings/);
+    await expect(outsidePage).toHaveURL(hasUrl(expectedOrigin, "/settings"));
     await expect(outsidePage.getByRole("heading", { level: 1, name: "我的設定" })).toBeVisible();
     const accounts = outsidePage.getByRole("list", { name: "已連結的帳號" });
     await expect(accounts.getByText("LINE").locator("..")).toContainText("已連結");

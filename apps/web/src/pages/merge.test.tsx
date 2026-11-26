@@ -134,6 +134,66 @@ describe("/merge (confirming a Merge on the Link code path)", () => {
     expect(screen.getByRole("link", { name: "回到設定" })).toHaveAttribute("href", "/settings");
   });
 
+  it("refuses a Link-code preview restored without a confirmation credential and offers an exit to sign-in", async () => {
+    const kept = makeUser("LINE小宇", "line");
+    const other = makeUser("Google小宇", "google");
+    renderApp({
+      path: "/merge",
+      initialState: {
+        merge: {
+          mergeId: "m-lost",
+          path: "linkCode",
+          expiresAt: Date.now() + 600_000,
+          kept: {
+            id: kept.id,
+            displayName: kept.displayName,
+            pictureUrl: null,
+            providers: ["line"],
+            profileProvider: "line",
+            groupCount: 0,
+            groups: [],
+          },
+          other: {
+            id: other.id,
+            displayName: other.displayName,
+            pictureUrl: null,
+            providers: ["google"],
+            profileProvider: "google",
+            groupCount: 0,
+            groups: [],
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("失效或過期");
+    expect(screen.queryByRole("button", { name: "合併帳號" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
+    expect(screen.getByRole("link", { name: "回到登入" })).toHaveAttribute("href", "/sign-in");
+  });
+
+  it("replaces an expired Link-code confirmation attempt with the translated expired-Merge refusal and exit", async () => {
+    const user = userEvent.setup();
+    const kept = makeUser("LINE小宇", "line");
+    const other = makeUser("Google小宇", "google");
+    const { api } = renderApp({
+      path: "/link?code=code-1",
+      seed: () => undefined,
+    });
+    api.linkCodes.set("code-1", kept);
+    api.googleOwners = new Map([["g-1", other]]);
+
+    await screen.findByRole("heading", { level: 1, name: "確認合併帳號" });
+    await user.click(screen.getByRole("checkbox", { name: "這兩個帳號都是我本人" }));
+    api.failNext("POST /api/v1/auth/merge/confirm", "UNAUTHORIZED", 401);
+    await user.click(screen.getByRole("button", { name: "合併帳號" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("失效或過期");
+    expect(screen.queryByRole("button", { name: "合併帳號" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
+    expect(screen.getByRole("link", { name: "回到登入" })).toHaveAttribute("href", "/sign-in");
+  });
+
   it("renders English strings when Language is English", async () => {
     setLocale("en");
     const kept = { ...makeUser("LINE Xiaoyu", "line"), language: "en" as const };
@@ -326,5 +386,38 @@ describe("/merge (confirming a Merge on the Settings connect-LINE path)", () => 
     const accounts = screen.getByRole("list", { name: "Linked accounts" });
     expect(accountRow(accounts, "LINE")).toHaveTextContent("Linked");
     expect(accountRow(accounts, "Google")).toHaveTextContent("Linked");
+  });
+
+  it("keeps the User signed out when an explicit sign-out happens while a Settings confirm is in flight", async () => {
+    const user = userEvent.setup();
+    const kept = makeUser("Google小宇", "google");
+    const other = makeUser("LINE小宇", "line");
+    const { api } = renderApp({
+      path: "/settings",
+      cookieUser: kept,
+      lineLink: { idToken: "fake|l-other|LINE小宇" },
+    });
+    api.lineOwners.set("l-other", other);
+
+    const list = await screen.findByRole("list", { name: "已連結的帳號" });
+    await user.click(within(accountRow(list, "LINE")).getByRole("button", { name: "連接" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "確認合併帳號" })).toBeVisible();
+
+    const release = api.holdResponses("POST /api/v1/auth/merge/confirm");
+    await user.click(screen.getByRole("button", { name: "合併帳號" }));
+
+    const settingsLink = screen.getAllByRole("link", { name: "設定" })[0];
+    if (settingsLink === undefined) throw new Error("No settings nav link");
+    await user.click(settingsLink);
+    await screen.findByRole("heading", { level: 1, name: "我的設定" });
+    await user.click(screen.getByRole("button", { name: "登出" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /搶低價機票/ }, { timeout: 3000 }),
+    ).toBeVisible();
+
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole("heading", { level: 1, name: /搶低價機票/ })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: "我的設定" })).toBeNull();
   });
 });
