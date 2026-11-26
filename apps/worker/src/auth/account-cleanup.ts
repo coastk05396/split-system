@@ -1,8 +1,19 @@
 import type { Bindings } from "../env.js";
+import { ApiError } from "../errors.js";
 import { groupLedger } from "../ledger-client.js";
 
 const BATCH = 100;
 const MERGE_RETRY_DELAY_MS = 60 * 60 * 1000;
+
+function cleanupErrorLog(event: string, operation: string, error: unknown): string {
+  return JSON.stringify({
+    event,
+    operation,
+    role: "maintenance",
+    errorClass: error instanceof Error ? error.name : "UnknownError",
+    ...(error instanceof ApiError ? { errorCode: error.code } : {}),
+  });
+}
 
 /**
  * Tells each ledger that a deleted account is gone for good, so it drops the rollback copy it
@@ -29,11 +40,11 @@ export async function commitAccountCleanups(env: Bindings): Promise<void> {
           .bind(task.user_id, task.group_id)
           .run();
       } catch (error) {
-        console.error(JSON.stringify({ event: "account_cleanup_failed", error: String(error) }));
+        console.error(cleanupErrorLog("account_cleanup_failed", "account_cleanup_task", error));
       }
     }
   } catch (error) {
-    console.error(JSON.stringify({ event: "account_cleanup_failed", error: String(error) }));
+    console.error(cleanupErrorLog("account_cleanup_failed", "account_cleanup_queue", error));
   }
 }
 
@@ -52,28 +63,37 @@ export async function commitMergeCleanups(
     const query =
       otherUserId === undefined
         ? env.DB.prepare(
-            "SELECT kept_user_id,other_user_id,group_id,next_retry_at FROM merge_cleanups ORDER BY next_retry_at ASC LIMIT ?",
+            "SELECT kept_user_id,other_user_id,group_id,next_retry_at,pending_reservation_at FROM merge_cleanups ORDER BY next_retry_at ASC LIMIT ?",
           ).bind(BATCH)
         : env.DB.prepare(
-            "SELECT kept_user_id,other_user_id,group_id,next_retry_at FROM merge_cleanups WHERE other_user_id=? ORDER BY next_retry_at ASC LIMIT ?",
+            "SELECT kept_user_id,other_user_id,group_id,next_retry_at,pending_reservation_at FROM merge_cleanups WHERE other_user_id=? ORDER BY next_retry_at ASC LIMIT ?",
           ).bind(otherUserId, BATCH);
     const { results } = await query.all<{
       kept_user_id: string;
       other_user_id: string;
       group_id: string;
       next_retry_at: number;
+      pending_reservation_at: number | null;
     }>();
     for (const task of results) {
       try {
-        await groupLedger(env, task.group_id).mergeUser({
+        const ledger = groupLedger(env, task.group_id);
+        await ledger.mergeUser({
           keptUserId: task.kept_user_id,
           otherUserId: task.other_user_id,
         });
+        if (task.pending_reservation_at !== null && !(await ledger.isMember(task.kept_user_id))) {
+          await env.DB.prepare(
+            "DELETE FROM group_reservations WHERE user_id=? AND group_id=? AND status='pending' AND created_at=?",
+          )
+            .bind(task.kept_user_id, task.group_id, task.pending_reservation_at)
+            .run();
+        }
         await env.DB.prepare("DELETE FROM merge_cleanups WHERE other_user_id=? AND group_id=?")
           .bind(task.other_user_id, task.group_id)
           .run();
       } catch (error) {
-        console.error(JSON.stringify({ event: "merge_cleanup_failed", error: String(error) }));
+        console.error(cleanupErrorLog("merge_cleanup_failed", "merge_cleanup_task", error));
         await env.DB.prepare(
           "UPDATE merge_cleanups SET next_retry_at=MAX(next_retry_at + 1, ?) WHERE other_user_id=? AND group_id=?",
         )
@@ -83,6 +103,28 @@ export async function commitMergeCleanups(
       }
     }
   } catch (error) {
-    console.error(JSON.stringify({ event: "merge_cleanup_failed", error: String(error) }));
+    console.error(cleanupErrorLog("merge_cleanup_failed", "merge_cleanup_queue", error));
+  }
+}
+
+/** One-time reprojection of pre-0021 cold Groups so Former Members appear in group_memberships. */
+export async function backfillGroupMemberships(env: Bindings): Promise<void> {
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT group_id FROM group_directory WHERE deleted = 0 AND membership_reprojected = 0 LIMIT ?",
+    )
+      .bind(BATCH)
+      .all<{ group_id: string }>();
+    for (const row of results) {
+      try {
+        await groupLedger(env, row.group_id).projectMemberships();
+      } catch (error) {
+        console.error(cleanupErrorLog("membership_backfill_failed", "project_memberships", error));
+      }
+    }
+  } catch (error) {
+    console.error(
+      cleanupErrorLog("membership_backfill_failed", "membership_backfill_queue", error),
+    );
   }
 }

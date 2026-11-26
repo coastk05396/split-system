@@ -222,6 +222,37 @@ export class GroupLedger extends DurableObject<Bindings> {
     return this.drainInFlight;
   }
 
+  private membershipStatements(
+    groupId: string,
+    deleted: number,
+    members: readonly MemberRow[],
+    rev: number,
+    fence: string,
+  ): D1PreparedStatement[] {
+    const db = this.env.DB;
+    const statements: D1PreparedStatement[] = [
+      db
+        .prepare(`DELETE FROM group_memberships WHERE group_id = ? AND ${fence}`)
+        .bind(groupId, groupId, rev),
+    ];
+    if (!deleted) {
+      const memberUserIds = [
+        ...new Set(members.map((m) => m.user_id).filter((id): id is string => id !== null)),
+      ];
+      if (memberUserIds.length > 0) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT OR IGNORE INTO group_memberships (user_id, group_id)
+               SELECT j.value, ? FROM json_each(?) j WHERE ${fence}`,
+            )
+            .bind(groupId, JSON.stringify(memberUserIds), groupId, rev),
+        );
+      }
+    }
+    return statements;
+  }
+
   private async push(): Promise<void> {
     const snapshot = this.ctx.storage.transactionSync(() => {
       const sql = this.ctx.storage.sql;
@@ -287,24 +318,9 @@ export class GroupLedger extends DurableObject<Bindings> {
         db
           .prepare(`DELETE FROM group_member_summary WHERE group_id = ? AND ${fence}`)
           .bind(g.id, g.id, rev),
-        db
-          .prepare(`DELETE FROM group_memberships WHERE group_id = ? AND ${fence}`)
-          .bind(g.id, g.id, rev),
+        ...this.membershipStatements(g.id, g.deleted, members, rev, fence),
       ];
       if (!g.deleted) {
-        const memberUserIds = [
-          ...new Set(members.map((m) => m.user_id).filter((id): id is string => id !== null)),
-        ];
-        if (memberUserIds.length > 0) {
-          statements.push(
-            db
-              .prepare(
-                `INSERT OR IGNORE INTO group_memberships (user_id, group_id)
-                 SELECT j.value, ? FROM json_each(?) j WHERE ${fence}`,
-              )
-              .bind(g.id, JSON.stringify(memberUserIds), g.id, rev),
-          );
-        }
         statements.push(
           db.prepare(`DELETE FROM invites WHERE group_id=? AND ${fence}`).bind(g.id, g.id, rev),
         );
@@ -430,8 +446,8 @@ export class GroupLedger extends DurableObject<Bindings> {
       statements.push(
         db
           .prepare(
-            `INSERT INTO group_directory (group_id,name,settlement_currency,is_trip,trip_destination,trip_start_date,trip_end_date,trip_notes,settlement_currency_locked,member_count,member_preview,created_at,updated_at,rev,deleted)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET name=excluded.name,settlement_currency=excluded.settlement_currency,is_trip=excluded.is_trip,trip_destination=excluded.trip_destination,trip_start_date=excluded.trip_start_date,trip_end_date=excluded.trip_end_date,trip_notes=excluded.trip_notes,settlement_currency_locked=excluded.settlement_currency_locked,member_count=excluded.member_count,member_preview=excluded.member_preview,created_at=excluded.created_at,updated_at=excluded.updated_at,rev=excluded.rev,deleted=excluded.deleted WHERE group_directory.rev <= excluded.rev`,
+            `INSERT INTO group_directory (group_id,name,settlement_currency,is_trip,trip_destination,trip_start_date,trip_end_date,trip_notes,settlement_currency_locked,member_count,member_preview,created_at,updated_at,rev,deleted,membership_reprojected)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1) ON CONFLICT(group_id) DO UPDATE SET name=excluded.name,settlement_currency=excluded.settlement_currency,is_trip=excluded.is_trip,trip_destination=excluded.trip_destination,trip_start_date=excluded.trip_start_date,trip_end_date=excluded.trip_end_date,trip_notes=excluded.trip_notes,settlement_currency_locked=excluded.settlement_currency_locked,member_count=excluded.member_count,member_preview=excluded.member_preview,created_at=excluded.created_at,updated_at=excluded.updated_at,rev=excluded.rev,deleted=excluded.deleted,membership_reprojected=1 WHERE group_directory.rev <= excluded.rev`,
           )
           .bind(
             g.id,
@@ -527,7 +543,20 @@ export class GroupLedger extends DurableObject<Bindings> {
   private async broadcastSyncNeeded(rev: number, closeAll?: true): Promise<void> {
     const sockets = this.ctx.getWebSockets();
     if (sockets.length === 0) return;
-    const deadUserIds = await this.missingOrMergingUsers(sockets);
+    let deadUserIds: Set<string>;
+    try {
+      deadUserIds = await this.missingOrMergingUsers(sockets);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "live_broadcast_skipped",
+          operation: "broadcast_sync_needed",
+          role: "ledger",
+          errorClass: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return;
+    }
     const message: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
     for (const socket of sockets) {
       const userId = this.ctx.getTags(socket)[0];
@@ -901,6 +930,39 @@ export class GroupLedger extends DurableObject<Bindings> {
           if (this.dirtyCount() > 0) return { ok: false, code: "SERVICE_UNAVAILABLE" };
         }
         if (dirty !== undefined || hadDirty) await this.broadcastSyncNeeded(rev);
+        return { ok: true, value: null, rev };
+      } catch (error) {
+        return failure(error);
+      }
+    });
+  }
+
+  /** Projects all Member seats (Former Members included) into D1 once for pre-0021 Groups. */
+  projectMemberships(): Promise<LedgerResult<null>> {
+    return this.serializeWrite(async () => {
+      if (!this.hasTable("ledger_members")) return { ok: true, value: null, rev: 0 };
+      try {
+        const snapshot = this.ctx.storage.transactionSync(() => {
+          const group = this.ctx.storage.sql
+            .exec<GroupRow>("SELECT * FROM ledger_group")
+            .toArray()[0];
+          const members = this.ctx.storage.sql
+            .exec<MemberRow>("SELECT * FROM ledger_members")
+            .toArray();
+          return group ? { group, members, rev: this.rev() } : null;
+        });
+        if (snapshot === null) return { ok: true, value: null, rev: 0 };
+        const { group: g, members, rev } = snapshot;
+        const db = this.env.DB;
+        const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
+        await db.batch([
+          ...this.membershipStatements(g.id, g.deleted, members, rev, fence),
+          db
+            .prepare(
+              `UPDATE group_directory SET membership_reprojected = 1 WHERE group_id = ? AND ${fence}`,
+            )
+            .bind(g.id, g.id, rev),
+        ]);
         return { ok: true, value: null, rev };
       } catch (error) {
         return failure(error);

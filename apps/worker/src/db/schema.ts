@@ -128,6 +128,7 @@ export const mergeCleanups = sqliteTable(
     otherUserId: text("other_user_id").notNull(),
     groupId: text("group_id").notNull(),
     nextRetryAt: integer("next_retry_at").notNull(),
+    pendingReservationAt: integer("pending_reservation_at"),
   },
   (t) => [
     primaryKey({ columns: [t.otherUserId, t.groupId] }),
@@ -204,6 +205,7 @@ export const groupDirectory = sqliteTable("group_directory", {
   updatedAt: integer("updated_at").notNull(),
   rev: integer("rev").notNull().default(0),
   deleted: integer("deleted").notNull().default(0),
+  membershipReprojected: integer("membership_reprojected").notNull().default(0),
 });
 
 /** Group Member Summary read model (decision 16). */

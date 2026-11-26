@@ -30,6 +30,21 @@ jobs:
         env:
           VITE_LIFF_ID: ${{ vars.VITE_LIFF_ID }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+      - name: Preflight duplicate identities before migrations
+        working-directory: apps/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          result=$(pnpm exec wrangler d1 execute DB --remote --env production --json --command "SELECT user_id, provider, COUNT(*) AS duplicate_count FROM identities GROUP BY user_id, provider HAVING COUNT(*) > 1")
+          node -e '
+            const payload = JSON.parse(process.argv[1]);
+            const rows = (Array.isArray(payload) ? payload : [payload]).flatMap((entry) => entry.results ?? []);
+            if (rows.length > 0) {
+              console.error("Preflight failed: found " + rows.length + " duplicate (user_id, provider) group(s) in identities. Reconcile sign-in methods manually before applying migration 0021.");
+              process.exit(1);
+            }
+          ' "$result"
       - uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

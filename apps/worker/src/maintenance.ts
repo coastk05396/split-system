@@ -1,6 +1,10 @@
 import { and, asc, eq, lt } from "drizzle-orm";
 import { createDb } from "./db/client.js";
-import { commitAccountCleanups, commitMergeCleanups } from "./auth/account-cleanup.js";
+import {
+  backfillGroupMemberships,
+  commitAccountCleanups,
+  commitMergeCleanups,
+} from "./auth/account-cleanup.js";
 import { productionDeps } from "./deps.js";
 import type { Bindings } from "./env.js";
 import { refreshDailyFlights } from "./flights/daily.js";
@@ -102,6 +106,7 @@ async function runAccountAndRateMaintenance(env: Bindings, now: number): Promise
   const db = createDb(env.DB);
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
+  await backfillGroupMemberships(env);
   await commitMergeCleanups(env, now);
   await refreshRates(db, productionDeps.rateSource, now);
 }

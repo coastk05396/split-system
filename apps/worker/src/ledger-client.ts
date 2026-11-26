@@ -80,6 +80,8 @@ export function groupLedger(env: Bindings, groupId: string) {
         Revised<AccountDeletionValues[O["action"]]>
       >,
     mergeUser: (op: MergeUserOperation): Promise<Revised<null>> => decode<null>(stub.mergeUser(op)),
+    /** Reprojects every Member seat (Former Members included) for pre-0021 Groups. */
+    projectMemberships: (): Promise<Revised<null>> => decode<null>(stub.projectMemberships()),
     /** Opens the User's live-update WebSocket; the ledger answers 404 to a non-Member. */
     live: (userId: string, protocol?: string): Promise<Response> => {
       const headers = new Headers({ Upgrade: "websocket", "X-User-Id": userId });

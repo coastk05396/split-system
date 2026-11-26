@@ -7,7 +7,8 @@ import {
 } from "@split/shared";
 import { env } from "cloudflare:workers";
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ApiError } from "../src/errors.js";
 import type {
   AccountDeletionOperation,
   CreateGroup,
@@ -41,6 +42,19 @@ async function issueLinkCode(accessToken: string): Promise<string> {
   const res = await call("/auth/link-code", json({}, bearer(accessToken)));
   expect(res.status).toBe(200);
   return (await res.json<{ code: string }>()).code;
+}
+
+function spyD1Prepare(wrap: (stmt: D1PreparedStatement, sqlText: string) => D1PreparedStatement) {
+  const dbProto = Object.getPrototypeOf(env.DB) as D1Database;
+  const orig = Object.getOwnPropertyDescriptor(dbProto, "prepare")?.value as
+    ((this: D1Database, query: string) => D1PreparedStatement) | undefined;
+  if (typeof orig !== "function") throw new Error("expected D1Database.prepare method");
+  return vi.spyOn(dbProto, "prepare").mockImplementation(function (
+    this: D1Database,
+    sqlText: string,
+  ) {
+    return wrap(orig.call(this, sqlText), sqlText);
+  });
 }
 
 function redeem(code: string, sub: string, name = "Google名", email = "g@example.com") {
@@ -2476,4 +2490,501 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
       await env.DB.prepare("DELETE FROM merge_cleanups WHERE kept_user_id='kept-old'").run();
     }
   }, 60_000);
+
+  it("suppresses live broadcast when socket validation hits D1 failure while keeping projection and write response", async () => {
+    const admin = await person("BroadcastFail");
+    const group = await createGroup(admin, { name: "廣播失敗測試" });
+
+    const liveRes = await call(`/groups/${group.id}/live`, {
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${admin.accessToken}` },
+    });
+    expect(liveRes.status).toBe(101);
+    const socket = liveRes.webSocket;
+    if (socket === null) throw new Error("missing socket");
+    socket.accept();
+
+    const received: string[] = [];
+    socket.addEventListener("message", (event) => {
+      received.push(String(event.data));
+    });
+
+    const prepareSpy = spyD1Prepare((stmt, sqlText) => {
+      if (sqlText.includes("SELECT other_user_id FROM merge_cleanups WHERE other_user_id IN")) {
+        throw new Error("transient D1 read failure: sensitive-token");
+      }
+      return stmt;
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const patchRes = await send(
+        admin,
+        "PATCH",
+        `/groups/${group.id}`,
+        { name: "已提交改名" },
+        { "If-Match": String(group.updatedAt) },
+      );
+      expect(patchRes.status).toBe(200);
+
+      const detailRes = await send(admin, "GET", `/groups/${group.id}`);
+      expect(detailRes.status).toBe(200);
+      expect((await detailRes.json<{ name: string }>()).name).toBe("已提交改名");
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(received).toEqual([]);
+
+      const logs = errorSpy.mock.calls.map(
+        (c) => JSON.parse(String(c[0])) as Record<string, unknown>,
+      );
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          event: "live_broadcast_skipped",
+          operation: "broadcast_sync_needed",
+          role: "ledger",
+          errorClass: "Error",
+        }),
+      );
+      expect(JSON.stringify(logs)).not.toContain("sensitive-token");
+    } finally {
+      prepareSpy.mockRestore();
+      errorSpy.mockRestore();
+      socket.close();
+    }
+  });
+
+  it("logs merge cleanup failures with event, operation, role, and error class or ApiError code without raw external messages", async () => {
+    const kept = await signIn("line", uniqueSub("line-log"), "LINE日誌");
+    const googleSub = uniqueSub("google-log");
+    const other = await signIn("google", googleSub, "Google日誌");
+    const group = await createGroup(other, { name: "日誌測試群" });
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
+
+    const groupDoId = env.GROUP_LEDGER.idFromName(group.id);
+    const makeLedger = (err: Error) =>
+      new Proxy(env.GROUP_LEDGER, {
+        get(targetNamespace, key) {
+          if (key !== "get") {
+            const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+            return typeof value === "function"
+              ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+              : value;
+          }
+          return (id: DurableObjectId) => {
+            const stub = targetNamespace.get(id);
+            return new Proxy(stub, {
+              get(targetStub, prop) {
+                if (prop === "mergeUser" && id.equals(groupDoId)) {
+                  return () => Promise.reject(err);
+                }
+                const value: unknown = Reflect.get(targetStub, prop, targetStub);
+                return typeof value === "function"
+                  ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                  : value;
+              },
+            });
+          };
+        },
+      });
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+        { GROUP_LEDGER: makeLedger(new Error("raw external leak secret-value")) },
+      );
+      expect(confirmRes.status).toBe(200);
+
+      await runScheduled(
+        MAINTENANCE_CRON,
+        { ...env, GROUP_LEDGER: makeLedger(new ApiError("GROUP_MERGING")) },
+        clock.now + 60_000,
+      );
+
+      const dbSpy = spyD1Prepare((stmt, sqlText) => {
+        if (sqlText.includes("FROM merge_cleanups ORDER BY next_retry_at")) {
+          throw new TypeError("d1-queue-leak");
+        }
+        return stmt;
+      });
+      try {
+        await runScheduled(MAINTENANCE_CRON, env, clock.now + 120_000);
+      } finally {
+        dbSpy.mockRestore();
+      }
+
+      const logs = errorSpy.mock.calls.map(
+        (c) => JSON.parse(String(c[0])) as Record<string, unknown>,
+      );
+      const mergeLogs = logs.filter((l) => l.event === "merge_cleanup_failed");
+      expect(mergeLogs).toContainEqual({
+        event: "merge_cleanup_failed",
+        operation: "merge_cleanup_task",
+        role: "maintenance",
+        errorClass: "Error",
+      });
+      expect(mergeLogs).toContainEqual({
+        event: "merge_cleanup_failed",
+        operation: "merge_cleanup_task",
+        role: "maintenance",
+        errorClass: "ApiError",
+        errorCode: "GROUP_MERGING",
+      });
+      expect(mergeLogs).toContainEqual({
+        event: "merge_cleanup_failed",
+        operation: "merge_cleanup_queue",
+        role: "maintenance",
+        errorClass: "TypeError",
+      });
+      expect(JSON.stringify(mergeLogs)).not.toContain("secret-value");
+      expect(JSON.stringify(mergeLogs)).not.toContain("d1-queue-leak");
+    } finally {
+      errorSpy.mockRestore();
+      await runScheduled(MAINTENANCE_CRON, env, clock.now + 180_000);
+    }
+  });
+
+  it("releases a transferred pending reservation when a merged-away User's refused in-flight join leaves the keeper with no seat, while keeping real seats", async () => {
+    const admin = await person("上限房東");
+    const joinTarget = await createGroup(admin, { name: "未完成加入群" });
+    const token = await inviteToken(admin, joinTarget.id);
+
+    const lineSubCap = uniqueSub("line-cap");
+    let kept = await signIn("line", lineSubCap, "LINE上限");
+    // Seat kept in 19 Groups (1 slot remaining under MAX_GROUPS_PER_USER = 20).
+    for (let i = 0; i < 19; i += 1) {
+      if (i > 0 && i % 4 === 0) {
+        clock.now += 3_600_001;
+        kept = await signIn("line", lineSubCap, "LINE上限");
+      }
+      await createGroup(kept, { name: `既有群-${String(i)}` });
+    }
+    clock.now += 3_600_001;
+    kept = await signIn("line", lineSubCap, "LINE上限");
+
+    const googleSub = uniqueSub("google-cap");
+    const other = await signIn("google", googleSub, "Google上限");
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
+
+    let releaseJoin: () => void = () => {};
+    const holdJoin = new Promise<void>((resolve) => {
+      releaseJoin = resolve;
+    });
+    let observedJoin: () => void = () => {};
+    const joining = new Promise<void>((resolve) => {
+      observedJoin = resolve;
+    });
+
+    const targetDoId = env.GROUP_LEDGER.idFromName(joinTarget.id);
+    const holdingLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "member" && id.equals(targetDoId)) {
+                return async (op: MemberOperation) => {
+                  if (op.action === "join" && op.userId === other.userId) {
+                    observedJoin();
+                    await holdJoin;
+                  }
+                  return targetStub.member(op);
+                };
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const joinPromise = call(
+      `/invites/${token}/join`,
+      { method: "POST", headers: bearer(other.accessToken) },
+      { GROUP_LEDGER: holdingLedger },
+    );
+    try {
+      await joining;
+      const confirmRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      );
+      expect(confirmRes.status).toBe(200);
+    } finally {
+      releaseJoin();
+    }
+    const joinRes = await joinPromise;
+    expect([403, 404, 409]).toContain(joinRes.status);
+
+    // Since kept has no seat in joinTarget, releasing the pending reservation frees the 20th slot.
+    clock.now += 65_000;
+    const realJoinedGroup = await send(kept, "POST", "/groups", { name: "第二十個真實群" });
+    expect(realJoinedGroup.status).toBe(201);
+
+    // A 21st Group still hits the real Group cap because the 20 real seats stayed counted.
+    clock.now += 65_000;
+    const overCap = await send(kept, "POST", "/groups", { name: "超限群" });
+    expect(overCap.status).toBe(409);
+    expect(await errorCode(overCap)).toBe("GROUP_LIMIT_REACHED");
+  }, 60_000);
+
+  it("reprojects existing Former Members from Group ledgers during maintenance so upgraded cold Groups still Merge cleanly", async () => {
+    const admin = await person("升級房東");
+    const kept = await signIn("line", uniqueSub("line-upgrade"), "LINE升級");
+    const googleSub = uniqueSub("google-upgrade");
+    const other = await signIn("google", googleSub, "Google升級");
+
+    const coldGroup = await createGroup(admin, { name: "舊版冷群組" });
+    const token = await inviteToken(admin, coldGroup.id);
+    expect((await send(other, "POST", `/invites/${token}/join`)).status).toBe(200);
+    const otherM = (await listMembers(admin, coldGroup.id)).find(
+      (m) => m.userId === other.userId,
+    )?.id;
+    if (otherM === undefined) throw new Error("expected other member");
+
+    const otherExpense = await createExpense(
+      other,
+      coldGroup.id,
+      twdExpense(otherM, [otherM], 200, {
+        description: "升級前退群消費",
+        category: "food",
+      }),
+    );
+    expect((await send(other, "POST", `/groups/${coldGroup.id}/leave`)).status).toBe(204);
+
+    // Simulate pre-0021 state where 0021 only backfilled active summaries and left former seats missing.
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM group_memberships WHERE user_id=? AND group_id=?").bind(
+        other.userId,
+        coldGroup.id,
+      ),
+      env.DB.prepare("UPDATE group_directory SET membership_reprojected=0 WHERE group_id=?").bind(
+        coldGroup.id,
+      ),
+    ]);
+
+    await runScheduled(MAINTENANCE_CRON, env, clock.now);
+
+    // Second maintenance pass must be a no-op for the already reprojected Group.
+    let secondPassCalls = 0;
+    const coldDoId = env.GROUP_LEDGER.idFromName(coldGroup.id);
+    const spyNamespace = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "projectMemberships" && id.equals(coldDoId)) {
+                secondPassCalls += 1;
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+    await runScheduled(
+      MAINTENANCE_CRON,
+      { ...env, GROUP_LEDGER: spyNamespace },
+      clock.now + 60_000,
+    );
+    expect(secondPassCalls).toBe(0);
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
+    expect(
+      (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
+        .status,
+    ).toBe(200);
+
+    // Rejoining reactivates the merged former seat instead of leaving a duplicate former Member row.
+    expect((await send(kept, "POST", `/invites/${token}/join`)).status).toBe(200);
+    const membersAfter = await listMembers(admin, coldGroup.id);
+    expect(membersAfter.filter((m) => m.userId === other.userId || m.status === "former")).toEqual(
+      [],
+    );
+    const keptM = membersAfter.find((m) => m.userId === kept.userId)?.id;
+    expect(keptM).toBeDefined();
+
+    const fetched = await (
+      await send(kept, "GET", `/groups/${coldGroup.id}/expenses/${otherExpense.id}`)
+    ).json<Expense>();
+    expect(fetched.creatorMemberId).toBe(keptM);
+  });
+
+  it("lets an already gate-admitted Expense write finish before Merge and repoints what that write touched", async () => {
+    const kept = await signIn("line", uniqueSub("line-admit"), "LINE先過門");
+    const googleSub = uniqueSub("google-admit");
+    const other = await signIn("google", googleSub, "Google先過門");
+    const alice = await person("小美先過門");
+
+    const group = await createGroup(kept, { name: "先過門再合併" });
+    const token = await inviteToken(kept, group.id);
+    expect((await send(other, "POST", `/invites/${token}/join`)).status).toBe(200);
+    expect((await send(alice, "POST", `/invites/${token}/join`)).status).toBe(200);
+
+    const members = await listMembers(kept, group.id);
+    const keptM = members.find((m) => m.userId === kept.userId)?.id;
+    const otherM = members.find((m) => m.userId === other.userId)?.id;
+    const aliceM = members.find((m) => m.userId === alice.userId)?.id;
+    if (!keptM || !otherM || !aliceM) throw new Error("missing members");
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
+
+    let releaseWrite: () => void = () => {};
+    const holdWrite = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let observedPastGate: () => void = () => {};
+    const pastGate = new Promise<void>((resolve) => {
+      observedPastGate = resolve;
+    });
+    let observedMergeRpc: () => void = () => {};
+    const mergeRpcReached = new Promise<void>((resolve) => {
+      observedMergeRpc = resolve;
+    });
+
+    let armed = true;
+    const prepareSpy = spyD1Prepare((stmt, sqlText) => {
+      if (armed && sqlText.includes("SELECT 1 AS found FROM merge_cleanups WHERE group_id=?")) {
+        const origBind = stmt.bind.bind(stmt);
+        stmt.bind = (...bindArgs: unknown[]) => {
+          const bound = origBind(...bindArgs);
+          if (armed && bindArgs[0] === group.id) {
+            const origFirst = bound.first.bind(bound);
+            bound.first = async <T = unknown>(...firstArgs: unknown[]) => {
+              const row = await origFirst<T>(...(firstArgs as [string]));
+              if (armed) {
+                armed = false;
+                observedPastGate();
+                await holdWrite;
+              }
+              return row;
+            };
+          }
+          return bound;
+        };
+      }
+      return stmt;
+    });
+
+    const groupDoId = env.GROUP_LEDGER.idFromName(group.id);
+    const mergeObserverLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const s = targetNamespace.get(id);
+          return new Proxy(s, {
+            get(targetStub, prop) {
+              if (prop === "mergeUser" && id.equals(groupDoId)) {
+                return (...args: Parameters<typeof targetStub.mergeUser>) => {
+                  observedMergeRpc();
+                  return targetStub.mergeUser(...args);
+                };
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const admittedWrite = send(
+      other,
+      "POST",
+      `/groups/${group.id}/expenses`,
+      twdExpense(otherM, [keptM, otherM, aliceM], 600, {
+        description: "閘門後先寫入",
+        category: "food",
+      }),
+      { "Idempotency-Key": newKey() },
+    );
+
+    let confirmPromise: Promise<Response>;
+    try {
+      await pastGate;
+      confirmPromise = call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+        { GROUP_LEDGER: mergeObserverLedger },
+      );
+      await mergeRpcReached;
+    } finally {
+      prepareSpy.mockRestore();
+      releaseWrite();
+    }
+
+    const [writeRes, confirmRes] = await Promise.all([admittedWrite, confirmPromise]);
+    expect(writeRes.status).toBe(201);
+    expect(confirmRes.status).toBe(200);
+
+    const detailRes = await send(kept, "GET", `/groups/${group.id}`);
+    expect(detailRes.status).toBe(200);
+    expect((await detailRes.json<{ merging?: boolean }>()).merging).not.toBe(true);
+
+    const pageRes = await send(kept, "GET", `/groups/${group.id}/expenses`);
+    expect(pageRes.status).toBe(200);
+    const { expenses } = await pageRes.json<{ expenses: Expense[] }>();
+    expect(expenses).toHaveLength(1);
+    const afterExpense = expenses[0];
+    if (afterExpense === undefined) throw new Error("expected repointed expense");
+    expect(afterExpense.creatorMemberId).toBe(keptM);
+    expect(afterExpense.payers).toEqual([
+      { memberId: keptM, amountMinor: 600, settlementAmount: 600 },
+    ]);
+    expect(afterExpense.splits).toEqual([
+      { memberId: keptM, shares: null, amountMinor: 400, settlementAmount: 400 },
+      { memberId: aliceM, shares: null, amountMinor: 200, settlementAmount: 200 },
+    ]);
+
+    const afterBalances = await balances(kept, group.id);
+    expect(afterBalances.get(keptM)).toBe(200);
+    expect(afterBalances.get(aliceM)).toBe(-200);
+    expect(afterBalances.has(otherM)).toBe(false);
+
+    const spending = await (
+      await send(kept, "GET", "/stats/spending")
+    ).json<{ amount: number }[]>();
+    expect(spending).toEqual([
+      { month: "2026-06", category: "food", currency: "TWD", amount: 400 },
+    ]);
+  });
 });

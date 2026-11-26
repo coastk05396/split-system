@@ -641,8 +641,18 @@ export async function confirmMerge(
     ),
     // Capture every affected Group inside the commit transaction before moving reservations.
     env.DB.prepare(
-      `INSERT OR IGNORE INTO merge_cleanups(kept_user_id,other_user_id,group_id,next_retry_at)
-       SELECT ?,?,g.group_id,?
+      `INSERT OR IGNORE INTO merge_cleanups(kept_user_id,other_user_id,group_id,next_retry_at,pending_reservation_at)
+       SELECT ?,?,g.group_id,?,
+         CASE
+           WHEN NOT EXISTS (
+             SELECT 1 FROM group_reservations kr WHERE kr.user_id=? AND kr.group_id=g.group_id
+           )
+           THEN (
+             SELECT r.created_at
+             FROM group_reservations r
+             WHERE r.user_id=? AND r.group_id=g.group_id AND r.status='pending'
+           )
+         END
        FROM (
          SELECT group_id FROM group_reservations WHERE user_id=?
          UNION
@@ -657,6 +667,8 @@ export async function confirmMerge(
       keptUserId,
       otherUserId,
       now,
+      keptUserId,
+      otherUserId,
       otherUserId,
       otherUserId,
       otherUserId,
@@ -664,8 +676,16 @@ export async function confirmMerge(
       ...guardArgs,
     ),
     env.DB.prepare(
-      `UPDATE merge_cleanups SET kept_user_id=? WHERE kept_user_id=? AND ${guard}`,
-    ).bind(keptUserId, otherUserId, ...guardArgs),
+      `UPDATE merge_cleanups
+       SET kept_user_id=?,
+           pending_reservation_at=CASE
+             WHEN EXISTS (
+               SELECT 1 FROM group_reservations kr WHERE kr.user_id=? AND kr.group_id=merge_cleanups.group_id
+             ) THEN NULL
+             ELSE pending_reservation_at
+           END
+       WHERE kept_user_id=? AND ${guard}`,
+    ).bind(keptUserId, keptUserId, otherUserId, ...guardArgs),
     env.DB.prepare(
       `UPDATE OR IGNORE group_reservations SET user_id=? WHERE user_id=? AND ${guard}`,
     ).bind(keptUserId, otherUserId, ...guardArgs),

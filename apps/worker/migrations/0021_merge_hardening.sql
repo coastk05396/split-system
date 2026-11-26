@@ -16,5 +16,3 @@ SELECT user_id, group_id FROM group_member_summary;
 -- Rename expires_at -> next_retry_at so queue ordering is not mistaken for task expiration.
 ALTER TABLE merge_cleanups RENAME COLUMN expires_at TO next_retry_at;
 CREATE INDEX IF NOT EXISTS merge_cleanups_retry_idx ON merge_cleanups (next_retry_at);
-
-
