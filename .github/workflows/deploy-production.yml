@@ -36,12 +36,43 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          result=$(pnpm exec wrangler d1 execute DB --remote --env production --json --command "SELECT user_id, provider, COUNT(*) AS duplicate_count FROM identities GROUP BY user_id, provider HAVING COUNT(*) > 1")
+          result=$(pnpm exec wrangler d1 execute DB --remote --env production --json --command "SELECT COUNT(*) AS duplicate_groups FROM (SELECT 1 FROM identities GROUP BY user_id, provider HAVING COUNT(*) > 1)")
           node -e '
-            const payload = JSON.parse(process.argv[1]);
-            const rows = (Array.isArray(payload) ? payload : [payload]).flatMap((entry) => entry.results ?? []);
-            if (rows.length > 0) {
-              console.error("Preflight failed: found " + rows.length + " duplicate (user_id, provider) group(s) in identities. Reconcile sign-in methods manually before applying migration 0021.");
+            let payload;
+            try {
+              payload = JSON.parse(process.argv[1] ?? "");
+            } catch {
+              console.error("Preflight failed: invalid JSON output from wrangler d1 execute.");
+              process.exit(1);
+            }
+            if (!Array.isArray(payload) || payload.length !== 1) {
+              console.error("Preflight failed: expected a single D1 statement envelope.");
+              process.exit(1);
+            }
+            const statement = payload[0];
+            if (
+              statement === null ||
+              typeof statement !== "object" ||
+              statement.success !== true ||
+              !Array.isArray(statement.results) ||
+              statement.results.length !== 1
+            ) {
+              console.error("Preflight failed: expected one successful D1 result row.");
+              process.exit(1);
+            }
+            const row = statement.results[0];
+            if (
+              row === null ||
+              typeof row !== "object" ||
+              typeof row.duplicate_groups !== "number" ||
+              !Number.isInteger(row.duplicate_groups) ||
+              row.duplicate_groups < 0
+            ) {
+              console.error("Preflight failed: expected a nonnegative integer duplicate_groups count.");
+              process.exit(1);
+            }
+            if (row.duplicate_groups > 0) {
+              console.error("Preflight failed: found " + row.duplicate_groups + " duplicate (user_id, provider) group(s) in identities. Reconcile sign-in methods manually before applying migration 0021.");
               process.exit(1);
             }
           ' "$result"

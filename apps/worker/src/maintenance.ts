@@ -106,7 +106,7 @@ async function runAccountAndRateMaintenance(env: Bindings, now: number): Promise
   const db = createDb(env.DB);
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
-  await backfillGroupMemberships(env);
+  await backfillGroupMemberships(env, now);
   await commitMergeCleanups(env, now);
   await refreshRates(db, productionDeps.rateSource, now);
 }

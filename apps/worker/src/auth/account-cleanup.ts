@@ -108,19 +108,39 @@ export async function commitMergeCleanups(
 }
 
 /** One-time reprojection of pre-0021 cold Groups so Former Members appear in group_memberships. */
-export async function backfillGroupMemberships(env: Bindings): Promise<void> {
+export async function backfillGroupMemberships(env: Bindings, now = Date.now()): Promise<void> {
   try {
     const { results } = await env.DB.prepare(
-      "SELECT group_id FROM group_directory WHERE deleted = 0 AND membership_reprojected = 0 LIMIT ?",
+      "SELECT group_id FROM group_directory WHERE deleted = 0 AND membership_reprojected = 0 ORDER BY membership_backfill_retry_at ASC, created_at ASC LIMIT ?",
     )
       .bind(BATCH)
       .all<{ group_id: string }>();
+    if (results.length === 0) return;
     for (const row of results) {
       try {
         await groupLedger(env, row.group_id).projectMemberships();
       } catch (error) {
         console.error(cleanupErrorLog("membership_backfill_failed", "project_memberships", error));
+        await env.DB.prepare(
+          "UPDATE group_directory SET membership_backfill_retry_at = MAX(membership_backfill_retry_at + 1, ?) WHERE group_id = ?",
+        )
+          .bind(now + MERGE_RETRY_DELAY_MS, row.group_id)
+          .run()
+          .catch(() => undefined);
       }
+    }
+    const remaining = await env.DB.prepare(
+      "SELECT count(*) AS n FROM group_directory WHERE deleted = 0 AND membership_reprojected = 0",
+    ).first<{ n: number }>();
+    const incompleteCount = remaining?.n ?? 0;
+    if (incompleteCount > 0) {
+      console.log(
+        JSON.stringify({
+          event: "membership_backfill_incomplete",
+          role: "maintenance",
+          incompleteCount,
+        }),
+      );
     }
   } catch (error) {
     console.error(

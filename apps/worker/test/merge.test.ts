@@ -2826,6 +2826,22 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
       ),
     ]);
 
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
+
+    // Confirmation before maintenance finishes cold Group backfill is refused and keeps the pending Merge intact.
+    const refusedBeforeBackfill = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+    );
+    expect(refusedBeforeBackfill.status).toBe(409);
+    expect(await refusedBeforeBackfill.json()).toEqual({
+      error: { code: "MERGE_BACKFILL_PENDING" },
+    });
+    expect((await call("/auth/merge", { headers: bearer(confirmToken) })).status).toBe(200);
+
     await runScheduled(MAINTENANCE_CRON, env, clock.now);
 
     // Second maintenance pass must be a no-op for the already reprojected Group.
@@ -2862,10 +2878,7 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
     );
     expect(secondPassCalls).toBe(0);
 
-    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined || confirmToken === undefined)
-      throw new Error("expected merge preview");
+    // The same confirmation credential succeeds after maintenance completes the initial backfill.
     expect(
       (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
         .status,
@@ -3034,4 +3047,109 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
       { month: "2026-06", category: "food", currency: "TWD", amount: 400 },
     ]);
   });
+
+  it("rotates failing backfill Groups, marks uninitialized ledgers complete, and exposes the remaining count", async () => {
+    const admin = await person("回填排隊房東");
+    const healthyCold = await createGroup(admin, { name: "健康冷群" });
+    await env.DB.prepare("UPDATE group_directory SET membership_reprojected=0 WHERE group_id=?")
+      .bind(healthyCold.id)
+      .run();
+
+    const failingIds = Array.from({ length: 101 }, (_, i) => `old-backfill-${String(i)}`);
+    const failingDoIds = new Set(
+      failingIds.map((id) => env.GROUP_LEDGER.idFromName(id).toString()),
+    );
+    const healthyDoId = env.GROUP_LEDGER.idFromName(healthyCold.id);
+    const uninitId = `uninit-backfill-${crypto.randomUUID()}`;
+
+    await env.DB.batch([
+      ...failingIds.map((id, i) =>
+        env.DB.prepare(
+          `INSERT INTO group_directory(group_id,name,settlement_currency,created_at,updated_at,rev,deleted,membership_reprojected)
+           VALUES (?,?,?,?,?,0,0,0)`,
+        ).bind(id, id, "TWD", clock.now - 200_000 + i, clock.now - 200_000 + i),
+      ),
+      env.DB.prepare(
+        `INSERT INTO group_directory(group_id,name,settlement_currency,created_at,updated_at,rev,deleted,membership_reprojected)
+         VALUES (?,?,?,?,?,0,0,0)`,
+      ).bind(uninitId, uninitId, "TWD", clock.now - 10_000, clock.now - 10_000),
+    ]);
+
+    let healthyProjected = false;
+    const backfillLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "projectMemberships") {
+                if (failingDoIds.has(id.toString())) {
+                  return () => Promise.reject(new Error("unreachable old ledger"));
+                }
+                if (id.equals(healthyDoId)) {
+                  return (...args: Parameters<typeof targetStub.projectMemberships>) => {
+                    healthyProjected = true;
+                    return targetStub.projectMemberships(...args);
+                  };
+                }
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await runScheduled(
+        MAINTENANCE_CRON,
+        { ...env, GROUP_LEDGER: backfillLedger },
+        clock.now + 1_000,
+      );
+      await runScheduled(
+        MAINTENANCE_CRON,
+        { ...env, GROUP_LEDGER: backfillLedger },
+        clock.now + 2_000,
+      );
+
+      expect(healthyProjected).toBe(true);
+
+      const uninitRow = await env.DB.prepare(
+        "SELECT membership_reprojected FROM group_directory WHERE group_id=?",
+      )
+        .bind(uninitId)
+        .first<{ membership_reprojected: number }>();
+      expect(uninitRow?.membership_reprojected).toBe(1);
+
+      const infoLogs = logSpy.mock.calls.map(
+        (c) => JSON.parse(String(c[0])) as Record<string, unknown>,
+      );
+      expect(infoLogs).toContainEqual(
+        expect.objectContaining({
+          event: "membership_backfill_incomplete",
+          role: "maintenance",
+          incompleteCount: expect.any(Number) as unknown,
+        }),
+      );
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      await env.DB.prepare(
+        "DELETE FROM group_directory WHERE group_id LIKE 'old-backfill-%' OR group_id=?",
+      )
+        .bind(uninitId)
+        .run();
+    }
+  }, 60_000);
 });

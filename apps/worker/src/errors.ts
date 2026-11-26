@@ -19,6 +19,8 @@ export const ERROR_STATUS = {
   PROVIDER_ALREADY_LINKED: 409,
   MERGE_ACCOUNT_DELETION_PENDING: 409,
   MERGE_SAME_PROVIDER: 409,
+  /** Cold Groups still need initial membership reprojection before Merge confirmation can safely discover Former Members. */
+  MERGE_BACKFILL_PENDING: 409,
   /** A User Merge is still finishing in this Group's ledger, so writes wait until it completes. */
   GROUP_MERGING: 409,
   LAST_ADMIN: 409,

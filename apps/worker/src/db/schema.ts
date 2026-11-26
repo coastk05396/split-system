@@ -206,6 +206,7 @@ export const groupDirectory = sqliteTable("group_directory", {
   rev: integer("rev").notNull().default(0),
   deleted: integer("deleted").notNull().default(0),
   membershipReprojected: integer("membership_reprojected").notNull().default(0),
+  membershipBackfillRetryAt: integer("membership_backfill_retry_at").notNull().default(0),
 });
 
 /** Group Member Summary read model (decision 16). */
