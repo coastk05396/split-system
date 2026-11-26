@@ -304,3 +304,79 @@ describe("openExternal", () => {
     expect(liff.openWindow).not.toHaveBeenCalled();
   });
 });
+
+describe("connecting LINE from Settings (startLink / takeLinkResult)", () => {
+  const chrome = "Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36";
+  beforeEach(() => {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, value: chrome });
+    liff.isInClient.mockReturnValue(false);
+    window.history.replaceState(null, "", "/settings");
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "userAgent");
+    window.history.replaceState(null, "", "/");
+    liff.isInClient.mockReturnValue(true);
+  });
+
+  it("returns null without loading LIFF when no link was started", async () => {
+    await expect(createLineSignIn("liff-id").takeLinkResult()).resolves.toBeNull();
+    expect(liff.init).not.toHaveBeenCalled();
+  });
+
+  it("starts LINE Login for /settings, returns the ID token on arrival, and clears the marker", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink();
+    expect(liff.logout).toHaveBeenCalledTimes(1);
+    expect(liff.login).toHaveBeenCalledWith({
+      redirectUri: `${window.location.origin}/settings`,
+    });
+    expect(localStorage.getItem("split.lineLink")).not.toBeNull();
+
+    // Simulate returning on a fresh page load after LINE Login.
+    const returning = createLineSignIn("liff-id");
+    await expect(returning.takeLinkResult()).resolves.toEqual({ idToken: "line-id-token" });
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+    expect(localStorage.getItem("split.lineLogin")).toBeNull();
+    await expect(createLineSignIn("liff-id").takeLinkResult()).resolves.toBeNull();
+  });
+
+  it("returns null idToken and strips OAuth error params when LINE Login is cancelled", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink();
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?error=access_denied&error_description=User+cancelled&state=abc&liffClientId=123",
+    );
+
+    await expect(createLineSignIn("liff-id").takeLinkResult()).resolves.toEqual({ idToken: null });
+    expect(window.location.search).toBe("");
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+    expect(localStorage.getItem("split.lineLogin")).toBeNull();
+  });
+
+  it("returns null idToken when LIFF fails or is not logged in on return", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink();
+    liff.isLoggedIn.mockReturnValueOnce(false);
+    await expect(createLineSignIn("liff-id").takeLinkResult()).resolves.toEqual({ idToken: null });
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+
+    await line.startLink();
+    liff.init.mockRejectedValueOnce(new Error("init failed"));
+    await expect(createLineSignIn("liff-id").takeLinkResult()).resolves.toEqual({ idToken: null });
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+  });
+
+  it("shares one pending result across StrictMode double-calls before settling", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink();
+    const returning = createLineSignIn("liff-id");
+    const [first, second] = await Promise.all([
+      returning.takeLinkResult(),
+      returning.takeLinkResult(),
+    ]);
+    expect(first).toEqual({ idToken: "line-id-token" });
+    expect(second).toEqual({ idToken: "line-id-token" });
+  });
+});

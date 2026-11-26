@@ -21,6 +21,10 @@ export interface RenderAppOptions {
   cookieUser?: Me;
   /** Opened inside the LINE app, where LIFF hands over this ID token. */
   insideLine?: { idToken: string | null };
+  /** How the fake LINE link trip answers from Settings: by default with a token at once. */
+  lineLink?: "holds" | "fails" | "cancelled" | { idToken: string };
+  /** What a LINE link trip brought back to Settings, if starting directly on return. */
+  lineLinkResult?: { idToken: string | null };
   /** LINE's outside-browser call fails (LIFF cannot start or the native call throws). */
   openExternalFails?: boolean;
   /** The app was opened from a LINE chat that the LIFF app may post into. */
@@ -72,8 +76,8 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   // Pending writes live in module state; each test starts without the last one's.
   clearExpenseWrites();
   options.seed?.(api.groups);
-  const { line, google, ...signInLogs } = createFakeSignIn(options, (path) =>
-    router.navigate(path),
+  const { line, google, ...signInLogs } = createFakeSignIn(options, (path, navOptions) =>
+    router.navigate(path, navOptions),
   );
 
   const deps: AppDeps = {

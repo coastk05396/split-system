@@ -128,14 +128,17 @@ export function createGoogleErrand(
       }
       const linked = { replace: true, state: { linked: "google" } };
       try {
+        let linkOutcome: { merge: MergePreview | null } = { merge: null };
         let linkCodeOutcome: { merge: MergePreview | null } | false = { merge: null };
         if (errand.purpose === "signIn") await auth().signIn("google", idToken);
         else if (errand.purpose === "linkCode")
           linkCodeOutcome = await auth().redeemLinkCode(errand.code, idToken);
-        else await auth().link("google", idToken);
+        else linkOutcome = await auth().link("google", idToken);
         if (!isActive()) return;
         if (errand.purpose === "link") {
-          void navigate("/settings", linked);
+          if (linkOutcome.merge !== null)
+            void navigate("/merge", { replace: true, state: { merge: linkOutcome.merge } });
+          else void navigate("/settings", linked);
         } else if (errand.purpose === "linkCode") {
           if (linkCodeOutcome === false) void navigate(origin(errand), { replace: true });
           else if (linkCodeOutcome.merge !== null)

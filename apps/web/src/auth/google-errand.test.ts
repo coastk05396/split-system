@@ -26,7 +26,7 @@ function setup(options: RenderAppOptions = {}, signedIn = false) {
     redeemLinkCode: vi.fn((): Promise<{ merge: MergePreview | null } | false> =>
       Promise.resolve({ merge: null }),
     ),
-    link: vi.fn(() => Promise.resolve()),
+    link: vi.fn((): Promise<{ merge: MergePreview | null }> => Promise.resolve({ merge: null })),
     createLinkCode: vi.fn(() => Promise.resolve("code-1")),
     refreshIdentities: vi.fn(() => Promise.resolve()),
   };

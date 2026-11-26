@@ -226,6 +226,51 @@ describe("settings (screen 11)", () => {
     expect(screen.queryByRole("button", { name: /連結 LINE|連接/ })).toBeNull();
   });
 
+  it("outside LINE, shows Connect on the LINE row for a Google User and links an unowned LINE", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp({ path: "/settings", cookieUser: makeUser("小宇", "google") });
+
+    const lineRow = await row("LINE");
+    expect(lineRow).not.toHaveTextContent("即將推出");
+    await user.click(within(lineRow).getByRole("button", { name: "連接" }));
+
+    await waitFor(async () => {
+      expect(await row("LINE")).toHaveTextContent("已連結");
+    });
+    expect(api.calls).toContain("POST /api/v1/auth/link/line");
+    expect((await row("LINE")).querySelector(".linked-pop")).not.toBeNull();
+    // Google session keeps its profile card and email.
+    expect(screen.getByText("小宇@example.com")).toBeVisible();
+  });
+
+  it("returns to Settings with a translated error and changes nothing when LINE Login is cancelled", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp({
+      path: "/settings",
+      cookieUser: makeUser("小宇", "google"),
+      lineLink: "cancelled",
+    });
+
+    await user.click(within(await row("LINE")).getByRole("button", { name: "連接" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("登入沒有成功");
+    expect(await row("LINE")).not.toHaveTextContent("已連結");
+    expect(api.calls).not.toContain("POST /api/v1/auth/link/line");
+  });
+
+  it("returns to Settings with a translated error and changes nothing when LINE Login fails", async () => {
+    const user = userEvent.setup();
+    const { api } = renderApp({
+      path: "/settings",
+      cookieUser: makeUser("小宇", "google"),
+      lineLink: "fails",
+    });
+
+    await user.click(within(await row("LINE")).getByRole("button", { name: "連接" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("出了點狀況");
+    expect(await row("LINE")).not.toHaveTextContent("已連結");
+    expect(api.calls).not.toContain("POST /api/v1/auth/link/line");
+  });
+
   it("shows only linked rows with no Unlink button when both accounts are linked", async () => {
     renderApp({ path: "/settings", cookieUser: bothLinked("小宇") });
 

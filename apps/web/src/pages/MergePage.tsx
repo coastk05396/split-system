@@ -167,7 +167,10 @@ export function MergePage() {
     setWorking(true);
     try {
       await confirmMerge(preview.mergeId);
-      void navigate("/settings", { replace: true, state: { linked: "google" } });
+      const linkedProvider =
+        preview.other.providers.find((p) => !preview.kept.providers.includes(p)) ??
+        preview.other.profileProvider;
+      void navigate("/settings", { replace: true, state: { linked: linkedProvider } });
     } catch (error) {
       setSubmitError(error instanceof ApiFailure ? error.code : "INTERNAL");
       setWorking(false);

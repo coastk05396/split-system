@@ -110,3 +110,9 @@ export const redeemLinkCodeResponseSchema = sessionResponseSchema.extend({
   merge: mergePreviewSchema.optional(),
 });
 export type RedeemLinkCodeResponse = z.infer<typeof redeemLinkCodeResponseSchema>;
+
+export const linkMergeResponseSchema = z.object({
+  mergeNeeded: z.literal(true),
+  merge: mergePreviewSchema,
+});
+export type LinkMergeResponse = z.infer<typeof linkMergeResponseSchema>;

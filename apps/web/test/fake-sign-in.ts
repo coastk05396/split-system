@@ -9,7 +9,7 @@ import type { RenderAppOptions } from "./render-app.js";
 /** The same browser ports for page tests and the Google errand seam. */
 export function createFakeSignIn(
   options: RenderAppOptions = {},
-  navigate: (path: string) => unknown = () => undefined,
+  navigate: (path: string, navOptions?: { replace?: boolean }) => unknown = () => undefined,
 ) {
   const lineLogins: string[] = [];
   const lineExternalOpens: string[] = [];
@@ -26,6 +26,9 @@ export function createFakeSignIn(
     return Promise.resolve(options.linePicker !== "cancelled");
   }
 
+  let lineLinkAnswer: { idToken: string | null } | null = options.lineLinkResult ?? null;
+  let lineLinkPromise: Promise<{ idToken: string | null } | null> | null = null;
+
   const line: LineSignIn = {
     isInClient: () => options.insideLine !== undefined,
     prepare: () => {
@@ -36,6 +39,38 @@ export function createFakeSignIn(
     login: () => {
       lineLogins.push(window.location.href);
       return Promise.resolve();
+    },
+    startLink: () => {
+      lineLinkPromise = null;
+      lineLogins.push(window.location.href);
+      if (options.lineLink === "fails") return Promise.reject(new Error("LIFF failed"));
+      if (options.lineLink === "holds") return Promise.resolve();
+      lineLinkAnswer = {
+        idToken:
+          options.lineLink === "cancelled"
+            ? null
+            : typeof options.lineLink === "object"
+              ? options.lineLink.idToken
+              : "fake|l-1|LINE 小宇",
+      };
+      void navigate("/settings?liffClientId=fake&code=fake", { replace: true });
+      return Promise.resolve();
+    },
+    takeLinkResult: () => {
+      if (lineLinkPromise !== null) return lineLinkPromise;
+      const answer = lineLinkAnswer;
+      if (answer === null) return Promise.resolve(null);
+      lineLinkAnswer = null;
+      lineLinkPromise = Promise.resolve(answer).finally(() => {
+        queueMicrotask(() => {
+          lineLinkPromise = null;
+        });
+      });
+      return lineLinkPromise;
+    },
+    cancelLink: () => {
+      lineLinkAnswer = null;
+      lineLinkPromise = null;
     },
     openExternal: (url) => {
       if (options.openExternalFails === true) return Promise.reject(new Error("LIFF failed"));

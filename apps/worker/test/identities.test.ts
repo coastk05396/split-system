@@ -21,13 +21,23 @@ describe("POST /auth/link/:provider", () => {
     expect((await signIn("line", lineSub)).userId).toBe(session.userId);
   });
 
-  it("refuses an Identity that already belongs to another User", async () => {
+  it("returns a merge-needed preview without linking when an Identity already belongs to another User", async () => {
     const lineSub = uniqueSub("taken");
-    await signIn("line", lineSub);
-    const other = await signIn("google", uniqueSub("other"));
-    const res = await link("line", other.accessToken, lineSub);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: { code: "IDENTITY_LINKED_ELSEWHERE" } });
+    const other = await signIn("line", lineSub, "LINE小宇");
+    const kept = await signIn("google", uniqueSub("other"), "Google小宇");
+    const res = await link("line", kept.accessToken, lineSub);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      mergeNeeded: true,
+      merge: {
+        path: "settings",
+        kept: { id: kept.userId, providers: ["google"] },
+        other: { id: other.userId, providers: ["line"] },
+      },
+    });
+    expect(await meOf(kept.accessToken)).toMatchObject({
+      identities: [{ provider: "google" }],
+    });
   });
 
   it("refuses a second Identity of a provider the User already has", async () => {
