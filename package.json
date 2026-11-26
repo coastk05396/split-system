@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node -e \"const fs=require('node:fs');const t='apps/worker/.dev.vars';if(!fs.existsSync(t))fs.copyFileSync('.dev.vars.example',t)\" && pnpm --parallel --filter @split/worker --filter @split/web dev",
     "typecheck": "pnpm -r typecheck && tsc -p e2e/tsconfig.json",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm -r lint && eslint e2e",
     "test": "pnpm -r test",
     "e2e": "sh e2e/run.sh",
     "build": "pnpm --filter @split/web build",
