@@ -92,6 +92,10 @@ _Avoid_: Header, avatar row
 A short-lived, single-use code a signed-in User gets inside LINE so that a Google sign-in in an outside browser joins that same User instead of creating a new one.
 _Avoid_: Pairing code, invite code (an Invite brings someone into a Group)
 
+**Merge**:
+Folding a second User into the signed-in one, when the Identity being linked already belongs to that second User. The signed-in User keeps its settings and Profile source and takes over the other's Identities and Groups; in a Group both belonged to, their two Members become one, and no other Member's Balance changes. The other User is deleted, and a Merge cannot be undone.
+_Avoid_: Account merge, combine, link (linking attaches an Identity no User has yet)
+
 **Google errand**:
 One trip to Google and back, to sign in, to link Google to the signed-in User, or to use a Link code. Inside LINE, which Google refuses, it begins by opening the phone's outside browser.
 _Avoid_: Google flow, OAuth redirect, Google login (that is the Identity)
