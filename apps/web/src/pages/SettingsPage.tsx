@@ -105,23 +105,25 @@ export function SettingsPage() {
   useEffect(() => {
     const show = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
-      line.cancelLink();
+      const wasPending = line.cancelLink();
       setLinkingLine(false);
+      if (wasPending) setError("ID_TOKEN_INVALID");
     };
     window.addEventListener("pageshow", show);
     return () => {
       window.removeEventListener("pageshow", show);
     };
   }, [line]);
+  const signedInUserId = state.status === "signedIn" ? state.user.id : null;
   useEffect(() => {
-    if (state.status !== "signedIn" || line.isInClient()) return;
+    if (signedInUserId === null || line.isInClient()) return;
     const controller = new AbortController();
     const isActive = () => !controller.signal.aborted;
     void (async () => {
-      const result = await line.takeLinkResult();
+      const result = await line.takeLinkResult(signedInUserId);
       if (!isActive() || result === null) return;
       if (result.idToken === null) {
-        setError("ID_TOKEN_INVALID");
+        setError(result.mismatch === true ? "UNAUTHORIZED" : "ID_TOKEN_INVALID");
         setLinkingLine(false);
         return;
       }
@@ -142,7 +144,7 @@ export function SettingsPage() {
     return () => {
       controller.abort();
     };
-  }, [location.key, state.status, line, link, navigate]);
+  }, [location.key, signedInUserId, line, link, navigate]);
   const [startedLinked] = useState(
     () => new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
   );
@@ -314,7 +316,7 @@ export function SettingsPage() {
                           setError(null);
                           googleErrand.clearError();
                           setLinkingLine(true);
-                          void line.startLink().catch((err: unknown) => {
+                          void line.startLink(user.id).catch((err: unknown) => {
                             setError(err instanceof ApiFailure ? err.code : "INTERNAL");
                             setLinkingLine(false);
                           });

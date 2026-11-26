@@ -168,6 +168,59 @@ export async function createSession(
 }
 
 /**
+ * Starts a short-lived unrefreshable Session row to bind a Link-code pending Merge before
+ * confirmation; no refresh cookie is ever issued for it.
+ */
+export async function createConfirmationSession(
+  db: Db,
+  userId: string,
+  provider: Provider,
+  userAgent: string | undefined,
+  now: number,
+): Promise<string> {
+  const sessionId = crypto.randomUUID();
+  const placeholder = await newRefreshToken(sessionId);
+  await db.insert(sessions).values({
+    id: sessionId,
+    userId,
+    provider,
+    refreshTokenHash: placeholder.hash,
+    userAgent: userAgent?.slice(0, MAX_USER_AGENT_LENGTH) ?? null,
+    expiresAt: now + MERGE_PENDING_TTL_MS,
+    createdAt: now,
+  });
+  return sessionId;
+}
+
+/** Deletes a Session row by ID (used to invalidate temporary confirmation sessions). */
+export async function deleteSessionById(db: Db, sessionId: string, userId: string): Promise<void> {
+  await db.delete(sessions).where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)));
+}
+
+/** True while an unexpired pending Merge row exists for the given confirmation credential. */
+export async function hasActivePendingMerge(
+  db: Db,
+  mergeId: string,
+  userId: string,
+  sessionId: string,
+  now: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: pendingMerges.id })
+    .from(pendingMerges)
+    .where(
+      and(
+        eq(pendingMerges.id, mergeId),
+        eq(pendingMerges.keptUserId, userId),
+        eq(pendingMerges.sessionId, sessionId),
+        gt(pendingMerges.expiresAt, now),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
  * Rotates a refresh token: the presented one stops working and a new one is returned.
  * A token whose session exists but whose secret no longer matches was already rotated, so
  * someone is replaying it: the whole session is revoked, which also signs out whoever

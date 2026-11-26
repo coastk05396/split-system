@@ -1,4 +1,4 @@
-import { type ComponentType, lazy, Suspense } from "react";
+import { type ComponentType, lazy, Suspense, useState } from "react";
 import {
   Link,
   Navigate,
@@ -27,6 +27,9 @@ const FlightsPage = lazy(() =>
 );
 const SignInPage = lazy(() =>
   import("../pages/SignInPage.js").then((m) => ({ default: m.SignInPage })),
+);
+const MergePage = lazy(() =>
+  import("../pages/MergePage.js").then((m) => ({ default: m.MergePage })),
 );
 
 /** Trip pages while the Trip module is under maintenance: back to the Group. */
@@ -81,6 +84,30 @@ function SignInRoute() {
       <SignInPage />
     </Suspense>
   );
+}
+
+function MergeFrame({ signedIn }: { signedIn: boolean }) {
+  // Latch the outer chrome on arrival so confirming on the Link-code path does not swap
+  // wrappers and unmount MergePage while it displays partial-merge status.
+  const [withShell] = useState(signedIn);
+  const content = (
+    <Suspense fallback={<Loading />}>
+      <MergePage />
+    </Suspense>
+  );
+  if (withShell) return <AppShell>{content}</AppShell>;
+  return <main className="mx-auto w-full max-w-5xl px-5 pt-6 md:px-12 md:pt-12">{content}</main>;
+}
+
+function MergeRoute() {
+  const { state, session } = useAuth();
+  const location = useLocation();
+  if (state.status === "loading") return <Splash />;
+  const hasState = (location.state as { merge?: unknown } | null)?.merge !== undefined;
+  if (state.status !== "signedIn" && !hasState && !session.hasPendingMerge()) {
+    return <Navigate to="/sign-in?next=%2Fmerge" replace />;
+  }
+  return <MergeFrame signedIn={state.status === "signedIn"} />;
 }
 
 function FlightsRoute() {
@@ -140,6 +167,7 @@ export const routes: RouteObject[] = [
     lazy: page(() => import("../pages/GoogleReturnPage.js"), "GoogleReturnPage"),
     ErrorBoundary: RouteError,
   },
+  { path: "/merge", Component: MergeRoute, ErrorBoundary: RouteError },
   // Policy pages are public: linked from sign-in, readable signed in or out.
   {
     path: "/privacy",
@@ -199,7 +227,6 @@ export const routes: RouteObject[] = [
       { path: "new", lazy: page(() => import("../pages/NewEntryPage.js"), "NewEntryPage") },
       { path: "stats", lazy: page(() => import("../pages/StatsPage.js"), "StatsPage") },
       { path: "settings", lazy: page(() => import("../pages/SettingsPage.js"), "SettingsPage") },
-      { path: "merge", lazy: page(() => import("../pages/MergePage.js"), "MergePage") },
     ],
   },
   { path: "*", Component: NotFoundPage },

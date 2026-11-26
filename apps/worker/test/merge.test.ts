@@ -9,8 +9,18 @@ import { env } from "cloudflare:workers";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { AccountDeletionOperation } from "../src/ledger-types.js";
+import { signAccessToken } from "../src/auth/tokens.js";
 import { dailyMaintenance, MAINTENANCE_CRON, runScheduled } from "../src/maintenance.js";
-import { bearer, call, clock, json, signIn, uniqueSub, withCookie } from "./auth-harness.js";
+import {
+  bearer,
+  call,
+  clock,
+  json,
+  refreshCookie,
+  signIn,
+  uniqueSub,
+  withCookie,
+} from "./auth-harness.js";
 import {
   createGroup,
   errorCode,
@@ -32,8 +42,7 @@ function redeem(code: string, sub: string, name = "Google名", email = "g@exampl
 }
 
 interface RedeemMergeBody {
-  accessToken: string;
-  user: { id: string; identities: { provider: string; email: string | null }[] };
+  confirmationToken?: string;
   mergeNeeded?: boolean;
   merge?: {
     mergeId: string;
@@ -61,6 +70,91 @@ interface RedeemMergeBody {
 }
 
 describe("User Merge on the Link code path", () => {
+  it("link-code redemption with mergeNeeded issues only a confirmation credential limited to preview, confirm and cancel until confirm succeeds", async () => {
+    const lineSub = uniqueSub("line");
+    const googleSub = uniqueSub("google");
+    const kept = await signIn("line", lineSub, "LINE小宇");
+    const other = await signIn("google", googleSub, "Google小宇");
+    const keptGroup = await createGroup(kept, { name: "LINE秘密群" });
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    expect(redeemRes.status).toBe(200);
+    expect(refreshCookie(redeemRes)).toBeUndefined();
+    const redeemBody = await redeemRes.json<{
+      mergeNeeded?: boolean;
+      confirmationToken?: string;
+      accessToken?: string;
+      user?: unknown;
+      merge?: { mergeId: string };
+    }>();
+    expect(redeemBody.mergeNeeded).toBe(true);
+    expect(redeemBody.accessToken).toBeUndefined();
+    expect(redeemBody.user).toBeUndefined();
+    const token = redeemBody.confirmationToken;
+    const mergeId = redeemBody.merge?.mergeId;
+    if (token === undefined || mergeId === undefined) throw new Error("expected confirmationToken");
+
+    // Confirmation credential cannot access normal kept-User routes before confirmation.
+    expect((await call("/me", { headers: bearer(token) })).status).toBe(401);
+    expect((await call("/groups", { headers: bearer(token) })).status).toBe(401);
+    expect((await call(`/groups/${keptGroup.id}`, { headers: bearer(token) })).status).toBe(401);
+    expect((await call("/auth/link-code", json({}, bearer(token)))).status).toBe(401);
+
+    // It CAN read the pending merge preview.
+    expect((await call("/auth/merge", { headers: bearer(token) })).status).toBe(200);
+
+    // Cancelling invalidates the confirmation credential immediately.
+    expect((await call("/auth/merge/cancel", json({ mergeId }, bearer(token)))).status).toBe(204);
+    expect((await call("/auth/merge", { headers: bearer(token) })).status).toBe(401);
+    expect((await call("/auth/merge/confirm", json({ mergeId }, bearer(token)))).status).toBe(401);
+    expect((await call("/auth/merge/cancel", json({ mergeId }, bearer(token)))).status).toBe(401);
+
+    // Expiry also invalidates the confirmation credential.
+    const redeemRes2 = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const body2 = await redeemRes2.json<{
+      confirmationToken?: string;
+      merge?: { mergeId: string };
+    }>();
+    const token2 = body2.confirmationToken;
+    const mergeId2 = body2.merge?.mergeId;
+    if (token2 === undefined || mergeId2 === undefined) throw new Error("expected token2");
+    clock.now += MERGE_PENDING_TTL_MS + 1;
+    try {
+      expect((await call("/auth/merge", { headers: bearer(token2) })).status).toBe(401);
+      expect(
+        (await call("/auth/merge/confirm", json({ mergeId: mergeId2 }, bearer(token2)))).status,
+      ).toBe(401);
+      expect(
+        (await call("/auth/merge/cancel", json({ mergeId: mergeId2 }, bearer(token2)))).status,
+      ).toBe(401);
+    } finally {
+      clock.now -= MERGE_PENDING_TTL_MS + 1;
+    }
+
+    // Successful confirm issues a real normal Session (accessToken + refresh cookie) and invalidates confirmationToken.
+    const redeemRes3 = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const body3 = await redeemRes3.json<{
+      confirmationToken?: string;
+      merge?: { mergeId: string };
+    }>();
+    const token3 = body3.confirmationToken;
+    const mergeId3 = body3.merge?.mergeId;
+    if (token3 === undefined || mergeId3 === undefined) throw new Error("expected token3");
+    const confirmRes = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: mergeId3 }, bearer(token3)),
+    );
+    expect(confirmRes.status).toBe(200);
+    const cookie = refreshCookie(confirmRes);
+    expect(cookie).toBeTruthy();
+    const confirmed = await confirmRes.json<{ accessToken: string; user: { id: string } }>();
+    expect(confirmed.user.id).toBe(kept.userId);
+    expect((await call("/me", { headers: bearer(confirmed.accessToken) })).status).toBe(200);
+    expect((await call("/auth/refresh", withCookie(cookie ?? ""))).status).toBe(200);
+    expect((await call("/auth/merge", { headers: bearer(token3) })).status).toBe(401);
+    expect(other.userId).not.toBe(kept.userId);
+  });
+
   it("redeeming a Link code with a Google owned by another User returns a merge-needed preview and links nothing yet", async () => {
     const lineSub = uniqueSub("line");
     const googleSub = uniqueSub("google");
@@ -125,8 +219,9 @@ describe("User Merge on the Link code path", () => {
     const kept = await signIn("line", lineSub, "LINE小宇");
     await signIn("google", googleSub, "Google小宇");
     const res = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await res.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await res.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
 
     // Another Session of the same kept User cannot read or confirm this pending Merge.
     expect((await call("/auth/merge", { headers: bearer(kept.accessToken) })).status).toBe(422);
@@ -140,16 +235,16 @@ describe("User Merge on the Link code path", () => {
     // Confirming Session can read the preview.
     expect((await call("/auth/merge", { headers: bearer(confirmToken) })).status).toBe(200);
 
-    // Once expired, both preview and confirm refuse.
+    // Once expired, confirmation credential is invalidated (401).
     clock.now += MERGE_PENDING_TTL_MS + 1;
     try {
-      expect((await call("/auth/merge", { headers: bearer(confirmToken) })).status).toBe(422);
+      expect((await call("/auth/merge", { headers: bearer(confirmToken) })).status).toBe(401);
       const expired = await call(
         "/auth/merge/confirm",
         json({ mergeId: merge.mergeId }, bearer(confirmToken)),
       );
-      expect(expired.status).toBe(422);
-      expect(await expired.json()).toEqual({ error: { code: "MERGE_PENDING_INVALID" } });
+      expect(expired.status).toBe(401);
+      expect(await expired.json()).toEqual({ error: { code: "UNAUTHORIZED" } });
     } finally {
       clock.now -= MERGE_PENDING_TTL_MS + 1;
     }
@@ -163,8 +258,9 @@ describe("User Merge on the Link code path", () => {
     const otherGroup = await createGroup(other, { name: "其他群組" });
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
 
     const cancelRes = await call(
       "/auth/merge/cancel",
@@ -172,13 +268,13 @@ describe("User Merge on the Link code path", () => {
     );
     expect(cancelRes.status).toBe(204);
 
-    // Single-use: cannot be fetched or confirmed afterwards.
-    expect((await call("/auth/merge", { headers: bearer(confirmToken) })).status).toBe(422);
+    // Single-use: confirmation credential is invalidated on cancel.
+    expect((await call("/auth/merge", { headers: bearer(confirmToken) })).status).toBe(401);
     const reuseRes = await call(
       "/auth/merge/confirm",
       json({ mergeId: merge.mergeId }, bearer(confirmToken)),
     );
-    expect(reuseRes.status).toBe(422);
+    expect(reuseRes.status).toBe(401);
 
     // Both Users, Identities, and Groups remain intact.
     expect(await (await call("/me", { headers: bearer(kept.accessToken) })).json()).toMatchObject({
@@ -208,8 +304,9 @@ describe("User Merge on the Link code path", () => {
     ).toBe(200);
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
 
     const confirmRes = await call(
       "/auth/merge/confirm",
@@ -226,8 +323,9 @@ describe("User Merge on the Link code path", () => {
     await createGroup(other, { name: "刪除中群組" });
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
 
     let release: () => void = () => {};
     const hold = new Promise<void>((resolve) => {
@@ -326,8 +424,9 @@ describe("User Merge on the Link code path", () => {
         "Google新名",
         "new@example.com",
       );
-      const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-      if (merge === undefined) throw new Error("expected merge preview");
+      const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+      if (merge === undefined || confirmToken === undefined)
+        throw new Error("expected merge preview");
 
       const confirmRes = await call(
         "/auth/merge/confirm",
@@ -418,9 +517,19 @@ describe("User Merge on the Link code path", () => {
         { month: "2026-06", category: "food", currency: "TWD", amount: 750 },
       ]);
 
-      // Merged-away User's access and refresh tokens fail.
+      // Merged-away User's access, Group detail, live WebSocket and refresh tokens fail.
       expect((await call("/me", { headers: bearer(other.accessToken) })).status).toBe(401);
       expect((await call("/auth/refresh", withCookie(other.refresh))).status).toBe(401);
+      expect(
+        (await call(`/groups/${otherGroup.id}`, { headers: bearer(other.accessToken) })).status,
+      ).toBe(401);
+      expect(
+        (
+          await call(`/groups/${otherGroup.id}/live`, {
+            headers: { Upgrade: "websocket", Authorization: `Bearer ${other.accessToken}` },
+          })
+        ).status,
+      ).toBe(401);
     } finally {
       clock.now = baseTime;
     }
@@ -438,8 +547,9 @@ describe("User Merge on the Link code path", () => {
     expect((await send(alice, "POST", `/invites/${token}/join`)).status).toBe(200);
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
 
     const flakyDoId = env.GROUP_LEDGER.idFromName(flakyGroup.id);
     const flakyLedger = new Proxy(env.GROUP_LEDGER, {
@@ -611,6 +721,97 @@ describe("User Merge on the Link code path", () => {
     expect(writeAfter.status).toBe(201);
   });
 
+  it("refuses a merged-away User at Group detail and live WebSocket while cleanup is pending, including tokens without sid, and silences/closes existing sockets", async () => {
+    const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
+    const googleSub = uniqueSub("google");
+    const other = await signIn("google", googleSub, "Google小宇");
+    const flakyGroup = await createGroup(other, { name: "未完成群組" });
+
+    const legacyNoSidToken = await signAccessToken(
+      other.userId,
+      env.SESSION_SIGNING_KEY,
+      clock.now,
+      "google",
+    );
+    const liveBefore = await call(`/groups/${flakyGroup.id}/live`, {
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${other.accessToken}` },
+    });
+    expect(liveBefore.status).toBe(101);
+    const otherSocket = liveBefore.webSocket;
+    if (otherSocket === null) throw new Error("expected socket");
+    otherSocket.accept();
+    const socketMessages: string[] = [];
+    otherSocket.addEventListener("message", (event) => {
+      socketMessages.push(String(event.data));
+    });
+    const socketClosed = new Promise<number>((resolve) => {
+      otherSocket.addEventListener(
+        "close",
+        (event) => {
+          resolve(event.code);
+        },
+        { once: true },
+      );
+    });
+
+    const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
+
+    const flakyDoId = env.GROUP_LEDGER.idFromName(flakyGroup.id);
+    const flakyLedger = new Proxy(env.GROUP_LEDGER, {
+      get(targetNamespace, key) {
+        if (key !== "get") {
+          const value: unknown = Reflect.get(targetNamespace, key, targetNamespace);
+          return typeof value === "function"
+            ? (...args: unknown[]): unknown => Reflect.apply(value, targetNamespace, args)
+            : value;
+        }
+        return (id: DurableObjectId) => {
+          const stub = targetNamespace.get(id);
+          return new Proxy(stub, {
+            get(targetStub, prop) {
+              if (prop === "mergeUser" && id.equals(flakyDoId)) {
+                return () => Promise.reject(new Error("ledger unreachable"));
+              }
+              const value: unknown = Reflect.get(targetStub, prop, targetStub);
+              return typeof value === "function"
+                ? (...args: unknown[]): unknown => Reflect.apply(value, targetStub, args)
+                : value;
+            },
+          });
+        };
+      },
+    });
+
+    const confirmRes = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      { GROUP_LEDGER: flakyLedger },
+    );
+    expect(confirmRes.status).toBe(200);
+    expect(await confirmRes.json()).toMatchObject({ mergingGroupIds: [flakyGroup.id] });
+
+    for (const tok of [other.accessToken, legacyNoSidToken]) {
+      expect((await call(`/groups/${flakyGroup.id}`, { headers: bearer(tok) })).status).toBe(401);
+      expect((await call(`/groups/${flakyGroup.id}/live`, { headers: bearer(tok) })).status).toBe(
+        401,
+      );
+      expect(
+        (
+          await call(`/groups/${flakyGroup.id}/live`, {
+            headers: { Upgrade: "websocket", Authorization: `Bearer ${tok}` },
+          })
+        ).status,
+      ).toBe(401);
+    }
+
+    await runScheduled(MAINTENANCE_CRON, env, clock.now + 60_000);
+    expect(await socketClosed).toBe(4003);
+    expect(socketMessages).toEqual([]);
+  });
+
   it("re-running a Group's merge after it finished is idempotent (revision and Balances unchanged)", async () => {
     const kept = await signIn("line", uniqueSub("line"), "LINE小宇");
     const googleSub = uniqueSub("google");
@@ -629,8 +830,9 @@ describe("User Merge on the Link code path", () => {
     );
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
     expect(
       (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
         .status,
@@ -677,13 +879,14 @@ describe("User Merge on the Link code path", () => {
     try {
       const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
       const body = await redeemRes.json<{
-        accessToken: string;
+        confirmationToken?: string;
         merge?: { kept: { groups: { id: string; merging?: boolean }[] } };
       }>();
       expect(body.merge?.kept.groups).toContainEqual(
         expect.objectContaining({ id: keptGroup.id, merging: true }),
       );
-      const previewRes = await call("/auth/merge", { headers: bearer(body.accessToken) });
+      if (body.confirmationToken === undefined) throw new Error("expected confirmationToken");
+      const previewRes = await call("/auth/merge", { headers: bearer(body.confirmationToken) });
       expect(previewRes.status).toBe(200);
       const preview = await previewRes.json<{
         kept: { groups: { id: string; merging?: boolean }[] };
@@ -734,8 +937,9 @@ describe("User Merge in a shared Group", () => {
     });
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
     expect(merge.kept.groups).toEqual([{ id: sharedGroup.id, name: "共同旅遊", shared: true }]);
     expect(merge.other.groups).toEqual([{ id: sharedGroup.id, name: "共同旅遊", shared: true }]);
 
@@ -853,8 +1057,9 @@ describe("User Merge in a shared Group", () => {
     );
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
     expect(
       (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
         .status,
@@ -946,8 +1151,9 @@ describe("User Merge in a shared Group", () => {
     const sThird = await sThirdRes.json<Settlement>();
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
     expect(
       (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
         .status,
@@ -1047,8 +1253,9 @@ describe("User Merge in a shared Group", () => {
     const placeholder = await placeholderRes.json<{ id: string }>();
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
     expect(
       (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
         .status,
@@ -1132,8 +1339,9 @@ describe("User Merge in a shared Group", () => {
     expect((await send(kept, "POST", `/groups/${formerGroup.id}/leave`)).status).toBe(204);
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
     expect(
       (await call("/auth/merge/confirm", json({ mergeId: merge.mergeId }, bearer(confirmToken))))
         .status,
@@ -1343,8 +1551,9 @@ describe("User Merge in a shared Group", () => {
 
         const beforeBalances = await balances(kept, sharedGroup.id);
         const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-        const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-        if (merge === undefined) throw new Error("expected merge preview");
+        const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+        if (merge === undefined || confirmToken === undefined)
+          throw new Error("expected merge preview");
         expect(
           (
             await call(
@@ -1492,8 +1701,9 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
     });
 
     const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
-    const { accessToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
-    if (merge === undefined) throw new Error("expected merge preview");
+    const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+    if (merge === undefined || confirmToken === undefined)
+      throw new Error("expected merge preview");
 
     const sharedDoId = env.GROUP_LEDGER.idFromName(sharedGroup.id);
     const flakyLedger = new Proxy(env.GROUP_LEDGER, {

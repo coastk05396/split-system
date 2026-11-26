@@ -28,50 +28,38 @@ export interface AppDeps {
 const verifiers = new WeakMap<Bindings, IdentityVerifier>();
 
 function parseTestToken(provider: Provider, idToken: string): VerifiedIdentity | null {
-  if (idToken.startsWith("fake|")) {
-    const [, sub, name, email] = idToken.split("|");
-    if (sub === undefined || sub === "" || name === undefined || name === "") return null;
-    return {
-      provider,
-      sub,
-      displayName: name,
-      pictureUrl: `https://pic/${sub}`,
-      email: provider === "google" && email !== undefined && email !== "" ? email : null,
+  if (!idToken.startsWith("fake.")) return null;
+  const payloadPart = idToken.split(".")[1];
+  if (payloadPart === undefined) return null;
+  try {
+    const padded = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const bytes = Uint8Array.from(atob(padded), (ch) => ch.charCodeAt(0));
+    const raw = JSON.parse(new TextDecoder().decode(bytes)) as {
+      sub?: unknown;
+      name?: unknown;
+      email?: unknown;
     };
-  }
-  if (idToken.startsWith("fake.")) {
-    const payloadPart = idToken.split(".")[1];
-    if (payloadPart === undefined) return null;
-    try {
-      const padded = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-      const raw = JSON.parse(atob(padded)) as {
-        sub?: unknown;
-        name?: unknown;
-        email?: unknown;
-      };
-      if (
-        typeof raw.sub !== "string" ||
-        raw.sub === "" ||
-        typeof raw.name !== "string" ||
-        raw.name === ""
-      ) {
-        return null;
-      }
-      return {
-        provider,
-        sub: raw.sub,
-        displayName: raw.name,
-        pictureUrl: null,
-        email:
-          provider === "google" && typeof raw.email === "string" && raw.email !== ""
-            ? raw.email
-            : null,
-      };
-    } catch {
+    if (
+      typeof raw.sub !== "string" ||
+      raw.sub === "" ||
+      typeof raw.name !== "string" ||
+      raw.name === ""
+    ) {
       return null;
     }
+    return {
+      provider,
+      sub: raw.sub,
+      displayName: raw.name,
+      pictureUrl: null,
+      email:
+        provider === "google" && typeof raw.email === "string" && raw.email !== ""
+          ? raw.email
+          : null,
+    };
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export const productionDeps = {

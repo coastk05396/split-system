@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { groupMemberSummary, mergeCleanups } from "../db/schema.js";
+import { groupMemberSummary, mergeCleanups, users } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 
 export interface MemberRow {
@@ -14,6 +14,12 @@ export interface MemberRow {
   netBalance: number;
   createdByMemberId?: string | null;
   createdAt: number;
+}
+
+/** True when the User still exists in D1 (false after account deletion or Merge away). */
+export async function userExists(db: Db, userId: string): Promise<boolean> {
+  const [row] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+  return row !== undefined;
 }
 
 /** The signed-in User's active Member row in a Group, or undefined when they are not seated. */

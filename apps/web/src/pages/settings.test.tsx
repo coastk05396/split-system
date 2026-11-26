@@ -271,6 +271,53 @@ describe("settings (screen 11)", () => {
     expect(api.calls).not.toContain("POST /api/v1/auth/link/line");
   });
 
+  it("refuses to link LINE when the browser Session switched to another User during LINE Login", async () => {
+    const userA = makeUser("甲", "google");
+    const userB = makeUser("乙", "google");
+    const { api } = renderApp({
+      path: "/settings",
+      cookieUser: userB,
+      lineLinkResult: { idToken: "fake|l-1|LINE 甲", userId: userA.id },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("請重新登入");
+    expect(await row("LINE")).not.toHaveTextContent("已連結");
+    expect(api.calls).not.toContain("POST /api/v1/auth/link/line");
+  });
+
+  it("does not fall through to ordinary LINE sign-in when returning signed out from a pending LINE link", async () => {
+    const userA = makeUser("甲", "google");
+    const { api } = renderApp({
+      path: "/settings",
+      lineLinkResult: { idToken: "fake|l-1|LINE 甲", userId: userA.id },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("請重新登入");
+    expect(api.calls).not.toContain("POST /api/v1/auth/line");
+    expect(api.calls).not.toContain("POST /api/v1/auth/link/line");
+  });
+
+  it("shows the translated cancellation error when Browser Back restores Settings from bfcache during a pending LINE link", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      path: "/settings",
+      cookieUser: makeUser("小宇", "google"),
+      lineLink: "holds",
+    });
+
+    // A non-pending pageshow restore stays quiet.
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await user.click(within(await row("LINE")).getByRole("button", { name: "連接" }));
+    expect(within(await row("LINE")).getByRole("button", { name: "前往 LINE…" })).toBeDisabled();
+
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("登入沒有成功");
+    expect(within(await row("LINE")).getByRole("button", { name: "連接" })).toBeEnabled();
+  });
+
   it("shows only linked rows with no Unlink button when both accounts are linked", async () => {
     renderApp({ path: "/settings", cookieUser: bothLinked("小宇") });
 

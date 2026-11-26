@@ -38,6 +38,7 @@ import {
   requireAdmin,
   requireMember,
   requireWritableMember,
+  userExists,
 } from "./membership.js";
 import { groupLedger } from "../ledger-client.js";
 
@@ -65,6 +66,7 @@ export function groupRoutes(deps: AppDeps) {
       if (userId === null) throw new ApiError("UNAUTHORIZED");
       const groupId = c.req.param("id");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, userId))) throw new ApiError("UNAUTHORIZED");
       if ((await findMembership(db, groupId, userId)) === undefined)
         await consumeRateLimit(db, userId, "membership_lookup", deps.now());
       if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
@@ -121,6 +123,7 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id", signedIn, async (c) => {
       const id = c.req.param("id");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
       const membership = await findMembership(db, id, c.var.userId);
       if (membership === undefined)
         await consumeRateLimit(db, c.var.userId, "membership_lookup", deps.now());

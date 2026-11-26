@@ -114,10 +114,17 @@ export const sessionResponseSchema = z.object({
 });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
-export const redeemLinkCodeResponseSchema = sessionResponseSchema.extend({
-  mergeNeeded: z.literal(true).optional(),
-  merge: mergePreviewSchema.optional(),
+export const redeemLinkCodeMergeResponseSchema = z.object({
+  mergeNeeded: z.literal(true),
+  merge: mergePreviewSchema,
+  confirmationToken: z.string(),
 });
+export type RedeemLinkCodeMergeResponse = z.infer<typeof redeemLinkCodeMergeResponseSchema>;
+
+export const redeemLinkCodeResponseSchema = z.union([
+  sessionResponseSchema,
+  redeemLinkCodeMergeResponseSchema,
+]);
 export type RedeemLinkCodeResponse = z.infer<typeof redeemLinkCodeResponseSchema>;
 
 export const linkMergeResponseSchema = z.object({

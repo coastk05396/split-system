@@ -24,7 +24,7 @@ export interface RenderAppOptions {
   /** How the fake LINE link trip answers from Settings: by default with a token at once. */
   lineLink?: "holds" | "fails" | "cancelled" | { idToken: string };
   /** What a LINE link trip brought back to Settings, if starting directly on return. */
-  lineLinkResult?: { idToken: string | null };
+  lineLinkResult?: { idToken: string | null; userId?: string };
   /** LINE's outside-browser call fails (LIFF cannot start or the native call throws). */
   openExternalFails?: boolean;
   /** The app was opened from a LINE chat that the LIFF app may post into. */
