@@ -465,6 +465,7 @@ const zhTW = {
   "settings.linked": "已連結",
   "settings.linkGoogle": "連接",
   "settings.linkingGoogle": "前往 Google…",
+  "settings.linkingLine": "前往 LINE…",
   "google.signingIn": "正在登入…",
   "google.linking": "正在連結…",
   "settings.comingSoon": "即將推出",

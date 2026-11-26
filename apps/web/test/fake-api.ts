@@ -33,10 +33,12 @@ export interface FakeApi {
   refuseLink: string | null;
   /** Link codes the server has issued, with the User each one belongs to. */
   linkCodes: Map<string, Me>;
-  /** Existing Users keyed by Google `sub`, to trigger a Merge on link-code redemption. */
+  /** Existing Users keyed by Google `sub`, to trigger a Merge on link-code redemption or link. */
   googleOwners: Map<string, Me>;
   /** Group IDs whose ledger merge fails during confirm, leaving them marked as merging. */
   failMergeGroups: Set<string>;
+  /** Existing Users keyed by LINE `sub`, to trigger a Merge on link. */
+  lineOwners: Map<string, Me>;
   /** The next request to "METHOD /path" reaches the server, but its answer is lost (network error). */
   dropNextResponse(route: string): void;
   /** Every request seen, with its headers and body text. */
@@ -143,6 +145,7 @@ export function createFakeApi(): FakeApi {
     linkCodes: new Map(),
     googleOwners: new Map(),
     failMergeGroups: new Set(),
+    lineOwners: new Map(),
     requests,
     spendingStats: [],
     spendingDetails: [],
@@ -182,6 +185,39 @@ export function createFakeApi(): FakeApi {
       return response;
     },
   };
+
+  function createPendingMerge(kept: Me, other: Me, path: "linkCode" | "settings"): MergePreview {
+    const keptGroups = api.groups.forUser(kept.id);
+    const otherGroups = api.groups.forUser(other.id);
+    const keptIds = new Set(keptGroups.map((g) => g.id));
+    const otherIds = new Set(otherGroups.map((g) => g.id));
+    const mergeId = `merge-${String(pendingMerges.size + 1)}`;
+    const preview: MergePreview = {
+      mergeId,
+      path,
+      expiresAt: Date.now() + 600_000,
+      kept: {
+        id: kept.id,
+        displayName: kept.displayName,
+        pictureUrl: kept.pictureUrl,
+        providers: kept.identities.map((i) => i.provider),
+        profileProvider: kept.identities[0]?.provider ?? "line",
+        groupCount: keptGroups.length,
+        groups: keptGroups.map((g) => ({ ...g, shared: otherIds.has(g.id) })),
+      },
+      other: {
+        id: other.id,
+        displayName: other.displayName,
+        pictureUrl: other.pictureUrl,
+        providers: other.identities.map((i) => i.provider),
+        profileProvider: other.identities[0]?.provider ?? "google",
+        groupCount: otherGroups.length,
+        groups: otherGroups.map((g) => ({ ...g, shared: keptIds.has(g.id) })),
+      },
+    };
+    pendingMerges.set(mergeId, { preview, kept, other });
+    return preview;
+  }
 
   async function serve(
     input: Parameters<typeof fetch>[0],
@@ -246,35 +282,7 @@ export function createFakeApi(): FakeApi {
         const [, sub = ""] = idToken.split("|");
         const existingOwner = api.googleOwners.get(sub);
         if (existingOwner !== undefined && existingOwner.id !== owner.id) {
-          const keptGroups = api.groups.forUser(owner.id);
-          const otherGroups = api.groups.forUser(existingOwner.id);
-          const keptIds = new Set(keptGroups.map((g) => g.id));
-          const otherIds = new Set(otherGroups.map((g) => g.id));
-          const mergeId = `merge-${String(pendingMerges.size + 1)}`;
-          const preview: MergePreview = {
-            mergeId,
-            path: "linkCode",
-            expiresAt: Date.now() + 600_000,
-            kept: {
-              id: owner.id,
-              displayName: owner.displayName,
-              pictureUrl: owner.pictureUrl,
-              providers: owner.identities.map((i) => i.provider),
-              profileProvider: owner.identities[0]?.provider ?? "line",
-              groupCount: keptGroups.length,
-              groups: keptGroups.map((g) => ({ ...g, shared: otherIds.has(g.id) })),
-            },
-            other: {
-              id: existingOwner.id,
-              displayName: existingOwner.displayName,
-              pictureUrl: existingOwner.pictureUrl,
-              providers: existingOwner.identities.map((i) => i.provider),
-              profileProvider: existingOwner.identities[0]?.provider ?? "google",
-              groupCount: otherGroups.length,
-              groups: otherGroups.map((g) => ({ ...g, shared: keptIds.has(g.id) })),
-            },
-          };
-          pendingMerges.set(mergeId, { preview, kept: owner, other: existingOwner });
+          const preview = createPendingMerge(owner, existingOwner, "linkCode");
           cookieUser = owner;
           tokenSeq += 1;
           const accessToken = `access-${tokenSeq}`;
@@ -316,7 +324,7 @@ export function createFakeApi(): FakeApi {
           .map((g) => g.id);
         const merged: Me = {
           ...match.kept,
-          signedInWith: "google",
+          signedInWith: match.preview.path === "linkCode" ? "google" : match.kept.signedInWith,
           identities: [...match.kept.identities, ...match.other.identities],
         };
         cookieUser = merged;
@@ -391,6 +399,21 @@ export function createFakeApi(): FakeApi {
         return error("ID_TOKEN_INVALID", 401);
       }
       if (api.refuseLink !== null) return error(api.refuseLink, 409);
+      const [, sub = ""] = idToken.split("|");
+      const owners = provider === "google" ? api.googleOwners : api.lineOwners;
+      const existingOwner = owners.get(sub);
+      if (existingOwner !== undefined && existingOwner.id !== authed.id) {
+        if (authed.identities.some((i) => i.provider === provider)) {
+          return error("PROVIDER_ALREADY_LINKED", 409);
+        }
+        return json({
+          mergeNeeded: true,
+          merge: createPendingMerge(authed, existingOwner, "settings"),
+        });
+      }
+      if (authed.identities.some((i) => i.provider === provider)) {
+        return error("PROVIDER_ALREADY_LINKED", 409);
+      }
       return update({
         ...authed,
         identities: [

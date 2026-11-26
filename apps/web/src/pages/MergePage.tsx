@@ -169,6 +169,9 @@ export function MergePage() {
   const requiresTick = preview.path === "linkCode";
   const canConfirm = !working && (!requiresTick || confirmed);
   const mergingIds = new Set(mergingGroupIds ?? []);
+  const linkedProvider =
+    preview.other.providers.find((p) => !preview.kept.providers.includes(p)) ??
+    preview.other.profileProvider;
 
   async function onConfirm() {
     if (preview === null) return;
@@ -177,7 +180,7 @@ export function MergePage() {
     try {
       const result = await confirmMerge(preview.mergeId);
       if (result.mergingGroupIds.length === 0) {
-        void navigate("/settings", { replace: true, state: { linked: "google" } });
+        void navigate("/settings", { replace: true, state: { linked: linkedProvider } });
         return;
       }
       setMergingGroupIds(result.mergingGroupIds);
@@ -234,7 +237,7 @@ export function MergePage() {
             <Link
               to="/settings"
               replace
-              state={{ linked: "google" }}
+              state={{ linked: linkedProvider }}
               className={`${secondaryButton} flex-1 py-3.5 text-center`}
             >
               {t("merge.backToSettings")}

@@ -29,6 +29,7 @@ import {
 import type { Bindings } from "./env.js";
 import { ApiError, invalid, type ErrorCode } from "./errors.js";
 import { expenseOperation } from "./ledger-expenses.js";
+import { mergeLedgerUser } from "./ledger-merge.js";
 import { settlementOperation } from "./ledger-settlements.js";
 import type {
   AccountDeletionOperation,
@@ -734,22 +735,15 @@ export class GroupLedger extends DurableObject<Bindings> {
       return { ok: true, value: null, rev: this.hasTable("ledger_meta") ? this.rev() : 0 };
     }
     try {
-      const { rev } = await this.commit((sql) => {
-        const otherRows = sql
-          .exec<MemberRow>("SELECT * FROM ledger_members WHERE user_id=?", op.otherUserId)
-          .toArray();
-        if (otherRows.length === 0) return { value: null };
-        const keptRows = sql
-          .exec<MemberRow>("SELECT * FROM ledger_members WHERE user_id=?", op.keptUserId)
-          .toArray();
-        if (keptRows.length > 0) throw new ApiError("INTERNAL");
-        sql.exec(
-          "UPDATE ledger_members SET user_id=? WHERE user_id=?",
-          op.keptUserId,
-          op.otherUserId,
-        );
-        return { value: null, dirty: ["group"], leaving: op.otherUserId };
-      });
+      const { rev } = await this.commit(
+        (sql) => {
+          const outcome = mergeLedgerUser(sql, op.keptUserId, op.otherUserId);
+          return outcome.changed
+            ? { value: null, dirty: outcome.dirty, leaving: outcome.leaving }
+            : { value: null };
+        },
+        { signal: "after push" },
+      );
       return { ok: true, value: null, rev };
     } catch (error) {
       return failure(error);

@@ -19,6 +19,12 @@ export interface LineSignIn {
   autoSignIn(): Promise<string | null>;
   /** Outside LINE: send the browser to LINE Login (email or QR), returning here. */
   login(): Promise<void>;
+  /** Outside LINE on Settings: send the browser to LINE Login to link LINE to the signed-in User. */
+  startLink(): Promise<void>;
+  /** On return from `startLink`: the LINE ID token (or null when cancelled/failed), or null when none is pending. */
+  takeLinkResult(): Promise<{ idToken: string | null } | null>;
+  /** Clears a pending `startLink` marker when the browser restores the page via back-forward cache. */
+  cancelLink(): void;
   /** Inside LINE: open `url` in the phone's own browser (Google refuses LINE's in-app one). */
   openExternal(url: string): Promise<void>;
   /**
@@ -45,12 +51,22 @@ export interface ShareOptions {
 export class LineShareUnavailableError extends Error {}
 
 const RETURNING_KEY = "split.lineLogin";
+const LINK_KEY = "split.lineLink";
 
 /** How long a started LINE login may take to come back before the marker is ignored. */
 const RETURNING_TTL_MS = 10 * 60 * 1000;
 
 /** LIFF adds these to the address when it sends the browser back from LINE. */
 const LIFF_RETURN_PARAM = /[?&](liff\.state|liffClientId|liffRedirectUri)=/;
+const OAUTH_RETURN_PARAMS = [
+  "error",
+  "error_description",
+  "liffOAuth2Error",
+  "code",
+  "state",
+  "liffClientId",
+  "liffRedirectUri",
+] as const;
 
 /**
  * LIFF's `init()` on Android checks for this query parameter after a browser login; without it,
@@ -85,6 +101,31 @@ function markReturning(): void {
 
 function clearReturning(): void {
   storage()?.removeItem(RETURNING_KEY);
+}
+
+function markLink(): void {
+  storage()?.setItem(LINK_KEY, String(Date.now()));
+}
+
+function clearLink(): void {
+  storage()?.removeItem(LINK_KEY);
+}
+
+function hasPendingLink(): boolean {
+  const started = Number(storage()?.getItem(LINK_KEY));
+  return Number.isFinite(started) && Date.now() - started < RETURNING_TTL_MS;
+}
+
+function stripOAuthParams(): void {
+  const url = new URL(window.location.href);
+  let changed = false;
+  for (const param of OAUTH_RETURN_PARAMS) {
+    if (url.searchParams.has(param)) {
+      url.searchParams.delete(param);
+      changed = true;
+    }
+  }
+  if (changed) window.history.replaceState(window.history.state, "", url);
 }
 
 /** A LINE login was started a moment ago, or the address says LIFF just sent us back. */
@@ -146,6 +187,42 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
 
   // Started once per page load: React may mount the auth provider twice in dev.
   let autoSignIn: Promise<string | null> | null = null;
+  let linkResult: Promise<{ idToken: string | null } | null> | null = null;
+
+  async function beginLogin(redirectUri: string): Promise<void> {
+    markReturning();
+    const liff = await loadLiff();
+    if (liff === null) {
+      clearReturning();
+      throw new Error("LIFF ID is not configured");
+    }
+    // A browser LIFF still counts as logged in keeps its old ID token (valid one hour):
+    // `liff.init` ignores the new login's code while logged in. Drop it first. The LINE
+    // app signs in by itself, and LIFF does not allow logging in or out there.
+    if (!liff.isInClient() && liff.isLoggedIn()) liff.logout();
+    liff.login({ redirectUri });
+  }
+
+  async function readLinkResult(): Promise<{ idToken: string | null } | null> {
+    if (!hasPendingLink()) return null;
+    if (new URLSearchParams(window.location.search).has("error")) {
+      clearLink();
+      clearReturning();
+      stripOAuthParams();
+      return { idToken: null };
+    }
+    try {
+      const liff = await loadLiff();
+      if (liff === null || !liff.isLoggedIn()) return { idToken: null };
+      return { idToken: liff.getIDToken() };
+    } catch {
+      return { idToken: null };
+    } finally {
+      clearLink();
+      clearReturning();
+      stripOAuthParams();
+    }
+  }
 
   async function startAutoSignIn(): Promise<string | null> {
     if (!isReturning() && !looksLikeLineApp(navigator.userAgent)) return null;
@@ -197,18 +274,33 @@ export function createLineSignIn(liffId: string | undefined): LineSignIn {
       await loadLiff();
     },
 
-    async login() {
-      markReturning();
-      const liff = await loadLiff();
-      if (liff === null) {
+    login: () => beginLogin(window.location.href),
+
+    async startLink() {
+      linkResult = null;
+      markLink();
+      try {
+        await beginLogin(`${window.location.origin}${window.location.pathname}`);
+      } catch (error) {
+        clearLink();
         clearReturning();
-        throw new Error("LIFF ID is not configured");
+        throw error;
       }
-      // A browser LIFF still counts as logged in keeps its old ID token (valid one hour):
-      // `liff.init` ignores the new login's code while logged in. Drop it first. The LINE
-      // app signs in by itself, and LIFF does not allow logging in or out there.
-      if (!liff.isInClient() && liff.isLoggedIn()) liff.logout();
-      liff.login({ redirectUri: window.location.href });
+    },
+
+    takeLinkResult() {
+      linkResult ??= readLinkResult().finally(() => {
+        queueMicrotask(() => {
+          linkResult = null;
+        });
+      });
+      return linkResult;
+    },
+
+    cancelLink() {
+      linkResult = null;
+      clearLink();
+      clearReturning();
     },
 
     // Inside LIFF, LINE ignores the openExternalBrowser parameter, so use LIFF's own external

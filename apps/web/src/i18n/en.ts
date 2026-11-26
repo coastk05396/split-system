@@ -474,6 +474,7 @@ export const en: Record<MessageId, string> = {
   "settings.linked": "Linked",
   "settings.linkGoogle": "Connect",
   "settings.linkingGoogle": "Opening Google…",
+  "settings.linkingLine": "Opening LINE…",
   "google.signingIn": "Signing in…",
   "google.linking": "Linking…",
   "settings.comingSoon": "Coming soon",

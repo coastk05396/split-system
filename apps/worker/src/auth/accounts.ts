@@ -219,23 +219,37 @@ export async function endSession(db: Db, presented: string): Promise<void> {
     .where(and(eq(sessions.id, parsed.sessionId), eq(sessions.refreshTokenHash, parsed.hash)));
 }
 
-/** Adds a second Identity to a signed-in User. Users are never merged. */
+export type LinkIdentityOutcome =
+  | { mergeNeeded: false }
+  | {
+      mergeNeeded: true;
+      otherUserId: string;
+      otherProvider: Provider;
+      otherEmail: string | null;
+    };
+
+/** Adds a second Identity to a signed-in User, or flags that it already belongs to another User. */
 export async function linkIdentity(
   db: Db,
   userId: string,
   identity: VerifiedIdentity,
   now: number,
-): Promise<void> {
+): Promise<LinkIdentityOutcome> {
   const existing = await findIdentity(db, identity.provider, identity.sub);
-  if (existing !== undefined) {
-    if (existing.userId === userId) return;
-    throw new ApiError("IDENTITY_LINKED_ELSEWHERE");
-  }
+  if (existing !== undefined && existing.userId === userId) return { mergeNeeded: false };
   const [sameProvider] = await db
     .select({ id: identities.id })
     .from(identities)
     .where(and(eq(identities.userId, userId), eq(identities.provider, identity.provider)));
   if (sameProvider !== undefined) throw new ApiError("PROVIDER_ALREADY_LINKED");
+  if (existing !== undefined) {
+    return {
+      mergeNeeded: true,
+      otherUserId: existing.userId,
+      otherProvider: identity.provider,
+      otherEmail: identity.email,
+    };
+  }
   try {
     await db.insert(identities).values({
       id: crypto.randomUUID(),
@@ -245,8 +259,20 @@ export async function linkIdentity(
       email: identity.email,
       createdAt: now,
     });
+    return { mergeNeeded: false };
   } catch (error) {
-    if (isConstraintError(error, "UNIQUE")) throw new ApiError("IDENTITY_LINKED_ELSEWHERE");
+    if (isConstraintError(error, "UNIQUE")) {
+      const winner = await findIdentity(db, identity.provider, identity.sub);
+      if (winner !== undefined && winner.userId !== userId) {
+        return {
+          mergeNeeded: true,
+          otherUserId: winner.userId,
+          otherProvider: identity.provider,
+          otherEmail: identity.email,
+        };
+      }
+      if (winner !== undefined) return { mergeNeeded: false };
+    }
     throw error;
   }
 }
@@ -491,7 +517,8 @@ export async function confirmMerge(
   sessionId: string | null,
   mergeId: string,
   now: number,
-): Promise<{ userId: string; provider: Provider; mergingGroupIds: string[] }> {
+  signedInWith: Provider | null = null,
+): Promise<{ userId: string; provider: Provider | null; mergingGroupIds: string[] }> {
   const claimed = await claimPendingMerge(env, db, userId, sessionId, mergeId, now);
   if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
   const { keptUserId, otherUserId, otherProvider, otherEmail } = claimed;
@@ -521,12 +548,13 @@ export async function confirmMerge(
       otherUserId,
       ...guardArgs,
     ),
-    env.DB.prepare(`UPDATE sessions SET provider=? WHERE id=? AND user_id=? AND ${guard}`).bind(
-      otherProvider,
-      sessionId,
-      keptUserId,
-      ...guardArgs,
-    ),
+    ...(claimed.path === "linkCode"
+      ? [
+          env.DB.prepare(
+            `UPDATE sessions SET provider=? WHERE id=? AND user_id=? AND ${guard}`,
+          ).bind(otherProvider, sessionId, keptUserId, ...guardArgs),
+        ]
+      : []),
     env.DB.prepare(`DELETE FROM sessions WHERE user_id=? AND ${guard}`).bind(
       otherUserId,
       ...guardArgs,
@@ -581,7 +609,11 @@ export async function confirmMerge(
             .bind(otherUserId)
             .all<{ group_id: string }>()
         ).results.map((r) => r.group_id);
-  return { userId: keptUserId, provider: otherProvider, mergingGroupIds: remaining };
+  return {
+    userId: keptUserId,
+    provider: claimed.path === "linkCode" ? otherProvider : signedInWith,
+    mergingGroupIds: remaining,
+  };
 }
 
 /** Reads the current Session's active pending Merge preview without consuming it. */

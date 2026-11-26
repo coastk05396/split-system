@@ -137,8 +137,22 @@ export function authRoutes(deps: AppDeps) {
         const provider = readProvider(c.req.param("provider"));
         const identity = await verify(c, provider);
         const db = createDb(c.env.DB);
-        await linkIdentity(db, c.var.userId, identity, deps.now());
-        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+        const now = deps.now();
+        const outcome = await linkIdentity(db, c.var.userId, identity, now);
+        if (!outcome.mergeNeeded) {
+          return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+        }
+        if (c.var.sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
+        const merge = await createPendingMerge(db, {
+          keptUserId: c.var.userId,
+          otherUserId: outcome.otherUserId,
+          sessionId: c.var.sessionId,
+          path: "settings",
+          otherProvider: outcome.otherProvider,
+          otherEmail: outcome.otherEmail,
+          now,
+        });
+        return c.json({ mergeNeeded: true as const, merge }, 200);
       })
       // From LINE's in-app browser, where Google refuses to sign in: the signed-in User gets a code
       // to open in an outside browser, whose Google sign-in then joins this same User.
@@ -194,6 +208,7 @@ export function authRoutes(deps: AppDeps) {
           c.var.sessionId,
           mergeId,
           deps.now(),
+          c.var.signedInWith,
         );
         const me = await requireMe(db, merged.userId, merged.provider);
         const accessToken = await signAccessToken(

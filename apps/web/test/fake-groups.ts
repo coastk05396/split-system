@@ -377,12 +377,14 @@ export function createFakeGroups(): FakeGroups {
 
     repointUser(fromUserId, toUserId, skipGroupIds) {
       for (const g of groups.values()) {
+        if (skipGroupIds?.has(g.id) && g.members.some((m) => m.userId === fromUserId)) {
+          g.merging = true;
+        }
         const hasTarget = g.members.some((m) => m.userId === toUserId);
         if (hasTarget) continue;
         for (const m of g.members) {
           if (m.userId === fromUserId) m.userId = toUserId;
         }
-        if (skipGroupIds?.has(g.id)) g.merging = true;
       }
     },
 
