@@ -938,20 +938,30 @@ export class GroupLedger extends DurableObject<Bindings> {
   }
 
   /** Projects all Member seats (Former Members included) into D1 once for pre-0021 Groups. */
-  projectMemberships(): Promise<LedgerResult<null>> {
+  projectMemberships(groupId?: string): Promise<LedgerResult<null>> {
     return this.serializeWrite(async () => {
-      if (!this.hasTable("ledger_members")) return { ok: true, value: null, rev: 0 };
       try {
-        const snapshot = this.ctx.storage.transactionSync(() => {
-          const group = this.ctx.storage.sql
-            .exec<GroupRow>("SELECT * FROM ledger_group")
-            .toArray()[0];
-          const members = this.ctx.storage.sql
-            .exec<MemberRow>("SELECT * FROM ledger_members")
-            .toArray();
-          return group ? { group, members, rev: this.rev() } : null;
-        });
-        if (snapshot === null) return { ok: true, value: null, rev: 0 };
+        const snapshot = !this.hasTable("ledger_members")
+          ? null
+          : this.ctx.storage.transactionSync(() => {
+              const group = this.ctx.storage.sql
+                .exec<GroupRow>("SELECT * FROM ledger_group")
+                .toArray()[0];
+              const members = this.ctx.storage.sql
+                .exec<MemberRow>("SELECT * FROM ledger_members")
+                .toArray();
+              return group ? { group, members, rev: this.rev() } : null;
+            });
+        if (snapshot === null) {
+          if (groupId !== undefined) {
+            await this.env.DB.prepare(
+              "UPDATE group_directory SET membership_reprojected = 1 WHERE group_id = ?",
+            )
+              .bind(groupId)
+              .run();
+          }
+          return { ok: true, value: null, rev: 0 };
+        }
         const { group: g, members, rev } = snapshot;
         const db = this.env.DB;
         const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";

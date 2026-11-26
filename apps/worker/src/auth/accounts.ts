@@ -545,17 +545,24 @@ export async function claimPendingMerge(
   now: number,
 ) {
   if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
-  const [claimed] = await db
-    .delete(pendingMerges)
-    .where(
-      and(
-        eq(pendingMerges.id, mergeId),
-        eq(pendingMerges.keptUserId, userId),
-        eq(pendingMerges.sessionId, sessionId),
-        gt(pendingMerges.expiresAt, now),
-      ),
-    )
-    .returning();
+  const pendingFilter = and(
+    eq(pendingMerges.id, mergeId),
+    eq(pendingMerges.keptUserId, userId),
+    eq(pendingMerges.sessionId, sessionId),
+    gt(pendingMerges.expiresAt, now),
+  );
+  const [valid] = await db
+    .select({ id: pendingMerges.id })
+    .from(pendingMerges)
+    .where(pendingFilter)
+    .limit(1);
+  if (valid === undefined) throw new ApiError("MERGE_PENDING_INVALID");
+  // Wait for any unprojected live Group so confirmation never misses a cold Former Member.
+  const backfillPending = await env.DB.prepare(
+    "SELECT 1 AS found FROM group_directory WHERE deleted=0 AND membership_reprojected=0 LIMIT 1",
+  ).first();
+  if (backfillPending !== null) throw new ApiError("MERGE_BACKFILL_PENDING");
+  const [claimed] = await db.delete(pendingMerges).where(pendingFilter).returning();
   if (claimed === undefined) throw new ApiError("MERGE_PENDING_INVALID");
   const deleting = await env.DB.prepare(
     "SELECT 1 AS found FROM account_deletions WHERE user_id IN (?,?) AND expires_at > ? LIMIT 1",
@@ -596,7 +603,7 @@ export async function confirmMerge(
   const { keptUserId, otherUserId, otherProvider, otherEmail } = claimed;
 
   const guard =
-    "EXISTS (SELECT 1 FROM users WHERE id=?) AND EXISTS (SELECT 1 FROM users WHERE id=?) AND NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id IN (?,?) AND expires_at>?) AND NOT EXISTS (SELECT 1 FROM identities k JOIN identities o ON k.provider = o.provider WHERE k.user_id=? AND o.user_id=?)";
+    "EXISTS (SELECT 1 FROM users WHERE id=?) AND EXISTS (SELECT 1 FROM users WHERE id=?) AND NOT EXISTS (SELECT 1 FROM account_deletions WHERE user_id IN (?,?) AND expires_at>?) AND NOT EXISTS (SELECT 1 FROM identities k JOIN identities o ON k.provider = o.provider WHERE k.user_id=? AND o.user_id=?) AND NOT EXISTS (SELECT 1 FROM group_directory WHERE deleted=0 AND membership_reprojected=0)";
   const guardArgs = [
     keptUserId,
     otherUserId,
@@ -712,6 +719,10 @@ export async function confirmMerge(
       .bind(keptUserId, otherUserId)
       .first();
     if (overlap !== null) throw new ApiError("MERGE_SAME_PROVIDER");
+    const backfillPending = await env.DB.prepare(
+      "SELECT 1 AS found FROM group_directory WHERE deleted=0 AND membership_reprojected=0 LIMIT 1",
+    ).first();
+    if (backfillPending !== null) throw new ApiError("MERGE_BACKFILL_PENDING");
     throw new ApiError("MERGE_ACCOUNT_DELETION_PENDING");
   }
   const enqueued = await env.DB.prepare("SELECT group_id FROM merge_cleanups WHERE other_user_id=?")

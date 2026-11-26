@@ -643,6 +643,8 @@ export const enErrors: Record<ErrorCode, string> = {
     "One of the accounts has a deletion in progress, so they cannot be merged.",
   MERGE_SAME_PROVIDER:
     "Both accounts already have the same sign-in method linked, so they cannot be merged.",
+  MERGE_BACKFILL_PENDING:
+    "Data migration for existing groups is still finishing. Please try merging again shortly.",
   GROUP_MERGING: "This group is still finishing an account merge. Please try again shortly.",
   PROVIDER_ALREADY_LINKED: "You have already linked this kind of account.",
   LAST_ADMIN: "A group needs at least one admin.",

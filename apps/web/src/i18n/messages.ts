@@ -660,6 +660,7 @@ const zhErrors: Record<ErrorCode, string> = {
   MERGE_PENDING_INVALID: "這個合併確認已經失效或過期，請回到設定重新連結。",
   MERGE_ACCOUNT_DELETION_PENDING: "其中一個帳號正在刪除中，暫時無法合併。",
   MERGE_SAME_PROVIDER: "兩個帳號都已經綁定同一種登入方式，無法合併。",
+  MERGE_BACKFILL_PENDING: "系統正在完成現有群組的資料更新，請稍後再試一次合併。",
   GROUP_MERGING: "這個群組正在合併帳號中，請稍後再試。",
   PROVIDER_ALREADY_LINKED: "你已經連結過這種帳號了。",
   LAST_ADMIN: "群組至少要有一位管理員。",

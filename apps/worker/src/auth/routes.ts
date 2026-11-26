@@ -284,7 +284,11 @@ export function authRoutes(deps: AppDeps) {
             c.var.signedInWith,
           );
         } catch (error) {
-          if (c.var.confirmMergeId !== null && c.var.sessionId !== null) {
+          if (
+            !(error instanceof ApiError && error.code === "MERGE_BACKFILL_PENDING") &&
+            c.var.confirmMergeId !== null &&
+            c.var.sessionId !== null
+          ) {
             await deleteSessionById(db, c.var.sessionId, c.var.userId).catch(() => undefined);
           }
           throw error;
