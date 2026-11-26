@@ -133,7 +133,7 @@ export function SettingsPage() {
         const outcome = await link("line", result.idToken);
         if (!isActive()) return;
         if (outcome.merge !== null) {
-          void navigate("/merge", { replace: true, state: { merge: outcome.merge } });
+          void navigate("/merge", { replace: true });
         }
       } catch (err) {
         if (isActive()) setError(err instanceof ApiFailure ? err.code : "INTERNAL");

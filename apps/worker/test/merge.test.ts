@@ -776,6 +776,8 @@ describe("User Merge on the Link code path", () => {
     const flakyGroup = await createGroup(other, { name: "未完成群組", isTrip: true });
     const invite = await inviteToken(other, flakyGroup.id);
     expect((await send(bob, "POST", `/invites/${invite}/join`)).status).toBe(200);
+    const bobGroup = await createGroup(bob, { name: "外部邀請群組" });
+    const thirdPartyInvite = await inviteToken(bob, bobGroup.id);
     const bobMemberId = (await listMembers(other, flakyGroup.id)).find(
       (m) => m.userId === bob.userId,
     )?.id;
@@ -883,6 +885,8 @@ describe("User Merge on the Link code path", () => {
         `/groups/${flakyGroup.id}/balances`,
         `/groups/${flakyGroup.id}/settlements`,
         `/groups/${flakyGroup.id}/stops`,
+        `/invites/${invite}`,
+        `/invites/${thirdPartyInvite}`,
         "/stats/spending",
         "/stats/expenses?month=2026-06&category=food",
       ]) {

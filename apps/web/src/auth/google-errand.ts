@@ -136,13 +136,11 @@ export function createGoogleErrand(
         else linkOutcome = await auth().link("google", idToken);
         if (!isActive()) return;
         if (errand.purpose === "link") {
-          if (linkOutcome.merge !== null)
-            void navigate("/merge", { replace: true, state: { merge: linkOutcome.merge } });
+          if (linkOutcome.merge !== null) void navigate("/merge", { replace: true });
           else void navigate("/settings", linked);
         } else if (errand.purpose === "linkCode") {
           if (linkCodeOutcome === false) void navigate(origin(errand), { replace: true });
-          else if (linkCodeOutcome.merge !== null)
-            void navigate("/merge", { replace: true, state: { merge: linkCodeOutcome.merge } });
+          else if (linkCodeOutcome.merge !== null) void navigate("/merge", { replace: true });
           else void navigate("/settings", linked);
         } else void navigate(origin(errand), { replace: true });
       } catch (error) {

@@ -134,6 +134,71 @@ describe("/merge (confirming a Merge on the Link code path)", () => {
     expect(screen.getByRole("link", { name: "回到設定" })).toHaveAttribute("href", "/settings");
   });
 
+  it("ignores any preview cached in route history and refuses /merge under another Session", async () => {
+    const userA = makeUser("帳號A", "line");
+    const other = makeUser("帳號A的Google", "google");
+    const userB = makeUser("另一位使用者B", "google");
+    const { api } = renderApp({
+      path: "/merge",
+      cookieUser: userB,
+      initialState: {
+        merge: {
+          mergeId: "m-user-a",
+          path: "settings",
+          expiresAt: Date.now() + 600_000,
+          kept: {
+            id: userA.id,
+            displayName: userA.displayName,
+            pictureUrl: null,
+            providers: ["line"],
+            profileProvider: "line",
+            groupCount: 1,
+            groups: [{ id: "g-secret", name: "私密群組", shared: false }],
+          },
+          other: {
+            id: other.id,
+            displayName: other.displayName,
+            pictureUrl: null,
+            providers: ["google"],
+            profileProvider: "google",
+            groupCount: 0,
+            groups: [],
+          },
+        },
+      },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("失效或過期");
+    expect(screen.queryByText("帳號A")).toBeNull();
+    expect(screen.queryByText("私密群組")).toBeNull();
+    expect(screen.queryByRole("button", { name: "合併帳號" })).toBeNull();
+    expect(api.calls).toContain("GET /api/v1/auth/merge");
+    expect(screen.getByRole("link", { name: "回到設定" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("refuses an expired scoped confirmation credential on arrival at /merge instead of showing a cached preview", async () => {
+    const kept = makeUser("LINE小宇", "line");
+    const other = makeUser("Google小宇", "google");
+    const { api } = renderApp({
+      path: "/link?code=code-1",
+      seed: (groups) => {
+        groups.add(kept, { name: "LINE聚餐" });
+        groups.add(other, { name: "Google旅遊" });
+      },
+    });
+    api.linkCodes.set("code-1", kept);
+    api.googleOwners = new Map([["g-1", other]]);
+    api.failNext("GET /api/v1/auth/merge", "UNAUTHORIZED", 401);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("失效或過期");
+    expect(screen.queryByText("LINE聚餐")).toBeNull();
+    expect(screen.queryByText("Google旅遊")).toBeNull();
+    expect(screen.queryByRole("button", { name: "合併帳號" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
+    expect(api.calls).toContain("GET /api/v1/auth/merge");
+    expect(screen.getByRole("link", { name: "回到登入" })).toHaveAttribute("href", "/sign-in");
+  });
+
   it("refuses a Link-code preview restored without a confirmation credential and offers an exit to sign-in", async () => {
     const kept = makeUser("LINE小宇", "line");
     const other = makeUser("Google小宇", "google");

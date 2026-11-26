@@ -214,7 +214,7 @@ describe("Google errand", () => {
     };
     auth.redeemLinkCode.mockResolvedValue({ merge });
     await errand.finish();
-    expect(navigate).toHaveBeenCalledWith("/merge", { replace: true, state: { merge } });
+    expect(navigate).toHaveBeenCalledWith("/merge", { replace: true });
   });
 
   it.each([new ApiFailure("IDENTITY_LINKED_ELSEWHERE", 409), new Error("offline")])(

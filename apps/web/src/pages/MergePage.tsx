@@ -1,7 +1,7 @@
 import type { MergePreview, MergeUserPreview, Provider } from "@split/shared";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useId, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { useEffect, useId, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { ApiFailure, type ErrorCode } from "../api/errors.js";
 import { useAuth } from "../auth/AuthProvider.js";
 import { GoogleG } from "../auth/GoogleButton.js";
@@ -119,14 +119,12 @@ function UserSideCard({
  */
 export function MergePage() {
   const { state, session, getPendingMerge, confirmMerge, cancelMerge } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
   const hasProof = state.status === "signedIn" || session.hasPendingMerge();
-  const initial = hasProof
-    ? ((location.state as { merge?: MergePreview } | null)?.merge ?? null)
-    : null;
-  const [preview, setPreview] = useState<MergePreview | null>(initial);
-  const [loading, setLoading] = useState(hasProof && initial === null);
+  const signedInUserId = state.status === "signedIn" ? state.user.id : null;
+  const confirmedRef = useRef(false);
+  const [preview, setPreview] = useState<MergePreview | null>(null);
+  const [loading, setLoading] = useState(hasProof);
   const [loadError, setLoadError] = useState<ErrorCode | null>(
     hasProof ? null : "MERGE_PENDING_INVALID",
   );
@@ -137,15 +135,26 @@ export function MergePage() {
   const tickId = useId();
 
   useEffect(() => {
-    if (!hasProof || preview !== null) return;
+    if (confirmedRef.current) return;
+    if (!hasProof) {
+      setPreview(null);
+      setLoadError("MERGE_PENDING_INVALID");
+      setLoading(false);
+      return;
+    }
     let active = true;
+    setPreview(null);
+    setLoadError(null);
     setLoading(true);
     void getPendingMerge()
       .then((loaded) => {
         if (active) setPreview(loaded);
       })
       .catch((error: unknown) => {
-        if (active) setLoadError(error instanceof ApiFailure ? error.code : "INTERNAL");
+        if (active) {
+          setPreview(null);
+          setLoadError(error instanceof ApiFailure ? error.code : "INTERNAL");
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -153,7 +162,7 @@ export function MergePage() {
     return () => {
       active = false;
     };
-  }, [hasProof, preview, getPendingMerge]);
+  }, [hasProof, signedInUserId, getPendingMerge]);
 
   if (loading) return <Loading />;
 
@@ -189,6 +198,7 @@ export function MergePage() {
     try {
       const result = await confirmMerge(preview.mergeId);
       if (result === null) return;
+      confirmedRef.current = true;
       if (result.mergingGroupIds.length === 0) {
         void navigate("/settings", { replace: true, state: { linked: linkedProvider } });
         return;
