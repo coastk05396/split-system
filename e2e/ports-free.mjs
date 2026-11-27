@@ -1,6 +1,8 @@
 // Run by e2e/run.sh before it wipes local D1 state: a `pnpm dev` on 8787 would lose nothing but
 // Playwright would only fail later, after a full build; this names the cause at once.
+import console from "node:console";
 import { createServer } from "node:net";
+import process from "node:process";
 
 const taken = await Promise.all(
   [8787, 8788].map(
