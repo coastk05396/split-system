@@ -1,12 +1,22 @@
 import { and, asc, eq, lt } from "drizzle-orm";
 import { createDb } from "./db/client.js";
-import { commitAccountCleanups } from "./auth/account-cleanup.js";
+import {
+  backfillGroupMemberships,
+  commitAccountCleanups,
+  commitMergeCleanups,
+} from "./auth/account-cleanup.js";
 import { productionDeps } from "./deps.js";
 import type { Bindings } from "./env.js";
 import { refreshDailyFlights } from "./flights/daily.js";
 import { groupLedger } from "./ledger-client.js";
 import { refreshRates } from "./rates/rates.js";
-import { groupReservations, linkCodes, rateCounters, sessions } from "./db/schema.js";
+import {
+  groupReservations,
+  linkCodes,
+  pendingMerges,
+  rateCounters,
+  sessions,
+} from "./db/schema.js";
 import { RATE_COUNTER_RETENTION_MS } from "./rate-limit.js";
 
 /** Old pending reservations need an authoritative membership check before release. */
@@ -19,6 +29,7 @@ export async function purgeExpired(env: Bindings, now: number): Promise<void> {
     await db.batch([
       db.delete(sessions).where(lt(sessions.expiresAt, now)),
       db.delete(linkCodes).where(lt(linkCodes.expiresAt, now)),
+      db.delete(pendingMerges).where(lt(pendingMerges.expiresAt, now)),
       db.delete(rateCounters).where(lt(rateCounters.windowStart, now - RATE_COUNTER_RETENTION_MS)),
     ]);
     const stale = await db
@@ -95,6 +106,8 @@ async function runAccountAndRateMaintenance(env: Bindings, now: number): Promise
   const db = createDb(env.DB);
   await purgeExpired(env, now);
   await commitAccountCleanups(env);
+  await backfillGroupMemberships(env, now);
+  await commitMergeCleanups(env, now);
   await refreshRates(db, productionDeps.rateSource, now);
 }
 

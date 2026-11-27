@@ -17,7 +17,12 @@ export const ERROR_STATUS = {
   BALANCE_NOT_ZERO: 409,
   IDENTITY_LINKED_ELSEWHERE: 409,
   PROVIDER_ALREADY_LINKED: 409,
-  LAST_IDENTITY: 409,
+  MERGE_ACCOUNT_DELETION_PENDING: 409,
+  MERGE_SAME_PROVIDER: 409,
+  /** Cold Groups still need initial membership reprojection before Merge confirmation can safely discover Former Members. */
+  MERGE_BACKFILL_PENDING: 409,
+  /** A User Merge is still finishing in this Group's ledger, so writes wait until it completes. */
+  GROUP_MERGING: 409,
   LAST_ADMIN: 409,
   GROUP_LIMIT_REACHED: 409,
   SETTLEMENT_CURRENCY_LOCKED: 409,
@@ -35,6 +40,8 @@ export const ERROR_STATUS = {
   INVITE_EXPIRED: 422,
   /** A link code that is unknown, expired or already used. */
   LINK_CODE_INVALID: 422,
+  /** A pending Merge that is unknown, expired, already used, or for another Session. */
+  MERGE_PENDING_INVALID: 422,
   EXPENSE_AMOUNT_INVALID: 422,
   /** More than the payer still owes the receiver; details `{ maxAmount }`. */
   SETTLEMENT_EXCEEDS_DEBT: 422,

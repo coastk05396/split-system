@@ -3,6 +3,7 @@ import {
   type DailyFlightsResponse,
   getDefaultDailyFlights,
   type Me,
+  type MergePreview,
 } from "@split/shared";
 import { createFakeGroups, type FakeGroups } from "./fake-groups.js";
 
@@ -32,6 +33,12 @@ export interface FakeApi {
   refuseLink: string | null;
   /** Link codes the server has issued, with the User each one belongs to. */
   linkCodes: Map<string, Me>;
+  /** Existing Users keyed by Google `sub`, to trigger a Merge on link-code redemption or link. */
+  googleOwners: Map<string, Me>;
+  /** Group IDs whose ledger merge fails during confirm, leaving them marked as merging. */
+  failMergeGroups: Set<string>;
+  /** Existing Users keyed by LINE `sub`, to trigger a Merge on link. */
+  lineOwners: Map<string, Me>;
   /** The next request to "METHOD /path" reaches the server, but its answer is lost (network error). */
   dropNextResponse(route: string): void;
   /** Every request seen, with its headers and body text. */
@@ -79,6 +86,8 @@ export function createFakeApi(): FakeApi {
   let cookieUser: Me | null = null;
   let tokenSeq = 0;
   const liveTokens = new Map<string, Me>();
+  const confirmTokens = new Map<string, { kept: Me; mergeId: string }>();
+  const pendingMerges = new Map<string, { preview: MergePreview; kept: Me; other: Me }>();
   const calls: string[] = [];
   const failing = new Map<string, { code: string; status: number }>();
   const dropping = new Set<string>();
@@ -135,6 +144,9 @@ export function createFakeApi(): FakeApi {
     testSignInEnabled: true,
     refuseLink: null,
     linkCodes: new Map(),
+    googleOwners: new Map(),
+    failMergeGroups: new Set(),
+    lineOwners: new Map(),
     requests,
     spendingStats: [],
     spendingDetails: [],
@@ -174,6 +186,42 @@ export function createFakeApi(): FakeApi {
       return response;
     },
   };
+
+  function createPendingMerge(kept: Me, other: Me, path: "linkCode" | "settings"): MergePreview {
+    const keptGroups = api.groups.forUser(kept.id);
+    const otherGroups = api.groups.forUser(other.id);
+    const keptIds = new Set(keptGroups.map((g) => g.id));
+    const otherIds = new Set(otherGroups.map((g) => g.id));
+    const mergeId = `merge-${String(pendingMerges.size + 1)}`;
+    const preview: MergePreview = {
+      mergeId,
+      path,
+      expiresAt: Date.now() + 600_000,
+      kept: {
+        id: kept.id,
+        displayName: kept.displayName,
+        pictureUrl: kept.pictureUrl,
+        providers: kept.identities.map((i) => i.provider),
+        profileProvider: kept.identities[0]?.provider ?? "line",
+        groupCount: keptGroups.length,
+        groups: keptGroups.map((g) => ({ ...g, shared: otherIds.has(g.id) })),
+      },
+      other: {
+        id: other.id,
+        displayName: other.displayName,
+        pictureUrl: other.pictureUrl,
+        providers: other.identities.map((i) => i.provider),
+        profileProvider: other.identities[0]?.provider ?? "google",
+        groupCount: otherGroups.length,
+        groups: otherGroups.map((g) => ({ ...g, shared: keptIds.has(g.id) })),
+      },
+    };
+    for (const [id, existing] of pendingMerges) {
+      if (existing.kept.id === kept.id) pendingMerges.delete(id);
+    }
+    pendingMerges.set(mergeId, { preview, kept, other });
+    return preview;
+  }
 
   async function serve(
     input: Parameters<typeof fetch>[0],
@@ -235,6 +283,19 @@ export function createFakeApi(): FakeApi {
         const owner = typeof code === "string" ? api.linkCodes.get(code) : undefined;
         if (owner === undefined) return error("LINK_CODE_INVALID", 422);
         api.linkCodes.delete(String(code));
+        const [, sub = ""] = idToken.split("|");
+        const existingOwner = api.googleOwners.get(sub);
+        if (existingOwner !== undefined && existingOwner.id !== owner.id) {
+          const preview = createPendingMerge(owner, existingOwner, "linkCode");
+          tokenSeq += 1;
+          const confirmationToken = `confirm-${tokenSeq}`;
+          confirmTokens.set(confirmationToken, { kept: owner, mergeId: preview.mergeId });
+          return json({
+            mergeNeeded: true,
+            merge: preview,
+            confirmationToken,
+          });
+        }
         const linked = {
           ...owner,
           identities: [
@@ -243,6 +304,78 @@ export function createFakeApi(): FakeApi {
           ],
         };
         return issue(linked);
+      }
+      case "GET /api/v1/auth/merge": {
+        const confirm = bearer === undefined ? undefined : confirmTokens.get(bearer);
+        const actor = authed ?? confirm?.kept;
+        if (actor === undefined) return error("UNAUTHORIZED", 401);
+        const match = [...pendingMerges.values()].find(
+          (m) =>
+            m.kept.id === actor.id &&
+            (confirm === undefined || m.preview.mergeId === confirm.mergeId),
+        );
+        if (match === undefined) {
+          return error(
+            confirm !== undefined ? "UNAUTHORIZED" : "MERGE_PENDING_INVALID",
+            confirm !== undefined ? 401 : 422,
+          );
+        }
+        return json(match.preview);
+      }
+      case "POST /api/v1/auth/merge/confirm": {
+        const confirm = bearer === undefined ? undefined : confirmTokens.get(bearer);
+        const actor = authed ?? confirm?.kept;
+        if (actor === undefined) return error("UNAUTHORIZED", 401);
+        const { mergeId } = await readJson(init);
+        const match = typeof mergeId === "string" ? pendingMerges.get(mergeId) : undefined;
+        if (
+          match === undefined ||
+          match.kept.id !== actor.id ||
+          (confirm !== undefined && confirm.mergeId !== mergeId)
+        ) {
+          return error(
+            confirm !== undefined ? "UNAUTHORIZED" : "MERGE_PENDING_INVALID",
+            confirm !== undefined ? 401 : 422,
+          );
+        }
+        if (bearer !== undefined) confirmTokens.delete(bearer);
+        pendingMerges.delete(String(mergeId));
+        api.groups.repointUser(match.other.id, match.kept.id, api.failMergeGroups);
+        const mergingGroupIds = api.groups
+          .forUser(match.kept.id)
+          .filter((g) => g.merging === true)
+          .map((g) => g.id);
+        const merged: Me = {
+          ...match.kept,
+          signedInWith: match.preview.path === "linkCode" ? "google" : match.kept.signedInWith,
+          identities: [...match.kept.identities, ...match.other.identities],
+        };
+        cookieUser = merged;
+        tokenSeq += 1;
+        const accessToken = `access-${tokenSeq}`;
+        liveTokens.set(accessToken, merged);
+        return json({
+          accessToken,
+          expiresIn: 3600,
+          user: merged,
+          ...(mergingGroupIds.length > 0 ? { mergingGroupIds } : {}),
+        });
+      }
+      case "POST /api/v1/auth/merge/cancel": {
+        const confirm = bearer === undefined ? undefined : confirmTokens.get(bearer);
+        const actor = authed ?? confirm?.kept;
+        if (actor === undefined) return error("UNAUTHORIZED", 401);
+        const { mergeId } = await readJson(init);
+        if (confirm !== undefined && bearer !== undefined) {
+          if (confirm.mergeId !== mergeId) return error("MERGE_PENDING_INVALID", 422);
+          confirmTokens.delete(bearer);
+        }
+        const deleted =
+          typeof mergeId === "string" && pendingMerges.get(mergeId)?.kept.id === actor.id
+            ? pendingMerges.delete(mergeId)
+            : false;
+        if (!deleted) return error("MERGE_PENDING_INVALID", 422);
+        return new Response(null, { status: 204 });
       }
       case "POST /api/v1/auth/test-sign-in": {
         if (!api.testSignInEnabled) return error("NOT_FOUND", 404);
@@ -287,23 +420,33 @@ export function createFakeApi(): FakeApi {
       }
     }
 
-    const identity =
-      /^(POST \/api\/v1\/auth\/link|DELETE \/api\/v1\/auth\/identities)\/(line|google)$/.exec(
-        `${method} ${url.pathname}`,
-      );
+    const identity = /^POST \/api\/v1\/auth\/link\/(line|google)$/.exec(
+      `${method} ${url.pathname}`,
+    );
     if (identity !== null) {
       if (authed === undefined) return error("UNAUTHORIZED", 401);
-      const provider = identity[2] === "line" ? "line" : "google";
+      const provider = identity[1] === "line" ? "line" : "google";
       const others = authed.identities.filter((i) => i.provider !== provider);
-      if (method === "DELETE") {
-        if (others.length === 0) return error("LAST_IDENTITY", 409);
-        return update({ ...authed, identities: others });
-      }
       const { idToken } = await readJson(init);
       if (typeof idToken !== "string" || !idToken.startsWith("fake|")) {
         return error("ID_TOKEN_INVALID", 401);
       }
       if (api.refuseLink !== null) return error(api.refuseLink, 409);
+      const [, sub = ""] = idToken.split("|");
+      const owners = provider === "google" ? api.googleOwners : api.lineOwners;
+      const existingOwner = owners.get(sub);
+      if (existingOwner !== undefined && existingOwner.id !== authed.id) {
+        if (authed.identities.some((i) => i.provider === provider)) {
+          return error("PROVIDER_ALREADY_LINKED", 409);
+        }
+        return json({
+          mergeNeeded: true,
+          merge: createPendingMerge(authed, existingOwner, "settings"),
+        });
+      }
+      if (authed.identities.some((i) => i.provider === provider)) {
+        return error("PROVIDER_ALREADY_LINKED", 409);
+      }
       return update({
         ...authed,
         identities: [

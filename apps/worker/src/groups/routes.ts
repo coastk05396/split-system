@@ -32,7 +32,14 @@ import {
   patchMember,
   removeMember,
 } from "./members.js";
-import { findMembership, requireAdmin, requireMember } from "./membership.js";
+import {
+  findMembership,
+  isGroupMerging,
+  requireAdmin,
+  requireMember,
+  requireWritableMember,
+  userExists,
+} from "./membership.js";
 import { groupLedger } from "../ledger-client.js";
 
 /**
@@ -59,6 +66,7 @@ export function groupRoutes(deps: AppDeps) {
       if (userId === null) throw new ApiError("UNAUTHORIZED");
       const groupId = c.req.param("id");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, userId))) throw new ApiError("UNAUTHORIZED");
       if ((await findMembership(db, groupId, userId)) === undefined)
         await consumeRateLimit(db, userId, "membership_lookup", deps.now());
       if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
@@ -115,17 +123,28 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id", signedIn, async (c) => {
       const id = c.req.param("id");
       const db = createDb(c.env.DB);
-      if ((await findMembership(db, id, c.var.userId)) === undefined)
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
+      const membership = await findMembership(db, id, c.var.userId);
+      if (membership === undefined)
         await consumeRateLimit(db, c.var.userId, "membership_lookup", deps.now());
+      const merging = await isGroupMerging(db, id);
       const ledger = groupLedger(c.env, id);
-      if (!(await ledger.isMember(c.var.userId))) throw new ApiError("NOT_FOUND");
-      const { group, rev } = await readLedgerGroup(db, c.env, id, c.var.userId);
+      if (!(await ledger.isMember(c.var.userId)) && !(merging && membership !== undefined))
+        throw new ApiError("NOT_FOUND");
+      const { group, rev } = await readLedgerGroup(
+        db,
+        c.env,
+        id,
+        c.var.userId,
+        membership,
+        merging,
+      );
       c.header("X-Group-Rev", String(rev));
       return c.json(group, 200);
     })
     .patch("/groups/:id", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       requireAdmin(me);
       const expected = requireIfMatch(c);
       const patch = await parseBody(c, groupPatchSchema);
@@ -140,6 +159,7 @@ export function groupRoutes(deps: AppDeps) {
           // VALIDATION_FAILED carries the invalid Trip dates; a missing Group was INTERNAL.
           if (
             error.code === "FORBIDDEN" ||
+            error.code === "GROUP_MERGING" ||
             error.code === "SETTLEMENT_CURRENCY_LOCKED" ||
             error.code === "VALIDATION_FAILED"
           )
@@ -152,12 +172,13 @@ export function groupRoutes(deps: AppDeps) {
     })
     .delete("/groups/:id", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       requireAdmin(me);
       const { rev } = await groupLedger(c.env, me.groupId)
         .delete({ actorMemberId: me.id })
         .catch((error: unknown) => {
-          throw error instanceof ApiError && error.code === "FORBIDDEN"
+          throw error instanceof ApiError &&
+            (error.code === "FORBIDDEN" || error.code === "GROUP_MERGING")
             ? error
             : new ApiError("INTERNAL");
         });
@@ -167,13 +188,20 @@ export function groupRoutes(deps: AppDeps) {
     .get("/groups/:id/members", signedIn, async (c) => {
       const db = createDb(c.env.DB);
       const me = await requireMember(db, c.req.param("id"), c.var.userId);
-      const { members, rev } = await listMembersWithRev(db, me.groupId, me.id, c.env, c.var.userId);
+      const merging = await isGroupMerging(db, me.groupId);
+      const { members, rev } = await listMembersWithRev(
+        db,
+        me.groupId,
+        me.id,
+        c.env,
+        merging ? undefined : c.var.userId,
+      );
       c.header("X-Group-Rev", String(rev));
       return c.json(members, 200);
     })
     .post("/groups/:id/members", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const input = await parseBody(c, placeholderInputSchema);
       const result = await addPlaceholder(db, me, input, deps.now(), c.env);
       c.header("X-Group-Rev", String(result.rev));
@@ -181,7 +209,7 @@ export function groupRoutes(deps: AppDeps) {
     })
     .patch("/groups/:id/members/:mid", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const patch = await parseBody(c, memberPatchSchema);
       const result = await patchMember(db, me, c.req.param("mid"), patch, c.env);
       c.header("X-Group-Rev", String(result.rev));
@@ -189,14 +217,14 @@ export function groupRoutes(deps: AppDeps) {
     })
     .delete("/groups/:id/members/:mid", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const result = await removeMember(me, c.req.param("mid"), c.env);
       c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
     })
     .post("/groups/:id/leave", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const result = await leaveGroup(me, c.env);
       c.header("X-Group-Rev", String(result.rev));
       return c.body(null, 204);
@@ -208,7 +236,7 @@ export function groupRoutes(deps: AppDeps) {
     })
     .post("/groups/:id/invite", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       return c.json(
         await regenerateInvite(me, deps.now(), c.env, (rev) => {
           c.header("X-Group-Rev", rev);
@@ -218,7 +246,7 @@ export function groupRoutes(deps: AppDeps) {
     })
     .post("/groups/:id/invite/ensure", signedIn, writeLimit, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       return c.json(
         await ensureInvite(me, deps.now(), c.env, (rev) => {
           c.header("X-Group-Rev", rev);

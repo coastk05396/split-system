@@ -6,7 +6,7 @@ import { requireUser } from "../auth/require-user.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
-import { requireMember } from "../groups/membership.js";
+import { requireMember, requireWritableMember, userExists } from "../groups/membership.js";
 import { groupLedger } from "../ledger-client.js";
 import { fxRates } from "../db/schema.js";
 import { rateLimit } from "../rate-limit.js";
@@ -32,6 +32,7 @@ export function expenseRoutes(deps: AppDeps) {
       )
         throw new ApiError("VALIDATION_FAILED");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
       const spending = personalSpending(db, c.var.userId);
       const month = sql<string>`substr(${spending.date}, 1, 7)`;
       const rows = await db
@@ -63,6 +64,7 @@ export function expenseRoutes(deps: AppDeps) {
       )
         throw new ApiError("VALIDATION_FAILED");
       const db = createDb(c.env.DB);
+      if (!(await userExists(db, c.var.userId))) throw new ApiError("UNAUTHORIZED");
       const spending = personalSpending(db, c.var.userId);
       const rows = await db
         .select({
@@ -108,7 +110,7 @@ export function expenseRoutes(deps: AppDeps) {
     })
     .post("/groups/:id/expenses", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const key = requireIdempotencyKey(c);
       const input = await parseBody(c, expenseInputSchema);
       const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
@@ -144,7 +146,7 @@ export function expenseRoutes(deps: AppDeps) {
     })
     .patch("/groups/:id/expenses/:eid", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const expected = requireIfMatch(c);
       const input = await parseBody(c, expenseInputSchema);
       const rates = await db.select().from(fxRates).where(eq(fxRates.rateDate, input.fxDate));
@@ -167,7 +169,7 @@ export function expenseRoutes(deps: AppDeps) {
     })
     .delete("/groups/:id/expenses/:eid", signedIn, limited, async (c) => {
       const db = createDb(c.env.DB);
-      const me = await requireMember(db, c.req.param("id"), c.var.userId);
+      const me = await requireWritableMember(db, c.req.param("id"), c.var.userId);
       const { rev } = await groupLedger(c.env, me.groupId).expense({
         action: "delete",
         actorMemberId: me.id,

@@ -1,5 +1,6 @@
 import type { GoogleErrand, GoogleSignIn } from "../src/platform/google.js";
 import {
+  type LineLinkResult,
   LineShareUnavailableError,
   type LineMessage,
   type LineSignIn,
@@ -9,7 +10,7 @@ import type { RenderAppOptions } from "./render-app.js";
 /** The same browser ports for page tests and the Google errand seam. */
 export function createFakeSignIn(
   options: RenderAppOptions = {},
-  navigate: (path: string) => unknown = () => undefined,
+  navigate: (path: string, navOptions?: { replace?: boolean }) => unknown = () => undefined,
 ) {
   const lineLogins: string[] = [];
   const lineExternalOpens: string[] = [];
@@ -26,6 +27,11 @@ export function createFakeSignIn(
     return Promise.resolve(options.linePicker !== "cancelled");
   }
 
+  let lineLinkAnswer: { idToken: string | null; userId?: string } | null =
+    options.lineLinkResult ?? null;
+  let lineLinkPending = options.lineLinkResult !== undefined;
+  let lineLinkPromise: Promise<LineLinkResult | null> | null = null;
+
   const line: LineSignIn = {
     isInClient: () => options.insideLine !== undefined,
     prepare: () => {
@@ -36,6 +42,54 @@ export function createFakeSignIn(
     login: () => {
       lineLogins.push(window.location.href);
       return Promise.resolve();
+    },
+    startLink: (userId) => {
+      lineLinkPromise = null;
+      lineLogins.push(window.location.href);
+      if (options.lineLink === "fails") {
+        lineLinkPending = false;
+        return Promise.reject(new Error("LIFF failed"));
+      }
+      lineLinkPending = true;
+      if (options.lineLink === "holds") return Promise.resolve();
+      lineLinkAnswer = {
+        idToken:
+          options.lineLink === "cancelled"
+            ? null
+            : typeof options.lineLink === "object"
+              ? options.lineLink.idToken
+              : "fake|l-1|LINE 小宇",
+        userId,
+      };
+      void navigate("/settings?liffClientId=fake&code=fake", { replace: true });
+      return Promise.resolve();
+    },
+    hasPendingLink: () => lineLinkPending,
+    takeLinkResult: (expectedUserId) => {
+      if (lineLinkPromise !== null) return lineLinkPromise;
+      const answer = lineLinkAnswer;
+      if (answer === null) return Promise.resolve(null);
+      lineLinkAnswer = null;
+      lineLinkPending = false;
+      const result: LineLinkResult =
+        answer.userId !== undefined && answer.userId !== expectedUserId
+          ? { idToken: null, mismatch: true }
+          : answer.idToken === null
+            ? { idToken: null }
+            : { idToken: answer.idToken };
+      lineLinkPromise = Promise.resolve(result).finally(() => {
+        queueMicrotask(() => {
+          lineLinkPromise = null;
+        });
+      });
+      return lineLinkPromise;
+    },
+    cancelLink: () => {
+      const wasPending = lineLinkPending;
+      lineLinkPending = false;
+      lineLinkAnswer = null;
+      lineLinkPromise = null;
+      return wasPending;
     },
     openExternal: (url) => {
       if (options.openExternalFails === true) return Promise.reject(new Error("LIFF failed"));

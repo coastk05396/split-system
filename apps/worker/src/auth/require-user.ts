@@ -7,7 +7,11 @@ import { verifyAccess } from "./tokens.js";
 
 export interface SignedInEnv {
   Bindings: AppEnv["Bindings"];
-  Variables: AppEnv["Variables"] & { userId: string; signedInWith: Provider | null };
+  Variables: AppEnv["Variables"] & {
+    userId: string;
+    signedInWith: Provider | null;
+    sessionId: string | null;
+  };
 }
 
 /**
@@ -22,6 +26,7 @@ export function requireUser(now: () => number) {
     if (access === null) throw new ApiError("UNAUTHORIZED");
     c.set("userId", access.userId);
     c.set("signedInWith", access.provider);
+    c.set("sessionId", access.sessionId);
     await next();
   });
 }

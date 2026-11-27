@@ -124,6 +124,26 @@ describe("session", () => {
     expect(session.getAccessToken()).toBeNull();
     expect((await session.fetch("/api/v1/me")).status).toBe(401);
   });
+
+  it("does not let a Settings confirm arriving after sign-out restore the access token", async () => {
+    const api = createFakeApi();
+    const other = makeUser("LINE小宇", "line");
+    api.lineOwners.set("l-other", other);
+    const session = createSession({ fetch: api.fetch });
+    await session.signIn("google", "fake|g-kept|Google小宇");
+    const linked = await session.link("line", "fake|l-other|LINE小宇");
+    if (linked.merge === null) throw new Error("expected merge preview");
+
+    const release = api.holdResponses("POST /api/v1/auth/merge/confirm");
+    const pending = session.confirmMerge(linked.merge.mergeId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await session.signOut();
+    release();
+    await pending;
+
+    expect(session.getAccessToken()).toBeNull();
+  });
 });
 
 /**

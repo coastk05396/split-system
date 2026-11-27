@@ -69,6 +69,7 @@ export const identities = sqliteTable(
   },
   (t) => [
     uniqueIndex("identities_provider_sub_unique").on(t.provider, t.providerSub),
+    uniqueIndex("identities_user_provider_unique").on(t.userId, t.provider),
     check("identities_provider_check", oneOf(t.provider, PROVIDERS)),
   ],
 );
@@ -95,6 +96,46 @@ export const linkCodes = sqliteTable("link_codes", {
     .references(() => users.id, { onDelete: "cascade" }),
   expiresAt: integer("expires_at").notNull(),
 });
+
+/** Short-lived, single-use pending Merge bound to the confirming Session. */
+export const pendingMerges = sqliteTable(
+  "pending_merges",
+  {
+    id: text("id").primaryKey(),
+    keptUserId: text("kept_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    otherUserId: text("other_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    path: text("path", { enum: ["linkCode", "settings"] }).notNull(),
+    otherProvider: text("other_provider", { enum: PROVIDERS }).notNull(),
+    otherEmail: text("other_email"),
+    expiresAt: integer("expires_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("pending_merges_expires_idx").on(t.expiresAt)],
+);
+
+/** Durable per-Group Merge cleanup tasks pushed to each GroupLedger DO. */
+export const mergeCleanups = sqliteTable(
+  "merge_cleanups",
+  {
+    keptUserId: text("kept_user_id").notNull(),
+    otherUserId: text("other_user_id").notNull(),
+    groupId: text("group_id").notNull(),
+    nextRetryAt: integer("next_retry_at").notNull(),
+    pendingReservationAt: integer("pending_reservation_at"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.otherUserId, t.groupId] }),
+    index("merge_cleanups_group_idx").on(t.groupId),
+    index("merge_cleanups_retry_idx").on(t.nextRetryAt),
+  ],
+);
 
 /** Invite token lookup (retained). */
 export const invites = sqliteTable("invites", {
@@ -164,6 +205,8 @@ export const groupDirectory = sqliteTable("group_directory", {
   updatedAt: integer("updated_at").notNull(),
   rev: integer("rev").notNull().default(0),
   deleted: integer("deleted").notNull().default(0),
+  membershipReprojected: integer("membership_reprojected").notNull().default(0),
+  membershipBackfillRetryAt: integer("membership_backfill_retry_at").notNull().default(0),
 });
 
 /** Group Member Summary read model (decision 16). */
@@ -190,6 +233,16 @@ export const groupReservations = sqliteTable(
       .notNull()
       .default("pending"),
     createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.groupId] })],
+);
+
+/** Ledger-maintained membership index (active and Former Members) for Merge discovery. */
+export const groupMemberships = sqliteTable(
+  "group_memberships",
+  {
+    userId: text("user_id").notNull(),
+    groupId: text("group_id").notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.groupId] })],
 );

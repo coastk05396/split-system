@@ -1,3 +1,4 @@
+import type { MergePreview } from "@split/shared";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { renderApp } from "../../test/render-app.js";
@@ -22,8 +23,10 @@ function setup(options: RenderAppOptions = {}, signedIn = false) {
   const auth = {
     state,
     signIn: vi.fn(() => Promise.resolve(true)),
-    redeemLinkCode: vi.fn(() => Promise.resolve(true)),
-    link: vi.fn(() => Promise.resolve()),
+    redeemLinkCode: vi.fn((): Promise<{ merge: MergePreview | null } | false> =>
+      Promise.resolve({ merge: null }),
+    ),
+    link: vi.fn((): Promise<{ merge: MergePreview | null }> => Promise.resolve({ merge: null })),
     createLinkCode: vi.fn(() => Promise.resolve("code-1")),
     refreshIdentities: vi.fn(() => Promise.resolve()),
   };
@@ -177,6 +180,41 @@ describe("Google errand", () => {
     auth.redeemLinkCode.mockResolvedValue(false);
     await errand.finish();
     expect(navigate).toHaveBeenCalledWith("/link?code=code-1", { replace: true });
+  });
+
+  it("navigates to /merge when link-code redemption needs a Merge", async () => {
+    const { errand, auth, navigate } = setup({
+      googleRedirectResult: {
+        errand: { purpose: "linkCode", code: "code-1" },
+        idToken: "token",
+      },
+    });
+    const merge = {
+      mergeId: "m-1",
+      path: "linkCode" as const,
+      expiresAt: 1_000_000,
+      kept: {
+        id: "u-1",
+        displayName: "LINE",
+        pictureUrl: null,
+        providers: ["line" as const],
+        profileProvider: "line" as const,
+        groupCount: 0,
+        groups: [],
+      },
+      other: {
+        id: "u-2",
+        displayName: "Google",
+        pictureUrl: null,
+        providers: ["google" as const],
+        profileProvider: "google" as const,
+        groupCount: 0,
+        groups: [],
+      },
+    };
+    auth.redeemLinkCode.mockResolvedValue({ merge });
+    await errand.finish();
+    expect(navigate).toHaveBeenCalledWith("/merge", { replace: true });
   });
 
   it.each([new ApiFailure("IDENTITY_LINKED_ELSEWHERE", 409), new Error("offline")])(

@@ -1,4 +1,4 @@
-import type { Me, MePatch, Provider, TestSignInRequest } from "@split/shared";
+import type { Me, MePatch, MergePreview, Provider, TestSignInRequest } from "@split/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
@@ -22,7 +22,7 @@ import { voidMutationsInFlight } from "./void-mutations.js";
 import { clearExpenseWrites } from "../expenses/writes.js";
 import { cancelStatsInvalidation } from "../groups/data.js";
 import type { LineSignIn } from "../platform/line.js";
-import { createSession, type Session } from "./session.js";
+import { type ConfirmMergeResult, createSession, type Session } from "./session.js";
 
 export type AuthState =
   | { status: "loading" }
@@ -34,9 +34,14 @@ export interface Auth {
   state: AuthState;
   session: Session;
   signIn: (provider: Provider, idToken: string) => Promise<boolean>;
-  redeemLinkCode: (code: string, idToken: string) => Promise<boolean>;
-  link: (provider: Provider, idToken: string) => Promise<void>;
-  unlink: (provider: Provider) => Promise<void>;
+  redeemLinkCode: (
+    code: string,
+    idToken: string,
+  ) => Promise<{ merge: MergePreview | null } | false>;
+  getPendingMerge: () => Promise<MergePreview>;
+  confirmMerge: (mergeId: string) => Promise<ConfirmMergeResult | null>;
+  cancelMerge: (mergeId: string) => Promise<void>;
+  link: (provider: Provider, idToken: string) => Promise<{ merge: MergePreview | null }>;
   createLinkCode: () => Promise<string>;
   refreshIdentities: (signal: AbortSignal) => Promise<void>;
   testSignIn: (request: TestSignInRequest) => Promise<void>;
@@ -116,6 +121,11 @@ export function AuthProvider({
           settle({ status: "signedIn", user: restored });
           return;
         }
+        if (line.hasPendingLink()) {
+          line.cancelLink();
+          settle({ status: "signedOut", error: "UNAUTHORIZED" });
+          return;
+        }
         const lineToken = await line.autoSignIn();
         settle(
           lineToken === null
@@ -168,12 +178,29 @@ export function AuthProvider({
       state,
       session,
       signIn: (provider, idToken) => enter(session.signIn(provider, idToken)),
-      redeemLinkCode: (code, idToken) => enter(session.redeemLinkCode(code, idToken)),
-      link: async (provider, idToken) => {
-        syncUser(await session.link(provider, idToken));
+      redeemLinkCode: async (code, idToken) => {
+        try {
+          const result = await session.redeemLinkCode(code, idToken);
+          if (result.merge === null) setState({ status: "signedIn", user: result.user });
+          return { merge: result.merge };
+        } catch (error) {
+          setState({ status: "signedOut", error: failureCode(error) });
+          return false;
+        }
       },
-      unlink: async (provider) => {
-        syncUser(await session.unlink(provider));
+      getPendingMerge: () => session.getPendingMerge(),
+      confirmMerge: async (mergeId) => {
+        const result = await session.confirmMerge(mergeId);
+        if (result === null) return null;
+        setState({ status: "signedIn", user: result.user });
+        void queryClient.invalidateQueries();
+        return result;
+      },
+      cancelMerge: (mergeId) => session.cancelMerge(mergeId),
+      link: async (provider, idToken) => {
+        const result = await session.link(provider, idToken);
+        if (result.merge === null) syncUser(result.user);
+        return { merge: result.merge };
       },
       createLinkCode: () => session.createLinkCode(),
       async refreshIdentities(signal) {

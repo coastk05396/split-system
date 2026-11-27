@@ -1,5 +1,6 @@
 import {
   ACCESS_TOKEN_TTL_SECONDS,
+  confirmMergeRequestSchema,
   idTokenRequestSchema,
   mePatchSchema,
   providerSchema,
@@ -10,27 +11,41 @@ import {
 } from "@split/shared";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../api.js";
 import { createDb } from "../db/client.js";
 import type { AppDeps } from "../deps.js";
 import { ApiError } from "../errors.js";
 import { parseBody, sameOriginWrites } from "../request-guards.js";
 import {
+  cancelMerge,
+  confirmMerge,
+  createConfirmationSession,
   createLinkCode,
+  createPendingMerge,
   createSession,
   deleteAccount,
+  deleteSessionById,
   endSession,
+  getPendingMerge,
+  hasActivePendingMerge,
   linkIdentity,
   loadMe,
   redeemLinkCode,
   rotateSession,
   updateSettings,
   signInIdentity,
-  unlinkIdentity,
 } from "./accounts.js";
+import { bearerToken } from "./bearer-token.js";
 import type { Provider, VerifiedIdentity } from "./identity-verifier.js";
 import { requireUser } from "./require-user.js";
-import { type RefreshToken, signAccessToken } from "./tokens.js";
+import {
+  type RefreshToken,
+  signAccessToken,
+  signMergeConfirmToken,
+  verifyAccess,
+  verifyMergeConfirmToken,
+} from "./tokens.js";
 
 const REFRESH_COOKIE = "refresh";
 const COOKIE_PATH = "/api/v1/auth";
@@ -57,9 +72,46 @@ function clearRefreshCookie(c: Context): void {
 /** Sign-in, sessions, Identity linking and the account itself (SPEC §5.1, decisions 09, 26). */
 export function authRoutes(deps: AppDeps) {
   const signedIn = requireUser(deps.now);
+  const mergeActor = createMiddleware<{
+    Bindings: AppEnv["Bindings"];
+    Variables: AppEnv["Variables"] & {
+      userId: string;
+      signedInWith: Provider | null;
+      sessionId: string | null;
+      confirmMergeId: string | null;
+    };
+  }>(async (c, next) => {
+    const token = bearerToken(c.req.header("Authorization"));
+    if (token === undefined) throw new ApiError("UNAUTHORIZED");
+    const now = deps.now();
+    const access = await verifyAccess(token, c.env.SESSION_SIGNING_KEY, now);
+    if (access !== null) {
+      c.set("userId", access.userId);
+      c.set("signedInWith", access.provider);
+      c.set("sessionId", access.sessionId);
+      c.set("confirmMergeId", null);
+      await next();
+      return;
+    }
+    const confirm = await verifyMergeConfirmToken(token, c.env.SESSION_SIGNING_KEY, now);
+    if (confirm === null) throw new ApiError("UNAUTHORIZED");
+    const active = await hasActivePendingMerge(
+      createDb(c.env.DB),
+      confirm.mergeId,
+      confirm.userId,
+      confirm.sessionId,
+      now,
+    );
+    if (!active) throw new ApiError("UNAUTHORIZED");
+    c.set("userId", confirm.userId);
+    c.set("signedInWith", null);
+    c.set("sessionId", confirm.sessionId);
+    c.set("confirmMergeId", confirm.mergeId);
+    await next();
+  });
 
-  async function issueSession(
-    c: Context<AppEnv>,
+  async function issueSession<E extends AppEnv>(
+    c: Context<E>,
     userId: string,
     provider: Provider | null,
     refresh: RefreshToken,
@@ -72,6 +124,7 @@ export function authRoutes(deps: AppDeps) {
       c.env.SESSION_SIGNING_KEY,
       deps.now(),
       provider,
+      refresh.sessionId,
     );
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, user: me };
   }
@@ -132,8 +185,22 @@ export function authRoutes(deps: AppDeps) {
         const provider = readProvider(c.req.param("provider"));
         const identity = await verify(c, provider);
         const db = createDb(c.env.DB);
-        await linkIdentity(db, c.var.userId, identity, deps.now());
-        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+        const now = deps.now();
+        const outcome = await linkIdentity(db, c.var.userId, identity, now);
+        if (!outcome.mergeNeeded) {
+          return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+        }
+        if (c.var.sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
+        const merge = await createPendingMerge(db, {
+          keptUserId: c.var.userId,
+          otherUserId: outcome.otherUserId,
+          sessionId: c.var.sessionId,
+          path: "settings",
+          otherProvider: outcome.otherProvider,
+          otherEmail: outcome.otherEmail,
+          now,
+        });
+        return c.json({ mergeNeeded: true as const, merge }, 200);
       })
       // From LINE's in-app browser, where Google refuses to sign in: the signed-in User gets a code
       // to open in an outside browser, whose Google sign-in then joins this same User.
@@ -146,15 +213,127 @@ export function authRoutes(deps: AppDeps) {
         const identity = await deps.verifier(c.env).verify("google", idToken);
         const db = createDb(c.env.DB);
         const now = deps.now();
-        const userId = await redeemLinkCode(db, code, identity, now);
-        const refresh = await createSession(db, userId, "google", c.req.header("User-Agent"), now);
-        return c.json(await issueSession(c, userId, "google", refresh), 200);
+        const ua = c.req.header("User-Agent");
+        const outcome = await redeemLinkCode(db, code, identity, now);
+        if (!outcome.mergeNeeded) {
+          const refresh = await createSession(db, outcome.userId, "google", ua, now);
+          return c.json(await issueSession(c, outcome.userId, "google", refresh), 200);
+        }
+        const sessionId = await createConfirmationSession(
+          db,
+          outcome.keptUserId,
+          outcome.keptProvider,
+          ua,
+          now,
+        );
+        const merge = await createPendingMerge(db, {
+          keptUserId: outcome.keptUserId,
+          otherUserId: outcome.otherUserId,
+          sessionId,
+          path: "linkCode",
+          otherProvider: outcome.otherProvider,
+          otherEmail: outcome.otherEmail,
+          now,
+        });
+        const confirmationToken = await signMergeConfirmToken(
+          outcome.keptUserId,
+          c.env.SESSION_SIGNING_KEY,
+          now,
+          sessionId,
+          merge.mergeId,
+        );
+        return c.json({ mergeNeeded: true as const, merge, confirmationToken }, 200);
       })
-      .delete("/auth/identities/:provider", signedIn, async (c) => {
-        const provider = readProvider(c.req.param("provider"));
+      .get("/auth/merge", mergeActor, async (c) => {
+        const preview = await getPendingMerge(
+          createDb(c.env.DB),
+          c.var.userId,
+          c.var.sessionId,
+          deps.now(),
+        );
+        return c.json(preview, 200);
+      })
+      .post("/auth/merge/cancel", mergeActor, async (c) => {
+        const { mergeId } = await parseBody(c, confirmMergeRequestSchema);
+        if (c.var.confirmMergeId !== null && c.var.confirmMergeId !== mergeId) {
+          throw new ApiError("MERGE_PENDING_INVALID");
+        }
         const db = createDb(c.env.DB);
-        await unlinkIdentity(db, c.var.userId, provider);
-        return c.json(await requireMe(db, c.var.userId, c.var.signedInWith), 200);
+        await cancelMerge(db, c.var.userId, c.var.sessionId, mergeId, deps.now());
+        if (c.var.confirmMergeId !== null && c.var.sessionId !== null) {
+          await deleteSessionById(db, c.var.sessionId, c.var.userId);
+        }
+        return c.body(null, 204);
+      })
+      .post("/auth/merge/confirm", mergeActor, async (c) => {
+        const { mergeId } = await parseBody(c, confirmMergeRequestSchema);
+        if (c.var.confirmMergeId !== null && c.var.confirmMergeId !== mergeId) {
+          throw new ApiError("MERGE_PENDING_INVALID");
+        }
+        const db = createDb(c.env.DB);
+        const now = deps.now();
+        let merged: Awaited<ReturnType<typeof confirmMerge>>;
+        try {
+          merged = await confirmMerge(
+            c.env,
+            db,
+            c.var.userId,
+            c.var.sessionId,
+            mergeId,
+            now,
+            c.var.signedInWith,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof ApiError && error.code === "MERGE_BACKFILL_PENDING") &&
+            c.var.confirmMergeId !== null &&
+            c.var.sessionId !== null
+          ) {
+            await deleteSessionById(db, c.var.sessionId, c.var.userId).catch(() => undefined);
+          }
+          throw error;
+        }
+        if (c.var.confirmMergeId !== null) {
+          if (c.var.sessionId !== null) {
+            await deleteSessionById(db, c.var.sessionId, c.var.userId);
+          }
+          const refresh = await createSession(
+            db,
+            merged.userId,
+            merged.provider ?? "google",
+            c.req.header("User-Agent"),
+            now,
+          );
+          const session = await issueSession(c, merged.userId, merged.provider, refresh);
+          return c.json(
+            {
+              ...session,
+              ...(merged.mergingGroupIds.length > 0
+                ? { mergingGroupIds: merged.mergingGroupIds }
+                : {}),
+            },
+            200,
+          );
+        }
+        const me = await requireMe(db, merged.userId, merged.provider);
+        const accessToken = await signAccessToken(
+          merged.userId,
+          c.env.SESSION_SIGNING_KEY,
+          now,
+          merged.provider,
+          c.var.sessionId ?? undefined,
+        );
+        return c.json(
+          {
+            accessToken,
+            expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+            user: me,
+            ...(merged.mergingGroupIds.length > 0
+              ? { mergingGroupIds: merged.mergingGroupIds }
+              : {}),
+          },
+          200,
+        );
       })
       .get("/me", signedIn, async (c) =>
         c.json(await requireMe(createDb(c.env.DB), c.var.userId, c.var.signedInWith), 200),

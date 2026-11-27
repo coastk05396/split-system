@@ -1,3 +1,4 @@
+import type { MergePreview } from "@split/shared";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate, type NavigateFunction } from "react-router";
 import { ApiFailure, type ErrorCode } from "../api/errors.js";
@@ -127,14 +128,20 @@ export function createGoogleErrand(
       }
       const linked = { replace: true, state: { linked: "google" } };
       try {
-        let succeeded = true;
+        let linkOutcome: { merge: MergePreview | null } = { merge: null };
+        let linkCodeOutcome: { merge: MergePreview | null } | false = { merge: null };
         if (errand.purpose === "signIn") await auth().signIn("google", idToken);
         else if (errand.purpose === "linkCode")
-          succeeded = await auth().redeemLinkCode(errand.code, idToken);
-        else await auth().link("google", idToken);
+          linkCodeOutcome = await auth().redeemLinkCode(errand.code, idToken);
+        else linkOutcome = await auth().link("google", idToken);
         if (!isActive()) return;
-        if (errand.purpose === "link" || (errand.purpose === "linkCode" && succeeded)) {
-          void navigate("/settings", linked);
+        if (errand.purpose === "link") {
+          if (linkOutcome.merge !== null) void navigate("/merge", { replace: true });
+          else void navigate("/settings", linked);
+        } else if (errand.purpose === "linkCode") {
+          if (linkCodeOutcome === false) void navigate(origin(errand), { replace: true });
+          else if (linkCodeOutcome.merge !== null) void navigate("/merge", { replace: true });
+          else void navigate("/settings", linked);
         } else void navigate(origin(errand), { replace: true });
       } catch (error) {
         if (isActive()) change("ready", error instanceof ApiFailure ? error.code : "INTERNAL");

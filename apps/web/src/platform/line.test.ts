@@ -304,3 +304,146 @@ describe("openExternal", () => {
     expect(liff.openWindow).not.toHaveBeenCalled();
   });
 });
+
+describe("connecting LINE from Settings (startLink / takeLinkResult)", () => {
+  const chrome = "Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36";
+  beforeEach(() => {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, value: chrome });
+    liff.isInClient.mockReturnValue(false);
+    window.history.replaceState(null, "", "/settings");
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "userAgent");
+    window.history.replaceState(null, "", "/");
+    liff.isInClient.mockReturnValue(true);
+  });
+
+  it("returns null without loading LIFF when no link was started", async () => {
+    await expect(createLineSignIn("liff-id").takeLinkResult("user-1")).resolves.toBeNull();
+    expect(liff.init).not.toHaveBeenCalled();
+  });
+
+  it("starts LINE Login for /settings, returns the ID token on arrival, and clears the marker", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink("user-1");
+    expect(liff.logout).toHaveBeenCalledTimes(1);
+    expect(liff.login).toHaveBeenCalledWith({
+      redirectUri: `${window.location.origin}/settings`,
+    });
+    expect(localStorage.getItem("split.lineLink")).not.toBeNull();
+
+    // Simulate returning on a fresh page load after LINE Login.
+    const returning = createLineSignIn("liff-id");
+    await expect(returning.takeLinkResult("user-1")).resolves.toEqual({ idToken: "line-id-token" });
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+    expect(localStorage.getItem("split.lineLogin")).toBeNull();
+    await expect(createLineSignIn("liff-id").takeLinkResult("user-1")).resolves.toBeNull();
+  });
+
+  it("refuses to link and clears the marker when the signed-in User changed while at LINE Login", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink("user-a");
+    window.history.replaceState(null, "", "/settings?code=abc&state=xyz&liffClientId=123");
+
+    await expect(createLineSignIn("liff-id").takeLinkResult("user-b")).resolves.toEqual({
+      idToken: null,
+      mismatch: true,
+    });
+    expect(liff.getIDToken).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("");
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+    expect(localStorage.getItem("split.lineLogin")).toBeNull();
+  });
+
+  it("does not fall through to ordinary LINE sign-in when a link callback is pending", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink("user-a");
+    window.history.replaceState(null, "", "/settings?code=abc&state=xyz&liffClientId=123");
+
+    await expect(createLineSignIn("liff-id").autoSignIn()).resolves.toBeNull();
+    expect(liff.getIDToken).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("");
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+    expect(localStorage.getItem("split.lineLogin")).toBeNull();
+  });
+
+  it("refuses an expired LINE link callback instead of falling back to ordinary LINE sign-in", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_750_000_000_000);
+      const line = createLineSignIn("liff-id");
+      await line.startLink("user-a");
+
+      // Advance past the 10-minute link TTL, then arrive with LIFF return parameters.
+      vi.setSystemTime(1_750_000_000_000 + 11 * 60 * 1000);
+      window.history.replaceState(null, "", "/settings?code=abc&state=xyz&liffClientId=123");
+
+      const returning = createLineSignIn("liff-id");
+      expect(returning.hasPendingLink()).toBe(true);
+      await expect(returning.autoSignIn()).resolves.toBeNull();
+      expect(liff.getIDToken).not.toHaveBeenCalled();
+      expect(window.location.search).toBe("");
+      expect(localStorage.getItem("split.lineLink")).toBeNull();
+      expect(localStorage.getItem("split.lineLogin")).toBeNull();
+
+      // Same-user expired callback also refuses without linking.
+      await line.startLink("user-a");
+      vi.setSystemTime(1_750_000_000_000 + 25 * 60 * 1000);
+      window.history.replaceState(null, "", "/settings?code=abc&state=xyz&liffClientId=123");
+      await expect(createLineSignIn("liff-id").takeLinkResult("user-a")).resolves.toEqual({
+        idToken: null,
+        mismatch: true,
+      });
+      expect(liff.getIDToken).not.toHaveBeenCalled();
+      expect(localStorage.getItem("split.lineLink")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns null idToken and strips OAuth error params when LINE Login is cancelled", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink("user-1");
+    window.history.replaceState(
+      null,
+      "",
+      "/settings?error=access_denied&error_description=User+cancelled&state=abc&liffClientId=123",
+    );
+
+    await expect(createLineSignIn("liff-id").takeLinkResult("user-1")).resolves.toEqual({
+      idToken: null,
+    });
+    expect(window.location.search).toBe("");
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+    expect(localStorage.getItem("split.lineLogin")).toBeNull();
+  });
+
+  it("returns null idToken when LIFF fails or is not logged in on return", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink("user-1");
+    liff.isLoggedIn.mockReturnValueOnce(false);
+    await expect(createLineSignIn("liff-id").takeLinkResult("user-1")).resolves.toEqual({
+      idToken: null,
+    });
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+
+    await line.startLink("user-1");
+    liff.init.mockRejectedValueOnce(new Error("init failed"));
+    await expect(createLineSignIn("liff-id").takeLinkResult("user-1")).resolves.toEqual({
+      idToken: null,
+    });
+    expect(localStorage.getItem("split.lineLink")).toBeNull();
+  });
+
+  it("shares one pending result across StrictMode double-calls before settling", async () => {
+    const line = createLineSignIn("liff-id");
+    await line.startLink("user-1");
+    const returning = createLineSignIn("liff-id");
+    const [first, second] = await Promise.all([
+      returning.takeLinkResult("user-1"),
+      returning.takeLinkResult("user-1"),
+    ]);
+    expect(first).toEqual({ idToken: "line-id-token" });
+    expect(second).toEqual({ idToken: "line-id-token" });
+  });
+});

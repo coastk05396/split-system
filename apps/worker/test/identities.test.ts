@@ -9,10 +9,6 @@ function meOf(accessToken: string) {
   return call("/me", { headers: bearer(accessToken) }).then((res) => res.json());
 }
 
-function unlink(provider: string, accessToken: string) {
-  return call(`/auth/identities/${provider}`, { method: "DELETE", headers: bearer(accessToken) });
-}
-
 describe("POST /auth/link/:provider", () => {
   it("adds a second Identity, after which either one signs into the same User", async () => {
     const lineSub = uniqueSub("line");
@@ -25,13 +21,23 @@ describe("POST /auth/link/:provider", () => {
     expect((await signIn("line", lineSub)).userId).toBe(session.userId);
   });
 
-  it("refuses an Identity that already belongs to another User", async () => {
+  it("returns a merge-needed preview without linking when an Identity already belongs to another User", async () => {
     const lineSub = uniqueSub("taken");
-    await signIn("line", lineSub);
-    const other = await signIn("google", uniqueSub("other"));
-    const res = await link("line", other.accessToken, lineSub);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: { code: "IDENTITY_LINKED_ELSEWHERE" } });
+    const other = await signIn("line", lineSub, "LINE小宇");
+    const kept = await signIn("google", uniqueSub("other"), "Google小宇");
+    const res = await link("line", kept.accessToken, lineSub);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      mergeNeeded: true,
+      merge: {
+        path: "settings",
+        kept: { id: kept.userId, providers: ["google"] },
+        other: { id: other.userId, providers: ["line"] },
+      },
+    });
+    expect(await meOf(kept.accessToken)).toMatchObject({
+      identities: [{ provider: "google" }],
+    });
   });
 
   it("refuses a second Identity of a provider the User already has", async () => {
@@ -39,6 +45,19 @@ describe("POST /auth/link/:provider", () => {
     const res = await link("google", session.accessToken, uniqueSub("g2"));
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: { code: "PROVIDER_ALREADY_LINKED" } });
+  });
+
+  it("refuses concurrent ordinary linking of two distinct Identities from the same provider", async () => {
+    const session = await signIn("line", uniqueSub("l-race"));
+    const [res1, res2] = await Promise.all([
+      link("google", session.accessToken, uniqueSub("g-race-1")),
+      link("google", session.accessToken, uniqueSub("g-race-2")),
+    ]);
+    expect([res1.status, res2.status].sort((a, b) => a - b)).toEqual([200, 409]);
+    const loser = res1.status === 409 ? res1 : res2;
+    expect(await loser.json()).toEqual({ error: { code: "PROVIDER_ALREADY_LINKED" } });
+    const me = (await meOf(session.accessToken)) as { identities: { provider: string }[] };
+    expect(me.identities.map((i) => i.provider).sort()).toEqual(["google", "line"]);
   });
 
   it("requires a signed-in User", async () => {
@@ -143,21 +162,6 @@ describe("Profile source: the first Identity's name and picture stay", () => {
     expect(await meOf(session.accessToken)).toMatchObject({ displayName: "新名" });
   });
 
-  it("passes to the remaining Identity once the source is unlinked", async () => {
-    const lineSub = uniqueSub("l");
-    const googleSub = uniqueSub("g");
-    const session = await signIn("line", lineSub, "LINE名");
-    await linkLater("google", session.accessToken, googleSub);
-    await unlink("line", session.accessToken);
-    // Nothing is fetched at unlink time: the old name stays until the next sign-in.
-    expect(await meOf(session.accessToken)).toMatchObject({ displayName: "LINE名" });
-    await signIn("google", googleSub, "Google名");
-    expect(await meOf(session.accessToken)).toMatchObject({
-      displayName: "Google名",
-      pictureUrl: `https://pic/${googleSub}`,
-    });
-  });
-
   it("still refreshes a non-source Google email at sign-in", async () => {
     const googleSub = uniqueSub("g");
     const session = await signIn("line", uniqueSub("l"), "LINE名");
@@ -170,26 +174,20 @@ describe("Profile source: the first Identity's name and picture stay", () => {
 });
 
 describe("DELETE /auth/identities/:provider", () => {
-  it("refuses to unlink the last Identity", async () => {
-    const session = await signIn("line", uniqueSub("only"));
-    const res = await unlink("line", session.accessToken);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: { code: "LAST_IDENTITY" } });
-  });
-
-  it("unlinks one of two Identities, which then no longer signs in to this User", async () => {
-    const lineSub = uniqueSub("drop");
-    const session = await signIn("google", uniqueSub("keep"));
+  it("is removed (404) and leaves both Identities linked", async () => {
+    const lineSub = uniqueSub("keep-l");
+    const googleSub = uniqueSub("keep-g");
+    const session = await signIn("google", googleSub);
     await link("line", session.accessToken, lineSub);
 
-    const res = await unlink("line", session.accessToken);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ identities: [{ provider: "google" }] });
-    expect((await signIn("line", lineSub)).userId).not.toBe(session.userId);
-  });
-
-  it("answers 404 for a provider the User has not linked", async () => {
-    const session = await signIn("google", uniqueSub("none"));
-    expect((await unlink("line", session.accessToken)).status).toBe(404);
+    const res = await call("/auth/identities/line", {
+      method: "DELETE",
+      headers: bearer(session.accessToken),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: { code: "NOT_FOUND" } });
+    expect(await meOf(session.accessToken)).toMatchObject({
+      identities: [{ provider: "google" }, { provider: "line" }],
+    });
   });
 });

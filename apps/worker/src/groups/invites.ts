@@ -14,7 +14,13 @@ import { groupDirectory, invites } from "../db/schema.js";
 import { ApiError } from "../errors.js";
 import { assertUnderGroupCap } from "./groups.js";
 import { listMembers } from "./members.js";
-import { findMembership, type MemberRow, requireAdmin } from "./membership.js";
+import {
+  assertGroupNotMerging,
+  findMembership,
+  type MemberRow,
+  requireAdmin,
+  userExists,
+} from "./membership.js";
 
 /** 256 random bits, base64url: unguessable, and the whole secret of the link. */
 function newToken(): string {
@@ -43,7 +49,10 @@ async function ledgerInvite(
     })
     .catch((error: unknown) => {
       if (!(error instanceof ApiError)) throw error;
-      const kept = error.code === "INVITE_EXPIRED" || error.code === "FORBIDDEN";
+      const kept =
+        error.code === "INVITE_EXPIRED" ||
+        error.code === "FORBIDDEN" ||
+        error.code === "GROUP_MERGING";
       throw new ApiError(kept ? error.code : "NOT_FOUND");
     });
   setRev?.(String(rev));
@@ -74,7 +83,8 @@ export async function ensureInvite(
 }
 
 /** A live Invite's Group; a regenerated (deleted) link is 404, a lapsed one INVITE_EXPIRED. */
-async function openInvite(db: Db, token: string, now: number, env: Bindings) {
+async function openInvite(db: Db, token: string, userId: string, now: number, env: Bindings) {
+  if (!(await userExists(db, userId))) throw new ApiError("UNAUTHORIZED");
   const [row] = await db
     .select({ groupId: invites.groupId, expiresAt: invites.expiresAt })
     .from(invites)
@@ -104,7 +114,7 @@ export async function previewInvite(
   now: number,
   env: Bindings,
 ): Promise<InvitePreview> {
-  const { group, expiresAt } = await openInvite(db, token, now, env);
+  const { group, expiresAt } = await openInvite(db, token, userId, now, env);
   const mine = await findMembership(db, group.id, userId);
   const isMember = mine?.status === "active";
   const everyone = await listMembers(db, group.id, mine?.id ?? null, env);
@@ -160,7 +170,8 @@ export async function joinGroup(
   env: Bindings,
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
-  const { group } = await openInvite(db, token, now, env);
+  const { group } = await openInvite(db, token, userId, now, env);
+  await assertGroupNotMerging(db, group.id);
   const result = await withReservation(
     env.DB,
     userId,
@@ -192,7 +203,8 @@ export async function claimPlaceholder(
   env: Bindings,
   setRev?: (rev: string) => void,
 ): Promise<JoinResult> {
-  const { group } = await openInvite(db, token, now, env);
+  const { group } = await openInvite(db, token, userId, now, env);
+  await assertGroupNotMerging(db, group.id);
   if ((await findMembership(db, group.id, userId)) !== undefined)
     throw new ApiError("ALREADY_MEMBER");
   await assertUnderGroupCap(db, userId);

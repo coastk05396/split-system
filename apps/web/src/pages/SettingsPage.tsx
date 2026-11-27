@@ -1,5 +1,5 @@
 import { CURRENCY_CODES, LANGUAGES, type Provider } from "@split/shared";
-import { Check, ChevronRight, LoaderCircle } from "lucide-react";
+import { Check, ChevronRight, LoaderCircle, MessageCircle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ApiFailure, type ErrorCode } from "../api/errors.js";
@@ -80,17 +80,18 @@ const pickerSelect = "absolute inset-0 size-full cursor-pointer opacity-0";
 
 /**
  * Screen 11 (設定與帳號) as changed by docs/design-changes.md: no 通知提醒; the 偏好幣別
- * (Preferred currency) and 語言 sit under the profile, then 登入與安全 (linked Identities with
+ * (Preferred currency) and 語言 sit under the profile, then 登入與安全 (linked Identities, no
  * unlink), the policy links, 登出 and 刪除帳號. No hint text, no 登出所有裝置.
  */
 export function SettingsPage() {
-  const { state, signOut, updateMe, deleteAccount, unlink } = useAuth();
+  const { state, signOut, updateMe, deleteAccount, link } = useAuth();
   const { line, google } = useDeps();
   const [error, setError] = useState<ErrorCode | null>(null);
   const [working, setWorking] = useState(false);
+  const [linkingLine, setLinkingLine] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const googleErrand = useGoogleErrand("settings");
-  const busy = working || googleErrand.phase === "leaving";
+  const busy = working || linkingLine || googleErrand.phase === "leaving";
   // What was already linked when the page opened is shown still; only a new link pops in.
   const location = useLocation();
   const navigate = useNavigate();
@@ -101,6 +102,49 @@ export function SettingsPage() {
       void navigate(location.pathname + location.search, { replace: true, state: null });
     }
   }, []); // once per visit
+  useEffect(() => {
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      const wasPending = line.cancelLink();
+      setLinkingLine(false);
+      if (wasPending) setError("ID_TOKEN_INVALID");
+    };
+    window.addEventListener("pageshow", show);
+    return () => {
+      window.removeEventListener("pageshow", show);
+    };
+  }, [line]);
+  const signedInUserId = state.status === "signedIn" ? state.user.id : null;
+  useEffect(() => {
+    if (signedInUserId === null || line.isInClient()) return;
+    const controller = new AbortController();
+    const isActive = () => !controller.signal.aborted;
+    void (async () => {
+      const result = await line.takeLinkResult(signedInUserId);
+      if (!isActive() || result === null) return;
+      if (result.idToken === null) {
+        setError(result.mismatch === true ? "UNAUTHORIZED" : "ID_TOKEN_INVALID");
+        setLinkingLine(false);
+        return;
+      }
+      setError(null);
+      setLinkingLine(true);
+      try {
+        const outcome = await link("line", result.idToken);
+        if (!isActive()) return;
+        if (outcome.merge !== null) {
+          void navigate("/merge", { replace: true });
+        }
+      } catch (err) {
+        if (isActive()) setError(err instanceof ApiFailure ? err.code : "INTERNAL");
+      } finally {
+        if (isActive()) setLinkingLine(false);
+      }
+    })();
+    return () => {
+      controller.abort();
+    };
+  }, [location.key, signedInUserId, line, link, navigate]);
   const [startedLinked] = useState(
     () => new Set(state.status === "signedIn" ? state.user.identities.map((i) => i.provider) : []),
   );
@@ -259,21 +303,38 @@ export function SettingsPage() {
                     {t("settings.linked")}
                   </span>
                 )}
-                {isLinked && linked.size > 1 && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    aria-label={t("settings.unlink", { provider: name })}
-                    onClick={() => {
-                      void runAuth(() => unlink(provider));
-                    }}
-                    className="press-pill rounded-full border border-sprout-200 px-2 py-0.5 text-xs text-ink-muted hover:border-sprout-500"
-                  >
-                    {t("settings.unlinkShort")}
-                  </button>
-                )}
                 {!isLinked && provider === "line" && (
-                  <span className="ml-auto text-xs text-ink-muted">{t("settings.comingSoon")}</span>
+                  <span className="ml-auto">
+                    {line.isInClient() ? (
+                      <span className="text-xs text-ink-muted">{t("settings.comingSoon")}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-busy={linkingLine}
+                        onClick={() => {
+                          setError(null);
+                          googleErrand.clearError();
+                          setLinkingLine(true);
+                          void line.startLink(user.id).catch((err: unknown) => {
+                            setError(err instanceof ApiFailure ? err.code : "INTERNAL");
+                            setLinkingLine(false);
+                          });
+                        }}
+                        className="press-pill press-deep flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-line px-5 text-sm font-bold text-white shadow-[inset_0_1px_0_0_rgb(255_255_255/0.25),0_6px_14px_-8px_#06c755] hover:brightness-95"
+                      >
+                        {linkingLine ? (
+                          <LoaderCircle
+                            aria-hidden="true"
+                            className="size-4 animate-spin motion-reduce:animate-none"
+                          />
+                        ) : (
+                          <MessageCircle aria-hidden="true" className="size-4" />
+                        )}
+                        {linkingLine ? t("settings.linkingLine") : t("settings.linkGoogle")}
+                      </button>
+                    )}
+                  </span>
                 )}
                 {!isLinked && provider === "google" && google.available && (
                   <span className="ml-auto">

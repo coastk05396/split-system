@@ -133,6 +133,8 @@ export const groupSchema = z.object({
   memberPreview: z.array(z.object({ name: z.string(), pictureUrl: z.string().nullable() })),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
+  /** True while a User Merge is still pending on this Group's ledger. */
+  merging: z.boolean().optional(),
   me: z.object({
     memberId: z.string(),
     role: z.enum(MEMBER_ROLES),

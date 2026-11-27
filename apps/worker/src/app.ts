@@ -31,9 +31,13 @@ export function createApp(deps: AppDeps) {
           userId === null
             ? null
             : await c.env.DB.prepare(
-                "SELECT 1 FROM group_member_summary WHERE group_id=? AND user_id=?",
+                `SELECT 1 FROM group_member_summary WHERE group_id=? AND (
+                  user_id=? OR user_id IN (
+                    SELECT other_user_id FROM merge_cleanups WHERE group_id=? AND kept_user_id=?
+                  )
+                ) LIMIT 1`,
               )
-                .bind(id, userId)
+                .bind(id, userId, id, userId)
                 .first();
         if (member !== null) {
           try {

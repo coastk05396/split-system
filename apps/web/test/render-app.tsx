@@ -17,10 +17,16 @@ export interface RenderAppOptions {
   strictMode?: boolean;
   webSocket?: typeof WebSocket;
   path?: string;
+  /** Optional React Router history state for the initial entry. */
+  initialState?: unknown;
   /** A User whose refresh cookie the browser already holds. */
   cookieUser?: Me;
   /** Opened inside the LINE app, where LIFF hands over this ID token. */
   insideLine?: { idToken: string | null };
+  /** How the fake LINE link trip answers from Settings: by default with a token at once. */
+  lineLink?: "holds" | "fails" | "cancelled" | { idToken: string };
+  /** What a LINE link trip brought back to Settings, if starting directly on return. */
+  lineLinkResult?: { idToken: string | null; userId?: string };
   /** LINE's outside-browser call fails (LIFF cannot start or the native call throws). */
   openExternalFails?: boolean;
   /** The app was opened from a LINE chat that the LIFF app may post into. */
@@ -72,8 +78,8 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
   // Pending writes live in module state; each test starts without the last one's.
   clearExpenseWrites();
   options.seed?.(api.groups);
-  const { line, google, ...signInLogs } = createFakeSignIn(options, (path) =>
-    router.navigate(path),
+  const { line, google, ...signInLogs } = createFakeSignIn(options, (path, navOptions) =>
+    router.navigate(path, navOptions),
   );
 
   const deps: AppDeps = {
@@ -84,8 +90,13 @@ export function renderApp(options: RenderAppOptions = {}): RenderedApp {
     cacheStorage: options.cacheStorage,
   };
   if (options.webSocket !== undefined) deps.webSocket = options.webSocket;
+  const initialPath = options.pathFor?.() ?? options.path ?? "/";
   const router = createMemoryRouter(routes, {
-    initialEntries: [options.pathFor?.() ?? options.path ?? "/"],
+    initialEntries: [
+      options.initialState === undefined
+        ? initialPath
+        : { pathname: initialPath, state: options.initialState },
+    ],
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const app = (

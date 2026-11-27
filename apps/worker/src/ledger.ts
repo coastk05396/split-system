@@ -29,6 +29,7 @@ import {
 import type { Bindings } from "./env.js";
 import { ApiError, invalid, type ErrorCode } from "./errors.js";
 import { expenseOperation } from "./ledger-expenses.js";
+import { mergeLedgerUser } from "./ledger-merge.js";
 import { settlementOperation } from "./ledger-settlements.js";
 import type {
   AccountDeletionOperation,
@@ -44,6 +45,7 @@ import type {
   LedgerState,
   MemberOperation,
   MemberOutcome,
+  MergeUserOperation,
   PatchGroup,
   SeatedMember,
   SettlementOperation,
@@ -126,6 +128,7 @@ function ledgerMember(row: MemberRow): LedgerMember {
 
 export class GroupLedger extends DurableObject<Bindings> {
   private drainInFlight: Promise<void> | undefined;
+  private writeQueue: Promise<void> = Promise.resolve();
   constructor(ctx: DurableObjectState, env: Bindings) {
     super(ctx, env);
     this.upgrade();
@@ -219,6 +222,37 @@ export class GroupLedger extends DurableObject<Bindings> {
     return this.drainInFlight;
   }
 
+  private membershipStatements(
+    groupId: string,
+    deleted: number,
+    members: readonly MemberRow[],
+    rev: number,
+    fence: string,
+  ): D1PreparedStatement[] {
+    const db = this.env.DB;
+    const statements: D1PreparedStatement[] = [
+      db
+        .prepare(`DELETE FROM group_memberships WHERE group_id = ? AND ${fence}`)
+        .bind(groupId, groupId, rev),
+    ];
+    if (!deleted) {
+      const memberUserIds = [
+        ...new Set(members.map((m) => m.user_id).filter((id): id is string => id !== null)),
+      ];
+      if (memberUserIds.length > 0) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT OR IGNORE INTO group_memberships (user_id, group_id)
+               SELECT j.value, ? FROM json_each(?) j WHERE ${fence}`,
+            )
+            .bind(groupId, JSON.stringify(memberUserIds), groupId, rev),
+        );
+      }
+    }
+    return statements;
+  }
+
   private async push(): Promise<void> {
     const snapshot = this.ctx.storage.transactionSync(() => {
       const sql = this.ctx.storage.sql;
@@ -284,6 +318,7 @@ export class GroupLedger extends DurableObject<Bindings> {
         db
           .prepare(`DELETE FROM group_member_summary WHERE group_id = ? AND ${fence}`)
           .bind(g.id, g.id, rev),
+        ...this.membershipStatements(g.id, g.deleted, members, rev, fence),
       ];
       if (!g.deleted) {
         statements.push(
@@ -411,8 +446,8 @@ export class GroupLedger extends DurableObject<Bindings> {
       statements.push(
         db
           .prepare(
-            `INSERT INTO group_directory (group_id,name,settlement_currency,is_trip,trip_destination,trip_start_date,trip_end_date,trip_notes,settlement_currency_locked,member_count,member_preview,created_at,updated_at,rev,deleted)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(group_id) DO UPDATE SET name=excluded.name,settlement_currency=excluded.settlement_currency,is_trip=excluded.is_trip,trip_destination=excluded.trip_destination,trip_start_date=excluded.trip_start_date,trip_end_date=excluded.trip_end_date,trip_notes=excluded.trip_notes,settlement_currency_locked=excluded.settlement_currency_locked,member_count=excluded.member_count,member_preview=excluded.member_preview,created_at=excluded.created_at,updated_at=excluded.updated_at,rev=excluded.rev,deleted=excluded.deleted WHERE group_directory.rev <= excluded.rev`,
+            `INSERT INTO group_directory (group_id,name,settlement_currency,is_trip,trip_destination,trip_start_date,trip_end_date,trip_notes,settlement_currency_locked,member_count,member_preview,created_at,updated_at,rev,deleted,membership_reprojected)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1) ON CONFLICT(group_id) DO UPDATE SET name=excluded.name,settlement_currency=excluded.settlement_currency,is_trip=excluded.is_trip,trip_destination=excluded.trip_destination,trip_start_date=excluded.trip_start_date,trip_end_date=excluded.trip_end_date,trip_notes=excluded.trip_notes,settlement_currency_locked=excluded.settlement_currency_locked,member_count=excluded.member_count,member_preview=excluded.member_preview,created_at=excluded.created_at,updated_at=excluded.updated_at,rev=excluded.rev,deleted=excluded.deleted,membership_reprojected=1 WHERE group_directory.rev <= excluded.rev`,
           )
           .bind(
             g.id,
@@ -479,15 +514,66 @@ export class GroupLedger extends DurableObject<Bindings> {
    * One drain projects a bounded batch, so a write that dirties many records needs several. Gives
    * up, leaving the retry to the alarm, when a pass makes no progress.
    */
+  private dirtyCount(): number {
+    if (!this.hasTable("ledger_dirty")) return 0;
+    return this.ctx.storage.sql.exec<{ n: number }>("SELECT count(*) AS n FROM ledger_dirty").one()
+      .n;
+  }
+
   private async drainAll(): Promise<void> {
-    const dirtyCount = (): number =>
-      this.ctx.storage.sql.exec<{ n: number }>("SELECT count(*) AS n FROM ledger_dirty").one().n;
-    let remaining = dirtyCount();
+    let remaining = this.dirtyCount();
     while (remaining > 0) {
       await this.drain();
-      const next = dirtyCount();
+      const next = this.dirtyCount();
       if (next >= remaining) return;
       remaining = next;
+    }
+  }
+
+  private closeSocketsFor(userId: string): void {
+    for (const socket of this.ctx.getWebSockets(userId)) {
+      try {
+        socket.close(4003, "Membership ended");
+      } catch {
+        /* socket closed */
+      }
+    }
+  }
+
+  private async broadcastSyncNeeded(rev: number, closeAll?: true): Promise<void> {
+    const sockets = this.ctx.getWebSockets();
+    if (sockets.length === 0) return;
+    let deadUserIds: Set<string>;
+    try {
+      deadUserIds = await this.missingOrMergingUsers(sockets);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "live_broadcast_skipped",
+          operation: "broadcast_sync_needed",
+          role: "ledger",
+          errorClass: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return;
+    }
+    const message: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
+    for (const socket of sockets) {
+      const userId = this.ctx.getTags(socket)[0];
+      if (userId !== undefined && deadUserIds.has(userId)) {
+        try {
+          socket.close(4003, "Membership ended");
+        } catch {
+          /* socket closed */
+        }
+        continue;
+      }
+      try {
+        socket.send(JSON.stringify(message));
+        if (closeAll) socket.close(4003, "Group deleted");
+      } catch {
+        /* socket closed */
+      }
     }
   }
 
@@ -495,13 +581,35 @@ export class GroupLedger extends DurableObject<Bindings> {
     await this.drain();
   }
 
-  /**
-   * Runs one write and owns every step after it, in one order: arm the alarm (so the summary
-   * push survives the isolate dying), then in one transaction the edit, the rev bump and the
-   * summary marks, then close and signal the Group's screens, then push. An edit that marks
-   * nothing changed nothing, so nothing follows it.
-   */
-  private async commit<T>(
+  private async serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this.writeQueue;
+    let release!: () => void;
+    this.writeQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  private async assertNotMerging(): Promise<void> {
+    if (!this.hasTable("ledger_group") || this.isDeleted()) return;
+    const row = this.ctx.storage.sql
+      .exec<{ id: string }>("SELECT id FROM ledger_group LIMIT 1")
+      .toArray()[0];
+    if (row === undefined) return;
+    const merging = await this.env.DB.prepare(
+      "SELECT 1 AS found FROM merge_cleanups WHERE group_id=? LIMIT 1",
+    )
+      .bind(row.id)
+      .first();
+    if (merging !== null) throw new ApiError("GROUP_MERGING");
+  }
+
+  private commit<T>(
     edit: (sql: SqlStorage) => Edit<T>,
     options: {
       /** A new Group starts at rev 0. */
@@ -510,8 +618,29 @@ export class GroupLedger extends DurableObject<Bindings> {
       signal?: "after push" | "none";
       /** The Group is gone: every screen gets the signal, then closes. */
       closeAll?: true;
+      /** Only internal lifecycle transitions (Group create, Merge, deletion restore) bypass the merge gate. */
+      gateMerge?: false;
     } = {},
   ): Promise<{ value: T; rev: number }> {
+    return this.serializeWrite(() => this.commitLocked(edit, options));
+  }
+
+  /**
+   * Runs one write and owns every step after it, in one order: check the merge gate, arm the
+   * alarm (so the summary push survives the isolate dying), then in one transaction the edit, the
+   * rev bump and the summary marks, then close and signal the Group's screens, then push. An edit
+   * that marks nothing changed nothing, so nothing follows it.
+   */
+  private async commitLocked<T>(
+    edit: (sql: SqlStorage) => Edit<T>,
+    options: {
+      bumpRev?: false;
+      signal?: "after push" | "none";
+      closeAll?: true;
+      gateMerge?: false;
+    } = {},
+  ): Promise<{ value: T; rev: number }> {
+    if (options.gateMerge !== false) await this.assertNotMerging();
     if ((await this.ctx.storage.getAlarm()) === null)
       await this.ctx.storage.setAlarm(Date.now() + 2000);
     const sql = this.ctx.storage.sql;
@@ -528,26 +657,9 @@ export class GroupLedger extends DurableObject<Bindings> {
       return { ...edited, rev: sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev };
     });
     if (dirty === undefined) return { value, rev };
-    if (leaving)
-      for (const socket of this.ctx.getWebSockets(leaving)) {
-        try {
-          socket.close(4003, "Membership ended");
-        } catch {
-          /* socket closed */
-        }
-      }
-    const signal = (): void => {
-      const message: SyncNeeded = { version: 1, type: "sync needed", rev, timestamp: Date.now() };
-      for (const socket of this.ctx.getWebSockets()) {
-        try {
-          socket.send(JSON.stringify(message));
-          if (options.closeAll) socket.close(4003, "Group deleted");
-        } catch {
-          /* socket closed */
-        }
-      }
-    };
-    if (options.signal === undefined) signal();
+    if (leaving) this.closeSocketsFor(leaving);
+    const signal = (): Promise<void> => this.broadcastSyncNeeded(rev, options.closeAll);
+    if (options.signal === undefined) await signal();
     await this.drain();
     if (options.signal === "after push")
       // Finish projection before signaling, without holding the request for every batch.
@@ -557,10 +669,34 @@ export class GroupLedger extends DurableObject<Bindings> {
             .exec<{ retry_count: number }>("SELECT retry_count FROM ledger_meta")
             .one().retry_count;
           if (retries === 0) await this.drainAll();
-          signal();
+          await signal();
         })(),
       );
     return { value, rev };
+  }
+
+  /** Connected socket User IDs that are already deleted or awaiting Merge cleanup in D1. */
+  private async missingOrMergingUsers(sockets: readonly WebSocket[]): Promise<Set<string>> {
+    const userIds = [
+      ...new Set(
+        sockets.flatMap((socket) => this.ctx.getTags(socket)).filter((id) => id.length > 0),
+      ),
+    ];
+    if (userIds.length === 0) return new Set();
+    const placeholders = userIds.map(() => "?").join(",");
+    const [existingRows, mergingRows] = await Promise.all([
+      this.env.DB.prepare(`SELECT id FROM users WHERE id IN (${placeholders})`)
+        .bind(...userIds)
+        .all<{ id: string }>(),
+      this.env.DB.prepare(
+        `SELECT other_user_id FROM merge_cleanups WHERE other_user_id IN (${placeholders})`,
+      )
+        .bind(...userIds)
+        .all<{ other_user_id: string }>(),
+    ]);
+    const existing = new Set(existingRows.results.map((row) => row.id));
+    const merging = new Set(mergingRows.results.map((row) => row.other_user_id));
+    return new Set(userIds.filter((id) => !existing.has(id) || merging.has(id)));
   }
 
   /** Whether the Group has been deleted (its tombstone is kept, with its rows). */
@@ -576,6 +712,14 @@ export class GroupLedger extends DurableObject<Bindings> {
       this.ctx.storage.sql
         .exec("SELECT name FROM sqlite_master WHERE type='table' AND name=?", name)
         .toArray().length > 0
+    );
+  }
+
+  private isMergedUser(sql: SqlStorage, userId: string): boolean {
+    if (!this.hasTable("ledger_merged_users")) return false;
+    return (
+      sql.exec("SELECT 1 FROM ledger_merged_users WHERE other_user_id=?", userId).toArray().length >
+      0
     );
   }
 
@@ -671,257 +815,373 @@ export class GroupLedger extends DurableObject<Bindings> {
     }
   }
 
-  async accountDeletion(
+  accountDeletion(
     op: AccountDeletionOperation,
   ): Promise<LedgerResult<AccountDeletionValues[keyof AccountDeletionValues]>> {
-    const sql = this.ctx.storage.sql;
-    const done = (
-      value: AccountDeletionValues[keyof AccountDeletionValues],
-    ): LedgerResult<AccountDeletionValues[keyof AccountDeletionValues]> => ({
-      ok: true,
-      value,
-      rev: this.hasTable("ledger_meta") ? this.rev() : 0,
+    return this.serializeWrite(async () => {
+      const sql = this.ctx.storage.sql;
+      const done = (
+        value: AccountDeletionValues[keyof AccountDeletionValues],
+      ): LedgerResult<AccountDeletionValues[keyof AccountDeletionValues]> => ({
+        ok: true,
+        value,
+        rev: this.hasTable("ledger_meta") ? this.rev() : 0,
+      });
+      if (op.action === "freeze") {
+        try {
+          await this.assertNotMerging();
+        } catch (error) {
+          return failure(error);
+        }
+        return done(
+          this.ctx.storage.transactionSync(() => freezeAccount(sql, op.userId, op.expires)),
+        );
+      }
+      if (op.action === "commit") {
+        this.ctx.storage.transactionSync(() => {
+          commitAccountDeletion(sql, op.userId, op.expires);
+        });
+        return done(null);
+      }
+      if (op.action === "unfreeze") {
+        this.ctx.storage.transactionSync(() => {
+          if (this.hasTable("account_freezes"))
+            sql.exec(
+              "DELETE FROM account_freezes WHERE user_id=? AND expires_at=?",
+              op.userId,
+              op.expires,
+            );
+        });
+        return done(null);
+      }
+      const initialized = this.hasTable("ledger_members");
+      if (op.action === "restore") {
+        if (!initialized) return done(false);
+        const { value: restored } = await this.commitLocked(
+          (edited) =>
+            restoreAccount(edited, op.userId, op.expires)
+              ? { value: true, dirty: ["group"] }
+              : { value: false },
+          { signal: "after push", gateMerge: false },
+        );
+        return done(restored);
+      }
+      if (!initialized) return done(null);
+      try {
+        await this.assertNotMerging();
+        await this.commitLocked(
+          (edited) =>
+            finalizeAccount(edited, op.userId, op.now, op.expires)
+              ? { value: undefined, dirty: ["group"], leaving: op.userId }
+              : { value: undefined },
+          { gateMerge: false },
+        );
+      } catch (error) {
+        return failure(error);
+      }
+      return done(null);
     });
-    if (op.action === "freeze")
-      return done(
-        this.ctx.storage.transactionSync(() => freezeAccount(sql, op.userId, op.expires)),
-      );
-    if (op.action === "commit") {
-      this.ctx.storage.transactionSync(() => {
-        commitAccountDeletion(sql, op.userId, op.expires);
-      });
-      return done(null);
-    }
-    if (op.action === "unfreeze") {
-      this.ctx.storage.transactionSync(() => {
-        if (this.hasTable("account_freezes"))
+  }
+
+  mergeUser(op: MergeUserOperation): Promise<LedgerResult<null>> {
+    return this.serializeWrite(async () => {
+      if (!this.hasTable("ledger_members")) {
+        return { ok: true, value: null, rev: 0 };
+      }
+      if (this.isDeleted()) {
+        if (this.dirtyCount() > 0) {
+          await this.drainAll();
+          if (this.dirtyCount() > 0) return { ok: false, code: "SERVICE_UNAVAILABLE" };
+        }
+        return { ok: true, value: null, rev: this.rev() };
+      }
+      try {
+        if ((await this.ctx.storage.getAlarm()) === null)
+          await this.ctx.storage.setAlarm(Date.now() + 2000);
+        const sql = this.ctx.storage.sql;
+        const { dirty, leaving, rev } = this.ctx.storage.transactionSync(() => {
           sql.exec(
-            "DELETE FROM account_freezes WHERE user_id=? AND expires_at=?",
-            op.userId,
-            op.expires,
+            "CREATE TABLE IF NOT EXISTS ledger_merged_users (other_user_id TEXT PRIMARY KEY, kept_user_id TEXT NOT NULL)",
           );
-      });
-      return done(null);
-    }
-    const initialized = this.hasTable("ledger_members");
-    if (op.action === "restore") {
-      if (!initialized) return done(false);
-      const { value: restored } = await this.commit(
-        (edited) =>
-          restoreAccount(edited, op.userId, op.expires)
-            ? { value: true, dirty: ["group"] }
-            : { value: false },
-        { signal: "after push" },
-      );
-      return done(restored);
-    }
-    if (!initialized) return done(null);
-    try {
-      await this.commit((edited) =>
-        finalizeAccount(edited, op.userId, op.now, op.expires)
-          ? { value: undefined, dirty: ["group"], leaving: op.userId }
-          : { value: undefined },
-      );
-    } catch (error) {
-      return failure(error);
-    }
-    return done(null);
+          sql.exec(
+            "INSERT OR IGNORE INTO ledger_merged_users (other_user_id, kept_user_id) VALUES (?, ?)",
+            op.otherUserId,
+            op.keptUserId,
+          );
+          const outcome = mergeLedgerUser(sql, op.keptUserId, op.otherUserId);
+          if (outcome.dirty !== undefined) {
+            sql.exec("UPDATE ledger_meta SET rev=rev+1");
+            for (const kind of outcome.dirty)
+              sql.exec(
+                "INSERT INTO ledger_dirty(kind,rev) SELECT ?,rev FROM ledger_meta WHERE true ON CONFLICT(kind) DO UPDATE SET rev=excluded.rev",
+                kind,
+              );
+          }
+          return {
+            dirty: outcome.dirty,
+            leaving: outcome.leaving,
+            rev: sql.exec<{ rev: number }>("SELECT rev FROM ledger_meta").one().rev,
+          };
+        });
+        if (leaving) this.closeSocketsFor(leaving);
+        const hadDirty = this.dirtyCount() > 0;
+        if (hadDirty) {
+          await this.drainAll();
+          if (this.dirtyCount() > 0) return { ok: false, code: "SERVICE_UNAVAILABLE" };
+        }
+        if (dirty !== undefined || hadDirty) await this.broadcastSyncNeeded(rev);
+        return { ok: true, value: null, rev };
+      } catch (error) {
+        return failure(error);
+      }
+    });
+  }
+
+  /** Projects all Member seats (Former Members included) into D1 once for pre-0021 Groups. */
+  projectMemberships(groupId?: string): Promise<LedgerResult<null>> {
+    return this.serializeWrite(async () => {
+      try {
+        const snapshot = !this.hasTable("ledger_members")
+          ? null
+          : this.ctx.storage.transactionSync(() => {
+              const group = this.ctx.storage.sql
+                .exec<GroupRow>("SELECT * FROM ledger_group")
+                .toArray()[0];
+              const members = this.ctx.storage.sql
+                .exec<MemberRow>("SELECT * FROM ledger_members")
+                .toArray();
+              return group ? { group, members, rev: this.rev() } : null;
+            });
+        if (snapshot === null) {
+          if (groupId !== undefined) {
+            await this.env.DB.prepare(
+              "UPDATE group_directory SET membership_reprojected = 1 WHERE group_id = ?",
+            )
+              .bind(groupId)
+              .run();
+          }
+          return { ok: true, value: null, rev: 0 };
+        }
+        const { group: g, members, rev } = snapshot;
+        const db = this.env.DB;
+        const fence = "COALESCE((SELECT rev FROM group_directory WHERE group_id = ?), -1) <= ?";
+        await db.batch([
+          ...this.membershipStatements(g.id, g.deleted, members, rev, fence),
+          db
+            .prepare(
+              `UPDATE group_directory SET membership_reprojected = 1 WHERE group_id = ? AND ${fence}`,
+            )
+            .bind(g.id, g.id, rev),
+        ]);
+        return { ok: true, value: null, rev };
+      } catch (error) {
+        return failure(error);
+      }
+    });
   }
 
   async member(op: MemberOperation): Promise<LedgerResult<MemberOutcome>> {
     if (this.isDeleted()) return notFound;
-    const { value: result, rev } = await this.commit(
-      (sql): Edit<MemberOutcome | { error: ErrorCode; details?: unknown }> => {
-        if (op.action === "join" || op.action === "claim") {
-          const invite = sql
-            .exec<{ token: string; expires_at: number }>(
-              "SELECT token,expires_at FROM ledger_invite LIMIT 1",
-            )
-            .toArray()[0];
-          if (!invite || invite.token !== op.inviteToken) return { value: { error: "NOT_FOUND" } };
-          if (invite.expires_at <= op.now) return { value: { error: "INVITE_EXPIRED" } };
-        }
-        if ((op.action === "join" || op.action === "claim") && isFrozen(sql, op.userId, op.now))
-          return { value: { error: "FORBIDDEN" } };
-        const all = sql
-          .exec<MemberRow>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
-          .toArray();
-        const actorMemberId =
-          op.action === "join" || op.action === "claim" ? undefined : op.actorMemberId;
-        const names = op.action === "add" || op.action === "patch" ? op.names : undefined;
-        const actor = all.find((m) => m.id === actorMemberId && m.status === "active");
-        const target = all.find((m) => m.id === op.targetMemberId);
-        const seated = all.filter((m) => m.status === "active" || m.status === "placeholder");
-        const conflict = (name: string, except?: string) =>
-          seated.some(
-            (m) =>
-              m.id !== except &&
-              (m.placeholder_name ?? (m.user_id === null ? undefined : names?.[m.user_id])) ===
-                name,
-          );
-        let memberId = op.targetMemberId;
-        let closeUserId: string | null = null;
-        if (op.action !== "join" && op.action !== "claim" && actor === undefined)
-          return { value: { error: "NOT_FOUND" } };
-        if (op.action === "add") {
-          const input = placeholderInputSchema.safeParse(op.input);
-          if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
-          if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
-          if (conflict(input.data.name)) return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
-          sql.exec(
-            "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at,placeholder_name,created_by_member_id) VALUES (?,NULL,'member','placeholder',0,?,?,?)",
-            memberId,
-            op.now,
-            input.data.name,
-            actor?.id ?? null,
-          );
-        } else if (op.action === "join") {
-          const existing = all.find((m) => m.user_id === op.userId);
-          if (existing?.status === "active")
-            return { value: { memberId: existing.id, changed: false } };
-          if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
-          if (existing !== undefined) {
-            memberId = existing.id;
-            sql.exec(
-              "UPDATE ledger_members SET status='active',role='member' WHERE id=?",
-              memberId,
+    try {
+      const { value: result, rev } = await this.commit(
+        (sql): Edit<MemberOutcome | { error: ErrorCode; details?: unknown }> => {
+          if (op.action === "join" || op.action === "claim") {
+            const invite = sql
+              .exec<{ token: string; expires_at: number }>(
+                "SELECT token,expires_at FROM ledger_invite LIMIT 1",
+              )
+              .toArray()[0];
+            if (!invite || invite.token !== op.inviteToken)
+              return { value: { error: "NOT_FOUND" } };
+            if (invite.expires_at <= op.now) return { value: { error: "INVITE_EXPIRED" } };
+          }
+          if (
+            (op.action === "join" || op.action === "claim") &&
+            (isFrozen(sql, op.userId, op.now) || this.isMergedUser(sql, op.userId))
+          )
+            return { value: { error: "FORBIDDEN" } };
+          const all = sql
+            .exec<MemberRow>("SELECT * FROM ledger_members ORDER BY created_at,rowid")
+            .toArray();
+          const actorMemberId =
+            op.action === "join" || op.action === "claim" ? undefined : op.actorMemberId;
+          const names = op.action === "add" || op.action === "patch" ? op.names : undefined;
+          const actor = all.find((m) => m.id === actorMemberId && m.status === "active");
+          const target = all.find((m) => m.id === op.targetMemberId);
+          const seated = all.filter((m) => m.status === "active" || m.status === "placeholder");
+          const conflict = (name: string, except?: string) =>
+            seated.some(
+              (m) =>
+                m.id !== except &&
+                (m.placeholder_name ?? (m.user_id === null ? undefined : names?.[m.user_id])) ===
+                  name,
             );
-          } else
+          let memberId = op.targetMemberId;
+          let closeUserId: string | null = null;
+          if (op.action !== "join" && op.action !== "claim" && actor === undefined)
+            return { value: { error: "NOT_FOUND" } };
+          if (op.action === "add") {
+            const input = placeholderInputSchema.safeParse(op.input);
+            if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
+            if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
+            if (conflict(input.data.name)) return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
             sql.exec(
-              "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at) VALUES (?,?,'member','active',0,?)",
+              "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at,placeholder_name,created_by_member_id) VALUES (?,NULL,'member','placeholder',0,?,?,?)",
               memberId,
-              op.userId,
               op.now,
+              input.data.name,
+              actor?.id ?? null,
             );
-        } else if (op.action === "claim") {
-          if (target === undefined) return { value: { error: "NOT_FOUND" } };
-          if (all.some((m) => m.user_id === op.userId))
-            return { value: { error: "ALREADY_MEMBER" } };
-          if (target.status !== "placeholder") return { value: { error: "PLACEHOLDER_CLAIMED" } };
-          sql.exec(
-            "UPDATE ledger_members SET user_id=?,status='active',placeholder_name=NULL WHERE id=?",
-            op.userId,
-            target.id,
-          );
-          memberId = target.id;
-        } else if (op.action === "patch") {
-          if (target === undefined) return { value: { error: "NOT_FOUND" } };
-          const input = memberPatchSchema.safeParse(op.input);
-          if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
-          if (input.data.placeholderName !== undefined) {
-            if (!canEditPlaceholderName(target)) return { value: { error: "MEMBER_NOT_ACTIVE" } };
-            if (conflict(input.data.placeholderName, target.id))
-              return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
+          } else if (op.action === "join") {
+            const existing = all.find((m) => m.user_id === op.userId);
+            if (existing?.status === "active")
+              return { value: { memberId: existing.id, changed: false } };
+            if (seated.length >= 30) return { value: { error: "GROUP_FULL" } };
+            if (existing !== undefined) {
+              memberId = existing.id;
+              sql.exec(
+                "UPDATE ledger_members SET status='active',role='member' WHERE id=?",
+                memberId,
+              );
+            } else
+              sql.exec(
+                "INSERT INTO ledger_members(id,user_id,role,status,net_balance,created_at) VALUES (?,?,'member','active',0,?)",
+                memberId,
+                op.userId,
+                op.now,
+              );
+          } else if (op.action === "claim") {
+            if (target === undefined) return { value: { error: "NOT_FOUND" } };
+            if (all.some((m) => m.user_id === op.userId))
+              return { value: { error: "ALREADY_MEMBER" } };
+            if (target.status !== "placeholder") return { value: { error: "PLACEHOLDER_CLAIMED" } };
             sql.exec(
-              "UPDATE ledger_members SET placeholder_name=? WHERE id=?",
-              input.data.placeholderName,
+              "UPDATE ledger_members SET user_id=?,status='active',placeholder_name=NULL WHERE id=?",
+              op.userId,
               target.id,
             );
-          } else if (input.data.role !== undefined) {
-            if (!actor || !canChangeMemberRole(actor, target)) {
+            memberId = target.id;
+          } else if (op.action === "patch") {
+            if (target === undefined) return { value: { error: "NOT_FOUND" } };
+            const input = memberPatchSchema.safeParse(op.input);
+            if (!input.success) return { value: { error: "VALIDATION_FAILED" } };
+            if (input.data.placeholderName !== undefined) {
+              if (!canEditPlaceholderName(target)) return { value: { error: "MEMBER_NOT_ACTIVE" } };
+              if (conflict(input.data.placeholderName, target.id))
+                return { value: { error: "PLACEHOLDER_NAME_TAKEN" } };
+              sql.exec(
+                "UPDATE ledger_members SET placeholder_name=? WHERE id=?",
+                input.data.placeholderName,
+                target.id,
+              );
+            } else if (input.data.role !== undefined) {
+              if (!actor || !canChangeMemberRole(actor, target)) {
+                return {
+                  value: {
+                    error:
+                      actor?.role === "admin" && target.status !== "active"
+                        ? "MEMBER_NOT_ACTIVE"
+                        : "FORBIDDEN",
+                  },
+                };
+              }
+              if (input.data.role === "member" && isLastAdmin(all, target.id))
+                return { value: { error: "LAST_ADMIN" } };
+              sql.exec("UPDATE ledger_members SET role=? WHERE id=?", input.data.role, target.id);
+            }
+          } else {
+            const leaving = op.action === "leave" ? actor : target;
+            if (leaving === undefined) return { value: { error: "NOT_FOUND" } };
+            if (actor === undefined) return { value: { error: "FORBIDDEN" } };
+            if (!canRemoveMember(actor, leaving)) {
               return {
                 value: {
                   error:
-                    actor?.role === "admin" && target.status !== "active"
+                    leaving.status === "former" && actor.role === "admin"
                       ? "MEMBER_NOT_ACTIVE"
                       : "FORBIDDEN",
                 },
               };
             }
-            if (input.data.role === "member" && isLastAdmin(all, target.id))
-              return { value: { error: "LAST_ADMIN" } };
-            sql.exec("UPDATE ledger_members SET role=? WHERE id=?", input.data.role, target.id);
-          }
-        } else {
-          const leaving = op.action === "leave" ? actor : target;
-          if (leaving === undefined) return { value: { error: "NOT_FOUND" } };
-          if (actor === undefined) return { value: { error: "FORBIDDEN" } };
-          if (!canRemoveMember(actor, leaving)) {
-            return {
-              value: {
-                error:
-                  leaving.status === "former" && actor.role === "admin"
-                    ? "MEMBER_NOT_ACTIVE"
-                    : "FORBIDDEN",
-              },
-            };
-          }
-          const balance = leaving.net_balance;
-          if (balance !== 0)
-            return {
-              value: {
-                error: "BALANCE_NOT_ZERO",
-                details: {
-                  balance,
-                  currency: sql.exec<GroupRow>("SELECT * FROM ledger_group").one()
-                    .settlement_currency,
+            const balance = leaving.net_balance;
+            if (balance !== 0)
+              return {
+                value: {
+                  error: "BALANCE_NOT_ZERO",
+                  details: {
+                    balance,
+                    currency: sql.exec<GroupRow>("SELECT * FROM ledger_group").one()
+                      .settlement_currency,
+                  },
                 },
-              },
-            };
-          if (isLastAdmin(all, leaving.id)) return { value: { error: "LAST_ADMIN" } };
-          const hasHistory =
-            leaving.status === "placeholder" &&
-            sql
-              .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
-              .toArray()
-              .some((row) => {
-                const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
-                return (
-                  expense.payers.some((payer) => payer.memberId === leaving.id) ||
-                  expense.splits.some((split) => split.memberId === leaving.id)
-                );
-              });
-          const disposition = memberRemovalDisposition(leaving, hasHistory);
-          if (disposition === "delete")
-            sql.exec("DELETE FROM ledger_members WHERE id=?", leaving.id);
-          else if (disposition === "former_placeholder")
-            sql.exec(
-              "UPDATE ledger_members SET status='former',placeholder_name=NULL,nickname=? WHERE id=?",
-              REMOVED_PLACEHOLDER_NAME,
-              leaving.id,
-            );
-          else
-            sql.exec(
-              "UPDATE ledger_members SET status='former',role='member' WHERE id=?",
-              leaving.id,
-            );
-          memberId = leaving.id;
-          closeUserId = leaving.user_id;
-        }
-        const history =
-          op.action === "claim" ||
-          op.action === "leave" ||
-          op.action === "remove" ||
-          (op.action === "join" && all.some((member) => member.id === memberId))
-            ? sql
-                .exec<{ id: string }>(
-                  `SELECT id FROM ledger_expenses WHERE deleted=0 AND (
+              };
+            if (isLastAdmin(all, leaving.id)) return { value: { error: "LAST_ADMIN" } };
+            const hasHistory =
+              leaving.status === "placeholder" &&
+              sql
+                .exec<{ data: string }>("SELECT data FROM ledger_expenses WHERE deleted=0")
+                .toArray()
+                .some((row) => {
+                  const expense = expenseSchema.parse(JSON.parse(row.data) as unknown);
+                  return (
+                    expense.payers.some((payer) => payer.memberId === leaving.id) ||
+                    expense.splits.some((split) => split.memberId === leaving.id)
+                  );
+                });
+            const disposition = memberRemovalDisposition(leaving, hasHistory);
+            if (disposition === "delete")
+              sql.exec("DELETE FROM ledger_members WHERE id=?", leaving.id);
+            else if (disposition === "former_placeholder")
+              sql.exec(
+                "UPDATE ledger_members SET status='former',placeholder_name=NULL,nickname=? WHERE id=?",
+                REMOVED_PLACEHOLDER_NAME,
+                leaving.id,
+              );
+            else
+              sql.exec(
+                "UPDATE ledger_members SET status='former',role='member' WHERE id=?",
+                leaving.id,
+              );
+            memberId = leaving.id;
+            closeUserId = leaving.user_id;
+          }
+          const history =
+            op.action === "claim" ||
+            op.action === "leave" ||
+            op.action === "remove" ||
+            (op.action === "join" && all.some((member) => member.id === memberId))
+              ? sql
+                  .exec<{ id: string }>(
+                    `SELECT id FROM ledger_expenses WHERE deleted=0 AND (
                EXISTS (SELECT 1 FROM json_each(data,'$.payers') WHERE json_extract(value,'$.memberId')=?) OR
                EXISTS (SELECT 1 FROM json_each(data,'$.splits') WHERE json_extract(value,'$.memberId')=?))`,
-                  memberId,
-                  memberId,
-                )
-                .toArray()
-                .map((row) => `expense:${row.id}`)
-            : [];
-        const updatedRow = sql
-          .exec<MemberRow>("SELECT * FROM ledger_members WHERE id=?", memberId)
-          .toArray()[0];
-        return {
-          value: {
-            memberId,
-            changed: true,
-            closeUserId,
-            member: updatedRow === undefined ? undefined : ledgerMember(updatedRow),
-          },
-          dirty: [...history, "group"],
-          leaving: closeUserId,
-        };
-      },
-      { signal: "after push" },
-    );
-    if ("error" in result) return { ok: false, code: result.error, details: result.details };
-    return { ok: true, value: result, rev };
+                    memberId,
+                    memberId,
+                  )
+                  .toArray()
+                  .map((row) => `expense:${row.id}`)
+              : [];
+          const updatedRow = sql
+            .exec<MemberRow>("SELECT * FROM ledger_members WHERE id=?", memberId)
+            .toArray()[0];
+          return {
+            value: {
+              memberId,
+              changed: true,
+              closeUserId,
+              member: updatedRow === undefined ? undefined : ledgerMember(updatedRow),
+            },
+            dirty: [...history, "group"],
+            leaving: closeUserId,
+          };
+        },
+        { signal: "after push" },
+      );
+      if ("error" in result) return { ok: false, code: result.error, details: result.details };
+      return { ok: true, value: result, rev };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   async invite(op: InviteOperation): Promise<LedgerResult<Invite>> {
@@ -972,11 +1232,15 @@ export class GroupLedger extends DurableObject<Bindings> {
       return { value: { token: op.token, expiresAt: op.expiresAt }, dirty: ["group"] };
     };
     // Showing or checking the Invite reads, so it does not commit.
-    const { value, rev } =
-      op.action === "get" || op.action === "validate"
-        ? this.read((sql) => edit(sql).value)
-        : await this.commit(edit);
-    return "error" in value ? { ok: false, code: value.error } : { ok: true, value, rev };
+    try {
+      const { value, rev } =
+        op.action === "get" || op.action === "validate"
+          ? this.read((sql) => edit(sql).value)
+          : await this.commit(edit);
+      return "error" in value ? { ok: false, code: value.error } : { ok: true, value, rev };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   members(asUserId?: string): LedgerResult<LedgerMember[]> {
@@ -1090,83 +1354,93 @@ export class GroupLedger extends DurableObject<Bindings> {
 
   async patchGroup(input: PatchGroup): Promise<LedgerResult<null>> {
     const { patch, expected, now, actorMemberId } = input;
-    const { value: result, rev } = await this.commit(
-      (
-        sql,
-      ): Edit<
-        | "OK"
-        | "FORBIDDEN"
-        | "NOT_FOUND"
-        | "EDIT_CONFLICT"
-        | "TRIP_DATES_INVALID"
-        | "SETTLEMENT_CURRENCY_LOCKED"
-      > => {
-        {
-          const actor = sql
-            .exec<{ role: string; status: string }>(
-              "SELECT role, status FROM ledger_members WHERE id=?",
-              actorMemberId,
-            )
+    try {
+      const { value: result, rev } = await this.commit(
+        (
+          sql,
+        ): Edit<
+          | "OK"
+          | "FORBIDDEN"
+          | "NOT_FOUND"
+          | "EDIT_CONFLICT"
+          | "TRIP_DATES_INVALID"
+          | "SETTLEMENT_CURRENCY_LOCKED"
+        > => {
+          {
+            const actor = sql
+              .exec<{ role: string; status: string }>(
+                "SELECT role, status FROM ledger_members WHERE id=?",
+                actorMemberId,
+              )
+              .toArray()[0];
+            if (!actor || actor.status !== "active" || actor.role !== "admin")
+              return { value: "FORBIDDEN" };
+          }
+          const current = sql
+            .exec<GroupRow>("SELECT * FROM ledger_group WHERE deleted = 0")
             .toArray()[0];
-          if (!actor || actor.status !== "active" || actor.role !== "admin")
-            return { value: "FORBIDDEN" };
-        }
-        const current = sql
-          .exec<GroupRow>("SELECT * FROM ledger_group WHERE deleted = 0")
-          .toArray()[0];
-        if (current === undefined) return { value: "NOT_FOUND" };
-        if (current.updated_at !== expected) return { value: "EDIT_CONFLICT" };
-        const start =
-          patch.tripStartDate === undefined ? current.trip_start_date : patch.tripStartDate;
-        const end = patch.tripEndDate === undefined ? current.trip_end_date : patch.tripEndDate;
-        if (!tripDatesValid(start, end)) return { value: "TRIP_DATES_INVALID" };
-        if (
-          sql.exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0").one()
-            .n > 0 &&
-          patch.settlementCurrency !== undefined &&
-          patch.settlementCurrency !== current.settlement_currency
-        )
-          return { value: "SETTLEMENT_CURRENCY_LOCKED" };
-        const currency = patch.settlementCurrency ?? current.settlement_currency;
-        sql.exec(
-          `UPDATE ledger_group SET name=?,settlement_currency=?,default_expense_currency=?,is_trip=?,trip_destination=?,trip_start_date=?,trip_end_date=?,trip_notes=?,updated_at=?`,
-          patch.name ?? current.name,
-          currency,
-          currency,
-          patch.isTrip === undefined ? current.is_trip : Number(patch.isTrip),
-          patch.tripDestination === undefined ? current.trip_destination : patch.tripDestination,
-          start,
-          end,
-          patch.tripNotes === undefined ? current.trip_notes : patch.tripNotes,
-          Math.max(now, current.updated_at + 1),
-        );
-        return { value: "OK", dirty: ["group"] };
-      },
-    );
-    if (result === "OK") return { ok: true, value: null, rev };
-    if (result === "TRIP_DATES_INVALID")
-      return failure(invalid("tripEndDate", "TRIP_DATES_INVALID"));
-    return { ok: false, code: result };
+          if (current === undefined) return { value: "NOT_FOUND" };
+          if (current.updated_at !== expected) return { value: "EDIT_CONFLICT" };
+          const start =
+            patch.tripStartDate === undefined ? current.trip_start_date : patch.tripStartDate;
+          const end = patch.tripEndDate === undefined ? current.trip_end_date : patch.tripEndDate;
+          if (!tripDatesValid(start, end)) return { value: "TRIP_DATES_INVALID" };
+          if (
+            sql
+              .exec<{ n: number }>("SELECT count(*) AS n FROM ledger_expenses WHERE deleted=0")
+              .one().n > 0 &&
+            patch.settlementCurrency !== undefined &&
+            patch.settlementCurrency !== current.settlement_currency
+          )
+            return { value: "SETTLEMENT_CURRENCY_LOCKED" };
+          const currency = patch.settlementCurrency ?? current.settlement_currency;
+          sql.exec(
+            `UPDATE ledger_group SET name=?,settlement_currency=?,default_expense_currency=?,is_trip=?,trip_destination=?,trip_start_date=?,trip_end_date=?,trip_notes=?,updated_at=?`,
+            patch.name ?? current.name,
+            currency,
+            currency,
+            patch.isTrip === undefined ? current.is_trip : Number(patch.isTrip),
+            patch.tripDestination === undefined ? current.trip_destination : patch.tripDestination,
+            start,
+            end,
+            patch.tripNotes === undefined ? current.trip_notes : patch.tripNotes,
+            Math.max(now, current.updated_at + 1),
+          );
+          return { value: "OK", dirty: ["group"] };
+        },
+      );
+      if (result === "OK") return { ok: true, value: null, rev };
+      if (result === "TRIP_DATES_INVALID")
+        return failure(invalid("tripEndDate", "TRIP_DATES_INVALID"));
+      return { ok: false, code: result };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   /** NOT_FOUND before the Group exists; FORBIDDEN unless an active admin asks. */
   async deleteGroup(by: DeleteGroup): Promise<LedgerResult<null>> {
     if (!this.hasTable("ledger_group")) return notFound;
-    const { value: allowed, rev } = await this.commit(
-      (sql) => {
-        const actor = sql
-          .exec<{ role: string; status: string }>(
-            "SELECT role, status FROM ledger_members WHERE id=?",
-            by.actorMemberId,
-          )
-          .toArray()[0];
-        if (!actor || actor.status !== "active" || actor.role !== "admin") return { value: false };
-        sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
-        return { value: true, dirty: ["group"] };
-      },
-      { closeAll: true },
-    );
-    return allowed ? { ok: true, value: null, rev } : { ok: false, code: "FORBIDDEN" };
+    try {
+      const { value: allowed, rev } = await this.commit(
+        (sql) => {
+          const actor = sql
+            .exec<{ role: string; status: string }>(
+              "SELECT role, status FROM ledger_members WHERE id=?",
+              by.actorMemberId,
+            )
+            .toArray()[0];
+          if (!actor || actor.status !== "active" || actor.role !== "admin")
+            return { value: false };
+          sql.exec("UPDATE ledger_group SET deleted=1 WHERE deleted=0");
+          return { value: true, dirty: ["group"] };
+        },
+        { closeAll: true },
+      );
+      return allowed ? { ok: true, value: null, rev } : { ok: false, code: "FORBIDDEN" };
+    } catch (error) {
+      return failure(error);
+    }
   }
 
   /** False when the creator holds no live reservation for it, or the Group already exists. */
@@ -1216,7 +1490,7 @@ export class GroupLedger extends DurableObject<Bindings> {
           );
           return { value: true, dirty: ["group"] };
         },
-        { bumpRev: false, signal: "none" },
+        { bumpRev: false, signal: "none", gateMerge: false },
       );
       return created.value;
     });

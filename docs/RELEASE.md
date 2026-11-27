@@ -43,7 +43,7 @@ Create or select a Messaging API channel for the bot. Set the webhook URL to `ht
 
 ## Release gate
 
-Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, actionlint, and secret scanning. Confirm `TEST_SIGN_IN` is absent from deployed Worker vars and secrets; the production-config E2E test requires the route to answer 404. Apply migrations before deploying the Worker. The pull request's CI runs the full gate, including E2E, actionlint and secret scanning; merging to `main` then runs the production workflow, which repeats typecheck, lint and tests, applies D1 migrations and deploys. Check risky changes on staging before merging; the production workflow can still be run by hand.
+Run typecheck, lint, unit/D1 tests, build, bundle-size check, Playwright E2E, actionlint, and secret scanning. Confirm `TEST_SIGN_IN` is absent from deployed Worker vars and secrets; the production-config E2E test requires the route to answer 404. Before applying migration `0021` on an existing database, confirm no duplicate `(user_id, provider)` rows exist (`SELECT user_id, provider, COUNT(*) FROM identities GROUP BY user_id, provider HAVING COUNT(*) > 1`). Apply migrations before deploying the Worker. The pull request's CI runs the full gate, including E2E, actionlint and secret scanning; merging to `main` then runs the production workflow, which repeats typecheck, lint and tests, applies D1 migrations and deploys. Check risky changes on staging before merging; the production workflow can still be run by hand.
 
 ### Group ledger live connection: real-device check
 
