@@ -493,17 +493,21 @@ export async function createPendingMerge(
 ): Promise<MergePreview> {
   const mergeId = crypto.randomUUID();
   const expiresAt = params.now + MERGE_PENDING_TTL_MS;
-  await db.insert(pendingMerges).values({
-    id: mergeId,
-    keptUserId: params.keptUserId,
-    otherUserId: params.otherUserId,
-    sessionId: params.sessionId,
-    path: params.path,
-    otherProvider: params.otherProvider,
-    otherEmail: params.otherEmail,
-    expiresAt,
-    createdAt: params.now,
-  });
+  await db.batch([
+    // Allow at most one active pending Merge per Session so a newer link attempt replaces any older one.
+    db.delete(pendingMerges).where(eq(pendingMerges.sessionId, params.sessionId)),
+    db.insert(pendingMerges).values({
+      id: mergeId,
+      keptUserId: params.keptUserId,
+      otherUserId: params.otherUserId,
+      sessionId: params.sessionId,
+      path: params.path,
+      otherProvider: params.otherProvider,
+      otherEmail: params.otherEmail,
+      expiresAt,
+      createdAt: params.now,
+    }),
+  ]);
   const preview = await buildMergePreview(
     db,
     mergeId,
@@ -516,23 +520,27 @@ export async function createPendingMerge(
   return preview;
 }
 
-/** Cancels and deletes a pending Merge belonging to the confirming Session. */
+/** Cancels and deletes an active pending Merge belonging to the confirming Session. */
 export async function cancelMerge(
   db: Db,
   userId: string,
   sessionId: string | null,
   mergeId: string,
+  now: number,
 ): Promise<void> {
-  if (sessionId === null) return;
-  await db
+  if (sessionId === null) throw new ApiError("MERGE_PENDING_INVALID");
+  const [deleted] = await db
     .delete(pendingMerges)
     .where(
       and(
         eq(pendingMerges.id, mergeId),
         eq(pendingMerges.keptUserId, userId),
         eq(pendingMerges.sessionId, sessionId),
+        gt(pendingMerges.expiresAt, now),
       ),
-    );
+    )
+    .returning({ id: pendingMerges.id });
+  if (deleted === undefined) throw new ApiError("MERGE_PENDING_INVALID");
 }
 
 /** Claims a single-use pending Merge for this Session and checks refusal preconditions. */

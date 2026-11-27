@@ -259,7 +259,7 @@ export function authRoutes(deps: AppDeps) {
           throw new ApiError("MERGE_PENDING_INVALID");
         }
         const db = createDb(c.env.DB);
-        await cancelMerge(db, c.var.userId, c.var.sessionId, mergeId);
+        await cancelMerge(db, c.var.userId, c.var.sessionId, mergeId, deps.now());
         if (c.var.confirmMergeId !== null && c.var.sessionId !== null) {
           await deleteSessionById(db, c.var.sessionId, c.var.userId);
         }

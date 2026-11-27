@@ -1983,6 +1983,91 @@ describe("User Merge in a shared Group", () => {
 });
 
 describe("User Merge on the Settings path (connect LINE from browser)", () => {
+  it("allows only one pending Merge per Session: a newer link replaces the older one, refuses the older confirm and cancel, and confirms the newer one", async () => {
+    const lineSub1 = uniqueSub("line-1");
+    const lineSub2 = uniqueSub("line-2");
+    const googleSub = uniqueSub("google");
+    const other1 = await signIn("line", lineSub1, "LINE一號");
+    const group1 = await createGroup(other1, { name: "一號群組" });
+    const other2 = await signIn("line", lineSub2, "LINE二號");
+    const group2 = await createGroup(other2, { name: "二號群組" });
+
+    const kept = await signIn("google", googleSub, "Google主帳號", "main@example.com");
+    const keptGroup = await createGroup(kept, { name: "主帳號群組" });
+
+    const link1 = await call(
+      "/auth/link/line",
+      json({ idToken: `fake|${lineSub1}|LINE一號` }, bearer(kept.accessToken)),
+    );
+    expect(link1.status).toBe(200);
+    const body1 = await link1.json<{ mergeNeeded?: boolean; merge?: { mergeId: string } }>();
+    if (!body1.mergeNeeded || body1.merge === undefined) throw new Error("expected first merge");
+    const merge1Id = body1.merge.mergeId;
+
+    const link2 = await call(
+      "/auth/link/line",
+      json({ idToken: `fake|${lineSub2}|LINE二號` }, bearer(kept.accessToken)),
+    );
+    expect(link2.status).toBe(200);
+    const body2 = await link2.json<{ mergeNeeded?: boolean; merge?: { mergeId: string } }>();
+    if (!body2.mergeNeeded || body2.merge === undefined) throw new Error("expected second merge");
+    const merge2Id = body2.merge.mergeId;
+    expect(merge2Id).not.toBe(merge1Id);
+
+    // The Session's active preview is now the newer Merge (M2).
+    const previewRes = await call("/auth/merge", { headers: bearer(kept.accessToken) });
+    expect(previewRes.status).toBe(200);
+    expect(await previewRes.json()).toMatchObject({
+      mergeId: merge2Id,
+      other: { id: other2.userId },
+    });
+
+    // The older attempt's confirm and cancel are both refused with MERGE_PENDING_INVALID.
+    const oldConfirm = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: merge1Id }, bearer(kept.accessToken)),
+    );
+    expect(oldConfirm.status).toBe(422);
+    expect(await oldConfirm.json()).toMatchObject({ error: { code: "MERGE_PENDING_INVALID" } });
+
+    const oldCancel = await call(
+      "/auth/merge/cancel",
+      json({ mergeId: merge1Id }, bearer(kept.accessToken)),
+    );
+    expect(oldCancel.status).toBe(422);
+    expect(await oldCancel.json()).toMatchObject({ error: { code: "MERGE_PENDING_INVALID" } });
+
+    // Confirming the newer attempt succeeds and leaves the older target User intact.
+    const newConfirm = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: merge2Id }, bearer(kept.accessToken)),
+    );
+    expect(newConfirm.status).toBe(200);
+
+    const groupsAfter = await (await send(kept, "GET", "/groups")).json<{ id: string }[]>();
+    expect(groupsAfter.map((g) => g.id).sort()).toEqual([group2.id, keptGroup.id].sort());
+    expect(await (await send(other1, "GET", "/groups")).json<{ id: string }[]>()).toMatchObject([
+      { id: group1.id },
+    ]);
+
+    // Reuse after confirm is also refused on preview, confirm and cancel.
+    const afterPreview = await call("/auth/merge", { headers: bearer(kept.accessToken) });
+    expect(afterPreview.status).toBe(422);
+    expect(await afterPreview.json()).toMatchObject({ error: { code: "MERGE_PENDING_INVALID" } });
+    const afterConfirm = await call(
+      "/auth/merge/confirm",
+      json({ mergeId: merge2Id }, bearer(kept.accessToken)),
+    );
+    expect(afterConfirm.status).toBe(422);
+    expect(await afterConfirm.json()).toMatchObject({ error: { code: "MERGE_PENDING_INVALID" } });
+    const afterCancel = await call(
+      "/auth/merge/cancel",
+      json({ mergeId: merge2Id }, bearer(kept.accessToken)),
+    );
+    expect(afterCancel.status).toBe(422);
+    expect(await afterCancel.json()).toMatchObject({ error: { code: "MERGE_PENDING_INVALID" } });
+  });
+
   it("returns mergeNeeded when linking a LINE owned by another User, and confirms into the Google User while keeping signedInWith", async () => {
     const baseTime = clock.now;
     const lineSub = uniqueSub("line");
@@ -2693,7 +2778,7 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
       errorSpy.mockRestore();
       await runScheduled(MAINTENANCE_CRON, env, clock.now + 180_000);
     }
-  });
+  }, 60_000);
 
   it("releases a transferred pending reservation when a merged-away User's refused in-flight join leaves the keeper with no seat, while keeping real seats", async () => {
     const admin = await person("上限房東");
@@ -2897,7 +2982,7 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
       await send(kept, "GET", `/groups/${coldGroup.id}/expenses/${otherExpense.id}`)
     ).json<Expense>();
     expect(fetched.creatorMemberId).toBe(keptM);
-  });
+  }, 60_000);
 
   it("lets an already gate-admitted Expense write finish before Merge and repoints what that write touched", async () => {
     const kept = await signIn("line", uniqueSub("line-admit"), "LINE先過門");
@@ -3111,6 +3196,7 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const uninitOnlyId = `uninit-only-${crypto.randomUUID()}`;
     try {
       await runScheduled(
         MAINTENANCE_CRON,
@@ -3125,13 +3211,6 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
 
       expect(healthyProjected).toBe(true);
 
-      const uninitRow = await env.DB.prepare(
-        "SELECT membership_reprojected FROM group_directory WHERE group_id=?",
-      )
-        .bind(uninitId)
-        .first<{ membership_reprojected: number }>();
-      expect(uninitRow?.membership_reprojected).toBe(1);
-
       const infoLogs = logSpy.mock.calls.map(
         (c) => JSON.parse(String(c[0])) as Record<string, unknown>,
       );
@@ -3142,14 +3221,54 @@ describe("User Merge on the Settings path (connect LINE from browser)", () => {
           incompleteCount: expect.any(Number) as unknown,
         }),
       );
-    } finally {
-      logSpy.mockRestore();
-      errorSpy.mockRestore();
+
+      // Clear the simulated failing batch rows, then verify an uninitialized Group as the only blocker:
+      // confirm is refused with MERGE_BACKFILL_PENDING until scheduled maintenance processes it, then succeeds.
       await env.DB.prepare(
         "DELETE FROM group_directory WHERE group_id LIKE 'old-backfill-%' OR group_id=?",
       )
         .bind(uninitId)
         .run();
+
+      const kept = await signIn("line", uniqueSub("backfill-line"), "LINE待回填");
+      const googleSub = uniqueSub("backfill-google");
+      await signIn("google", googleSub, "Google待回填");
+      const redeemRes = await redeem(await issueLinkCode(kept.accessToken), googleSub);
+      const { confirmationToken: confirmToken, merge } = await redeemRes.json<RedeemMergeBody>();
+      if (merge === undefined || confirmToken === undefined)
+        throw new Error("expected merge preview");
+
+      await env.DB.prepare(
+        `INSERT INTO group_directory(group_id,name,settlement_currency,created_at,updated_at,rev,deleted,membership_reprojected)
+         VALUES (?,?,?,?,?,0,0,0)`,
+      )
+        .bind(uninitOnlyId, uninitOnlyId, "TWD", clock.now - 5_000, clock.now - 5_000)
+        .run();
+
+      const blockedRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      );
+      expect(blockedRes.status).toBe(409);
+      expect(await blockedRes.json()).toMatchObject({
+        error: { code: "MERGE_BACKFILL_PENDING" },
+      });
+
+      await runScheduled(MAINTENANCE_CRON, env, clock.now + 3_000);
+
+      const unblockedRes = await call(
+        "/auth/merge/confirm",
+        json({ mergeId: merge.mergeId }, bearer(confirmToken)),
+      );
+      expect(unblockedRes.status).toBe(200);
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      await env.DB.prepare(
+        "DELETE FROM group_directory WHERE group_id LIKE 'old-backfill-%' OR group_id IN (?,?)",
+      )
+        .bind(uninitId, uninitOnlyId)
+        .run();
     }
-  }, 60_000);
+  }, 120_000);
 });

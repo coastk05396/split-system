@@ -216,6 +216,9 @@ export function createFakeApi(): FakeApi {
         groups: otherGroups.map((g) => ({ ...g, shared: keptIds.has(g.id) })),
       },
     };
+    for (const [id, existing] of pendingMerges) {
+      if (existing.kept.id === kept.id) pendingMerges.delete(id);
+    }
     pendingMerges.set(mergeId, { preview, kept, other });
     return preview;
   }
@@ -367,7 +370,11 @@ export function createFakeApi(): FakeApi {
           if (confirm.mergeId !== mergeId) return error("MERGE_PENDING_INVALID", 422);
           confirmTokens.delete(bearer);
         }
-        if (typeof mergeId === "string") pendingMerges.delete(mergeId);
+        const deleted =
+          typeof mergeId === "string" && pendingMerges.get(mergeId)?.kept.id === actor.id
+            ? pendingMerges.delete(mergeId)
+            : false;
+        if (!deleted) return error("MERGE_PENDING_INVALID", 422);
         return new Response(null, { status: 204 });
       }
       case "POST /api/v1/auth/test-sign-in": {
